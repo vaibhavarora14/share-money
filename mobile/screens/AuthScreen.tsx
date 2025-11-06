@@ -1,35 +1,48 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
   View,
+} from "react-native";
+import {
+  Button,
+  Card,
+  Divider,
   Text,
   TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
-import { useAuth } from '../contexts/AuthContext';
+  useTheme,
+} from "react-native-paper";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useAuth } from "../contexts/AuthContext";
 
 interface AuthScreenProps {
   onToggleMode: () => void;
   isSignUp: boolean;
 }
 
-export const AuthScreen: React.FC<AuthScreenProps> = ({ onToggleMode, isSignUp }) => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+export const AuthScreen: React.FC<AuthScreenProps> = ({
+  onToggleMode,
+  isSignUp,
+}) => {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const { signIn, signUp, signInWithGoogle } = useAuth();
+  const theme = useTheme();
 
   const handleSubmit = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert("Error", "Please fill in all fields");
       return;
     }
 
     if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+      Alert.alert("Error", "Password must be at least 6 characters");
       return;
     }
 
@@ -41,12 +54,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onToggleMode, isSignUp }
 
       if (error) {
         Alert.alert(
-          isSignUp ? 'Sign Up Error' : 'Sign In Error',
-          error.message || 'An error occurred'
+          isSignUp ? "Sign Up Error" : "Sign In Error",
+          error.message || "An error occurred"
         );
       }
     } catch (err) {
-      Alert.alert('Error', 'An unexpected error occurred');
+      Alert.alert("Error", "An unexpected error occurred");
     } finally {
       setLoading(false);
     }
@@ -57,212 +70,190 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onToggleMode, isSignUp }
     try {
       const { error } = await signInWithGoogle();
       if (error) {
-        Alert.alert('Google Sign In Error', error.message || 'Failed to sign in with Google');
+        Alert.alert(
+          "Google Sign In Error",
+          error.message || "Failed to sign in with Google"
+        );
       }
     } catch (err) {
-      Alert.alert('Error', 'An unexpected error occurred');
+      Alert.alert("Error", "An unexpected error occurred");
     } finally {
       setGoogleLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.card}>
-        <Text style={styles.title}>{isSignUp ? 'Create Account' : 'Welcome Back'}</Text>
-        <Text style={styles.subtitle}>
-          {isSignUp
-            ? 'Sign up to start tracking your transactions'
-            : 'Sign in to continue'}
-        </Text>
-
-        <View style={styles.form}>
-          <TextInput
-            style={styles.input}
-            placeholder="Email"
-            placeholderTextColor="#9ca3af"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            autoComplete="email"
-            editable={!loading}
-          />
-
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            placeholderTextColor="#9ca3af"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            autoCapitalize="none"
-            autoComplete="password"
-            editable={!loading}
-          />
-
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleSubmit}
-            disabled={loading || googleLoading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>
-                {isSignUp ? 'Sign Up' : 'Sign In'}
-              </Text>
-            )}
-          </TouchableOpacity>
-
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>OR</Text>
-            <View style={styles.dividerLine} />
+    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.keyboardView}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.header}>
+            <Text variant="displaySmall" style={styles.title}>
+              {isSignUp ? "Create Account" : "Welcome Back"}
+            </Text>
+            <Text
+              variant="bodyLarge"
+              style={[
+                styles.subtitle,
+                { color: theme.colors.onSurfaceVariant },
+              ]}
+            >
+              {isSignUp
+                ? "Sign up to start tracking your transactions"
+                : "Sign in to continue"}
+            </Text>
           </View>
 
-          <TouchableOpacity
-            style={[styles.googleButton, (loading || googleLoading) && styles.buttonDisabled]}
-            onPress={handleGoogleSignIn}
-            disabled={loading || googleLoading}
-          >
-            {googleLoading ? (
-              <ActivityIndicator color="#4285F4" />
-            ) : (
-              <>
-                <Text style={styles.googleIcon}>G</Text>
-                <Text style={styles.googleButtonText}>Continue with Google</Text>
-              </>
-            )}
-          </TouchableOpacity>
+          <Card style={styles.card} mode="elevated" elevation={2}>
+            <Card.Content style={styles.cardContent}>
+              <TextInput
+                label="Email"
+                value={email}
+                onChangeText={setEmail}
+                mode="outlined"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+                disabled={loading || googleLoading}
+                style={styles.input}
+                left={<TextInput.Icon icon="email" />}
+              />
 
-          <TouchableOpacity
-            style={styles.toggleButton}
-            onPress={onToggleMode}
-            disabled={loading || googleLoading}
-          >
-            <Text style={styles.toggleText}>
-              {isSignUp
-                ? 'Already have an account? Sign In'
-                : "Don't have an account? Sign Up"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </View>
+              <TextInput
+                label="Password"
+                value={password}
+                onChangeText={setPassword}
+                mode="outlined"
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoComplete="password"
+                disabled={loading || googleLoading}
+                style={styles.input}
+                left={<TextInput.Icon icon="lock" />}
+                right={
+                  <TextInput.Icon
+                    icon={showPassword ? "eye-off" : "eye"}
+                    onPress={() => setShowPassword(!showPassword)}
+                  />
+                }
+              />
+
+              <Button
+                mode="contained"
+                onPress={handleSubmit}
+                disabled={loading || googleLoading}
+                loading={loading}
+                style={styles.button}
+                contentStyle={styles.buttonContent}
+              >
+                {isSignUp ? "Sign Up" : "Sign In"}
+              </Button>
+
+              <View style={styles.dividerContainer}>
+                <Divider style={styles.divider} />
+                <Text
+                  variant="bodySmall"
+                  style={[
+                    styles.dividerText,
+                    { color: theme.colors.onSurfaceVariant },
+                  ]}
+                >
+                  OR
+                </Text>
+                <Divider style={styles.divider} />
+              </View>
+
+              <Button
+                mode="outlined"
+                onPress={handleGoogleSignIn}
+                disabled={loading || googleLoading}
+                loading={googleLoading}
+                style={styles.googleButton}
+                contentStyle={styles.buttonContent}
+                icon="google"
+              >
+                Continue with Google
+              </Button>
+
+              <Button
+                mode="text"
+                onPress={onToggleMode}
+                disabled={loading || googleLoading}
+                style={styles.toggleButton}
+              >
+                {isSignUp
+                  ? "Already have an account? Sign In"
+                  : "Don't have an account? Sign Up"}
+              </Button>
+            </Card.Content>
+          </Card>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb',
-    justifyContent: 'center',
+    backgroundColor: "#f5f5f5",
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: "center",
     padding: 20,
   },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+  header: {
+    marginBottom: 32,
+    alignItems: "center",
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#111827',
+    fontWeight: "bold",
     marginBottom: 8,
-    textAlign: 'center',
+    textAlign: "center",
   },
   subtitle: {
-    fontSize: 16,
-    color: '#6b7280',
-    marginBottom: 32,
-    textAlign: 'center',
+    textAlign: "center",
   },
-  form: {
-    width: '100%',
+  card: {
+    borderRadius: 16,
+  },
+  cardContent: {
+    paddingVertical: 8,
   },
   input: {
-    backgroundColor: '#f9fafb',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
-    padding: 16,
-    fontSize: 16,
-    color: '#111827',
     marginBottom: 16,
   },
   button: {
-    backgroundColor: '#3b82f6',
-    borderRadius: 8,
-    padding: 16,
-    alignItems: 'center',
     marginTop: 8,
+    marginBottom: 24,
   },
-  buttonDisabled: {
-    opacity: 0.6,
+  buttonContent: {
+    paddingVertical: 8,
   },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  toggleButton: {
-    marginTop: 24,
-    alignItems: 'center',
-  },
-  toggleText: {
-    color: '#3b82f6',
-    fontSize: 14,
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  dividerContainer: {
+    flexDirection: "row",
+    alignItems: "center",
     marginVertical: 24,
   },
-  dividerLine: {
+  divider: {
     flex: 1,
-    height: 1,
-    backgroundColor: '#e5e7eb',
   },
   dividerText: {
     marginHorizontal: 16,
-    fontSize: 14,
-    color: '#6b7280',
-    fontWeight: '500',
   },
   googleButton: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
     marginBottom: 16,
   },
-  googleIcon: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#4285F4',
-    marginRight: 12,
-    width: 24,
-    height: 24,
-    textAlign: 'center',
-    lineHeight: 24,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#4285F4',
-  },
-  googleButtonText: {
-    color: '#111827',
-    fontSize: 16,
-    fontWeight: '600',
+  toggleButton: {
+    marginTop: 8,
   },
 });
