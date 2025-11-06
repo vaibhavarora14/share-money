@@ -13,6 +13,7 @@ interface Transaction {
   date: string;
   type: 'income' | 'expense';
   category?: string;
+  user_id?: string;
 }
 
 export default async (req: Request) => {
@@ -36,15 +37,47 @@ export default async (req: Request) => {
       );
     }
 
-    // Create Supabase client
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    // Get authorization header
+    const authHeader = req.headers.get('authorization');
+    
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized: Missing authorization header' }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
 
-    // Query transactions from database
+    // Create Supabase client with user's auth token
+    const supabase = createClient(supabaseUrl, supabaseKey, {
+      global: {
+        headers: {
+          Authorization: authHeader,
+        },
+      },
+    });
+
+    // Verify user authentication
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized: Invalid or expired token' }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    // Query transactions from database (RLS will automatically filter by user_id)
     const { data: transactions, error } = await supabase
       .from('transactions')
       .select('*')
       .order('date', { ascending: false })
-      .limit(5);
+      .limit(100);
 
     if (error) {
       console.error('Supabase error:', error);

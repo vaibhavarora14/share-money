@@ -54,7 +54,11 @@ ShareMoney/
    supabase db push
    ```
    
-   Alternatively, you can run the migration SQL manually in the Supabase SQL Editor from `supabase/migrations/20240101000000_create_transactions.sql`
+   Alternatively, you can run the migration SQL manually in the Supabase SQL Editor:
+   - First run: `supabase/migrations/20240101000000_create_transactions.sql`
+   - Then run: `supabase/migrations/20240102000000_add_user_authentication.sql`
+   
+   **Important**: The authentication migration adds Row Level Security (RLS) policies, so users can only access their own transactions.
 
 ### 2. Netlify Backend Setup
 
@@ -106,21 +110,35 @@ ShareMoney/
    cd mobile
    ```
 
-2. Update the API URL in `App.tsx`:
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Configure Supabase credentials:
+   - Create a `.env` file in the `mobile` directory (or use environment variables)
+   - Add your Supabase credentials:
+     ```
+     EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
+     EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+     ```
+   - Alternatively, update `mobile/supabase.ts` directly with your credentials
+
+4. Update the API URL in `App.tsx`:
    - Open `mobile/App.tsx`
    - Find the `API_URL` constant near the top
    - Replace `https://your-site.netlify.app/api/transactions` with your actual Netlify URL
 
-3. For local development (if running Netlify dev locally):
-   - Change `API_URL` to `http://localhost:8888/api/transactions`
+5. For local development (if running Netlify dev locally):
+   - Change `API_URL` to `http://YOUR_LOCAL_IP:8888/api/transactions`
    - Make sure your mobile device/emulator can access localhost (use your computer's IP for physical devices)
 
-4. Start the Expo development server:
+6. Start the Expo development server:
    ```bash
    npm start
    ```
 
-5. Run on your preferred platform:
+7. Run on your preferred platform:
    - Press `i` for iOS simulator
    - Press `a` for Android emulator
    - Scan QR code with Expo Go app on your physical device
@@ -150,7 +168,8 @@ Then choose your platform (iOS, Android, or Web).
 
 - **Endpoint**: `/api/transactions`
 - **Method**: GET
-- **Response**: JSON array of transactions
+- **Authentication**: Required (Bearer token in Authorization header)
+- **Response**: JSON array of transactions (filtered by authenticated user)
 
 Example response:
 ```json
@@ -171,8 +190,10 @@ Example response:
 
 - ✅ Netlify Edge Functions backend (TypeScript)
 - ✅ Supabase PostgreSQL database integration
+- ✅ **User authentication** with Supabase Auth
+- ✅ **Row Level Security (RLS)** - users can only see their own transactions
 - ✅ React Native Expo mobile app (TypeScript)
-- ✅ Beautiful transaction list UI
+- ✅ Beautiful transaction list UI with login/signup screens
 - ✅ Loading and error states
 - ✅ Transaction categorization (income/expense)
 - ✅ Formatted dates and amounts
@@ -187,6 +208,16 @@ Example response:
 - Check that Netlify Edge Function is deployed and accessible
 - Verify CORS headers are set correctly in the Edge Function
 
+### Authentication errors
+
+- **"Unauthorized: Missing authorization header"**: Make sure you're signed in. The app should show the login screen if not authenticated.
+- **"Unauthorized: Invalid or expired token"**: Your session may have expired. Try signing out and signing back in.
+- **Can't sign up/sign in**: 
+  - Verify your Supabase credentials are correct in `mobile/supabase.ts` or `.env` file
+  - Check that Supabase Auth is enabled in your Supabase project settings
+  - Ensure email confirmation is disabled for testing (or check your email for confirmation link)
+- **"Users can only see their own transactions"**: This is expected behavior due to Row Level Security. Each user only sees their own data.
+
 ### Database connection errors
 
 - Verify Supabase environment variables are set correctly in Netlify
@@ -200,9 +231,26 @@ Example response:
 - Verify Edge Function file is in `netlify/edge-functions/` directory
 - Check Netlify build logs for errors
 
+## Authentication
+
+The app now includes full user authentication:
+
+1. **Sign Up**: New users can create an account with email and password
+2. **Sign In**: Existing users can sign in with their credentials
+3. **Session Management**: Authentication state is persisted using AsyncStorage
+4. **Protected API**: All API calls require a valid authentication token
+5. **User Isolation**: Each user can only see their own transactions (enforced by RLS)
+
+### Testing Authentication
+
+1. Start the app and you'll see the login screen
+2. Tap "Don't have an account? Sign Up" to create a new account
+3. After signing up/signing in, you'll see the transactions screen
+4. Use the "Sign Out" button in the header to log out
+
 ## Next Steps
 
-- Add authentication
+- ✅ Add authentication
 - Implement transaction creation/editing
 - Add filtering and sorting
 - Implement pull-to-refresh
