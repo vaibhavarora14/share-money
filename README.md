@@ -256,10 +256,14 @@ To enable Google sign-in, you need to configure Google OAuth in your Supabase pr
    - Create a new project or select an existing one
    - Navigate to **APIs & Services > Credentials**
    - Click **Create Credentials > OAuth client ID**
-   - Choose **Web application** as the application type
+   - **Important**: Choose **Web application** as the application type (even though this is a mobile app)
+   - **Why Web application?** Supabase acts as the OAuth server. The flow is:
+     - Mobile app → Supabase → Google OAuth
+     - Google redirects back to Supabase's web callback URL
+     - Supabase then redirects to your mobile app
    - Add authorized redirect URIs:
      - `https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback`
-     - Replace `YOUR_PROJECT_REF` with your Supabase project reference
+     - Replace `YOUR_PROJECT_REF` with your Supabase project reference (found in Supabase Dashboard > Settings > API)
    - Copy the **Client ID** and **Client Secret**
 
 2. **Configure in Supabase**:
