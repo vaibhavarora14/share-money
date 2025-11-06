@@ -2,6 +2,8 @@ import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { useState, useEffect } from 'react';
 import { Transaction, AmountInfo } from './types';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { AuthScreen } from './screens/AuthScreen';
 
 // Update this URL to your Netlify Edge Function URL
 // For local development: http://192.168.0.215:8888/api/transactions
@@ -10,22 +12,41 @@ const API_URL = __DEV__
   ? 'http://192.168.0.215:8888/api/transactions' 
   : 'https://sharemoney-app.netlify.app/api/transactions';
 
-export default function App() {
+function TransactionsScreen() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const { session, signOut } = useAuth();
 
   useEffect(() => {
-    fetchTransactions();
-  }, []);
+    if (session) {
+      fetchTransactions();
+    }
+  }, [session]);
 
   const fetchTransactions = async (): Promise<void> => {
+    if (!session) return;
+
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(API_URL);
+      
+      // Get the access token from the session
+      const token = session.access_token;
+      
+      const response = await fetch(API_URL, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
       
       if (!response.ok) {
+        if (response.status === 401) {
+          // Token expired or invalid, sign out
+          await signOut();
+          return;
+        }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
@@ -80,14 +101,22 @@ export default function App() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Transactions</Text>
-        <Text style={styles.headerSubtitle}>{transactions.length} transactions</Text>
+        <View style={styles.headerTop}>
+          <View>
+            <Text style={styles.headerTitle}>Transactions</Text>
+            <Text style={styles.headerSubtitle}>{transactions.length} transactions</Text>
+          </View>
+          <TouchableOpacity style={styles.signOutButton} onPress={signOut}>
+            <Text style={styles.signOutButtonText}>Sign Out</Text>
+          </TouchableOpacity>
+        </View>
       </View>
       
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         {transactions.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>No transactions found</Text>
+            <Text style={styles.emptySubtext}>Your transactions will appear here</Text>
           </View>
         ) : (
           transactions.map((transaction: Transaction) => {
@@ -128,11 +157,46 @@ export default function App() {
   );
 }
 
+function AppContent() {
+  const { session, loading } = useAuth();
+  const [isSignUp, setIsSignUp] = useState(false);
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#3b82f6" />
+        <StatusBar style="auto" />
+      </View>
+    );
+  }
+
+  if (!session) {
+    return (
+      <>
+        <AuthScreen isSignUp={isSignUp} onToggleMode={() => setIsSignUp(!isSignUp)} />
+        <StatusBar style="auto" />
+      </>
+    );
+  }
+
+  return <TransactionsScreen />;
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f9fafb',
     paddingTop: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     paddingHorizontal: 20,
@@ -140,6 +204,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
+  },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 32,
@@ -150,6 +219,17 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 16,
     color: '#6b7280',
+  },
+  signOutButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#ef4444',
+  },
+  signOutButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   scrollView: {
     flex: 1,
@@ -188,6 +268,11 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     color: '#6b7280',
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#9ca3af',
   },
   transactionCard: {
     backgroundColor: '#fff',
@@ -244,4 +329,3 @@ const styles = StyleSheet.create({
     textTransform: 'capitalize',
   },
 });
-
