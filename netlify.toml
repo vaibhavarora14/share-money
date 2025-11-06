@@ -1,0 +1,7 @@
+[build]
+  edge_functions = "netlify/edge-functions"
+
+[[edge_functions]]
+  path = "/api/transactions"
+  function = "transactions"
+
