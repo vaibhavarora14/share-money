@@ -15,10 +15,12 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.sharemoney.app"
+      "bundleIdentifier": "com.sharemoney.app",
+      "scheme": "com.sharemoney.app"
     },
     "android": {
       "package": "com.sharemoney.app",
+      "scheme": "com.sharemoney.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"

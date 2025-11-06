@@ -19,7 +19,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onToggleMode, isSignUp }
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signIn, signUp } = useAuth();
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const { signIn, signUp, signInWithGoogle } = useAuth();
 
   const handleSubmit = async () => {
     if (!email.trim() || !password.trim()) {
@@ -48,6 +49,20 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onToggleMode, isSignUp }
       Alert.alert('Error', 'An unexpected error occurred');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
+    try {
+      const { error } = await signInWithGoogle();
+      if (error) {
+        Alert.alert('Google Sign In Error', error.message || 'Failed to sign in with Google');
+      }
+    } catch (err) {
+      Alert.alert('Error', 'An unexpected error occurred');
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -89,7 +104,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onToggleMode, isSignUp }
           <TouchableOpacity
             style={[styles.button, loading && styles.buttonDisabled]}
             onPress={handleSubmit}
-            disabled={loading}
+            disabled={loading || googleLoading}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />
@@ -100,10 +115,31 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onToggleMode, isSignUp }
             )}
           </TouchableOpacity>
 
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>OR</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <TouchableOpacity
+            style={[styles.googleButton, (loading || googleLoading) && styles.buttonDisabled]}
+            onPress={handleGoogleSignIn}
+            disabled={loading || googleLoading}
+          >
+            {googleLoading ? (
+              <ActivityIndicator color="#4285F4" />
+            ) : (
+              <>
+                <Text style={styles.googleIcon}>G</Text>
+                <Text style={styles.googleButtonText}>Continue with Google</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.toggleButton}
             onPress={onToggleMode}
-            disabled={loading}
+            disabled={loading || googleLoading}
           >
             <Text style={styles.toggleText}>
               {isSignUp
@@ -182,5 +218,51 @@ const styles = StyleSheet.create({
   toggleText: {
     color: '#3b82f6',
     fontSize: 14,
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 24,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#e5e7eb',
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    fontSize: 14,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  googleButton: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  googleIcon: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#4285F4',
+    marginRight: 12,
+    width: 24,
+    height: 24,
+    textAlign: 'center',
+    lineHeight: 24,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#4285F4',
+  },
+  googleButtonText: {
+    color: '#111827',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
