@@ -36,6 +36,16 @@ supabase/.temp/
 .expo/
 .expo-shared/
 
+# Keystores and certificates (NEVER commit these!)
+*.keystore
+*.jks
+*.p12
+*.mobileprovision
+*.certSigningRequest
+*.p8
+*.key
+*.cer
+
 # Package locks (optional - uncomment if you want to ignore them)
 # package-lock.json
 # yarn.lock
