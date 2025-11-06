@@ -190,7 +190,7 @@ Example response:
 
 - ✅ Netlify Edge Functions backend (TypeScript)
 - ✅ Supabase PostgreSQL database integration
-- ✅ **User authentication** with Supabase Auth
+- ✅ **User authentication** with Supabase Auth (Email/Password + Google OAuth)
 - ✅ **Row Level Security (RLS)** - users can only see their own transactions
 - ✅ React Native Expo mobile app (TypeScript)
 - ✅ Beautiful transaction list UI with login/signup screens
@@ -216,6 +216,11 @@ Example response:
   - Verify your Supabase credentials are correct in `mobile/supabase.ts` or `.env` file
   - Check that Supabase Auth is enabled in your Supabase project settings
   - Ensure email confirmation is disabled for testing (or check your email for confirmation link)
+- **Google sign-in not working**:
+  - Verify Google OAuth is configured in Supabase Dashboard (Authentication > Providers)
+  - Check that redirect URLs are configured correctly in Supabase (Authentication > URL Configuration)
+  - Ensure the redirect URL matches the scheme in `mobile/app.json` (`com.sharemoney.app://auth/callback`)
+  - Make sure Google OAuth credentials (Client ID and Secret) are correctly entered in Supabase
 - **"Users can only see their own transactions"**: This is expected behavior due to Row Level Security. Each user only sees their own data.
 
 ### Database connection errors
@@ -233,20 +238,57 @@ Example response:
 
 ## Authentication
 
-The app now includes full user authentication:
+The app now includes full user authentication with multiple sign-in options:
 
-1. **Sign Up**: New users can create an account with email and password
-2. **Sign In**: Existing users can sign in with their credentials
-3. **Session Management**: Authentication state is persisted using AsyncStorage
-4. **Protected API**: All API calls require a valid authentication token
-5. **User Isolation**: Each user can only see their own transactions (enforced by RLS)
+1. **Email/Password Sign Up**: New users can create an account with email and password
+2. **Email/Password Sign In**: Existing users can sign in with their credentials
+3. **Google Sign In**: Users can sign in with their Google account (OAuth)
+4. **Session Management**: Authentication state is persisted using AsyncStorage
+5. **Protected API**: All API calls require a valid authentication token
+6. **User Isolation**: Each user can only see their own transactions (enforced by RLS)
+
+### Setting Up Google OAuth
+
+To enable Google sign-in, you need to configure Google OAuth in your Supabase project:
+
+1. **Create Google OAuth Credentials**:
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Create a new project or select an existing one
+   - Navigate to **APIs & Services > Credentials**
+   - Click **Create Credentials > OAuth client ID**
+   - Choose **Web application** as the application type
+   - Add authorized redirect URIs:
+     - `https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback`
+     - Replace `YOUR_PROJECT_REF` with your Supabase project reference
+   - Copy the **Client ID** and **Client Secret**
+
+2. **Configure in Supabase**:
+   - Go to your Supabase Dashboard
+   - Navigate to **Authentication > Providers**
+   - Enable **Google** provider
+   - Enter your Google **Client ID** and **Client Secret**
+   - Save the configuration
+
+3. **Configure Redirect URLs** (for mobile):
+   - In Supabase Dashboard, go to **Authentication > URL Configuration**
+   - Add your app's redirect URL to **Redirect URLs**:
+     - For development: `com.sharemoney.app://auth/callback`
+     - For production: Add your production redirect URL
+   - The redirect URL format is: `{scheme}://auth/callback`
+   - The scheme is defined in `mobile/app.json` (currently `com.sharemoney.app`)
 
 ### Testing Authentication
 
 1. Start the app and you'll see the login screen
-2. Tap "Don't have an account? Sign Up" to create a new account
-3. After signing up/signing in, you'll see the transactions screen
-4. Use the "Sign Out" button in the header to log out
+2. **Email/Password**: 
+   - Tap "Don't have an account? Sign Up" to create a new account
+   - Or sign in with existing credentials
+3. **Google Sign In**:
+   - Tap "Continue with Google" button
+   - A browser will open for Google authentication
+   - After successful authentication, you'll be redirected back to the app
+4. After signing up/signing in, you'll see the transactions screen
+5. Use the "Sign Out" button in the header to log out
 
 ## Next Steps
 
