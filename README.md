@@ -1,13 +1,20 @@
-# ShareMoney - Transactions App
+# ShareMoney
 
-A React Native Expo mobile app with Netlify Edge Functions backend, integrated with Supabase database to display transactions.
+React Native Expo mobile app with Netlify Functions backend and Supabase database.
+
+## Tech Stack
+
+- **Frontend**: React Native (Expo), TypeScript, React Native Paper
+- **Backend**: Netlify Functions (Node.js/TypeScript)
+- **Database**: Supabase (PostgreSQL)
+- **Auth**: Supabase Auth (Email/Password + Google OAuth)
 
 ## Project Structure
 
 ```
 ShareMoney/
-├── netlify/              # Netlify Edge Functions backend
-│   ├── edge-functions/   # Edge Functions
+├── netlify/              # Netlify Functions backend
+│   ├── functions/        # Netlify Functions
 │   │   └── transactions.ts
 │   └── package.json      # Backend dependencies
 ├── supabase/             # Supabase migrations
@@ -25,280 +32,159 @@ ShareMoney/
 
 ## Prerequisites
 
-- Node.js (v18 or higher)
-- npm or yarn
-- Expo CLI (installed globally or via npx)
-- Supabase account (free tier works)
-- Netlify account (free tier works)
+- Node.js (v18+)
+- npm/yarn
+- Supabase account
+- Netlify account
+- Expo CLI (via npx or global)
 
-## Setup Instructions
+## Development Setup
 
-### 1. Supabase Database Setup
+### 1. Clone and Install
 
-1. Create a new project at [supabase.com](https://supabase.com)
-2. Go to **Project Settings > API** and copy:
-   - **Project URL** (your `SUPABASE_URL`)
-   - **anon public** key (your `SUPABASE_ANON_KEY`)
-3. Set up the database using Supabase CLI:
-   ```bash
-   # Install Supabase CLI
-   brew install supabase/tap/supabase
-   
-   # Login to Supabase
-   supabase login
-   
-   # Link your project (replace with your project ref)
-   supabase link --project-ref YOUR_PROJECT_REF
-   
-   # Push migrations to create table and seed data
-   supabase db push
-   ```
-   
-   Alternatively, you can run the migration SQL manually in the Supabase SQL Editor:
-   - First run: `supabase/migrations/20240101000000_create_transactions.sql`
-   - Then run: `supabase/migrations/20240102000000_add_user_authentication.sql`
-   
-   **Important**: The authentication migration adds Row Level Security (RLS) policies, so users can only access their own transactions.
+```bash
+# Install root dependencies (if any)
+npm install
 
-### 2. Netlify Backend Setup
+# Install backend dependencies
+cd netlify && npm install
 
-1. Install dependencies:
-   ```bash
-   cd netlify
-   npm install
-   ```
+# Install mobile dependencies
+cd ../mobile && npm install
+```
 
-2. Set up environment variables in Netlify:
-   - Go to your Netlify site dashboard
-   - Navigate to **Site settings > Environment variables**
-   - Add the following:
-     - `SUPABASE_URL` = your Supabase project URL
-     - `SUPABASE_ANON_KEY` = your Supabase anon key
+### 2. Environment Variables
 
-3. For local development, create a `.env` file in the root directory:
-   ```
-   SUPABASE_URL=your_supabase_url
-   SUPABASE_ANON_KEY=your_supabase_anon_key
-   ```
+**Root `.env`** (for Netlify):
+```env
+SUPABASE_URL=your_supabase_url
+SUPABASE_ANON_KEY=your_supabase_anon_key
+```
 
-4. Deploy to Netlify:
-   
-   **Option A: Deploy from the netlify directory**
-   ```bash
-   # Install Netlify CLI if not already installed
-   npm install -g netlify-cli
-   
-   # Login to Netlify
-   netlify login
-   
-   # Navigate to netlify directory and deploy
-   cd netlify
-   netlify deploy --prod
-   ```
-   
-   **Option B: Deploy from root (move netlify.toml to root)**
-   - Move `netlify/netlify.toml` to the project root
-   - Update paths in `netlify.toml` to point to `netlify/edge-functions`
-   - Deploy from root: `netlify deploy --prod`
+**`mobile/.env`** (must use `EXPO_PUBLIC_` prefix):
+```env
+EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+EXPO_PUBLIC_API_URL=http://YOUR_LOCAL_IP:8888/api  # Optional, defaults based on __DEV__
+```
 
-5. Note your Netlify site URL (e.g., `https://your-site.netlify.app`)
+### 3. Database Setup
 
-### 3. Mobile App Setup
+```bash
+# Using Supabase CLI
+supabase link --project-ref YOUR_PROJECT_REF
+supabase db push
 
-1. Navigate to the mobile directory:
-   ```bash
-   cd mobile
-   ```
+# Or manually run migrations in Supabase SQL Editor:
+# - supabase/migrations/20240101000000_create_transactions.sql
+# - supabase/migrations/20240102000000_add_user_authentication.sql
+```
 
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
+### 4. Run Locally
 
-3. Configure Supabase credentials:
-   - Create a `.env` file in the `mobile` directory (or use environment variables)
-   - Add your Supabase credentials:
-     ```
-     EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
-     EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-     ```
-   - Alternatively, update `mobile/supabase.ts` directly with your credentials
-
-4. Update the API URL in `App.tsx`:
-   - Open `mobile/App.tsx`
-   - Find the `API_URL` constant near the top
-   - Replace `https://your-site.netlify.app/api/transactions` with your actual Netlify URL
-
-5. For local development (if running Netlify dev locally):
-   - Change `API_URL` to `http://YOUR_LOCAL_IP:8888/api/transactions`
-   - Make sure your mobile device/emulator can access localhost (use your computer's IP for physical devices)
-
-6. Start the Expo development server:
-   ```bash
-   npm start
-   ```
-
-7. Run on your preferred platform:
-   - Press `i` for iOS simulator
-   - Press `a` for Android emulator
-   - Scan QR code with Expo Go app on your physical device
-
-## Running the Project
-
-### Backend (Netlify)
-
-For local development:
+**Terminal 1 - Backend:**
 ```bash
 cd netlify
 netlify dev
+# Available at http://localhost:8888/api/transactions
 ```
 
-The Edge Function will be available at `http://localhost:8888/api/transactions`
-
-### Mobile App
-
+**Terminal 2 - Mobile:**
 ```bash
 cd mobile
 npm start
+# Press 'i' for iOS, 'a' for Android, or scan QR code
 ```
 
-Then choose your platform (iOS, Android, or Web).
+**Note**: For physical devices, use your local IP instead of `localhost` in `EXPO_PUBLIC_API_URL`.
 
-## API Endpoint
+## Deployment
 
-- **Endpoint**: `/api/transactions`
-- **Method**: GET
-- **Authentication**: Required (Bearer token in Authorization header)
-- **Response**: JSON array of transactions (filtered by authenticated user)
+### Netlify
 
-Example response:
-```json
-[
-  {
-    "id": 1,
-    "amount": 150.00,
-    "description": "Grocery shopping at Whole Foods",
-    "date": "2024-01-15",
-    "type": "expense",
-    "category": "Food"
-  },
-  ...
-]
-```
+1. Set environment variables in Netlify dashboard:
+   - `SUPABASE_URL`
+   - `SUPABASE_ANON_KEY`
 
-## Features
+2. Deploy:
+   ```bash
+   cd netlify
+   netlify deploy --prod
+   ```
 
-- ✅ Netlify Edge Functions backend (TypeScript)
-- ✅ Supabase PostgreSQL database integration
-- ✅ **User authentication** with Supabase Auth (Email/Password + Google OAuth)
-- ✅ **Row Level Security (RLS)** - users can only see their own transactions
-- ✅ React Native Expo mobile app (TypeScript)
-- ✅ Beautiful transaction list UI with login/signup screens
-- ✅ Loading and error states
-- ✅ Transaction categorization (income/expense)
-- ✅ Formatted dates and amounts
-- ✅ Full TypeScript support with type safety
+### Mobile (Expo)
+
+See `mobile/EXPO_PUBLISH.md` for EAS build and OTA update instructions.
+
+## API
+
+**Endpoint**: `GET /api/transactions`
+
+- **Auth**: Bearer token required
+- **Response**: JSON array of transactions (filtered by user via RLS)
+
+**Implementation**: `netlify/functions/transactions.ts`
+
+## Architecture
+
+- **Database**: Supabase PostgreSQL with Row Level Security (RLS)
+- **Auth**: Supabase Auth (JWT tokens, AsyncStorage persistence)
+- **API**: Netlify Functions with CORS and auth validation
+- **Mobile**: Expo with React Native Paper UI
+
+## Key Implementation Details
+
+### Authentication Flow
+
+1. User signs in via Supabase Auth (email/password or Google OAuth)
+2. JWT token stored in AsyncStorage
+3. Token sent in `Authorization: Bearer <token>` header to API
+4. Netlify Function validates token with Supabase
+5. RLS policies filter transactions by `user_id`
+
+### Google OAuth Setup
+
+1. Create OAuth credentials in Google Cloud Console (Web application type)
+2. Add redirect URI: `https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback`
+3. Configure in Supabase Dashboard > Authentication > Providers
+4. Add mobile redirect URL: `com.sharemoney.app://auth/callback` (in Supabase URL Configuration)
+
+### Environment Variables
+
+- **Expo requirement**: All mobile env vars must use `EXPO_PUBLIC_` prefix
+- **Netlify**: Loads from root `.env` automatically in dev
+- **Mobile**: Loads from `mobile/.env` (Expo SDK 49+ native support)
 
 ## Troubleshooting
 
-### Mobile app can't connect to API
+- **Port 8888 in use**: Change port or kill process
+- **Physical device can't connect**: Use local IP in `EXPO_PUBLIC_API_URL`, not `localhost`
+- **Auth errors**: Verify env vars have correct prefix, check Supabase dashboard config
+- **RLS issues**: Ensure migrations ran, verify policies in Supabase dashboard
 
-- Verify the `API_URL` in `App.js` is correct
-- For physical devices, use your computer's local IP instead of `localhost`
-- Check that Netlify Edge Function is deployed and accessible
-- Verify CORS headers are set correctly in the Edge Function
+## Development
 
-### Authentication errors
+### Testing API
 
-- **"Unauthorized: Missing authorization header"**: Make sure you're signed in. The app should show the login screen if not authenticated.
-- **"Unauthorized: Invalid or expired token"**: Your session may have expired. Try signing out and signing back in.
-- **Can't sign up/sign in**: 
-  - Verify your Supabase credentials are correct in `mobile/supabase.ts` or `.env` file
-  - Check that Supabase Auth is enabled in your Supabase project settings
-  - Ensure email confirmation is disabled for testing (or check your email for confirmation link)
-- **Google sign-in not working**:
-  - Verify Google OAuth is configured in Supabase Dashboard (Authentication > Providers)
-  - Check that redirect URLs are configured correctly in Supabase (Authentication > URL Configuration)
-  - Ensure the redirect URL matches the scheme in `mobile/app.json` (`com.sharemoney.app://auth/callback`)
-  - Make sure Google OAuth credentials (Client ID and Secret) are correctly entered in Supabase
-- **"Users can only see their own transactions"**: This is expected behavior due to Row Level Security. Each user only sees their own data.
+```bash
+curl http://localhost:8888/api/transactions
+```
 
-### Database connection errors
+### Code Structure
 
-- Verify Supabase environment variables are set correctly in Netlify
-- Check that the `transactions` table exists in Supabase
-- Run migrations: `supabase db push`
-- Or use the seed script: `./scripts/seed-db.sh`
+- `mobile/App.tsx` - Main app component, transaction list
+- `mobile/screens/AuthScreen.tsx` - Login/signup UI
+- `mobile/contexts/AuthContext.tsx` - Auth state management
+- `mobile/supabase.ts` - Supabase client configuration
+- `netlify/functions/transactions.ts` - API endpoint handler
 
-### Netlify deployment issues
+## Scripts
 
-- Make sure `netlify.toml` is in the correct location
-- Verify Edge Function file is in `netlify/edge-functions/` directory
-- Check Netlify build logs for errors
+- `./scripts/seed-db.sh` - Seed database with sample data
+- `./scripts/seed-db.ts` - TypeScript version of seed script
 
-## Authentication
+## Resources
 
-The app now includes full user authentication with multiple sign-in options:
-
-1. **Email/Password Sign Up**: New users can create an account with email and password
-2. **Email/Password Sign In**: Existing users can sign in with their credentials
-3. **Google Sign In**: Users can sign in with their Google account (OAuth)
-4. **Session Management**: Authentication state is persisted using AsyncStorage
-5. **Protected API**: All API calls require a valid authentication token
-6. **User Isolation**: Each user can only see their own transactions (enforced by RLS)
-
-### Setting Up Google OAuth
-
-To enable Google sign-in, you need to configure Google OAuth in your Supabase project:
-
-1. **Create Google OAuth Credentials**:
-   - Go to [Google Cloud Console](https://console.cloud.google.com/)
-   - Create a new project or select an existing one
-   - Navigate to **APIs & Services > Credentials**
-   - Click **Create Credentials > OAuth client ID**
-   - **Important**: Choose **Web application** as the application type (even though this is a mobile app)
-   - **Why Web application?** Supabase acts as the OAuth server. The flow is:
-     - Mobile app → Supabase → Google OAuth
-     - Google redirects back to Supabase's web callback URL
-     - Supabase then redirects to your mobile app
-   - Add authorized redirect URIs:
-     - `https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback`
-     - Replace `YOUR_PROJECT_REF` with your Supabase project reference (found in Supabase Dashboard > Settings > API)
-   - Copy the **Client ID** and **Client Secret**
-
-2. **Configure in Supabase**:
-   - Go to your Supabase Dashboard
-   - Navigate to **Authentication > Providers**
-   - Enable **Google** provider
-   - Enter your Google **Client ID** and **Client Secret**
-   - Save the configuration
-
-3. **Configure Redirect URLs** (for mobile):
-   - In Supabase Dashboard, go to **Authentication > URL Configuration**
-   - Add your app's redirect URL to **Redirect URLs**:
-     - For development: `com.sharemoney.app://auth/callback`
-     - For production: Add your production redirect URL
-   - The redirect URL format is: `{scheme}://auth/callback`
-   - The scheme is defined in `mobile/app.json` (currently `com.sharemoney.app`)
-
-### Testing Authentication
-
-1. Start the app and you'll see the login screen
-2. **Email/Password**: 
-   - Tap "Don't have an account? Sign Up" to create a new account
-   - Or sign in with existing credentials
-3. **Google Sign In**:
-   - Tap "Continue with Google" button
-   - A browser will open for Google authentication
-   - After successful authentication, you'll be redirected back to the app
-4. After signing up/signing in, you'll see the transactions screen
-5. Use the "Sign Out" button in the header to log out
-
-## Next Steps
-
-- ✅ Add authentication
-- Implement transaction creation/editing
-- Add filtering and sorting
-- Implement pull-to-refresh
-- Add transaction details screen
+- Expo publishing: `mobile/EXPO_PUBLISH.md`
+- Supabase migrations: `supabase/migrations/`
 

@@ -42,7 +42,10 @@ To build for production:
 ## Important Notes
 
 - **API URL**: ✅ Configured in `App.tsx` - uses production URL for non-dev builds
-- **Environment Variables**: Can be set in EAS dashboard or via `eas secret:create`
+- **Environment Variables**: 
+  - Must use the `EXPO_PUBLIC_` prefix to be accessible in the app (e.g., `EXPO_PUBLIC_SUPABASE_URL`)
+  - Can be set in EAS dashboard or via `eas secret:create`
+  - For local development, create a `.env` file in the `mobile/` directory
 - **Updates**: Use `eas update` to push OTA updates (already published initial version)
 
 ## Current Configuration
