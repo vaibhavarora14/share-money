@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import {
   Appbar,
   Button,
@@ -52,6 +53,8 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   const [currencyMenuVisible, setCurrencyMenuVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [slideAnim] = useState(new Animated.Value(0));
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const screenHeight = Dimensions.get("window").height;
@@ -61,6 +64,10 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     if (transaction) {
       setDescription(transaction.description || "");
       setAmount(transaction.amount.toString());
+      const transactionDate = transaction.date
+        ? new Date(transaction.date)
+        : new Date();
+      setSelectedDate(transactionDate);
       setDate(transaction.date || "");
       setType(transaction.type || "expense");
       setCategory(transaction.category || "");
@@ -68,10 +75,33 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     } else {
       // Set default date to today
       const today = new Date();
+      setSelectedDate(today);
       setDate(today.toISOString().split("T")[0]);
       setCurrency(defaultCurrency);
     }
   }, [transaction, defaultCurrency]);
+
+  const formatDateForInput = (date: Date): string => {
+    return date.toISOString().split("T")[0];
+  };
+
+  const handleDateChange = (event: any, selectedDate?: Date) => {
+    if (Platform.OS === "android") {
+      setShowDatePicker(false);
+      if (event.type === "set" && selectedDate) {
+        setSelectedDate(selectedDate);
+        setDate(formatDateForInput(selectedDate));
+      }
+    } else {
+      // iOS - update date as user scrolls, but don't close until Done is pressed
+      if (selectedDate) {
+        setSelectedDate(selectedDate);
+      }
+      if (event.type === "dismissed") {
+        setShowDatePicker(false);
+      }
+    }
+  };
 
   // Animation effect
   useEffect(() => {
@@ -287,13 +317,60 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
               <TextInput
                 label="Date"
                 value={date}
-                onChangeText={setDate}
                 mode="outlined"
-                disabled={loading}
+                editable={!loading}
+                showSoftInputOnFocus={false}
+                onFocus={() => setShowDatePicker(true)}
                 style={styles.input}
                 left={<TextInput.Icon icon="calendar" />}
+                right={
+                  <TextInput.Icon
+                    icon="calendar"
+                    onPress={() => !loading && setShowDatePicker(true)}
+                  />
+                }
                 placeholder="YYYY-MM-DD"
+                onPressIn={() => !loading && setShowDatePicker(true)}
               />
+              {showDatePicker && (
+                <>
+                  {Platform.OS === "ios" && (
+                    <View style={styles.datePickerContainer}>
+                      <View style={styles.datePickerHeader}>
+                        <Button onPress={() => setShowDatePicker(false)}>
+                          Cancel
+                        </Button>
+                        <Text variant="titleMedium">Select Date</Text>
+                        <Button
+                          onPress={() => {
+                            setDate(formatDateForInput(selectedDate));
+                            setShowDatePicker(false);
+                          }}
+                        >
+                          Done
+                        </Button>
+                      </View>
+                      <DateTimePicker
+                        value={selectedDate}
+                        mode="date"
+                        display="spinner"
+                        onChange={handleDateChange}
+                        maximumDate={new Date()}
+                        style={styles.datePicker}
+                      />
+                    </View>
+                  )}
+                  {Platform.OS === "android" && (
+                    <DateTimePicker
+                      value={selectedDate}
+                      mode="date"
+                      display="default"
+                      onChange={handleDateChange}
+                      maximumDate={new Date()}
+                    />
+                  )}
+                </>
+              )}
 
               <View style={styles.segmentedContainer}>
                 <Text
@@ -460,5 +537,26 @@ const styles = StyleSheet.create({
   saveButton: {},
   saveButtonFullWidth: {
     flex: 1,
+  },
+  datePickerContainer: {
+    backgroundColor: "#ffffff",
+    borderRadius: 8,
+    marginTop: 8,
+    marginBottom: 16,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+  },
+  datePickerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e0e0e0",
+  },
+  datePicker: {
+    height: 200,
   },
 });
