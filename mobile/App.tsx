@@ -874,6 +874,52 @@ function AppContent() {
     }
   };
 
+  const handleRemoveMember = async (userId: string) => {
+    if (!API_URL || !selectedGroup) {
+      throw new Error("Invalid request");
+    }
+
+    const token = await getAuthToken();
+    if (!token) {
+      throw new Error("Not authenticated");
+    }
+
+    const response = await fetch(
+      `${API_URL}/group-members?group_id=${selectedGroup.id}&user_id=${userId}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        errorData.error || `HTTP error! status: ${response.status}`
+      );
+    }
+
+    // Refresh group details
+    if (groupDetails && selectedGroup) {
+      const detailsResponse = await fetch(
+        `${API_URL}/groups/${selectedGroup.id}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      if (detailsResponse.ok) {
+        const updatedGroup: GroupWithMembers = await detailsResponse.json();
+        setGroupDetails(updatedGroup);
+      }
+    }
+  };
+
   const handleGroupPress = async (group: Group) => {
     if (!API_URL) return;
 
@@ -936,6 +982,9 @@ function AppContent() {
             setCurrentRoute("groups");
           }}
           onAddMember={() => setShowAddMember(true)}
+          onRemoveMember={async (userId: string) => {
+            await handleRemoveMember(userId);
+          }}
           onLeaveGroup={() => {
             setGroupDetails(null);
             setSelectedGroup(null);
