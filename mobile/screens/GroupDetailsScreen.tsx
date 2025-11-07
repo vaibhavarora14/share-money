@@ -18,6 +18,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../supabase";
 import { GroupWithMembers, Transaction } from "../types";
 import { TransactionFormScreen } from "./TransactionFormScreen";
+import { formatCurrency } from "../utils/currency";
 
 // API URL - must be set via EXPO_PUBLIC_API_URL environment variable
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -386,6 +387,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           transaction={null}
           onSave={handleCreateTransaction}
           onCancel={() => setShowTransactionForm(false)}
+          defaultCurrency={group.currency || "USD"}
         />
         <StatusBar style="auto" />
       </>
@@ -574,13 +576,32 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                         >
                           {transaction.description || "No description"}
                         </Text>
-                        <Text
-                          variant="bodySmall"
-                          style={{ color: theme.colors.onSurfaceVariant }}
-                        >
-                          {formatDate(transaction.date)}
-                          {transaction.category && ` • ${transaction.category}`}
-                        </Text>
+                        <View style={styles.transactionMeta}>
+                          <Text
+                            variant="bodySmall"
+                            style={{ color: theme.colors.onSurfaceVariant }}
+                          >
+                            {formatDate(transaction.date)}
+                            {transaction.category && ` • ${transaction.category}`}
+                          </Text>
+                          {transaction.currency && transaction.currency !== "USD" && (
+                            <Chip
+                              style={[
+                                styles.currencyChip,
+                                {
+                                  backgroundColor: theme.colors.surfaceVariant,
+                                  marginLeft: 8,
+                                },
+                              ]}
+                              textStyle={[
+                                styles.currencyChipText,
+                                { color: theme.colors.onSurfaceVariant },
+                              ]}
+                            >
+                              {transaction.currency}
+                            </Chip>
+                          )}
+                        </View>
                       </View>
                       <Text
                         variant="titleMedium"
@@ -589,7 +610,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                           { color: amountColor },
                         ]}
                       >
-                        {sign}${Math.abs(transaction.amount).toFixed(2)}
+                        {sign}{formatCurrency(transaction.amount, transaction.currency)}
                       </Text>
                     </Card.Content>
                   </Card>
@@ -627,12 +648,15 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       </ScrollView>
 
       {isMember && (
-        <FAB
+        <Button
+          mode="contained"
           icon="plus"
-          label="Add"
           onPress={() => setShowTransactionForm(true)}
           style={styles.addTransactionButton}
-        />
+          contentStyle={styles.addTransactionButtonContent}
+        >
+          Add Transaction
+        </Button>
       )}
     </SafeAreaView>
   );
@@ -707,12 +731,26 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginBottom: 4,
   },
+  transactionMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    marginTop: 4,
+  },
+  currencyChip: {
+    height: 20,
+  },
+  currencyChipText: {
+    fontSize: 10,
+  },
   transactionAmount: {
     fontWeight: "bold",
   },
   addTransactionButton: {
-    position: "absolute",
-    right: 16,
-    bottom: 16, // Space for bottom navigation bar
+    margin: 16,
+    marginBottom: 80, // Space for bottom navigation bar
+  },
+  addTransactionButtonContent: {
+    paddingVertical: 8,
   },
 });
