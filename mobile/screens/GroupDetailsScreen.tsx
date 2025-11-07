@@ -46,6 +46,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [menuVisible, setMenuVisible] = useState<boolean>(false);
   const [showTransactionForm, setShowTransactionForm] =
     useState<boolean>(false);
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [transactionsLoading, setTransactionsLoading] =
     useState<boolean>(false);
@@ -352,6 +353,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       }
 
       setShowTransactionForm(false);
+      setEditingTransaction(null);
       await fetchTransactions();
       if (onTransactionAdded) {
         onTransactionAdded();
@@ -359,6 +361,138 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     } catch (error) {
       throw error;
     }
+  };
+
+  const handleUpdateTransaction = async (
+    transactionData: Omit<Transaction, "id" | "created_at" | "user_id">
+  ): Promise<void> => {
+    if (!API_URL || !editingTransaction) {
+      throw new Error("Invalid request");
+    }
+
+    try {
+      let {
+        data: { session: currentSession },
+      } = await supabase.auth.getSession();
+
+      if (!currentSession) {
+        throw new Error("Not authenticated");
+      }
+
+      const token = currentSession.access_token;
+
+      const response = await fetch(`${API_URL}/transactions`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...transactionData,
+          id: editingTransaction.id,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.error || `HTTP error! status: ${response.status}`
+        );
+      }
+
+      setShowTransactionForm(false);
+      setEditingTransaction(null);
+      await fetchTransactions();
+      if (onTransactionAdded) {
+        onTransactionAdded();
+      }
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const handleDeleteTransaction = async (transactionId: number): Promise<void> => {
+    if (!API_URL) {
+      throw new Error("Unable to connect to the server");
+    }
+
+    try {
+      let {
+        data: { session: currentSession },
+      } = await supabase.auth.getSession();
+
+      if (!currentSession) {
+        throw new Error("Not authenticated");
+      }
+
+      const token = currentSession.access_token;
+
+      const response = await fetch(`${API_URL}/transactions?id=${transactionId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData.error || `HTTP error! status: ${response.status}`
+        );
+      }
+
+      await fetchTransactions();
+      if (onTransactionAdded) {
+        onTransactionAdded();
+      }
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const handleEditTransaction = (transaction: Transaction) => {
+    setEditingTransaction(transaction);
+    setShowTransactionForm(true);
+  };
+
+  const handleDeleteClick = (transaction: Transaction) => {
+    Alert.alert(
+      "Delete Transaction",
+      `Are you sure you want to delete "${transaction.description}"?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await handleDeleteTransaction(transaction.id);
+            } catch (error) {
+              Alert.alert(
+                "Error",
+                error instanceof Error ? error.message : "Failed to delete transaction"
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleTransactionFormSave = async (
+    transactionData: Omit<Transaction, "id" | "created_at" | "user_id">
+  ) => {
+    if (editingTransaction) {
+      await handleUpdateTransaction(transactionData);
+    } else {
+      await handleCreateTransaction(transactionData);
+    }
+  };
+
+  const handleTransactionFormCancel = () => {
+    setShowTransactionForm(false);
+    setEditingTransaction(null);
   };
 
   const currentUserId = session?.user?.id;
@@ -384,9 +518,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     return (
       <>
         <TransactionFormScreen
-          transaction={null}
-          onSave={handleCreateTransaction}
-          onCancel={() => setShowTransactionForm(false)}
+          transaction={editingTransaction}
+          onSave={handleTransactionFormSave}
+          onCancel={handleTransactionFormCancel}
           defaultCurrency={group.currency || "USD"}
         />
         <StatusBar style="auto" />
@@ -603,15 +737,31 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                           )}
                         </View>
                       </View>
-                      <Text
-                        variant="titleMedium"
-                        style={[
-                          styles.transactionAmount,
-                          { color: amountColor },
-                        ]}
-                      >
-                        {sign}{formatCurrency(transaction.amount, transaction.currency)}
-                      </Text>
+                      <View style={styles.transactionRight}>
+                        <Text
+                          variant="titleMedium"
+                          style={[
+                            styles.transactionAmount,
+                            { color: amountColor },
+                          ]}
+                        >
+                          {sign}{formatCurrency(transaction.amount, transaction.currency)}
+                        </Text>
+                        <View style={styles.transactionActions}>
+                          <IconButton
+                            icon="pencil"
+                            size={20}
+                            onPress={() => handleEditTransaction(transaction)}
+                            iconColor={theme.colors.primary}
+                          />
+                          <IconButton
+                            icon="delete"
+                            size={20}
+                            onPress={() => handleDeleteClick(transaction)}
+                            iconColor={theme.colors.error}
+                          />
+                        </View>
+                      </View>
                     </Card.Content>
                   </Card>
                   {index < Math.min(transactions.length, 5) - 1 && (
@@ -741,6 +891,14 @@ const styles = StyleSheet.create({
   },
   transactionAmount: {
     fontWeight: "bold",
+    marginBottom: 8,
+  },
+  transactionRight: {
+    alignItems: "flex-end",
+  },
+  transactionActions: {
+    flexDirection: "row",
+    marginTop: 4,
   },
   addTransactionFab: {
     position: "absolute",
