@@ -324,6 +324,52 @@ export const handler: Handler = async (event, context) => {
       };
     }
 
+    // Handle DELETE /groups/:id - Delete group
+    if (httpMethod === 'DELETE' && groupId) {
+      // Verify user is the owner
+      const { data: group, error: groupError } = await supabase
+        .from('groups')
+        .select('created_by')
+        .eq('id', groupId)
+        .single();
+
+      if (groupError || !group) {
+        return {
+          statusCode: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Group not found' }),
+        };
+      }
+
+      if (group.created_by !== user.id) {
+        return {
+          statusCode: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Only group owners can delete groups' }),
+        };
+      }
+
+      const { error: deleteError } = await supabase
+        .from('groups')
+        .delete()
+        .eq('id', groupId);
+
+      if (deleteError) {
+        console.error('Supabase error:', deleteError);
+        return {
+          statusCode: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Failed to delete group', details: deleteError.message }),
+        };
+      }
+
+      return {
+        statusCode: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ success: true, message: 'Group deleted successfully' }),
+      };
+    }
+
     // Method not allowed
     return {
       statusCode: 405,

@@ -8,13 +8,14 @@ import {
   Chip,
   FAB,
   IconButton,
+  Menu,
   Text,
   useTheme,
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../supabase";
-import { GroupWithMembers } from "../types";
+import { GroupWithMembers, Transaction } from "../types";
 
 // API URL - must be set via EXPO_PUBLIC_API_URL environment variable
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -24,6 +25,7 @@ interface GroupDetailsScreenProps {
   onBack: () => void;
   onAddMember: () => void;
   onLeaveGroup?: () => void;
+  onDeleteGroup?: () => void;
 }
 
 export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
@@ -31,10 +33,14 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   onBack,
   onAddMember,
   onLeaveGroup,
+  onDeleteGroup,
 }) => {
   const [group, setGroup] = useState<GroupWithMembers>(initialGroup);
   const [loading, setLoading] = useState<boolean>(false);
   const [leaving, setLeaving] = useState<boolean>(false);
+  const [menuVisible, setMenuVisible] = useState<boolean>(false);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactionsLoading, setTransactionsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const { session, signOut } = useAuth();
   const theme = useTheme();
@@ -100,9 +106,109 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     }
   }, [group.id, session, signOut]);
 
+  const fetchTransactions = useCallback(async (): Promise<void> => {
+    if (!API_URL || !session) return;
+
+    try {
+      setTransactionsLoading(true);
+      let {
+        data: { session: currentSession },
+      } = await supabase.auth.getSession();
+
+      if (!currentSession) return;
+
+      const token = currentSession.access_token;
+
+      const response = await fetch(`${API_URL}/transactions`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (response.ok) {
+        const data: Transaction[] = await response.json();
+        // For now, show all transactions. Later we can filter by group_id
+        setTransactions(data);
+      }
+    } catch (err) {
+      console.error("Error fetching transactions:", err);
+    } finally {
+      setTransactionsLoading(false);
+    }
+  }, [session]);
+
   useEffect(() => {
     fetchGroupDetails();
-  }, [fetchGroupDetails]);
+    fetchTransactions();
+  }, [fetchGroupDetails, fetchTransactions]);
+
+  const handleDeleteGroup = async () => {
+    Alert.alert(
+      "Delete Group",
+      `Are you sure you want to delete "${group.name}"? This action cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            if (!API_URL) {
+              Alert.alert("Error", "Unable to connect to the server");
+              return;
+            }
+
+            try {
+              setLeaving(true);
+
+              let {
+                data: { session: currentSession },
+              } = await supabase.auth.getSession();
+
+              if (!currentSession) {
+                Alert.alert("Error", "Not authenticated");
+                return;
+              }
+
+              const token = currentSession.access_token;
+
+              const response = await fetch(`${API_URL}/groups/${group.id}`, {
+                method: "DELETE",
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  "Content-Type": "application/json",
+                },
+              });
+
+              if (!response.ok) {
+                if (response.status === 401) {
+                  await signOut();
+                  return;
+                }
+
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+              }
+
+              if (onDeleteGroup) {
+                onDeleteGroup();
+              } else {
+                onBack();
+              }
+            } catch (err) {
+              Alert.alert(
+                "Error",
+                err instanceof Error ? err.message : "Failed to delete group"
+              );
+            } finally {
+              setLeaving(false);
+              setMenuVisible(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const handleLeaveGroup = async () => {
     Alert.alert(
@@ -173,6 +279,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               );
             } finally {
               setLeaving(false);
+              setMenuVisible(false);
             }
           },
         },
@@ -228,10 +335,56 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
+    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
       <Appbar.Header>
         <Appbar.BackAction onPress={onBack} />
         <Appbar.Content title={group.name} />
+        {isMember && (
+          <Menu
+            visible={menuVisible}
+            onDismiss={() => setMenuVisible(false)}
+            anchor={
+              <Appbar.Action
+                icon="dots-vertical"
+                onPress={() => setMenuVisible(true)}
+              />
+            }
+          >
+            {isOwner && (
+              <Menu.Item
+                onPress={() => {
+                  setMenuVisible(false);
+                  handleDeleteGroup();
+                }}
+                title="Delete Group"
+                leadingIcon="delete"
+                titleStyle={{ color: theme.colors.error }}
+              />
+            )}
+            {!isOwner && (
+              <Menu.Item
+                onPress={() => {
+                  setMenuVisible(false);
+                  handleLeaveGroup();
+                }}
+                title="Leave Group"
+                leadingIcon="exit-run"
+                titleStyle={{ color: theme.colors.error }}
+              />
+            )}
+            {isOwner && (
+              <Menu.Item
+                onPress={() => {
+                  setMenuVisible(false);
+                  handleLeaveGroup();
+                }}
+                title="Leave Group"
+                leadingIcon="exit-run"
+                titleStyle={{ color: theme.colors.error }}
+              />
+            )}
+          </Menu>
+        )}
       </Appbar.Header>
 
       <ScrollView
@@ -302,6 +455,72 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             </Text>
           )}
         </View>
+
+        <View style={styles.section}>
+          <Text variant="titleMedium" style={styles.sectionTitle}>
+            Transactions ({transactions.length})
+          </Text>
+
+          {transactionsLoading ? (
+            <ActivityIndicator size="small" style={{ marginVertical: 16 }} />
+          ) : transactions.length > 0 ? (
+            transactions.slice(0, 5).map((transaction, index) => {
+              const isIncome = transaction.type === "income";
+              const amountColor = isIncome ? "#10b981" : "#ef4444";
+              const sign = isIncome ? "+" : "-";
+
+              return (
+                <React.Fragment key={transaction.id}>
+                  <Card style={styles.transactionCard} mode="outlined">
+                    <Card.Content style={styles.transactionContent}>
+                      <View style={styles.transactionLeft}>
+                        <Text variant="titleSmall" style={styles.transactionDescription}>
+                          {transaction.description || "No description"}
+                        </Text>
+                        <Text
+                          variant="bodySmall"
+                          style={{ color: theme.colors.onSurfaceVariant }}
+                        >
+                          {formatDate(transaction.date)}
+                          {transaction.category && ` • ${transaction.category}`}
+                        </Text>
+                      </View>
+                      <Text
+                        variant="titleMedium"
+                        style={[styles.transactionAmount, { color: amountColor }]}
+                      >
+                        {sign}${Math.abs(transaction.amount).toFixed(2)}
+                      </Text>
+                    </Card.Content>
+                  </Card>
+                  {index < Math.min(transactions.length, 5) - 1 && (
+                    <View style={{ height: 8 }} />
+                  )}
+                </React.Fragment>
+              );
+            })
+          ) : (
+            <Text
+              variant="bodyMedium"
+              style={{ color: theme.colors.onSurfaceVariant, textAlign: "center" }}
+            >
+              No transactions yet
+            </Text>
+          )}
+
+          {transactions.length > 5 && (
+            <Text
+              variant="bodySmall"
+              style={{
+                color: theme.colors.primary,
+                textAlign: "center",
+                marginTop: 8,
+              }}
+            >
+              Showing 5 of {transactions.length} transactions
+            </Text>
+          )}
+        </View>
       </ScrollView>
 
       {isOwner && (
@@ -311,23 +530,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           onPress={onAddMember}
           label="Add Member"
         />
-      )}
-
-      {isMember && (
-        <Button
-          mode="outlined"
-          onPress={handleLeaveGroup}
-          disabled={leaving}
-          loading={leaving}
-          style={[
-            styles.leaveButton,
-            { borderColor: theme.colors.error },
-            isOwner && styles.leaveButtonWithFab,
-          ]}
-          textColor={theme.colors.error}
-        >
-          Leave Group
-        </Button>
       )}
     </SafeAreaView>
   );
@@ -380,18 +582,30 @@ const styles = StyleSheet.create({
   roleChip: {
     height: 28,
   },
+  transactionCard: {
+    marginBottom: 0,
+  },
+  transactionContent: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 4,
+  },
+  transactionLeft: {
+    flex: 1,
+    marginRight: 16,
+  },
+  transactionDescription: {
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  transactionAmount: {
+    fontWeight: "bold",
+  },
   fab: {
     position: "absolute",
     margin: 16,
     right: 0,
-    bottom: 0,
-  },
-  leaveButton: {
-    margin: 16,
-    marginTop: 8,
-    marginBottom: 16,
-  },
-  leaveButtonWithFab: {
-    marginBottom: 80, // Add extra space when FAB is present
+    bottom: 80, // Space for bottom navigation bar
   },
 });
