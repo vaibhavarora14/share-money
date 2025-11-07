@@ -6,6 +6,7 @@ export interface Transaction {
   type: 'income' | 'expense';
   category?: string;
   created_at?: string;
+  user_id?: string;
 }
 
 export interface AmountInfo {
