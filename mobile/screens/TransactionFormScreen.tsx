@@ -305,6 +305,8 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                       {currency}
                     </Button>
                   }
+                  contentStyle={styles.currencyMenuContent}
+                  style={styles.currencyMenu}
                 >
                   {CURRENCIES.map((curr) => (
                     <Menu.Item
@@ -472,6 +474,7 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     justifyContent: "flex-end",
+    zIndex: 1000,
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
@@ -488,6 +491,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
+    zIndex: 1000,
   },
   handleContainer: {
     alignItems: "center",
@@ -572,5 +576,13 @@ const styles = StyleSheet.create({
   },
   datePicker: {
     height: 200,
+  },
+  currencyMenu: {
+    zIndex: 9999,
+    elevation: 9999,
+  },
+  currencyMenuContent: {
+    zIndex: 9999,
+    elevation: 9999,
   },
 });
