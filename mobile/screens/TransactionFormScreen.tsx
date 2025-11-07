@@ -1,40 +1,45 @@
 import React, { useEffect, useState } from "react";
 import {
   Alert,
+  Animated,
+  Dimensions,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
+  TouchableOpacity,
   View,
 } from "react-native";
 import {
   Appbar,
   Button,
-  Card,
   Menu,
   SegmentedButtons,
   Text,
   TextInput,
   useTheme,
 } from "react-native-paper";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Transaction } from "../types";
 import { CURRENCIES, getCurrencySymbol } from "../utils/currency";
 
 interface TransactionFormScreenProps {
+  visible: boolean;
   transaction?: Transaction | null;
   onSave: (
     transaction: Omit<Transaction, "id" | "created_at" | "user_id">
   ) => Promise<void>;
-  onCancel: () => void;
+  onDismiss: () => void;
   onDelete?: () => Promise<void>;
   defaultCurrency?: string;
 }
 
 export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
+  visible,
   transaction,
   onSave,
-  onCancel,
+  onDismiss,
   onDelete,
   defaultCurrency = "USD",
 }) => {
@@ -46,7 +51,10 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   const [currency, setCurrency] = useState<string>(defaultCurrency);
   const [currencyMenuVisible, setCurrencyMenuVisible] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [slideAnim] = useState(new Animated.Value(0));
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const screenHeight = Dimensions.get("window").height;
 
   // Initialize form with transaction data if editing
   useEffect(() => {
@@ -64,6 +72,34 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       setCurrency(defaultCurrency);
     }
   }, [transaction, defaultCurrency]);
+
+  // Animation effect
+  useEffect(() => {
+    if (visible) {
+      Animated.spring(slideAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+        tension: 65,
+        friction: 11,
+      }).start();
+    } else {
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [visible, slideAnim]);
+
+  const handleDismiss = () => {
+    setDescription("");
+    setAmount("");
+    setDate("");
+    setType("expense");
+    setCategory("");
+    setCurrency(defaultCurrency);
+    onDismiss();
+  };
 
   const handleSave = async () => {
     // Validation
@@ -98,6 +134,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
         category: category.trim() || undefined,
         currency: currency || defaultCurrency || "USD",
       });
+      handleDismiss();
     } catch (error) {
       Alert.alert(
         "Error",
@@ -125,6 +162,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
             setLoading(true);
             try {
               await onDelete();
+              handleDismiss();
             } catch (error) {
               Alert.alert(
                 "Error",
@@ -141,24 +179,55 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     );
   };
 
+  const bottomSheetHeight = screenHeight * 0.85;
+  const translateY = slideAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [bottomSheetHeight, 0],
+  });
+
   return (
-    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
-      <Appbar.Header>
-        <Appbar.BackAction onPress={onCancel} />
-        <Appbar.Content
-          title={transaction ? "Edit Transaction" : "New Transaction"}
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      onRequestClose={handleDismiss}
+    >
+      <View style={styles.modalOverlay}>
+        <TouchableOpacity
+          style={styles.backdrop}
+          activeOpacity={1}
+          onPress={handleDismiss}
         />
-      </Appbar.Header>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.keyboardView}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
+        <Animated.View
+          style={[
+            styles.bottomSheet,
+            {
+              height: bottomSheetHeight,
+              transform: [{ translateY }],
+              paddingBottom: insets.bottom,
+            },
+          ]}
         >
-          <Card style={styles.card} mode="elevated" elevation={2}>
-            <Card.Content style={styles.cardContent}>
+          <View style={styles.handleContainer}>
+            <View style={styles.handle} />
+          </View>
+          <Appbar.Header style={styles.header}>
+            <Appbar.Content
+              title={transaction ? "Edit Transaction" : "New Transaction"}
+            />
+            <Appbar.Action icon="close" onPress={handleDismiss} />
+          </Appbar.Header>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={styles.keyboardView}
+            keyboardVerticalOffset={0}
+          >
+            <ScrollView
+              style={styles.scrollView}
+              contentContainerStyle={styles.scrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
               <TextInput
                 label="Description"
                 value={description}
@@ -295,31 +364,60 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                   {transaction ? "Update" : "Create"}
                 </Button>
               </View>
-            </Card.Content>
-          </Card>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </Animated.View>
+      </View>
+    </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  modalOverlay: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    justifyContent: "flex-end",
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  bottomSheet: {
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: -2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  handleContainer: {
+    alignItems: "center",
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#ccc",
+  },
+  header: {
+    elevation: 0,
+    backgroundColor: "transparent",
   },
   keyboardView: {
     flex: 1,
   },
+  scrollView: {
+    flex: 1,
+  },
   scrollContent: {
-    flexGrow: 1,
     padding: 20,
-  },
-  card: {
-    borderRadius: 16,
-  },
-  cardContent: {
-    paddingVertical: 8,
+    paddingBottom: 32,
   },
   input: {
     marginBottom: 16,

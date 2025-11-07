@@ -1,35 +1,65 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
+  Animated,
+  Dimensions,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
+  TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
+  Appbar,
   Button,
-  Card,
-  Text,
   TextInput,
   useTheme,
 } from "react-native-paper";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { Group } from "../types";
 
 interface CreateGroupScreenProps {
+  visible: boolean;
   onCreateGroup: (groupData: { name: string; description?: string }) => Promise<void>;
-  onCancel: () => void;
+  onDismiss: () => void;
 }
 
 export const CreateGroupScreen: React.FC<CreateGroupScreenProps> = ({
+  visible,
   onCreateGroup,
-  onCancel,
+  onDismiss,
 }) => {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
+  const [slideAnim] = useState(new Animated.Value(0));
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const screenHeight = Dimensions.get("window").height;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.spring(slideAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+        tension: 65,
+        friction: 11,
+      }).start();
+    } else {
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [visible, slideAnim]);
+
+  const handleDismiss = () => {
+    setName("");
+    setDescription("");
+    onDismiss();
+  };
 
   const handleCreate = async () => {
     // Validation
@@ -44,6 +74,9 @@ export const CreateGroupScreen: React.FC<CreateGroupScreenProps> = ({
         name: name.trim(),
         description: description.trim() || undefined,
       });
+      setName("");
+      setDescription("");
+      onDismiss();
     } catch (error) {
       Alert.alert(
         "Error",
@@ -54,22 +87,53 @@ export const CreateGroupScreen: React.FC<CreateGroupScreenProps> = ({
     }
   };
 
-  return (
-    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.keyboardView}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          <Card style={styles.card} mode="elevated" elevation={2}>
-            <Card.Content style={styles.cardContent}>
-              <Text variant="headlineSmall" style={styles.title}>
-                Create New Group
-              </Text>
+  const bottomSheetHeight = screenHeight * 0.7;
+  const translateY = slideAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [bottomSheetHeight, 0],
+  });
 
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      onRequestClose={handleDismiss}
+    >
+      <View style={styles.modalOverlay}>
+        <TouchableOpacity
+          style={styles.backdrop}
+          activeOpacity={1}
+          onPress={handleDismiss}
+        />
+        <Animated.View
+          style={[
+            styles.bottomSheet,
+            {
+              height: bottomSheetHeight,
+              transform: [{ translateY }],
+              paddingBottom: insets.bottom,
+            },
+          ]}
+        >
+          <View style={styles.handleContainer}>
+            <View style={styles.handle} />
+          </View>
+          <Appbar.Header style={styles.header}>
+            <Appbar.Content title="Create New Group" />
+            <Appbar.Action icon="close" onPress={handleDismiss} />
+          </Appbar.Header>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={styles.keyboardView}
+            keyboardVerticalOffset={0}
+          >
+            <ScrollView
+              style={styles.scrollView}
+              contentContainerStyle={styles.scrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
               <TextInput
                 label="Group Name"
                 value={name}
@@ -94,68 +158,74 @@ export const CreateGroupScreen: React.FC<CreateGroupScreenProps> = ({
                 placeholder="Add a description for this group"
               />
 
-              <View style={styles.buttonRow}>
-                <Button
-                  mode="outlined"
-                  onPress={onCancel}
-                  disabled={loading}
-                  style={[styles.button, styles.cancelButton]}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  mode="contained"
-                  onPress={handleCreate}
-                  disabled={loading}
-                  loading={loading}
-                  style={[styles.button, styles.saveButton]}
-                >
-                  Create
-                </Button>
-              </View>
-            </Card.Content>
-          </Card>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+              <Button
+                mode="contained"
+                onPress={handleCreate}
+                disabled={loading}
+                loading={loading}
+                style={styles.createButton}
+              >
+                Create
+              </Button>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </Animated.View>
+      </View>
+    </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  modalOverlay: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    justifyContent: "flex-end",
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  bottomSheet: {
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: -2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  handleContainer: {
+    alignItems: "center",
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#ccc",
+  },
+  header: {
+    elevation: 0,
+    backgroundColor: "transparent",
   },
   keyboardView: {
     flex: 1,
   },
+  scrollView: {
+    flex: 1,
+  },
   scrollContent: {
-    flexGrow: 1,
     padding: 20,
-  },
-  card: {
-    borderRadius: 16,
-  },
-  cardContent: {
-    paddingVertical: 8,
-  },
-  title: {
-    fontWeight: "bold",
-    marginBottom: 24,
-    textAlign: "center",
+    paddingBottom: 32,
   },
   input: {
     marginBottom: 16,
   },
-  buttonRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+  createButton: {
     marginTop: 8,
   },
-  button: {
-    flex: 1,
-    marginHorizontal: 6,
-  },
-  cancelButton: {},
-  saveButton: {},
 });

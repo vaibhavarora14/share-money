@@ -474,10 +474,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     }
   };
 
-  const handleTransactionFormCancel = () => {
-    setShowTransactionForm(false);
-    setEditingTransaction(null);
-  };
 
   const currentUserId = session?.user?.id;
   const isOwner =
@@ -498,33 +494,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     );
   }
 
-  if (showTransactionForm) {
-    return (
-      <>
-        <TransactionFormScreen
-          transaction={editingTransaction}
-          onSave={handleTransactionFormSave}
-          onCancel={handleTransactionFormCancel}
-          onDelete={
-            editingTransaction
-              ? async () => {
-                  try {
-                    await handleDeleteTransaction(editingTransaction.id);
-                    setShowTransactionForm(false);
-                    setEditingTransaction(null);
-                  } catch (error) {
-                    // Error is already handled in handleDeleteTransaction
-                    throw error;
-                  }
-                }
-              : undefined
-          }
-          defaultCurrency={group.currency || "USD"}
-        />
-        <StatusBar style="auto" />
-      </>
-    );
-  }
 
   if (error) {
     return (
@@ -781,6 +750,35 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           style={styles.addTransactionButton}
         />
       )}
+
+      <TransactionFormScreen
+        visible={showTransactionForm}
+        transaction={editingTransaction}
+        onSave={async (transactionData) => {
+          await handleTransactionFormSave(transactionData);
+          setShowTransactionForm(false);
+          setEditingTransaction(null);
+        }}
+        onDismiss={() => {
+          setShowTransactionForm(false);
+          setEditingTransaction(null);
+        }}
+        onDelete={
+          editingTransaction
+            ? async () => {
+                try {
+                  await handleDeleteTransaction(editingTransaction.id);
+                  setShowTransactionForm(false);
+                  setEditingTransaction(null);
+                } catch (error) {
+                  // Error is already handled in handleDeleteTransaction
+                  throw error;
+                }
+              }
+            : undefined
+        }
+        defaultCurrency={group.currency || "USD"}
+      />
     </SafeAreaView>
   );
 };
