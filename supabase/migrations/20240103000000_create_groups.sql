@@ -65,6 +65,9 @@ CREATE POLICY "Group owners can delete groups"
 -- RLS Policies for group_members table
 -- Users can view members of groups they belong to
 -- Use a function to avoid infinite recursion
+-- SECURITY DEFINER is needed here to bypass RLS when checking membership,
+-- which prevents infinite recursion in RLS policies. The function uses
+-- direct table access without RLS checks to break the circular dependency.
 CREATE OR REPLACE FUNCTION is_group_member(group_uuid UUID, user_uuid UUID)
 RETURNS BOOLEAN AS $$
 BEGIN
@@ -125,6 +128,10 @@ CREATE POLICY "Users can leave groups or owners can remove members"
   );
 
 -- Function to automatically add creator as owner when group is created
+-- SECURITY DEFINER is needed here to bypass RLS when inserting the creator
+-- as an owner, ensuring the trigger can always execute successfully regardless
+-- of RLS policies. The function uses NEW.created_by which is already validated
+-- by the INSERT policy on groups table.
 CREATE OR REPLACE FUNCTION add_group_creator_as_owner()
 RETURNS TRIGGER AS $$
 BEGIN
