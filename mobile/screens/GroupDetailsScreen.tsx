@@ -27,6 +27,7 @@ interface GroupDetailsScreenProps {
   group: GroupWithMembers;
   onBack: () => void;
   onAddMember: () => void;
+  onRemoveMember?: (userId: string) => Promise<void>;
   onLeaveGroup?: () => void;
   onDeleteGroup?: () => void;
   onTransactionAdded?: () => void;
@@ -36,6 +37,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   group: initialGroup,
   onBack,
   onAddMember,
+  onRemoveMember,
   onLeaveGroup,
   onDeleteGroup,
   onTransactionAdded,
@@ -43,6 +45,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [group, setGroup] = useState<GroupWithMembers>(initialGroup);
   const [loading, setLoading] = useState<boolean>(false);
   const [leaving, setLeaving] = useState<boolean>(false);
+  const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
   const [menuVisible, setMenuVisible] = useState<boolean>(false);
   const [showTransactionForm, setShowTransactionForm] =
     useState<boolean>(false);
@@ -153,6 +156,11 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       setTransactionsLoading(false);
     }
   }, [session, group.id]);
+
+  // Update local state when initialGroup prop changes
+  useEffect(() => {
+    setGroup(initialGroup);
+  }, [initialGroup]);
 
   useEffect(() => {
     fetchGroupDetails();
@@ -469,6 +477,58 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     }
   };
 
+  const handleRemoveMember = async (memberUserId: string, memberEmail?: string) => {
+    if (!onRemoveMember) {
+      return;
+    }
+
+    const memberName = memberEmail || `User ${memberUserId.substring(0, 8)}...`;
+    const isRemovingSelf = memberUserId === session?.user?.id;
+    const ownerCount = group.members?.filter((m) => m.role === "owner").length || 0;
+    const memberToRemove = group.members?.find((m) => m.user_id === memberUserId);
+    const isRemovingOwner = memberToRemove?.role === "owner";
+
+    // Check if trying to remove the last owner
+    if (isRemovingOwner && ownerCount === 1) {
+      Alert.alert(
+        "Cannot Remove Member",
+        "Cannot remove the last owner of the group. Please transfer ownership first or delete the group."
+      );
+      return;
+    }
+
+    Alert.alert(
+      isRemovingSelf ? "Leave Group" : "Remove Member",
+      isRemovingSelf
+        ? `Are you sure you want to leave "${group.name}"?`
+        : `Are you sure you want to remove "${memberName}" from this group?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: isRemovingSelf ? "Leave" : "Remove",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setRemovingMemberId(memberUserId);
+              await onRemoveMember(memberUserId);
+              // If removing self, navigate back
+              if (isRemovingSelf && onLeaveGroup) {
+                onLeaveGroup();
+              }
+            } catch (error) {
+              Alert.alert(
+                "Error",
+                error instanceof Error ? error.message : "Failed to remove member"
+              );
+            } finally {
+              setRemovingMemberId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleEditTransaction = (transaction: Transaction) => {
     setEditingTransaction(transaction);
     setShowTransactionForm(true);
@@ -624,48 +684,96 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           </View>
 
           {group.members && group.members.length > 0 ? (
-            group.members.map((member, index) => (
-              <React.Fragment key={member.id}>
-                <Card style={styles.memberCard} mode="outlined">
-                  <Card.Content style={styles.memberContent}>
-                    <View style={styles.memberLeft}>
-                      <Text variant="titleSmall" style={styles.memberName}>
-                        {member.email ||
-                          `User ${member.user_id.substring(0, 8)}...`}
-                      </Text>
-                      <Text
-                        variant="bodySmall"
-                        style={{ color: theme.colors.onSurfaceVariant }}
-                      >
-                        Joined {formatDate(member.joined_at)}
-                      </Text>
-                    </View>
-                    <Chip
-                      style={[
-                        styles.roleChip,
-                        {
-                          backgroundColor:
-                            member.role === "owner"
-                              ? theme.colors.primaryContainer
-                              : theme.colors.surfaceVariant,
-                        },
-                      ]}
-                      textStyle={{
-                        color:
-                          member.role === "owner"
-                            ? theme.colors.onPrimaryContainer
-                            : theme.colors.onSurfaceVariant,
-                      }}
-                    >
-                      {member.role}
-                    </Chip>
-                  </Card.Content>
-                </Card>
-                {index < group.members!.length - 1 && (
-                  <View style={{ height: 8 }} />
-                )}
-              </React.Fragment>
-            ))
+            group.members.map((member, index) => {
+              const memberName = member.email || `User ${member.user_id.substring(0, 8)}...`;
+              const isCurrentUser = member.user_id === session?.user?.id;
+              const ownerCount = group.members?.filter((m) => m.role === "owner").length || 0;
+              // Owners can remove any member (including themselves if not last owner)
+              // Regular members can remove themselves
+              const canRemove = 
+                (isOwner && (!isCurrentUser || (isCurrentUser && (ownerCount > 1 || member.role !== "owner")))) ||
+                (!isOwner && isCurrentUser);
+              const isRemoving = removingMemberId === member.user_id;
+
+              return (
+                <React.Fragment key={member.id}>
+                  <Card 
+                    style={[
+                      styles.memberCard,
+                      isRemoving && styles.memberCardRemoving
+                    ]} 
+                    mode="outlined"
+                  >
+                    <Card.Content style={styles.memberContent}>
+                      <View style={styles.memberLeft}>
+                        <Text 
+                          variant="titleSmall" 
+                          style={[
+                            styles.memberName,
+                            isRemoving && { opacity: 0.6 }
+                          ]}
+                        >
+                          {memberName}
+                        </Text>
+                        <Text
+                          variant="bodySmall"
+                          style={{ 
+                            color: theme.colors.onSurfaceVariant,
+                            opacity: isRemoving ? 0.6 : 1
+                          }}
+                        >
+                          Joined {formatDate(member.joined_at)}
+                        </Text>
+                      </View>
+                      <View style={styles.memberRight}>
+                        {isRemoving ? (
+                          <ActivityIndicator 
+                            size="small" 
+                            color={theme.colors.primary}
+                            style={styles.removingIndicator}
+                          />
+                        ) : (
+                          <>
+                            <Chip
+                              style={[
+                                styles.roleChip,
+                                {
+                                  backgroundColor:
+                                    member.role === "owner"
+                                      ? theme.colors.primaryContainer
+                                      : theme.colors.surfaceVariant,
+                                },
+                              ]}
+                              textStyle={{
+                                color:
+                                  member.role === "owner"
+                                    ? theme.colors.onPrimaryContainer
+                                    : theme.colors.onSurfaceVariant,
+                              }}
+                            >
+                              {member.role}
+                            </Chip>
+                            {canRemove && (
+                              <IconButton
+                                icon="delete-outline"
+                                size={20}
+                                iconColor={theme.colors.error}
+                                onPress={() => handleRemoveMember(member.user_id, member.email)}
+                                style={styles.removeMemberButton}
+                                disabled={removingMemberId !== null}
+                              />
+                            )}
+                          </>
+                        )}
+                      </View>
+                    </Card.Content>
+                  </Card>
+                  {index < group.members!.length - 1 && (
+                    <View style={{ height: 8 }} />
+                  )}
+                </React.Fragment>
+              );
+            })
           ) : (
             <Text
               variant="bodyMedium"
@@ -843,6 +951,9 @@ const styles = StyleSheet.create({
   memberCard: {
     marginBottom: 0,
   },
+  memberCardRemoving: {
+    opacity: 0.7,
+  },
   memberContent: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -853,12 +964,22 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 8,
   },
+  memberRight: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
   memberName: {
     fontWeight: "600",
     marginBottom: 4,
   },
   roleChip: {
     height: 28,
+  },
+  removeMemberButton: {
+    margin: 0,
+  },
+  removingIndicator: {
+    marginHorizontal: 8,
   },
   transactionCard: {
     marginBottom: 0,
