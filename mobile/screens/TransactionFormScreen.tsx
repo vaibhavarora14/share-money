@@ -3,6 +3,7 @@ import {
   Alert,
   Animated,
   Dimensions,
+  FlatList,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -15,7 +16,6 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import {
   Appbar,
   Button,
-  Menu,
   SegmentedButtons,
   Text,
   TextInput,
@@ -50,7 +50,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   const [type, setType] = useState<"income" | "expense">("expense");
   const [category, setCategory] = useState("");
   const [currency, setCurrency] = useState<string>(defaultCurrency);
-  const [currencyMenuVisible, setCurrencyMenuVisible] = useState(false);
+  const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
   const [loading, setLoading] = useState(false);
   const [slideAnim] = useState(new Animated.Value(0));
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -263,6 +263,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
               contentContainerStyle={styles.scrollContent}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
+              nestedScrollEnabled={true}
             >
               <TextInput
                 label="Description"
@@ -292,34 +293,14 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                   }
                   placeholder="0.00"
                 />
-                <Menu
-                  visible={currencyMenuVisible}
-                  onDismiss={() => setCurrencyMenuVisible(false)}
-                  anchor={
-                    <Button
-                      mode="outlined"
-                      onPress={() => setCurrencyMenuVisible(true)}
-                      style={styles.currencyButton}
-                      disabled={loading}
-                    >
-                      {currency}
-                    </Button>
-                  }
-                  contentStyle={styles.currencyMenuContent}
-                  style={styles.currencyMenu}
+                <Button
+                  mode="outlined"
+                  onPress={() => setShowCurrencyPicker(true)}
+                  style={styles.currencyButton}
+                  disabled={loading}
                 >
-                  {CURRENCIES.map((curr) => (
-                    <Menu.Item
-                      key={curr.code}
-                      onPress={() => {
-                        setCurrency(curr.code);
-                        setCurrencyMenuVisible(false);
-                      }}
-                      title={`${curr.code} - ${curr.name}`}
-                      leadingIcon={curr.code === currency ? "check" : undefined}
-                    />
-                  ))}
-                </Menu>
+                  {currency}
+                </Button>
               </View>
 
               <TextInput
@@ -466,6 +447,75 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
           </KeyboardAvoidingView>
         </Animated.View>
       </View>
+      
+      {/* Currency Picker Modal */}
+      <Modal
+        visible={showCurrencyPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCurrencyPicker(false)}
+      >
+        <TouchableOpacity
+          style={styles.currencyPickerOverlay}
+          activeOpacity={1}
+          onPress={() => setShowCurrencyPicker(false)}
+        >
+          <View
+            style={[
+              styles.currencyPickerContainer,
+              { backgroundColor: theme.colors.surface },
+            ]}
+            onStartShouldSetResponder={() => true}
+          >
+            <View
+              style={[
+                styles.currencyPickerHeader,
+                { borderBottomColor: theme.colors.outlineVariant },
+              ]}
+            >
+              <Text variant="titleLarge">Select Currency</Text>
+              <Button onPress={() => setShowCurrencyPicker(false)}>Close</Button>
+            </View>
+            <FlatList
+              data={CURRENCIES}
+              keyExtractor={(item) => item.code}
+              style={styles.currencyList}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.currencyItem,
+                    item.code === currency && {
+                      backgroundColor: theme.colors.primaryContainer,
+                    },
+                  ]}
+                  onPress={() => {
+                    setCurrency(item.code);
+                    setShowCurrencyPicker(false);
+                  }}
+                >
+                  <View style={styles.currencyItemContent}>
+                    <Text variant="bodyLarge" style={styles.currencyCode}>
+                      {item.code}
+                    </Text>
+                    <Text
+                      variant="bodyMedium"
+                      style={[
+                        styles.currencyName,
+                        { color: theme.colors.onSurfaceVariant },
+                      ]}
+                    >
+                      {item.name}
+                    </Text>
+                  </View>
+                  {item.code === currency && (
+                    <Text style={{ color: theme.colors.primary }}>✓</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </Modal>
   );
 };
@@ -577,12 +627,55 @@ const styles = StyleSheet.create({
   datePicker: {
     height: 200,
   },
-  currencyMenu: {
-    zIndex: 9999,
-    elevation: 9999,
+  currencyPickerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  currencyMenuContent: {
-    zIndex: 9999,
-    elevation: 9999,
+  currencyPickerContainer: {
+    width: "90%",
+    maxWidth: 400,
+    maxHeight: "80%",
+    borderRadius: 16,
+    overflow: "hidden",
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  currencyPickerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  currencyList: {
+    maxHeight: 400,
+  },
+  currencyItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(0, 0, 0, 0.1)",
+  },
+  currencyItemContent: {
+    flex: 1,
+  },
+  currencyCode: {
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  currencyName: {
+    fontSize: 14,
   },
 });
