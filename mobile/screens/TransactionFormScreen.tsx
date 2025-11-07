@@ -5,6 +5,7 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  Text,
   View,
 } from "react-native";
 import {
@@ -139,7 +140,13 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                   keyboardType="decimal-pad"
                   disabled={loading}
                   style={styles.amountInput}
-                  left={<TextInput.Icon icon="currency-usd" />}
+                  left={
+                    <View style={{ justifyContent: 'center', alignItems: 'center', paddingLeft: 12 }}>
+                      <Text style={{ fontSize: 18, fontWeight: 'bold', color: theme.colors.onSurface }}>
+                        {getCurrencySymbol(currency)}
+                      </Text>
+                    </View>
+                  }
                   placeholder="0.00"
                 />
                 <Menu
