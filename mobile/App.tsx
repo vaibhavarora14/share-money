@@ -831,6 +831,11 @@ function AppContent() {
             setSelectedGroup(null);
           }}
           onAddMember={() => setShowAddMember(true)}
+          onLeaveGroup={() => {
+            setGroupDetails(null);
+            setSelectedGroup(null);
+            setCurrentView('groups');
+          }}
         />
         <StatusBar style="auto" />
       </>
