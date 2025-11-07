@@ -64,12 +64,28 @@ CREATE POLICY "Group owners can delete groups"
 
 -- RLS Policies for group_members table
 -- Users can view members of groups they belong to
+-- Use a function to avoid infinite recursion
+CREATE OR REPLACE FUNCTION is_group_member(group_uuid UUID, user_uuid UUID)
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM group_members
+    WHERE group_id = group_uuid AND user_id = user_uuid
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 CREATE POLICY "Users can view members of their groups"
   ON group_members
   FOR SELECT
   USING (
-    group_id IN (
-      SELECT group_id FROM group_members WHERE user_id = auth.uid()
+    EXISTS (
+      SELECT 1 FROM groups
+      WHERE groups.id = group_members.group_id
+      AND (
+        groups.created_by = auth.uid()
+        OR is_group_member(group_members.group_id, auth.uid())
+      )
     )
   );
 
