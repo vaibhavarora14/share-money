@@ -8,6 +8,13 @@ export interface Transaction {
   created_at?: string;
   user_id?: string;
   group_id?: string;
+  currency?: string;
+}
+
+export interface Currency {
+  code: string;
+  symbol: string;
+  name: string;
 }
 
 export interface AmountInfo {
@@ -22,6 +29,7 @@ export interface Group {
   created_by: string;
   created_at: string;
   updated_at: string;
+  currency?: string;
 }
 
 export interface GroupMember {
