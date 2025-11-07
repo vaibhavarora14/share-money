@@ -22,6 +22,7 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL;
 interface GroupsListScreenProps {
   onGroupPress: (group: Group) => void;
   onCreateGroup: () => void;
+  onLogout?: () => void;
 }
 
 export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
@@ -156,10 +157,9 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
+    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
       <Appbar.Header>
         <Appbar.Content title="Groups" subtitle={`${groups.length} total`} />
-        <Appbar.Action icon="logout" onPress={signOut} />
       </Appbar.Header>
 
       <ScrollView
@@ -277,6 +277,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     margin: 16,
     right: 0,
-    bottom: 0,
+    bottom: 80, // Space for bottom navigation bar
   },
 });
