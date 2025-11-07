@@ -247,12 +247,13 @@ export const handler: Handler = async (event, context) => {
         };
       }
 
-      // Create group (created_by will be set automatically by RLS)
+      // Create group - must set created_by to current user for RLS policy
       const { data: group, error } = await supabase
         .from('groups')
         .insert({
           name: groupData.name.trim(),
           description: groupData.description?.trim() || null,
+          created_by: user.id, // Explicitly set created_by to pass RLS policy
         })
         .select()
         .single();
