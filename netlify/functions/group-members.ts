@@ -141,30 +141,84 @@ export const handler: Handler = async (event, context) => {
 
       // Find user by email
       // Note: Supabase Admin API is needed to search by email
-      // For now, we'll use a workaround by querying auth.users via RPC or admin API
-      // Since we don't have admin access, we'll need to create an RPC function or use admin API
-      // Let's use the admin API endpoint
-      const adminKey = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseKey;
+      // This requires the service role key for admin access
+      const adminKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
       
-      const findUserResponse = await fetch(
-        `${supabaseUrl}/auth/v1/admin/users?email=${encodeURIComponent(requestData.email)}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${adminKey}`,
-            'apikey': adminKey,
-          },
-        }
-      );
-
-      if (!findUserResponse.ok) {
+      if (!adminKey) {
+        console.error('SUPABASE_SERVICE_ROLE_KEY is not configured');
         return {
-          statusCode: 404,
+          statusCode: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'User not found with the provided email' }),
+          body: JSON.stringify({ 
+            error: 'Server configuration error: Admin API access not configured. Please contact support.' 
+          }),
+        };
+      }
+      
+      let findUserResponse;
+      try {
+        findUserResponse = await fetch(
+          `${supabaseUrl}/auth/v1/admin/users?email=${encodeURIComponent(requestData.email)}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${adminKey}`,
+              'apikey': adminKey,
+            },
+          }
+        );
+      } catch (networkError: any) {
+        console.error('Network error while fetching user:', networkError);
+        return {
+          statusCode: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            error: 'Network error while searching for user. Please try again.',
+            details: networkError.message 
+          }),
         };
       }
 
-      const usersData = await findUserResponse.json();
+      if (!findUserResponse.ok) {
+        const errorStatus = findUserResponse.status;
+        let errorMessage = 'User not found with the provided email';
+        
+        // Handle authentication/authorization errors
+        if (errorStatus === 401 || errorStatus === 403) {
+          console.error('Admin API authentication failed:', errorStatus);
+          errorMessage = 'Server configuration error: Unable to access user database. Please contact support.';
+        }
+        
+        // Try to get error details from response
+        try {
+          const errorData = await findUserResponse.json();
+          if (errorData.error_description || errorData.message) {
+            errorMessage = errorData.error_description || errorData.message;
+          }
+        } catch (e) {
+          // Ignore JSON parse errors
+        }
+        
+        return {
+          statusCode: errorStatus === 401 || errorStatus === 403 ? 500 : 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: errorMessage }),
+        };
+      }
+
+      let usersData;
+      try {
+        usersData = await findUserResponse.json();
+      } catch (parseError: any) {
+        console.error('Error parsing user search response:', parseError);
+        return {
+          statusCode: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            error: 'Error processing user search results. Please try again.' 
+          }),
+        };
+      }
+
       const targetUser = Array.isArray(usersData.users) 
         ? usersData.users.find((u: any) => u.email === requestData.email)
         : usersData.users?.[0];
