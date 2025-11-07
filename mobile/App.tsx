@@ -35,7 +35,7 @@ const EXPENSE_COLOR = "#ef4444";
 // API URL - must be set via EXPO_PUBLIC_API_URL environment variable
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
-function TransactionsScreen({ onNavigateToGroups }: { onNavigateToGroups?: () => void }) {
+function TransactionsScreen({ onNavigateToGroups }: { onNavigateToGroups: () => void }) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -468,9 +468,10 @@ function TransactionsScreen({ onNavigateToGroups }: { onNavigateToGroups?: () =>
           title="Transactions"
           subtitle={`${transactions.length} total`}
         />
-        {onNavigateToGroups && (
-          <Appbar.Action icon="account-group" onPress={onNavigateToGroups} />
-        )}
+        <Appbar.Action 
+          icon="account-multiple" 
+          onPress={onNavigateToGroups || (() => {})}
+        />
         <Appbar.Action icon="logout" onPress={signOut} />
       </Appbar.Header>
 
@@ -543,6 +544,14 @@ function TransactionsScreen({ onNavigateToGroups }: { onNavigateToGroups?: () =>
             >
               Your transactions will appear here
             </Text>
+            <Button
+              mode="contained"
+              icon="account-multiple"
+              onPress={onNavigateToGroups}
+              style={{ marginTop: 24 }}
+            >
+              Go to Groups
+            </Button>
           </View>
         ) : (
           transactions.map((transaction, index) => {
@@ -646,6 +655,15 @@ function TransactionsScreen({ onNavigateToGroups }: { onNavigateToGroups?: () =>
         onPress={() => setShowForm(true)}
         label="Add"
       />
+
+      <Button
+        mode="outlined"
+        icon="account-multiple"
+        onPress={onNavigateToGroups}
+        style={styles.groupsButton}
+      >
+        Groups
+      </Button>
 
       <StatusBar style="auto" />
     </SafeAreaView>
@@ -979,6 +997,12 @@ const styles = StyleSheet.create({
     position: "absolute",
     margin: 16,
     right: 0,
+    bottom: 0,
+  },
+  groupsButton: {
+    position: "absolute",
+    margin: 16,
+    left: 0,
     bottom: 0,
   },
 });
