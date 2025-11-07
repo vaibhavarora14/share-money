@@ -235,11 +235,17 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
               height: bottomSheetHeight,
               transform: [{ translateY }],
               paddingBottom: insets.bottom,
+              backgroundColor: theme.colors.surface,
             },
           ]}
         >
           <View style={styles.handleContainer}>
-            <View style={styles.handle} />
+            <View
+              style={[
+                styles.handle,
+                { backgroundColor: theme.colors.outlineVariant },
+              ]}
+            />
           </View>
           <Appbar.Header style={styles.header}>
             <Appbar.Content
@@ -335,8 +341,21 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
               {showDatePicker && (
                 <>
                   {Platform.OS === "ios" && (
-                    <View style={styles.datePickerContainer}>
-                      <View style={styles.datePickerHeader}>
+                    <View
+                      style={[
+                        styles.datePickerContainer,
+                        {
+                          backgroundColor: theme.colors.surface,
+                          borderColor: theme.colors.outlineVariant,
+                        },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.datePickerHeader,
+                          { borderBottomColor: theme.colors.outlineVariant },
+                        ]}
+                      >
                         <Button onPress={() => setShowDatePicker(false)}>
                           Cancel
                         </Button>
@@ -459,7 +478,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
   bottomSheet: {
-    backgroundColor: "#ffffff",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     shadowColor: "#000",
@@ -480,7 +498,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "#ccc",
   },
   header: {
     elevation: 0,
@@ -539,13 +556,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   datePickerContainer: {
-    backgroundColor: "#ffffff",
     borderRadius: 8,
     marginTop: 8,
     marginBottom: 16,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#e0e0e0",
   },
   datePickerHeader: {
     flexDirection: "row",
@@ -554,7 +569,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
   },
   datePicker: {
     height: 200,

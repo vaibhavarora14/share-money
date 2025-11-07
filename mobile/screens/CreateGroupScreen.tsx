@@ -113,11 +113,17 @@ export const CreateGroupScreen: React.FC<CreateGroupScreenProps> = ({
               height: bottomSheetHeight,
               transform: [{ translateY }],
               paddingBottom: insets.bottom,
+              backgroundColor: theme.colors.surface,
             },
           ]}
         >
           <View style={styles.handleContainer}>
-            <View style={styles.handle} />
+            <View
+              style={[
+                styles.handle,
+                { backgroundColor: theme.colors.outlineVariant },
+              ]}
+            />
           </View>
           <Appbar.Header style={styles.header}>
             <Appbar.Content title="Create New Group" />
@@ -185,7 +191,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
   bottomSheet: {
-    backgroundColor: "#ffffff",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     shadowColor: "#000",
@@ -206,7 +211,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "#ccc",
   },
   header: {
     elevation: 0,

@@ -82,7 +82,11 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
         },
       });
 
-      console.log("Groups response status:", response.status, response.statusText);
+      console.log(
+        "Groups response status:",
+        response.status,
+        response.statusText
+      );
       if (!response.ok) {
         if (response.status === 401) {
           await signOut();
@@ -136,7 +140,12 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
+      <View
+        style={[
+          styles.centerContainer,
+          { backgroundColor: theme.colors.background },
+        ]}
+      >
         <ActivityIndicator size="large" />
         <Text variant="bodyLarge" style={{ marginTop: 16 }}>
           Loading groups...
@@ -147,7 +156,12 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
 
   if (error) {
     return (
-      <View style={styles.centerContainer}>
+      <View
+        style={[
+          styles.centerContainer,
+          { backgroundColor: theme.colors.background },
+        ]}
+      >
         <Text
           variant="headlineSmall"
           style={{ color: theme.colors.error, marginBottom: 16 }}
@@ -168,7 +182,10 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      edges={["top", "bottom"]}
+    >
       <Appbar.Header>
         <Appbar.Content title="Groups" subtitle={`${groups.length} total`} />
       </Appbar.Header>
@@ -256,7 +273,6 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
   },
   centerContainer: {
     flex: 1,
