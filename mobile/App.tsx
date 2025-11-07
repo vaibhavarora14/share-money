@@ -207,6 +207,22 @@ function TransactionsScreen() {
     }
   }, [session, fetchTransactions]);
 
+  // Memoize calculations to avoid recalculating on every render
+  // Must be called before any early returns to maintain hook order
+  const { totalIncome, totalExpense, balance } = useMemo(() => {
+    const income = transactions
+      .filter((t) => t.type === "income")
+      .reduce((sum, t) => sum + t.amount, 0);
+    const expense = transactions
+      .filter((t) => t.type === "expense")
+      .reduce((sum, t) => sum + t.amount, 0);
+    return {
+      totalIncome: income,
+      totalExpense: expense,
+      balance: income - expense,
+    };
+  }, [transactions]);
+
   const formatDate = (dateString: string): string => {
     const date = new Date(dateString);
     return date.toLocaleDateString("en-US", {
@@ -255,21 +271,6 @@ function TransactionsScreen() {
       </View>
     );
   }
-
-  // Memoize calculations to avoid recalculating on every render
-  const { totalIncome, totalExpense, balance } = useMemo(() => {
-    const income = transactions
-      .filter((t) => t.type === "income")
-      .reduce((sum, t) => sum + t.amount, 0);
-    const expense = transactions
-      .filter((t) => t.type === "expense")
-      .reduce((sum, t) => sum + t.amount, 0);
-    return {
-      totalIncome: income,
-      totalExpense: expense,
-      balance: income - expense,
-    };
-  }, [transactions]);
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
