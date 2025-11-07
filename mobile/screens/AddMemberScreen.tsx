@@ -1,35 +1,67 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
+  Animated,
+  Dimensions,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
+  TouchableOpacity,
   View,
 } from "react-native";
 import {
+  Appbar,
   Button,
-  Card,
   Text,
   TextInput,
   useTheme,
 } from "react-native-paper";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface AddMemberScreenProps {
+  visible: boolean;
   groupId: string;
   onAddMember: (email: string) => Promise<void>;
-  onCancel: () => void;
+  onDismiss: () => void;
 }
 
 export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
+  visible,
   groupId,
   onAddMember,
-  onCancel,
+  onDismiss,
 }) => {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  const [slideAnim] = useState(new Animated.Value(0));
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const screenHeight = Dimensions.get("window").height;
+
+  // Animation effect
+  useEffect(() => {
+    if (visible) {
+      Animated.spring(slideAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+        tension: 65,
+        friction: 11,
+      }).start();
+    } else {
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [visible, slideAnim]);
+
+  const handleDismiss = () => {
+    setEmail("");
+    onDismiss();
+  };
 
   const handleAdd = async () => {
     // Validation
@@ -48,6 +80,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
     setLoading(true);
     try {
       await onAddMember(email.trim());
+      handleDismiss();
     } catch (error) {
       Alert.alert(
         "Error",
@@ -58,22 +91,53 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
     }
   };
 
-  return (
-    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.keyboardView}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          <Card style={styles.card} mode="elevated" elevation={2}>
-            <Card.Content style={styles.cardContent}>
-              <Text variant="headlineSmall" style={styles.title}>
-                Add Member
-              </Text>
+  const bottomSheetHeight = screenHeight * 0.5;
+  const translateY = slideAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [bottomSheetHeight, 0],
+  });
 
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      onRequestClose={handleDismiss}
+    >
+      <View style={styles.modalOverlay}>
+        <TouchableOpacity
+          style={styles.backdrop}
+          activeOpacity={1}
+          onPress={handleDismiss}
+        />
+        <Animated.View
+          style={[
+            styles.bottomSheet,
+            {
+              height: bottomSheetHeight,
+              transform: [{ translateY }],
+              paddingBottom: insets.bottom,
+            },
+          ]}
+        >
+          <View style={styles.handleContainer}>
+            <View style={styles.handle} />
+          </View>
+          <Appbar.Header style={styles.header}>
+            <Appbar.Content title="Add Member" />
+            <Appbar.Action icon="close" onPress={handleDismiss} />
+          </Appbar.Header>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={styles.keyboardView}
+            keyboardVerticalOffset={0}
+          >
+            <ScrollView
+              style={styles.scrollView}
+              contentContainerStyle={styles.scrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
               <Text
                 variant="bodyMedium"
                 style={[
@@ -98,55 +162,69 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                 placeholder="user@example.com"
               />
 
-              <View style={styles.buttonRow}>
-                <Button
-                  mode="outlined"
-                  onPress={onCancel}
-                  disabled={loading}
-                  style={[styles.button, styles.cancelButton]}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  mode="contained"
-                  onPress={handleAdd}
-                  disabled={loading}
-                  loading={loading}
-                  style={[styles.button, styles.saveButton]}
-                >
-                  Add Member
-                </Button>
-              </View>
-            </Card.Content>
-          </Card>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+              <Button
+                mode="contained"
+                onPress={handleAdd}
+                disabled={loading}
+                loading={loading}
+                style={styles.addButton}
+              >
+                Add Member
+              </Button>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </Animated.View>
+      </View>
+    </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  modalOverlay: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    justifyContent: "flex-end",
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  bottomSheet: {
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: -2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  handleContainer: {
+    alignItems: "center",
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#ccc",
+  },
+  header: {
+    elevation: 0,
+    backgroundColor: "transparent",
   },
   keyboardView: {
     flex: 1,
   },
+  scrollView: {
+    flex: 1,
+  },
   scrollContent: {
-    flexGrow: 1,
     padding: 20,
-  },
-  card: {
-    borderRadius: 16,
-  },
-  cardContent: {
-    paddingVertical: 8,
-  },
-  title: {
-    fontWeight: "bold",
-    marginBottom: 8,
-    textAlign: "center",
+    paddingBottom: 32,
   },
   subtitle: {
     textAlign: "center",
@@ -155,15 +233,7 @@ const styles = StyleSheet.create({
   input: {
     marginBottom: 16,
   },
-  buttonRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+  addButton: {
     marginTop: 8,
   },
-  button: {
-    flex: 1,
-    marginHorizontal: 6,
-  },
-  cancelButton: {},
-  saveButton: {},
 });

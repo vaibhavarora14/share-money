@@ -1,11 +1,10 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import {
   ActivityIndicator,
   Appbar,
   Button,
   Card,
-  Chip,
   FAB,
   IconButton,
   Text,
@@ -15,13 +14,17 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../supabase";
 import { Group } from "../types";
+import { CreateGroupScreen } from "./CreateGroupScreen";
 
 // API URL - must be set via EXPO_PUBLIC_API_URL environment variable
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 interface GroupsListScreenProps {
   onGroupPress: (group: Group) => void;
-  onCreateGroup: () => void;
+  onCreateGroup: (groupData: {
+    name: string;
+    description?: string;
+  }) => Promise<void>;
   onLogout?: () => void;
 }
 
@@ -32,6 +35,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [showCreateGroup, setShowCreateGroup] = useState<boolean>(false);
   const { session, signOut } = useAuth();
   const fetchingRef = React.useRef<boolean>(false);
   const theme = useTheme();
@@ -84,7 +88,9 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
         }
 
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        throw new Error(
+          errorData.error || `HTTP error! status: ${response.status}`
+        );
       }
 
       const data: Group[] = await response.json();
@@ -226,8 +232,17 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
       <FAB
         icon="plus"
         style={styles.fab}
-        onPress={onCreateGroup}
-        label="Create Group"
+        onPress={() => setShowCreateGroup(true)}
+        label="Create"
+      />
+
+      <CreateGroupScreen
+        visible={showCreateGroup}
+        onCreateGroup={async (groupData) => {
+          await onCreateGroup(groupData);
+          setShowCreateGroup(false);
+        }}
+        onDismiss={() => setShowCreateGroup(false)}
       />
     </SafeAreaView>
   );
@@ -277,6 +292,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     margin: 16,
     right: 0,
-    bottom: 80, // Space for bottom navigation bar
+    bottom: 10, // Space for bottom navigation bar
   },
 });
