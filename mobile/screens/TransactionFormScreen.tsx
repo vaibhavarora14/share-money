@@ -8,6 +8,7 @@ import {
   View,
 } from "react-native";
 import {
+  Appbar,
   Button,
   Card,
   Menu,
@@ -26,22 +27,15 @@ interface TransactionFormScreenProps {
     transaction: Omit<Transaction, "id" | "created_at" | "user_id">
   ) => Promise<void>;
   onCancel: () => void;
+  onDelete?: () => Promise<void>;
   defaultCurrency?: string;
 }
-
-// Currency icon component that re-renders when currency changes
-const CurrencyIcon: React.FC<{ currency: string; theme: any }> = ({ currency, theme }) => (
-  <View style={{ justifyContent: 'center', alignItems: 'center', paddingLeft: 12, minWidth: 30 }}>
-    <Text style={{ fontSize: 18, fontWeight: 'bold', color: theme.colors.onSurface }}>
-      {getCurrencySymbol(currency)}
-    </Text>
-  </View>
-);
 
 export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   transaction,
   onSave,
   onCancel,
+  onDelete,
   defaultCurrency = "USD",
 }) => {
   const [description, setDescription] = useState("");
@@ -102,7 +96,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
         date: date.trim(),
         type,
         category: category.trim() || undefined,
-        currency: currency || defaultCurrency || 'USD',
+        currency: currency || defaultCurrency || "USD",
       });
     } catch (error) {
       Alert.alert(
@@ -114,8 +108,47 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     }
   };
 
+  const handleDelete = () => {
+    if (!onDelete || !transaction) return;
+
+    Alert.alert(
+      "Delete Transaction",
+      `Are you sure you want to delete "${
+        transaction.description || "this transaction"
+      }"?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setLoading(true);
+            try {
+              await onDelete();
+            } catch (error) {
+              Alert.alert(
+                "Error",
+                error instanceof Error
+                  ? error.message
+                  : "Failed to delete transaction"
+              );
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+      <Appbar.Header>
+        <Appbar.BackAction onPress={onCancel} />
+        <Appbar.Content
+          title={transaction ? "Edit Transaction" : "New Transaction"}
+        />
+      </Appbar.Header>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardView}
@@ -126,10 +159,6 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
         >
           <Card style={styles.card} mode="elevated" elevation={2}>
             <Card.Content style={styles.cardContent}>
-              <Text variant="headlineSmall" style={styles.title}>
-                {transaction ? "Edit Transaction" : "New Transaction"}
-              </Text>
-
               <TextInput
                 label="Description"
                 value={description}
@@ -150,7 +179,12 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                   keyboardType="decimal-pad"
                   disabled={loading}
                   style={styles.amountInput}
-                  left={<CurrencyIcon currency={currency} theme={theme} />}
+                  left={
+                    <TextInput.Affix
+                      text={getCurrencySymbol(currency)}
+                      textStyle={styles.currencyAffix}
+                    />
+                  }
                   placeholder="0.00"
                 />
                 <Menu
@@ -235,20 +269,28 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
               />
 
               <View style={styles.buttonRow}>
-                <Button
-                  mode="outlined"
-                  onPress={onCancel}
-                  disabled={loading}
-                  style={[styles.button, styles.cancelButton]}
-                >
-                  Cancel
-                </Button>
+                {transaction && onDelete && (
+                  <Button
+                    mode="outlined"
+                    onPress={handleDelete}
+                    disabled={loading}
+                    style={[styles.button, styles.deleteButton]}
+                    textColor={theme.colors.error}
+                    icon="delete"
+                  >
+                    Delete
+                  </Button>
+                )}
                 <Button
                   mode="contained"
                   onPress={handleSave}
                   disabled={loading}
                   loading={loading}
-                  style={[styles.button, styles.saveButton]}
+                  style={[
+                    styles.button,
+                    styles.saveButton,
+                    !(transaction && onDelete) && styles.saveButtonFullWidth,
+                  ]}
                 >
                   {transaction ? "Update" : "Create"}
                 </Button>
@@ -279,11 +321,6 @@ const styles = StyleSheet.create({
   cardContent: {
     paddingVertical: 8,
   },
-  title: {
-    fontWeight: "bold",
-    marginBottom: 24,
-    textAlign: "center",
-  },
   input: {
     marginBottom: 16,
   },
@@ -295,6 +332,10 @@ const styles = StyleSheet.create({
   amountInput: {
     flex: 1,
     marginRight: 8,
+  },
+  currencyAffix: {
+    fontSize: 18,
+    fontWeight: "bold",
   },
   currencyButton: {
     minWidth: 80,
@@ -312,11 +353,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     marginTop: 8,
+    gap: 8,
   },
   button: {
     flex: 1,
-    marginHorizontal: 6,
   },
-  cancelButton: {},
+  deleteButton: {},
   saveButton: {},
+  saveButtonFullWidth: {
+    flex: 1,
+  },
 });

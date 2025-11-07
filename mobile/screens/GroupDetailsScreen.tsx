@@ -46,7 +46,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [menuVisible, setMenuVisible] = useState<boolean>(false);
   const [showTransactionForm, setShowTransactionForm] =
     useState<boolean>(false);
-  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [editingTransaction, setEditingTransaction] =
+    useState<Transaction | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [transactionsLoading, setTransactionsLoading] =
     useState<boolean>(false);
@@ -342,7 +343,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         body: JSON.stringify({
           ...transactionData,
           group_id: group.id,
-          currency: transactionData.currency || group.currency || 'USD',
+          currency: transactionData.currency || group.currency || "USD",
         }),
       });
 
@@ -391,7 +392,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         body: JSON.stringify({
           ...transactionData,
           id: editingTransaction.id,
-          currency: transactionData.currency || group.currency || 'USD',
+          currency: transactionData.currency || group.currency || "USD",
         }),
       });
 
@@ -413,7 +414,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     }
   };
 
-  const handleDeleteTransaction = async (transactionId: number): Promise<void> => {
+  const handleDeleteTransaction = async (
+    transactionId: number
+  ): Promise<void> => {
     if (!API_URL) {
       throw new Error("Unable to connect to the server");
     }
@@ -429,13 +432,16 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
       const token = currentSession.access_token;
 
-      const response = await fetch(`${API_URL}/transactions?id=${transactionId}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
+      const response = await fetch(
+        `${API_URL}/transactions?id=${transactionId}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -456,30 +462,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const handleEditTransaction = (transaction: Transaction) => {
     setEditingTransaction(transaction);
     setShowTransactionForm(true);
-  };
-
-  const handleDeleteClick = (transaction: Transaction) => {
-    Alert.alert(
-      "Delete Transaction",
-      `Are you sure you want to delete "${transaction.description}"?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await handleDeleteTransaction(transaction.id);
-            } catch (error) {
-              Alert.alert(
-                "Error",
-                error instanceof Error ? error.message : "Failed to delete transaction"
-              );
-            }
-          },
-        },
-      ]
-    );
   };
 
   const handleTransactionFormSave = async (
@@ -523,6 +505,20 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           transaction={editingTransaction}
           onSave={handleTransactionFormSave}
           onCancel={handleTransactionFormCancel}
+          onDelete={
+            editingTransaction
+              ? async () => {
+                  try {
+                    await handleDeleteTransaction(editingTransaction.id);
+                    setShowTransactionForm(false);
+                    setEditingTransaction(null);
+                  } catch (error) {
+                    // Error is already handled in handleDeleteTransaction
+                    throw error;
+                  }
+                }
+              : undefined
+          }
           defaultCurrency={group.currency || "USD"}
         />
         <StatusBar style="auto" />
@@ -703,7 +699,11 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
               return (
                 <React.Fragment key={transaction.id}>
-                  <Card style={styles.transactionCard} mode="outlined">
+                  <Card
+                    style={styles.transactionCard}
+                    mode="outlined"
+                    onPress={() => handleEditTransaction(transaction)}
+                  >
                     <Card.Content style={styles.transactionContent}>
                       <View style={styles.transactionLeft}>
                         <Text
@@ -721,25 +721,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                             {transaction.category &&
                               ` • ${transaction.category}`}
                           </Text>
-                          {transaction.currency &&
-                            transaction.currency !== "USD" && (
-                              <Chip
-                                style={[
-                                  styles.currencyChip,
-                                  {
-                                    backgroundColor:
-                                      theme.colors.surfaceVariant,
-                                    marginLeft: 8,
-                                  },
-                                ]}
-                                textStyle={[
-                                  styles.currencyChipText,
-                                  { color: theme.colors.onSurfaceVariant },
-                                ]}
-                              >
-                                {transaction.currency}
-                              </Chip>
-                            )}
                         </View>
                       </View>
                       <View style={styles.transactionRight}>
@@ -750,22 +731,12 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                             { color: amountColor },
                           ]}
                         >
-                          {sign}{formatCurrency(transaction.amount, transaction.currency)}
+                          {sign}
+                          {formatCurrency(
+                            transaction.amount,
+                            transaction.currency
+                          )}
                         </Text>
-                        <View style={styles.transactionActions}>
-                          <IconButton
-                            icon="pencil"
-                            size={20}
-                            onPress={() => handleEditTransaction(transaction)}
-                            iconColor={theme.colors.primary}
-                          />
-                          <IconButton
-                            icon="delete"
-                            size={20}
-                            onPress={() => handleDeleteClick(transaction)}
-                            iconColor={theme.colors.error}
-                          />
-                        </View>
                       </View>
                     </Card.Content>
                   </Card>
@@ -886,14 +857,7 @@ const styles = StyleSheet.create({
   transactionMeta: {
     flexDirection: "row",
     alignItems: "center",
-    flexWrap: "wrap",
     marginTop: 4,
-  },
-  currencyChip: {
-    height: 20,
-  },
-  currencyChipText: {
-    fontSize: 10,
   },
   transactionAmount: {
     fontWeight: "bold",
@@ -901,10 +865,6 @@ const styles = StyleSheet.create({
   },
   transactionRight: {
     alignItems: "flex-end",
-  },
-  transactionActions: {
-    flexDirection: "row",
-    marginTop: 4,
   },
   addTransactionButton: {
     position: "absolute",
