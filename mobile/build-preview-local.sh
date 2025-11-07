@@ -31,6 +31,9 @@ echo ""
 # This reads the .env file and exports all EXPO_PUBLIC_* variables
 export $(grep -v '^#' .env | grep '^EXPO_PUBLIC_' | xargs)
 
+# Set flag to indicate this is a development build (enables new architecture)
+export EXPO_PUBLIC_USE_DEV_CLIENT="true"
+
 # Verify required variables are set
 if [ -z "$EXPO_PUBLIC_SUPABASE_URL" ] || [ -z "$EXPO_PUBLIC_SUPABASE_ANON_KEY" ]; then
     echo "❌ Error: Required environment variables not found in .env"
