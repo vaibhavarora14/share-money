@@ -10,6 +10,7 @@ import {
 import {
   Button,
   Card,
+  Menu,
   SegmentedButtons,
   Text,
   TextInput,
@@ -17,23 +18,28 @@ import {
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Transaction } from "../types";
+import { CURRENCIES, getCurrencySymbol } from "../utils/currency";
 
 interface TransactionFormScreenProps {
   transaction?: Transaction | null;
   onSave: (transaction: Omit<Transaction, "id" | "created_at" | "user_id">) => Promise<void>;
   onCancel: () => void;
+  defaultCurrency?: string;
 }
 
 export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   transaction,
   onSave,
   onCancel,
+  defaultCurrency = "USD",
 }) => {
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState("");
   const [type, setType] = useState<"income" | "expense">("expense");
   const [category, setCategory] = useState("");
+  const [currency, setCurrency] = useState<string>(defaultCurrency);
+  const [currencyMenuVisible, setCurrencyMenuVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const theme = useTheme();
 
@@ -45,12 +51,14 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       setDate(transaction.date || "");
       setType(transaction.type || "expense");
       setCategory(transaction.category || "");
+      setCurrency(transaction.currency || defaultCurrency);
     } else {
       // Set default date to today
       const today = new Date();
       setDate(today.toISOString().split("T")[0]);
+      setCurrency(defaultCurrency);
     }
-  }, [transaction]);
+  }, [transaction, defaultCurrency]);
 
   const handleSave = async () => {
     // Validation
@@ -83,6 +91,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
         date: date.trim(),
         type,
         category: category.trim() || undefined,
+        currency: currency || defaultCurrency,
       });
     } catch (error) {
       Alert.alert(
@@ -121,17 +130,45 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                 placeholder="e.g., Grocery shopping"
               />
 
-              <TextInput
-                label="Amount"
-                value={amount}
-                onChangeText={setAmount}
-                mode="outlined"
-                keyboardType="decimal-pad"
-                disabled={loading}
-                style={styles.input}
-                left={<TextInput.Icon icon="currency-usd" />}
-                placeholder="0.00"
-              />
+              <View style={styles.amountRow}>
+                <TextInput
+                  label="Amount"
+                  value={amount}
+                  onChangeText={setAmount}
+                  mode="outlined"
+                  keyboardType="decimal-pad"
+                  disabled={loading}
+                  style={styles.amountInput}
+                  left={<TextInput.Icon icon="currency-usd" />}
+                  placeholder="0.00"
+                />
+                <Menu
+                  visible={currencyMenuVisible}
+                  onDismiss={() => setCurrencyMenuVisible(false)}
+                  anchor={
+                    <Button
+                      mode="outlined"
+                      onPress={() => setCurrencyMenuVisible(true)}
+                      style={styles.currencyButton}
+                      disabled={loading}
+                    >
+                      {currency}
+                    </Button>
+                  }
+                >
+                  {CURRENCIES.map((curr) => (
+                    <Menu.Item
+                      key={curr.code}
+                      onPress={() => {
+                        setCurrency(curr.code);
+                        setCurrencyMenuVisible(false);
+                      }}
+                      title={`${curr.code} - ${curr.name}`}
+                      leadingIcon={curr.code === currency ? "check" : undefined}
+                    />
+                  ))}
+                </Menu>
+              </View>
 
               <TextInput
                 label="Date"
@@ -238,6 +275,17 @@ const styles = StyleSheet.create({
   },
   input: {
     marginBottom: 16,
+  },
+  amountRow: {
+    flexDirection: "row",
+    marginBottom: 16,
+  },
+  amountInput: {
+    flex: 1,
+    marginRight: 8,
+  },
+  currencyButton: {
+    minWidth: 80,
   },
   segmentedContainer: {
     marginBottom: 16,

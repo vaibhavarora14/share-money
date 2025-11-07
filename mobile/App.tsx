@@ -26,6 +26,7 @@ import { AddMemberScreen } from "./screens/AddMemberScreen";
 import { BottomNavBar } from "./components/BottomNavBar";
 import { supabase } from "./supabase";
 import { Transaction, Group, GroupWithMembers } from "./types";
+import { formatCurrency } from "./utils/currency";
 
 // Constants
 const TOKEN_REFRESH_BUFFER_SECONDS = 60;
@@ -219,17 +220,22 @@ function TransactionsScreen({ onNavigateToGroups }: { onNavigateToGroups: () => 
 
   // Memoize calculations to avoid recalculating on every render
   // Must be called before any early returns to maintain hook order
-  const { totalIncome, totalExpense, balance } = useMemo(() => {
+  // Note: Totals are calculated without currency conversion (mixed currencies possible)
+  const { totalIncome, totalExpense, balance, currencies } = useMemo(() => {
     const income = transactions
       .filter((t) => t.type === "income")
       .reduce((sum, t) => sum + t.amount, 0);
     const expense = transactions
       .filter((t) => t.type === "expense")
       .reduce((sum, t) => sum + t.amount, 0);
+    const uniqueCurrencies = Array.from(
+      new Set(transactions.map((t) => t.currency || "USD").filter(Boolean))
+    );
     return {
       totalIncome: income,
       totalExpense: expense,
       balance: income - expense,
+      currencies: uniqueCurrencies,
     };
   }, [transactions]);
 
@@ -242,9 +248,9 @@ function TransactionsScreen({ onNavigateToGroups }: { onNavigateToGroups: () => 
     });
   };
 
-  const formatAmount = (amount: number, type: "income" | "expense"): string => {
+  const formatAmount = (amount: number, type: "income" | "expense", currency?: string): string => {
     const sign = type === "income" ? "+" : "-";
-    return `${sign}$${Math.abs(amount).toFixed(2)}`;
+    return `${sign}${formatCurrency(amount, currency || "USD")}`;
   };
 
   const getAuthToken = async (): Promise<string | null> => {
@@ -433,6 +439,7 @@ function TransactionsScreen({ onNavigateToGroups }: { onNavigateToGroups: () => 
           transaction={editingTransaction}
           onSave={handleFormSave}
           onCancel={handleFormCancel}
+          defaultCurrency={editingTransaction?.currency || "USD"}
         />
         <StatusBar style="auto" />
       </>
@@ -490,8 +497,16 @@ function TransactionsScreen({ onNavigateToGroups }: { onNavigateToGroups: () => 
                 variant="titleMedium"
                 style={{ color: INCOME_COLOR, fontWeight: "bold" }}
               >
-                ${totalIncome.toFixed(2)}
+                {formatCurrency(totalIncome, currencies[0] || "USD")}
               </Text>
+              {currencies.length > 1 && (
+                <Text
+                  variant="bodySmall"
+                  style={{ color: theme.colors.onSurfaceVariant, fontSize: 10 }}
+                >
+                  Mixed currencies
+                </Text>
+              )}
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
@@ -505,8 +520,16 @@ function TransactionsScreen({ onNavigateToGroups }: { onNavigateToGroups: () => 
                 variant="titleMedium"
                 style={{ color: EXPENSE_COLOR, fontWeight: "bold" }}
               >
-                ${totalExpense.toFixed(2)}
+                {formatCurrency(totalExpense, currencies[0] || "USD")}
               </Text>
+              {currencies.length > 1 && (
+                <Text
+                  variant="bodySmall"
+                  style={{ color: theme.colors.onSurfaceVariant, fontSize: 10 }}
+                >
+                  Mixed currencies
+                </Text>
+              )}
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
@@ -523,8 +546,16 @@ function TransactionsScreen({ onNavigateToGroups }: { onNavigateToGroups: () => 
                   fontWeight: "bold",
                 }}
               >
-                ${balance.toFixed(2)}
+                {formatCurrency(balance, currencies[0] || "USD")}
               </Text>
+              {currencies.length > 1 && (
+                <Text
+                  variant="bodySmall"
+                  style={{ color: theme.colors.onSurfaceVariant, fontSize: 10 }}
+                >
+                  Mixed currencies
+                </Text>
+              )}
             </View>
           </View>
         </Surface>
@@ -607,7 +638,7 @@ function TransactionsScreen({ onNavigateToGroups }: { onNavigateToGroups: () => 
                         variant="titleLarge"
                         style={[styles.amount, { color: amountColor }]}
                       >
-                        {formatAmount(transaction.amount, transaction.type)}
+                        {formatAmount(transaction.amount, transaction.type, transaction.currency)}
                       </Text>
                       <View style={styles.chipAndActions}>
                         <Chip
