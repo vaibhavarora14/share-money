@@ -258,7 +258,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                   <Card.Content style={styles.memberContent}>
                     <View style={styles.memberLeft}>
                       <Text variant="titleSmall" style={styles.memberName}>
-                        {member.email || "Unknown User"}
+                        {member.email || `User ${member.user_id.substring(0, 8)}...`}
                       </Text>
                       <Text
                         variant="bodySmall"

@@ -100,6 +100,9 @@ export const handler: Handler = async (event, context) => {
       };
     }
 
+    // Extract email from user object (could be user.email or user.user?.email)
+    const currentUserEmail = user.email || user.user?.email || null;
+
     // Create Supabase client
     const supabase = createClient(supabaseUrl, supabaseKey, {
       global: {
@@ -177,14 +180,25 @@ export const handler: Handler = async (event, context) => {
       }
 
       // Try to get user emails using admin API if service role key is available
-      // Otherwise, return members without emails
+      // Also include current user's email if they're a member
       const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
       let membersWithEmails = members || [];
+
+      // Extract current user's email (already extracted above)
 
       if (serviceRoleKey) {
         try {
           membersWithEmails = await Promise.all(
             (members || []).map(async (member) => {
+              // If this is the current user, use their email directly
+              if (member.user_id === user.id && currentUserEmail) {
+                return {
+                  ...member,
+                  email: currentUserEmail,
+                };
+              }
+
+              // Otherwise, fetch from Admin API
               try {
                 const userResponse = await fetch(
                   `${supabaseUrl}/auth/v1/admin/users/${member.user_id}`,
@@ -199,18 +213,31 @@ export const handler: Handler = async (event, context) => {
                   const userData = await userResponse.json();
                   return {
                     ...member,
-                    email: userData.user?.email || null,
+                    email: userData.user?.email || userData.email || null,
                   };
+                } else {
+                  console.error(`Failed to fetch user ${member.user_id}: ${userResponse.status}`);
                 }
-              } catch {
-                // Ignore errors, return member without email
+              } catch (err) {
+                console.error(`Error fetching user ${member.user_id}:`, err);
               }
               return member;
             })
           );
-        } catch {
-          // If admin API fails, just return members without emails
+        } catch (err) {
+          console.error('Error fetching member emails:', err);
         }
+      } else {
+        // If no service role key, at least set current user's email
+        membersWithEmails = (members || []).map(member => {
+          if (member.user_id === user.id && currentUserEmail) {
+            return {
+              ...member,
+              email: currentUserEmail,
+            };
+          }
+          return member;
+        });
       }
 
       const groupWithMembers: GroupWithMembers = {
