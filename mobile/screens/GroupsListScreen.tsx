@@ -161,9 +161,10 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
     <SafeAreaView style={styles.container} edges={["top"]}>
       <Appbar.Header>
         <Appbar.Content title="Groups" subtitle={`${groups.length} total`} />
-        {onNavigateToTransactions && (
-          <Appbar.Action icon="wallet" onPress={onNavigateToTransactions} />
-        )}
+        <Appbar.Action 
+          icon="wallet" 
+          onPress={onNavigateToTransactions || (() => {})}
+        />
         <Appbar.Action icon="logout" onPress={signOut} />
       </Appbar.Header>
 
