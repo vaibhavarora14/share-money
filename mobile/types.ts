@@ -7,6 +7,7 @@ export interface Transaction {
   category?: string;
   created_at?: string;
   user_id?: string;
+  group_id?: string;
 }
 
 export interface AmountInfo {

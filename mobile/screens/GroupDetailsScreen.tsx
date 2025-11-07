@@ -12,10 +12,12 @@ import {
   Text,
   useTheme,
 } from "react-native-paper";
+import { StatusBar } from "expo-status-bar";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../supabase";
 import { GroupWithMembers, Transaction } from "../types";
+import { TransactionFormScreen } from "./TransactionFormScreen";
 
 // API URL - must be set via EXPO_PUBLIC_API_URL environment variable
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -26,6 +28,7 @@ interface GroupDetailsScreenProps {
   onAddMember: () => void;
   onLeaveGroup?: () => void;
   onDeleteGroup?: () => void;
+  onTransactionAdded?: () => void;
 }
 
 export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
@@ -34,11 +37,13 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   onAddMember,
   onLeaveGroup,
   onDeleteGroup,
+  onTransactionAdded,
 }) => {
   const [group, setGroup] = useState<GroupWithMembers>(initialGroup);
   const [loading, setLoading] = useState<boolean>(false);
   const [leaving, setLeaving] = useState<boolean>(false);
   const [menuVisible, setMenuVisible] = useState<boolean>(false);
+  const [showTransactionForm, setShowTransactionForm] = useState<boolean>(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [transactionsLoading, setTransactionsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -119,7 +124,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
       const token = currentSession.access_token;
 
-      const response = await fetch(`${API_URL}/transactions`, {
+      const response = await fetch(`${API_URL}/transactions?group_id=${group.id}`, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
@@ -128,15 +133,16 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
       if (response.ok) {
         const data: Transaction[] = await response.json();
-        // For now, show all transactions. Later we can filter by group_id
-        setTransactions(data);
+        // Filter to only show transactions for this group
+        const groupTransactions = data.filter(t => t.group_id === group.id);
+        setTransactions(groupTransactions);
       }
     } catch (err) {
       console.error("Error fetching transactions:", err);
     } finally {
       setTransactionsLoading(false);
     }
-  }, [session]);
+  }, [session, group.id]);
 
   useEffect(() => {
     fetchGroupDetails();
@@ -296,6 +302,51 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     });
   };
 
+  const handleCreateTransaction = async (
+    transactionData: Omit<Transaction, "id" | "created_at" | "user_id">
+  ): Promise<void> => {
+    if (!API_URL) {
+      throw new Error("Unable to connect to the server");
+    }
+
+    try {
+      let {
+        data: { session: currentSession },
+      } = await supabase.auth.getSession();
+
+      if (!currentSession) {
+        throw new Error("Not authenticated");
+      }
+
+      const token = currentSession.access_token;
+
+      const response = await fetch(`${API_URL}/transactions`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...transactionData,
+          group_id: group.id,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      }
+
+      setShowTransactionForm(false);
+      await fetchTransactions();
+      if (onTransactionAdded) {
+        onTransactionAdded();
+      }
+    } catch (error) {
+      throw error;
+    }
+  };
+
   const currentUserId = session?.user?.id;
   const isOwner = group.created_by === currentUserId || 
     group.members?.some(m => m.user_id === currentUserId && m.role === 'owner');
@@ -309,6 +360,19 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           Loading group details...
         </Text>
       </View>
+    );
+  }
+
+  if (showTransactionForm) {
+    return (
+      <>
+        <TransactionFormScreen
+          transaction={null}
+          onSave={handleCreateTransaction}
+          onCancel={() => setShowTransactionForm(false)}
+        />
+        <StatusBar style="auto" />
+      </>
     );
   }
 
@@ -533,18 +597,17 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         </View>
       </ScrollView>
 
-      <Button
-        mode="contained"
-        icon="plus"
-        onPress={() => {
-          // TODO: Navigate to add transaction screen
-          Alert.alert("Info", "Add transaction functionality coming soon");
-        }}
-        style={styles.addTransactionButton}
-        contentStyle={styles.addTransactionButtonContent}
-      >
-        Add Transaction
-      </Button>
+      {isMember && (
+        <Button
+          mode="contained"
+          icon="plus"
+          onPress={() => setShowTransactionForm(true)}
+          style={styles.addTransactionButton}
+          contentStyle={styles.addTransactionButtonContent}
+        >
+          Add Transaction
+        </Button>
+      )}
     </SafeAreaView>
   );
 };
@@ -623,7 +686,7 @@ const styles = StyleSheet.create({
   },
   addTransactionButton: {
     margin: 16,
-    marginBottom: 8,
+    marginBottom: 80, // Space for bottom navigation bar
   },
   addTransactionButtonContent: {
     paddingVertical: 8,
