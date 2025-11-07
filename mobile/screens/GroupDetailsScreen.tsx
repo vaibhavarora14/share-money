@@ -1,3 +1,4 @@
+import { StatusBar } from "expo-status-bar";
 import React, { useCallback, useEffect, useState } from "react";
 import { Alert, ScrollView, StyleSheet, View } from "react-native";
 import {
@@ -12,7 +13,6 @@ import {
   Text,
   useTheme,
 } from "react-native-paper";
-import { StatusBar } from "expo-status-bar";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../supabase";
@@ -43,9 +43,11 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [leaving, setLeaving] = useState<boolean>(false);
   const [menuVisible, setMenuVisible] = useState<boolean>(false);
-  const [showTransactionForm, setShowTransactionForm] = useState<boolean>(false);
+  const [showTransactionForm, setShowTransactionForm] =
+    useState<boolean>(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [transactionsLoading, setTransactionsLoading] = useState<boolean>(false);
+  const [transactionsLoading, setTransactionsLoading] =
+    useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const { session, signOut } = useAuth();
   const theme = useTheme();
@@ -92,7 +94,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         }
 
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        throw new Error(
+          errorData.error || `HTTP error! status: ${response.status}`
+        );
       }
 
       const data: GroupWithMembers = await response.json();
@@ -124,17 +128,20 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
       const token = currentSession.access_token;
 
-      const response = await fetch(`${API_URL}/transactions?group_id=${group.id}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
+      const response = await fetch(
+        `${API_URL}/transactions?group_id=${group.id}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
       if (response.ok) {
         const data: Transaction[] = await response.json();
         // Filter to only show transactions for this group
-        const groupTransactions = data.filter(t => t.group_id === group.id);
+        const groupTransactions = data.filter((t) => t.group_id === group.id);
         setTransactions(groupTransactions);
       }
     } catch (err) {
@@ -193,7 +200,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 }
 
                 const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                throw new Error(
+                  errorData.error || `HTTP error! status: ${response.status}`
+                );
               }
 
               if (onDeleteGroup) {
@@ -269,7 +278,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 }
 
                 const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                throw new Error(
+                  errorData.error || `HTTP error! status: ${response.status}`
+                );
               }
 
               // Call the onLeaveGroup callback if provided, otherwise just go back
@@ -334,7 +345,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        throw new Error(
+          errorData.error || `HTTP error! status: ${response.status}`
+        );
       }
 
       setShowTransactionForm(false);
@@ -348,9 +361,12 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   };
 
   const currentUserId = session?.user?.id;
-  const isOwner = group.created_by === currentUserId || 
-    group.members?.some(m => m.user_id === currentUserId && m.role === 'owner');
-  const isMember = group.members?.some(m => m.user_id === currentUserId);
+  const isOwner =
+    group.created_by === currentUserId ||
+    group.members?.some(
+      (m) => m.user_id === currentUserId && m.role === "owner"
+    );
+  const isMember = group.members?.some((m) => m.user_id === currentUserId);
 
   if (loading && !group.members) {
     return (
@@ -485,7 +501,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                   <Card.Content style={styles.memberContent}>
                     <View style={styles.memberLeft}>
                       <Text variant="titleSmall" style={styles.memberName}>
-                        {member.email || `User ${member.user_id.substring(0, 8)}...`}
+                        {member.email ||
+                          `User ${member.user_id.substring(0, 8)}...`}
                       </Text>
                       <Text
                         variant="bodySmall"
@@ -523,7 +540,10 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           ) : (
             <Text
               variant="bodyMedium"
-              style={{ color: theme.colors.onSurfaceVariant, textAlign: "center" }}
+              style={{
+                color: theme.colors.onSurfaceVariant,
+                textAlign: "center",
+              }}
             >
               No members yet
             </Text>
@@ -548,7 +568,10 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                   <Card style={styles.transactionCard} mode="outlined">
                     <Card.Content style={styles.transactionContent}>
                       <View style={styles.transactionLeft}>
-                        <Text variant="titleSmall" style={styles.transactionDescription}>
+                        <Text
+                          variant="titleSmall"
+                          style={styles.transactionDescription}
+                        >
                           {transaction.description || "No description"}
                         </Text>
                         <Text
@@ -561,7 +584,10 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                       </View>
                       <Text
                         variant="titleMedium"
-                        style={[styles.transactionAmount, { color: amountColor }]}
+                        style={[
+                          styles.transactionAmount,
+                          { color: amountColor },
+                        ]}
                       >
                         {sign}${Math.abs(transaction.amount).toFixed(2)}
                       </Text>
@@ -576,7 +602,10 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           ) : (
             <Text
               variant="bodyMedium"
-              style={{ color: theme.colors.onSurfaceVariant, textAlign: "center" }}
+              style={{
+                color: theme.colors.onSurfaceVariant,
+                textAlign: "center",
+              }}
             >
               No transactions yet
             </Text>
@@ -598,15 +627,12 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       </ScrollView>
 
       {isMember && (
-        <Button
-          mode="contained"
+        <FAB
           icon="plus"
+          label="Add"
           onPress={() => setShowTransactionForm(true)}
           style={styles.addTransactionButton}
-          contentStyle={styles.addTransactionButtonContent}
-        >
-          Add Transaction
-        </Button>
+        />
       )}
     </SafeAreaView>
   );
@@ -685,10 +711,8 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   addTransactionButton: {
-    margin: 16,
-    marginBottom: 80, // Space for bottom navigation bar
-  },
-  addTransactionButtonContent: {
-    paddingVertical: 8,
+    position: "absolute",
+    right: 16,
+    bottom: 16, // Space for bottom navigation bar
   },
 });
