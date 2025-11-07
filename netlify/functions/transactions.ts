@@ -15,6 +15,7 @@ interface Transaction {
   type: 'income' | 'expense';
   category?: string;
   user_id?: string;
+  group_id?: string;
 }
 
 export const handler: Handler = async (event, context) => {
@@ -107,11 +108,20 @@ export const handler: Handler = async (event, context) => {
 
     const httpMethod = event.httpMethod;
 
-    // Handle GET - Fetch all transactions
+    // Handle GET - Fetch transactions (optionally filtered by group_id)
     if (httpMethod === 'GET') {
-      const { data: transactions, error } = await supabase
+      const groupId = event.queryStringParameters?.group_id;
+      
+      let query = supabase
         .from('transactions')
-        .select('*')
+        .select('*');
+
+      // Filter by group_id if provided
+      if (groupId) {
+        query = query.eq('group_id', groupId);
+      }
+
+      const { data: transactions, error } = await query
         .order('date', { ascending: false })
         .limit(100);
 
@@ -162,6 +172,24 @@ export const handler: Handler = async (event, context) => {
         };
       }
 
+      // If group_id is provided, verify user is a member of the group
+      if (transactionData.group_id) {
+        const { data: membership, error: membershipError } = await supabase
+          .from('group_members')
+          .select('id')
+          .eq('group_id', transactionData.group_id)
+          .eq('user_id', user.id)
+          .single();
+
+        if (membershipError || !membership) {
+          return {
+            statusCode: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ error: 'You must be a member of the group to add transactions' }),
+          };
+        }
+      }
+
       // Set user_id from authenticated user (RLS will also enforce this)
       const { data: transaction, error } = await supabase
         .from('transactions')
@@ -171,6 +199,7 @@ export const handler: Handler = async (event, context) => {
           date: transactionData.date,
           type: transactionData.type,
           category: transactionData.category || null,
+          group_id: transactionData.group_id || null,
         })
         .select()
         .single();
