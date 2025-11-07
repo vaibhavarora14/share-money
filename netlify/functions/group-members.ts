@@ -231,9 +231,7 @@ export const handler: Handler = async (event, context) => {
       // Use provided user_id if valid UUID, otherwise default to current user
       // Validate UUID format if provided
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      const userId = providedUserId && uuidRegex.test(providedUserId) 
-        ? providedUserId 
-        : currentUser.id;
+      const userId = providedUserId || currentUser.id;
 
       if (!groupId) {
         return {
@@ -249,6 +247,15 @@ export const handler: Handler = async (event, context) => {
           statusCode: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           body: JSON.stringify({ error: 'Invalid group_id format' }),
+        };
+      }
+
+      // Validate user_id format if provided (fail early rather than silently fallback)
+      if (providedUserId && !uuidRegex.test(providedUserId)) {
+        return {
+          statusCode: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Invalid user_id format' }),
         };
       }
 

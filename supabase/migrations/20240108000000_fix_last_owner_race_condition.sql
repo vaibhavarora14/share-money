@@ -14,6 +14,7 @@ RETURNS BOOLEAN AS $$
 DECLARE
   current_user_id UUID;
   target_membership RECORD;
+  current_user_role VARCHAR(20);
   owner_count INTEGER;
 BEGIN
   -- Get the current user ID from auth context
@@ -23,42 +24,42 @@ BEGIN
     RAISE EXCEPTION 'User not authenticated';
   END IF;
 
-  -- Get the target user's membership
-  SELECT role INTO target_membership
+  -- Get the target user's membership and lock the row
+  -- FOR UPDATE ensures no concurrent modifications can occur
+  SELECT role INTO STRICT target_membership
   FROM group_members
-  WHERE group_id = p_group_id AND user_id = p_user_id;
-
-  -- Check if target user is a member
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'User is not a member of this group';
-  END IF;
+  WHERE group_id = p_group_id AND user_id = p_user_id
+  FOR UPDATE;
 
   -- Check authorization: users can remove themselves, or owners can remove any member
   IF p_user_id != current_user_id THEN
-    -- Check if current user is an owner
-    IF NOT EXISTS (
-      SELECT 1 FROM group_members
-      WHERE group_id = p_group_id
-      AND user_id = current_user_id
-      AND role = 'owner'
-    ) THEN
+    -- Check if current user is an owner (lock the row to prevent concurrent role changes)
+    SELECT role INTO current_user_role
+    FROM group_members
+    WHERE group_id = p_group_id
+    AND user_id = current_user_id
+    FOR UPDATE;
+    
+    IF NOT FOUND OR current_user_role != 'owner' THEN
       RAISE EXCEPTION 'Only group owners can remove other members';
     END IF;
   END IF;
 
-  -- If removing an owner, check if it's the last owner (atomic check)
+  -- If removing an owner, check if it's the last owner (atomic check with lock)
+  -- Lock all owner rows to prevent concurrent removals
   IF target_membership.role = 'owner' THEN
     SELECT COUNT(*) INTO owner_count
     FROM group_members
     WHERE group_id = p_group_id
-    AND role = 'owner';
+    AND role = 'owner'
+    FOR UPDATE;  -- Lock all owner rows to prevent race conditions
 
     IF owner_count <= 1 THEN
       RAISE EXCEPTION 'Cannot remove the last owner of the group';
     END IF;
   END IF;
 
-  -- Perform the deletion
+  -- Perform the deletion (row is already locked, so this is safe)
   DELETE FROM group_members
   WHERE group_id = p_group_id
   AND user_id = p_user_id;
