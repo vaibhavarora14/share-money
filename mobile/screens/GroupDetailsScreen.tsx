@@ -319,7 +319,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           onPress={handleLeaveGroup}
           disabled={leaving}
           loading={leaving}
-          style={styles.leaveButton}
+          style={[styles.leaveButton, { borderColor: theme.colors.error }]}
           textColor={theme.colors.error}
         >
           Leave Group
@@ -385,6 +385,5 @@ const styles = StyleSheet.create({
   leaveButton: {
     margin: 16,
     marginTop: 8,
-    borderColor: theme.colors.error,
   },
 });
