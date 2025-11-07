@@ -6,3 +6,13 @@
   to = "/.netlify/functions/transactions"
   status = 200
 
+[[redirects]]
+  from = "/api/groups/*"
+  to = "/.netlify/functions/groups/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/api/group-members"
+  to = "/.netlify/functions/group-members"
+  status = 200
+
