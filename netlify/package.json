@@ -4,7 +4,7 @@
   "description": "Netlify Functions for ShareMoney",
   "type": "module",
   "scripts": {
-    "dev": "netlify dev"
+    "dev": "echo 'Current IP Address:' && ipconfig getifaddr en0 && echo '' && netlify dev"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
