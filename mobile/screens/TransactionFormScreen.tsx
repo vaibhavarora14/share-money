@@ -1,0 +1,262 @@
+import React, { useEffect, useState } from "react";
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
+import {
+  Button,
+  Card,
+  SegmentedButtons,
+  Text,
+  TextInput,
+  useTheme,
+} from "react-native-paper";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Transaction } from "../types";
+
+interface TransactionFormScreenProps {
+  transaction?: Transaction | null;
+  onSave: (transaction: Omit<Transaction, "id" | "created_at" | "user_id">) => Promise<void>;
+  onCancel: () => void;
+}
+
+export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
+  transaction,
+  onSave,
+  onCancel,
+}) => {
+  const [description, setDescription] = useState("");
+  const [amount, setAmount] = useState("");
+  const [date, setDate] = useState("");
+  const [type, setType] = useState<"income" | "expense">("expense");
+  const [category, setCategory] = useState("");
+  const [loading, setLoading] = useState(false);
+  const theme = useTheme();
+
+  // Initialize form with transaction data if editing
+  useEffect(() => {
+    if (transaction) {
+      setDescription(transaction.description || "");
+      setAmount(transaction.amount.toString());
+      setDate(transaction.date || "");
+      setType(transaction.type || "expense");
+      setCategory(transaction.category || "");
+    } else {
+      // Set default date to today
+      const today = new Date();
+      setDate(today.toISOString().split("T")[0]);
+    }
+  }, [transaction]);
+
+  const handleSave = async () => {
+    // Validation
+    if (!description.trim()) {
+      Alert.alert("Error", "Please enter a description");
+      return;
+    }
+
+    if (!amount.trim()) {
+      Alert.alert("Error", "Please enter an amount");
+      return;
+    }
+
+    const amountValue = parseFloat(amount);
+    if (isNaN(amountValue) || amountValue <= 0) {
+      Alert.alert("Error", "Please enter a valid amount greater than 0");
+      return;
+    }
+
+    if (!date.trim()) {
+      Alert.alert("Error", "Please enter a date");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await onSave({
+        description: description.trim(),
+        amount: amountValue,
+        date: date.trim(),
+        type,
+        category: category.trim() || undefined,
+      });
+    } catch (error) {
+      Alert.alert(
+        "Error",
+        error instanceof Error ? error.message : "Failed to save transaction"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.keyboardView}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Card style={styles.card} mode="elevated" elevation={2}>
+            <Card.Content style={styles.cardContent}>
+              <Text variant="headlineSmall" style={styles.title}>
+                {transaction ? "Edit Transaction" : "New Transaction"}
+              </Text>
+
+              <TextInput
+                label="Description"
+                value={description}
+                onChangeText={setDescription}
+                mode="outlined"
+                disabled={loading}
+                style={styles.input}
+                left={<TextInput.Icon icon="text" />}
+                placeholder="e.g., Grocery shopping"
+              />
+
+              <TextInput
+                label="Amount"
+                value={amount}
+                onChangeText={setAmount}
+                mode="outlined"
+                keyboardType="decimal-pad"
+                disabled={loading}
+                style={styles.input}
+                left={<TextInput.Icon icon="currency-usd" />}
+                placeholder="0.00"
+              />
+
+              <TextInput
+                label="Date"
+                value={date}
+                onChangeText={setDate}
+                mode="outlined"
+                disabled={loading}
+                style={styles.input}
+                left={<TextInput.Icon icon="calendar" />}
+                placeholder="YYYY-MM-DD"
+              />
+
+              <View style={styles.segmentedContainer}>
+                <Text
+                  variant="labelLarge"
+                  style={[
+                    styles.label,
+                    { color: theme.colors.onSurfaceVariant },
+                  ]}
+                >
+                  Type
+                </Text>
+                <SegmentedButtons
+                  value={type}
+                  onValueChange={(value) =>
+                    setType(value as "income" | "expense")
+                  }
+                  buttons={[
+                    {
+                      value: "expense",
+                      label: "Expense",
+                      icon: "arrow-down",
+                    },
+                    {
+                      value: "income",
+                      label: "Income",
+                      icon: "arrow-up",
+                    },
+                  ]}
+                  style={styles.segmentedButtons}
+                />
+              </View>
+
+              <TextInput
+                label="Category (Optional)"
+                value={category}
+                onChangeText={setCategory}
+                mode="outlined"
+                disabled={loading}
+                style={styles.input}
+                left={<TextInput.Icon icon="tag" />}
+                placeholder="e.g., Food, Transportation"
+              />
+
+              <View style={styles.buttonRow}>
+                <Button
+                  mode="outlined"
+                  onPress={onCancel}
+                  disabled={loading}
+                  style={[styles.button, styles.cancelButton]}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  mode="contained"
+                  onPress={handleSave}
+                  disabled={loading}
+                  loading={loading}
+                  style={[styles.button, styles.saveButton]}
+                >
+                  {transaction ? "Update" : "Create"}
+                </Button>
+              </View>
+            </Card.Content>
+          </Card>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#f5f5f5",
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    padding: 20,
+  },
+  card: {
+    borderRadius: 16,
+  },
+  cardContent: {
+    paddingVertical: 8,
+  },
+  title: {
+    fontWeight: "bold",
+    marginBottom: 24,
+    textAlign: "center",
+  },
+  input: {
+    marginBottom: 16,
+  },
+  segmentedContainer: {
+    marginBottom: 16,
+  },
+  label: {
+    marginBottom: 8,
+  },
+  segmentedButtons: {
+    marginTop: 4,
+  },
+  buttonRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 8,
+  },
+  button: {
+    flex: 1,
+    marginHorizontal: 6,
+  },
+  cancelButton: {},
+  saveButton: {},
+});

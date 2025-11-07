@@ -1,13 +1,15 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { StatusBar } from "expo-status-bar";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { Alert, ScrollView, StyleSheet, View } from "react-native";
 import {
   ActivityIndicator,
   Appbar,
   Button,
   Card,
   Chip,
+  FAB,
+  IconButton,
   Provider as PaperProvider,
   Surface,
   Text,
@@ -16,6 +18,7 @@ import {
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { AuthScreen } from "./screens/AuthScreen";
+import { TransactionFormScreen } from "./screens/TransactionFormScreen";
 import { supabase } from "./supabase";
 import { Transaction } from "./types";
 
@@ -32,6 +35,8 @@ function TransactionsScreen() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState<boolean>(false);
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const { session, signOut } = useAuth();
   const fetchingRef = React.useRef<boolean>(false);
   const theme = useTheme();
@@ -237,6 +242,173 @@ function TransactionsScreen() {
     return `${sign}$${Math.abs(amount).toFixed(2)}`;
   };
 
+  const getAuthToken = async (): Promise<string | null> => {
+    if (!session) return null;
+
+    let {
+      data: { session: currentSession },
+    } = await supabase.auth.getSession();
+
+    if (!currentSession) return null;
+
+    // Check if token is expired (with buffer)
+    const now = Math.floor(Date.now() / 1000);
+    const expiresAt = currentSession.expires_at || 0;
+
+    if (expiresAt && expiresAt < now + TOKEN_REFRESH_BUFFER_SECONDS) {
+      const { data: refreshData, error: refreshError } =
+        await supabase.auth.refreshSession();
+
+      if (refreshError || !refreshData.session) {
+        await signOut();
+        return null;
+      }
+
+      currentSession = refreshData.session;
+    }
+
+    return currentSession.access_token;
+  };
+
+  const handleCreateTransaction = async (
+    transactionData: Omit<Transaction, "id" | "created_at" | "user_id">
+  ): Promise<void> => {
+    if (!API_URL) {
+      throw new Error(
+        "Unable to connect to the server. Please check your app configuration and try again."
+      );
+    }
+
+    const token = await getAuthToken();
+    if (!token) {
+      throw new Error("Not authenticated");
+    }
+
+    const response = await fetch(`${API_URL}/transactions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(transactionData),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    await fetchTransactions();
+    setShowForm(false);
+    setEditingTransaction(null);
+  };
+
+  const handleUpdateTransaction = async (
+    transactionData: Omit<Transaction, "id" | "created_at" | "user_id">
+  ): Promise<void> => {
+    if (!API_URL || !editingTransaction) {
+      throw new Error("Invalid request");
+    }
+
+    const token = await getAuthToken();
+    if (!token) {
+      throw new Error("Not authenticated");
+    }
+
+    const response = await fetch(`${API_URL}/transactions`, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ...transactionData,
+        id: editingTransaction.id,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    await fetchTransactions();
+    setShowForm(false);
+    setEditingTransaction(null);
+  };
+
+  const handleDeleteTransaction = async (transactionId: number): Promise<void> => {
+    if (!API_URL) {
+      throw new Error(
+        "Unable to connect to the server. Please check your app configuration and try again."
+      );
+    }
+
+    const token = await getAuthToken();
+    if (!token) {
+      throw new Error("Not authenticated");
+    }
+
+    const response = await fetch(`${API_URL}/transactions?id=${transactionId}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    await fetchTransactions();
+  };
+
+  const handleEditClick = (transaction: Transaction) => {
+    setEditingTransaction(transaction);
+    setShowForm(true);
+  };
+
+  const handleDeleteClick = (transaction: Transaction) => {
+    Alert.alert(
+      "Delete Transaction",
+      `Are you sure you want to delete "${transaction.description}"?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await handleDeleteTransaction(transaction.id);
+            } catch (error) {
+              Alert.alert(
+                "Error",
+                error instanceof Error ? error.message : "Failed to delete transaction"
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleFormCancel = () => {
+    setShowForm(false);
+    setEditingTransaction(null);
+  };
+
+  const handleFormSave = async (
+    transactionData: Omit<Transaction, "id" | "created_at" | "user_id">
+  ) => {
+    if (editingTransaction) {
+      await handleUpdateTransaction(transactionData);
+    } else {
+      await handleCreateTransaction(transactionData);
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.centerContainer}>
@@ -246,6 +418,19 @@ function TransactionsScreen() {
         </Text>
         <StatusBar style="auto" />
       </View>
+    );
+  }
+
+  if (showForm) {
+    return (
+      <>
+        <TransactionFormScreen
+          transaction={editingTransaction}
+          onSave={handleFormSave}
+          onCancel={handleFormCancel}
+        />
+        <StatusBar style="auto" />
+      </>
     );
   }
 
@@ -407,19 +592,35 @@ function TransactionsScreen() {
                       >
                         {formatAmount(transaction.amount, transaction.type)}
                       </Text>
-                      <Chip
-                        style={[
-                          styles.typeChip,
-                          { backgroundColor: chipColor.backgroundColor },
-                        ]}
-                        textStyle={{
-                          color: chipColor.textColor,
-                          fontSize: 11,
-                          fontWeight: "600",
-                        }}
-                      >
-                        {transaction.type}
-                      </Chip>
+                      <View style={styles.chipAndActions}>
+                        <Chip
+                          style={[
+                            styles.typeChip,
+                            { backgroundColor: chipColor.backgroundColor },
+                          ]}
+                          textStyle={{
+                            color: chipColor.textColor,
+                            fontSize: 11,
+                            fontWeight: "600",
+                          }}
+                        >
+                          {transaction.type}
+                        </Chip>
+                        <View style={styles.actionButtons}>
+                          <IconButton
+                            icon="pencil"
+                            size={20}
+                            onPress={() => handleEditClick(transaction)}
+                            iconColor={theme.colors.primary}
+                          />
+                          <IconButton
+                            icon="delete"
+                            size={20}
+                            onPress={() => handleDeleteClick(transaction)}
+                            iconColor={theme.colors.error}
+                          />
+                        </View>
+                      </View>
                     </View>
                   </Card.Content>
                 </Card>
@@ -431,6 +632,13 @@ function TransactionsScreen() {
           })
         )}
       </ScrollView>
+
+      <FAB
+        icon="plus"
+        style={styles.fab}
+        onPress={() => setShowForm(true)}
+        label="Add"
+      />
 
       <StatusBar style="auto" />
     </SafeAreaView>
@@ -554,5 +762,19 @@ const styles = StyleSheet.create({
   },
   typeChip: {
     height: 24,
+  },
+  chipAndActions: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  actionButtons: {
+    flexDirection: "row",
+    marginLeft: 8,
+  },
+  fab: {
+    position: "absolute",
+    margin: 16,
+    right: 0,
+    bottom: 0,
   },
 });
