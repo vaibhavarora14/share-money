@@ -5,7 +5,6 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
-  Text,
   View,
 } from "react-native";
 import {
@@ -23,7 +22,9 @@ import { CURRENCIES, getCurrencySymbol } from "../utils/currency";
 
 interface TransactionFormScreenProps {
   transaction?: Transaction | null;
-  onSave: (transaction: Omit<Transaction, "id" | "created_at" | "user_id">) => Promise<void>;
+  onSave: (
+    transaction: Omit<Transaction, "id" | "created_at" | "user_id">
+  ) => Promise<void>;
   onCancel: () => void;
   defaultCurrency?: string;
 }
@@ -289,6 +290,7 @@ const styles = StyleSheet.create({
   amountRow: {
     flexDirection: "row",
     marginBottom: 16,
+    alignItems: "center",
   },
   amountInput: {
     flex: 1,
