@@ -10,7 +10,10 @@
     },
     "preview": {
       "distribution": "internal",
-      "channel": "preview"
+      "channel": "preview",
+      "env": {
+        "EXPO_NO_UPDATES": "1"
+      }
     },
     "production": {
       "channel": "production"

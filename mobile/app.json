@@ -39,7 +39,14 @@
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/afddb7db-3d7d-46da-a1b5-0d6e4b4374ce"
-    }
+      "url": "https://u.expo.dev/afddb7db-3d7d-46da-a1b5-0d6e4b4374ce",
+      "enabled": true,
+      "checkAutomatically": "ON_ERROR_RECOVERY",
+      "fallbackToCacheTimeout": 0
+    },
+    "plugins": [
+      "expo-font",
+      "expo-web-browser"
+    ]
   }
 }
