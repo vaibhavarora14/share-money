@@ -4,7 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
 };
 
 interface Transaction {
@@ -105,28 +105,209 @@ export const handler: Handler = async (event, context) => {
       },
     });
 
+    const httpMethod = event.httpMethod;
 
-    // Query transactions from database (RLS will automatically filter by user_id)
-    const { data: transactions, error } = await supabase
-      .from('transactions')
-      .select('*')
-      .order('date', { ascending: false })
-      .limit(100);
+    // Handle GET - Fetch all transactions
+    if (httpMethod === 'GET') {
+      const { data: transactions, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .order('date', { ascending: false })
+        .limit(100);
 
-    if (error) {
-      console.error('Supabase error:', error);
+      if (error) {
+        console.error('Supabase error:', error);
+        return {
+          statusCode: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Failed to fetch transactions', details: error.message }),
+        };
+      }
+
       return {
-        statusCode: 500,
+        statusCode: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: 'Failed to fetch transactions', details: error.message }),
+        body: JSON.stringify(transactions || []),
       };
     }
 
-    // Return transactions
+    // Handle POST - Create new transaction
+    if (httpMethod === 'POST') {
+      let transactionData: Partial<Transaction>;
+      try {
+        transactionData = JSON.parse(event.body || '{}');
+      } catch (e) {
+        return {
+          statusCode: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Invalid JSON in request body' }),
+        };
+      }
+
+      // Validate required fields
+      if (!transactionData.amount || !transactionData.description || !transactionData.date || !transactionData.type) {
+        return {
+          statusCode: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Missing required fields: amount, description, date, type' }),
+        };
+      }
+
+      // Validate type
+      if (transactionData.type !== 'income' && transactionData.type !== 'expense') {
+        return {
+          statusCode: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Type must be either "income" or "expense"' }),
+        };
+      }
+
+      // Set user_id from authenticated user (RLS will also enforce this)
+      const { data: transaction, error } = await supabase
+        .from('transactions')
+        .insert({
+          amount: transactionData.amount,
+          description: transactionData.description,
+          date: transactionData.date,
+          type: transactionData.type,
+          category: transactionData.category || null,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Supabase error:', error);
+        return {
+          statusCode: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Failed to create transaction', details: error.message }),
+        };
+      }
+
+      return {
+        statusCode: 201,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify(transaction),
+      };
+    }
+
+    // Handle PUT - Update existing transaction
+    if (httpMethod === 'PUT') {
+      let transactionData: Partial<Transaction>;
+      try {
+        transactionData = JSON.parse(event.body || '{}');
+      } catch (e) {
+        return {
+          statusCode: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Invalid JSON in request body' }),
+        };
+      }
+
+      if (!transactionData.id) {
+        return {
+          statusCode: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Missing transaction id' }),
+        };
+      }
+
+      // Validate type if provided
+      if (transactionData.type && transactionData.type !== 'income' && transactionData.type !== 'expense') {
+        return {
+          statusCode: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Type must be either "income" or "expense"' }),
+        };
+      }
+
+      // Build update object (exclude id and user_id)
+      const updateData: any = {};
+      if (transactionData.amount !== undefined) updateData.amount = transactionData.amount;
+      if (transactionData.description !== undefined) updateData.description = transactionData.description;
+      if (transactionData.date !== undefined) updateData.date = transactionData.date;
+      if (transactionData.type !== undefined) updateData.type = transactionData.type;
+      if (transactionData.category !== undefined) updateData.category = transactionData.category || null;
+
+      const { data: transaction, error } = await supabase
+        .from('transactions')
+        .update(updateData)
+        .eq('id', transactionData.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Supabase error:', error);
+        return {
+          statusCode: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Failed to update transaction', details: error.message }),
+        };
+      }
+
+      if (!transaction) {
+        return {
+          statusCode: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Transaction not found' }),
+        };
+      }
+
+      return {
+        statusCode: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify(transaction),
+      };
+    }
+
+    // Handle DELETE - Delete transaction
+    if (httpMethod === 'DELETE') {
+      // Get transaction ID from query string
+      const transactionId = event.queryStringParameters?.id;
+      
+      if (!transactionId) {
+        return {
+          statusCode: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Missing transaction id in query parameters' }),
+        };
+      }
+
+      const id = parseInt(transactionId, 10);
+      if (isNaN(id)) {
+        return {
+          statusCode: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Invalid transaction id' }),
+        };
+      }
+
+      const { error } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('Supabase error:', error);
+        return {
+          statusCode: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Failed to delete transaction', details: error.message }),
+        };
+      }
+
+      return {
+        statusCode: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ success: true, message: 'Transaction deleted successfully' }),
+      };
+    }
+
+    // Method not allowed
     return {
-      statusCode: 200,
+      statusCode: 405,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify(transactions || []),
+      body: JSON.stringify({ error: 'Method not allowed' }),
     };
   } catch (error: any) {
     console.error('Error:', error);
