@@ -74,6 +74,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
 
       const token = currentSession.access_token;
 
+      console.log("Fetching groups from:", `${API_URL}/groups`);
       const response = await fetch(`${API_URL}/groups`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -81,6 +82,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
         },
       });
 
+      console.log("Groups response status:", response.status, response.statusText);
       if (!response.ok) {
         if (response.status === 401) {
           await signOut();
@@ -98,6 +100,9 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Unknown error occurred";
+      console.error("Error fetching groups:", err);
+      console.error("API_URL:", API_URL);
+      console.error("Error message:", errorMessage);
       if (
         !errorMessage.includes("401") &&
         !errorMessage.includes("Unauthorized")
