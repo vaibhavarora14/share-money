@@ -281,9 +281,19 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 }
 
                 const errorData = await response.json().catch(() => ({}));
-                throw new Error(
-                  errorData.error || `HTTP error! status: ${response.status}`
-                );
+                const errorMessage = errorData.error || `HTTP error! status: ${response.status}`;
+                
+                // Show user-friendly error messages for specific cases
+                if (errorMessage.includes('last owner')) {
+                  Alert.alert(
+                    "Cannot Leave Group",
+                    "You cannot leave the group because you are the last owner. Please transfer ownership to another member first or delete the group.",
+                    [{ text: "OK" }]
+                  );
+                  return;
+                }
+                
+                throw new Error(errorMessage);
               }
 
               // Call the onLeaveGroup callback if provided, otherwise just go back
@@ -555,6 +565,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 title="Delete Group"
                 leadingIcon="delete"
                 titleStyle={{ color: theme.colors.error }}
+                disabled={leaving}
               />
             )}
             {!isOwner && (
@@ -566,6 +577,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 title="Leave Group"
                 leadingIcon="exit-run"
                 titleStyle={{ color: theme.colors.error }}
+                disabled={leaving}
               />
             )}
             {isOwner && (
@@ -577,6 +589,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 title="Leave Group"
                 leadingIcon="exit-run"
                 titleStyle={{ color: theme.colors.error }}
+                disabled={leaving}
               />
             )}
           </Menu>
