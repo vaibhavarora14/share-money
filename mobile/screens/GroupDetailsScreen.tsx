@@ -342,6 +342,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         body: JSON.stringify({
           ...transactionData,
           group_id: group.id,
+          currency: transactionData.currency || group.currency || 'USD',
         }),
       });
 
@@ -390,6 +391,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         body: JSON.stringify({
           ...transactionData,
           id: editingTransaction.id,
+          currency: transactionData.currency || group.currency || 'USD',
         }),
       });
 
