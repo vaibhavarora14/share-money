@@ -673,7 +673,7 @@ function TransactionsScreen({ onNavigateToGroups }: { onNavigateToGroups: () => 
 function AppContent() {
   const { session, loading } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
-  const [currentView, setCurrentView] = useState<'transactions' | 'groups'>('transactions');
+  const [currentView, setCurrentView] = useState<'transactions' | 'groups'>('groups');
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
@@ -873,23 +873,13 @@ function AppContent() {
     );
   }
 
-  // Show groups list or transactions based on current view
-  if (currentView === 'groups') {
-    return (
-      <>
-        <GroupsListScreen
-          onGroupPress={handleGroupPress}
-          onCreateGroup={() => setShowCreateGroup(true)}
-          onNavigateToTransactions={() => setCurrentView('transactions')}
-        />
-        <StatusBar style="auto" />
-      </>
-    );
-  }
-
+  // Show groups list (transactions view is hidden for now)
   return (
     <>
-      <TransactionsScreen onNavigateToGroups={() => setCurrentView('groups')} />
+      <GroupsListScreen
+        onGroupPress={handleGroupPress}
+        onCreateGroup={() => setShowCreateGroup(true)}
+      />
       <StatusBar style="auto" />
     </>
   );
