@@ -1,5 +1,6 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { StatusBar } from "expo-status-bar";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import {
   ActivityIndicator,
@@ -18,7 +19,13 @@ import { AuthScreen } from "./screens/AuthScreen";
 import { supabase } from "./supabase";
 import { Transaction } from "./types";
 
-// Set EXPO_PUBLIC_API_URL in your .env file
+// Constants
+const TOKEN_REFRESH_BUFFER_SECONDS = 60;
+const FETCH_DELAY_MS = 500;
+const INCOME_COLOR = "#10b981";
+const EXPENSE_COLOR = "#ef4444";
+
+// API URL - must be set via EXPO_PUBLIC_API_URL environment variable
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 function TransactionsScreen() {
@@ -29,20 +36,25 @@ function TransactionsScreen() {
   const fetchingRef = React.useRef<boolean>(false);
   const theme = useTheme();
 
+  // Validate API URL on mount
   useEffect(() => {
-    if (session) {
-      const timer = setTimeout(() => {
-        fetchTransactions();
-      }, 500);
-      return () => clearTimeout(timer);
-    } else {
-      setTransactions([]);
+    if (!API_URL) {
+      setError(
+        "Unable to connect to the server. Please check your app configuration and try again."
+      );
       setLoading(false);
-      setError(null);
     }
-  }, [session]);
+  }, []);
 
-  const fetchTransactions = async (): Promise<void> => {
+  const fetchTransactions = useCallback(async (): Promise<void> => {
+    if (!API_URL) {
+      setError(
+        "Unable to connect to the server. Please check your app configuration and try again."
+      );
+      setLoading(false);
+      return;
+    }
+
     if (!session) {
       return;
     }
@@ -66,11 +78,11 @@ function TransactionsScreen() {
         return;
       }
 
-      // Check if token is expired (with 60 second buffer)
+      // Check if token is expired (with buffer)
       const now = Math.floor(Date.now() / 1000);
       const expiresAt = currentSession.expires_at || 0;
 
-      if (expiresAt && expiresAt < now + 60) {
+      if (expiresAt && expiresAt < now + TOKEN_REFRESH_BUFFER_SECONDS) {
         // Token is expired or about to expire, try to refresh
         const { data: refreshData, error: refreshError } =
           await supabase.auth.refreshSession();
@@ -85,6 +97,12 @@ function TransactionsScreen() {
 
       const token = currentSession.access_token;
 
+      if (!API_URL) {
+        throw new Error(
+          "Unable to connect to the server. Please check your app configuration and try again."
+        );
+      }
+
       const response = await fetch(`${API_URL}/transactions`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -93,15 +111,17 @@ function TransactionsScreen() {
       });
 
       if (!response.ok) {
-        let responseText: string;
+        let responseText: string = "";
         let errorData: any = null;
 
         try {
           responseText = await response.text();
-          try {
-            errorData = JSON.parse(responseText);
-          } catch {
-            // Not JSON
+          if (responseText) {
+            try {
+              errorData = JSON.parse(responseText);
+            } catch {
+              // Not JSON, use text as error message
+            }
           }
         } catch {
           responseText = "";
@@ -111,24 +131,26 @@ function TransactionsScreen() {
           // Token is invalid or expired - sign out the user
           // If it's a "session_not_found" error, clear AsyncStorage to remove old tokens
           let errorDetails = "";
-          try {
-            const errorData = JSON.parse(responseText);
+          if (errorData) {
             errorDetails = errorData.error || errorData.details || "";
-          } catch {}
+          }
 
           if (
             errorDetails.includes("session_not_found") ||
             errorDetails.includes("Session from session_id")
           ) {
             // Clear AsyncStorage directly to ensure old tokens are removed
-            const AsyncStorage =
-              require("@react-native-async-storage/async-storage").default;
-            const keys = await AsyncStorage.getAllKeys();
-            const authKeys = keys.filter(
-              (key: string) => key.includes("supabase") || key.includes("auth")
-            );
-            if (authKeys.length > 0) {
-              await AsyncStorage.multiRemove(authKeys);
+            try {
+              const keys = await AsyncStorage.getAllKeys();
+              const authKeys = keys.filter(
+                (key: string) =>
+                  key.includes("supabase") || key.includes("auth")
+              );
+              if (authKeys.length > 0) {
+                await AsyncStorage.multiRemove(authKeys);
+              }
+            } catch (storageError) {
+              console.error("Error clearing AsyncStorage:", storageError);
             }
           }
 
@@ -170,7 +192,20 @@ function TransactionsScreen() {
       fetchingRef.current = false;
       setLoading(false);
     }
-  };
+  }, [session, signOut]);
+
+  useEffect(() => {
+    if (session) {
+      const timer = setTimeout(() => {
+        fetchTransactions();
+      }, FETCH_DELAY_MS);
+      return () => clearTimeout(timer);
+    } else {
+      setTransactions([]);
+      setLoading(false);
+      setError(null);
+    }
+  }, [session, fetchTransactions]);
 
   const formatDate = (dateString: string): string => {
     const date = new Date(dateString);
@@ -221,13 +256,20 @@ function TransactionsScreen() {
     );
   }
 
-  const totalIncome = transactions
-    .filter((t) => t.type === "income")
-    .reduce((sum, t) => sum + t.amount, 0);
-  const totalExpense = transactions
-    .filter((t) => t.type === "expense")
-    .reduce((sum, t) => sum + t.amount, 0);
-  const balance = totalIncome - totalExpense;
+  // Memoize calculations to avoid recalculating on every render
+  const { totalIncome, totalExpense, balance } = useMemo(() => {
+    const income = transactions
+      .filter((t) => t.type === "income")
+      .reduce((sum, t) => sum + t.amount, 0);
+    const expense = transactions
+      .filter((t) => t.type === "expense")
+      .reduce((sum, t) => sum + t.amount, 0);
+    return {
+      totalIncome: income,
+      totalExpense: expense,
+      balance: income - expense,
+    };
+  }, [transactions]);
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
@@ -251,7 +293,7 @@ function TransactionsScreen() {
               </Text>
               <Text
                 variant="titleMedium"
-                style={{ color: "#10b981", fontWeight: "bold" }}
+                style={{ color: INCOME_COLOR, fontWeight: "bold" }}
               >
                 ${totalIncome.toFixed(2)}
               </Text>
@@ -266,7 +308,7 @@ function TransactionsScreen() {
               </Text>
               <Text
                 variant="titleMedium"
-                style={{ color: "#ef4444", fontWeight: "bold" }}
+                style={{ color: EXPENSE_COLOR, fontWeight: "bold" }}
               >
                 ${totalExpense.toFixed(2)}
               </Text>
@@ -282,7 +324,7 @@ function TransactionsScreen() {
               <Text
                 variant="titleMedium"
                 style={{
-                  color: balance >= 0 ? "#10b981" : "#ef4444",
+                  color: balance >= 0 ? INCOME_COLOR : EXPENSE_COLOR,
                   fontWeight: "bold",
                 }}
               >
@@ -312,18 +354,14 @@ function TransactionsScreen() {
         ) : (
           transactions.map((transaction, index) => {
             const isIncome = transaction.type === "income";
-            const amountColor = isIncome ? "#10b981" : "#ef4444";
+            const amountColor = isIncome ? INCOME_COLOR : EXPENSE_COLOR;
             const chipColor = isIncome
               ? { backgroundColor: "#d1fae5", textColor: "#065f46" }
               : { backgroundColor: "#fee2e2", textColor: "#991b1b" };
 
             return (
               <React.Fragment key={transaction.id}>
-                <Card
-                  style={styles.transactionCard}
-                  onPress={() => {}}
-                  mode="outlined"
-                >
+                <Card style={styles.transactionCard} mode="outlined">
                   <Card.Content style={styles.cardContent}>
                     <View style={styles.transactionLeft}>
                       <Text
