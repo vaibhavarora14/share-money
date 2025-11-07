@@ -485,7 +485,12 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
   if (loading && !group.members) {
     return (
-      <View style={styles.centerContainer}>
+      <View
+        style={[
+          styles.centerContainer,
+          { backgroundColor: theme.colors.background },
+        ]}
+      >
         <ActivityIndicator size="large" />
         <Text variant="bodyLarge" style={{ marginTop: 16 }}>
           Loading group details...
@@ -497,7 +502,12 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
   if (error) {
     return (
-      <View style={styles.centerContainer}>
+      <View
+        style={[
+          styles.centerContainer,
+          { backgroundColor: theme.colors.background },
+        ]}
+      >
         <Text
           variant="headlineSmall"
           style={{ color: theme.colors.error, marginBottom: 16 }}
@@ -518,7 +528,10 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      edges={["top", "bottom"]}
+    >
       <Appbar.Header>
         <Appbar.BackAction onPress={onBack} />
         <Appbar.Content title={group.name} />
@@ -786,7 +799,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
   },
   centerContainer: {
     flex: 1,
