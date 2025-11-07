@@ -16,16 +16,15 @@ import {
   useTheme,
 } from "react-native-paper";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
-import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { AuthScreen } from "./screens/AuthScreen";
-import { TransactionFormScreen } from "./screens/TransactionFormScreen";
-import { GroupsListScreen } from "./screens/GroupsListScreen";
-import { CreateGroupScreen } from "./screens/CreateGroupScreen";
-import { GroupDetailsScreen } from "./screens/GroupDetailsScreen";
-import { AddMemberScreen } from "./screens/AddMemberScreen";
 import { BottomNavBar } from "./components/BottomNavBar";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { AddMemberScreen } from "./screens/AddMemberScreen";
+import { AuthScreen } from "./screens/AuthScreen";
+import { GroupDetailsScreen } from "./screens/GroupDetailsScreen";
+import { GroupsListScreen } from "./screens/GroupsListScreen";
+import { TransactionFormScreen } from "./screens/TransactionFormScreen";
 import { supabase } from "./supabase";
-import { Transaction, Group, GroupWithMembers } from "./types";
+import { Group, GroupWithMembers, Transaction } from "./types";
 import { formatCurrency } from "./utils/currency";
 
 // Constants
@@ -37,12 +36,17 @@ const EXPENSE_COLOR = "#ef4444";
 // API URL - must be set via EXPO_PUBLIC_API_URL environment variable
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
-function TransactionsScreen({ onNavigateToGroups }: { onNavigateToGroups: () => void }) {
+function TransactionsScreen({
+  onNavigateToGroups,
+}: {
+  onNavigateToGroups: () => void;
+}) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState<boolean>(false);
-  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [editingTransaction, setEditingTransaction] =
+    useState<Transaction | null>(null);
   const { session, signOut } = useAuth();
   const fetchingRef = React.useRef<boolean>(false);
   const theme = useTheme();
@@ -248,7 +252,11 @@ function TransactionsScreen({ onNavigateToGroups }: { onNavigateToGroups: () => 
     });
   };
 
-  const formatAmount = (amount: number, type: "income" | "expense", currency?: string): string => {
+  const formatAmount = (
+    amount: number,
+    type: "income" | "expense",
+    currency?: string
+  ): string => {
     const sign = type === "income" ? "+" : "-";
     return `${sign}${formatCurrency(amount, currency || "USD")}`;
   };
@@ -306,7 +314,9 @@ function TransactionsScreen({ onNavigateToGroups }: { onNavigateToGroups: () => 
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      throw new Error(
+        errorData.error || `HTTP error! status: ${response.status}`
+      );
     }
 
     await fetchTransactions();
@@ -340,7 +350,9 @@ function TransactionsScreen({ onNavigateToGroups }: { onNavigateToGroups: () => 
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      throw new Error(
+        errorData.error || `HTTP error! status: ${response.status}`
+      );
     }
 
     await fetchTransactions();
@@ -348,7 +360,9 @@ function TransactionsScreen({ onNavigateToGroups }: { onNavigateToGroups: () => 
     setEditingTransaction(null);
   };
 
-  const handleDeleteTransaction = async (transactionId: number): Promise<void> => {
+  const handleDeleteTransaction = async (
+    transactionId: number
+  ): Promise<void> => {
     if (!API_URL) {
       throw new Error(
         "Unable to connect to the server. Please check your app configuration and try again."
@@ -360,17 +374,22 @@ function TransactionsScreen({ onNavigateToGroups }: { onNavigateToGroups: () => 
       throw new Error("Not authenticated");
     }
 
-    const response = await fetch(`${API_URL}/transactions?id=${transactionId}`, {
-      method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    });
+    const response = await fetch(
+      `${API_URL}/transactions?id=${transactionId}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      throw new Error(
+        errorData.error || `HTTP error! status: ${response.status}`
+      );
     }
 
     await fetchTransactions();
@@ -396,18 +415,15 @@ function TransactionsScreen({ onNavigateToGroups }: { onNavigateToGroups: () => 
             } catch (error) {
               Alert.alert(
                 "Error",
-                error instanceof Error ? error.message : "Failed to delete transaction"
+                error instanceof Error
+                  ? error.message
+                  : "Failed to delete transaction"
               );
             }
           },
         },
       ]
     );
-  };
-
-  const handleFormCancel = () => {
-    setShowForm(false);
-    setEditingTransaction(null);
   };
 
   const handleFormSave = async (
@@ -429,20 +445,6 @@ function TransactionsScreen({ onNavigateToGroups }: { onNavigateToGroups: () => 
         </Text>
         <StatusBar style="auto" />
       </View>
-    );
-  }
-
-  if (showForm) {
-    return (
-      <>
-        <TransactionFormScreen
-          transaction={editingTransaction}
-          onSave={handleFormSave}
-          onCancel={handleFormCancel}
-          defaultCurrency={editingTransaction?.currency || "USD"}
-        />
-        <StatusBar style="auto" />
-      </>
     );
   }
 
@@ -476,8 +478,8 @@ function TransactionsScreen({ onNavigateToGroups }: { onNavigateToGroups: () => 
           title="Transactions"
           subtitle={`${transactions.length} total`}
         />
-        <Appbar.Action 
-          icon="account-multiple" 
+        <Appbar.Action
+          icon="account-multiple"
           onPress={onNavigateToGroups || (() => {})}
         />
         <Appbar.Action icon="logout" onPress={signOut} />
@@ -638,7 +640,11 @@ function TransactionsScreen({ onNavigateToGroups }: { onNavigateToGroups: () => 
                         variant="titleLarge"
                         style={[styles.amount, { color: amountColor }]}
                       >
-                        {formatAmount(transaction.amount, transaction.type, transaction.currency)}
+                        {formatAmount(
+                          transaction.amount,
+                          transaction.type,
+                          transaction.currency
+                        )}
                       </Text>
                       <View style={styles.chipAndActions}>
                         <Chip
@@ -688,16 +694,20 @@ function TransactionsScreen({ onNavigateToGroups }: { onNavigateToGroups: () => 
         label="Add"
       />
 
-      <Button
-        mode="outlined"
-        icon="account-multiple"
-        onPress={onNavigateToGroups}
-        style={styles.groupsButton}
-      >
-        Groups
-      </Button>
-
-      <StatusBar style="auto" />
+      <TransactionFormScreen
+        visible={showForm}
+        transaction={editingTransaction}
+        onSave={async (transactionData) => {
+          await handleFormSave(transactionData);
+          setShowForm(false);
+          setEditingTransaction(null);
+        }}
+        onDismiss={() => {
+          setShowForm(false);
+          setEditingTransaction(null);
+        }}
+        defaultCurrency={editingTransaction?.currency || "USD"}
+      />
     </SafeAreaView>
   );
 }
@@ -705,12 +715,15 @@ function TransactionsScreen({ onNavigateToGroups }: { onNavigateToGroups: () => 
 function AppContent() {
   const { session, loading, signOut } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
-  const [currentView, setCurrentView] = useState<'transactions' | 'groups'>('groups');
+  const [currentView, setCurrentView] = useState<"transactions" | "groups">(
+    "groups"
+  );
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
-  const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
-  const [groupDetails, setGroupDetails] = useState<GroupWithMembers | null>(null);
-  const [currentRoute, setCurrentRoute] = useState<string>('groups');
+  const [groupDetails, setGroupDetails] = useState<GroupWithMembers | null>(
+    null
+  );
+  const [currentRoute, setCurrentRoute] = useState<string>("groups");
 
   const getAuthToken = async (): Promise<string | null> => {
     if (!session) return null;
@@ -738,7 +751,10 @@ function AppContent() {
     return currentSession.access_token;
   };
 
-  const handleCreateGroup = async (groupData: { name: string; description?: string }) => {
+  const handleCreateGroup = async (groupData: {
+    name: string;
+    description?: string;
+  }) => {
     if (!API_URL) {
       throw new Error("Unable to connect to the server");
     }
@@ -759,11 +775,12 @@ function AppContent() {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      throw new Error(
+        errorData.error || `HTTP error! status: ${response.status}`
+      );
     }
 
-    setShowCreateGroup(false);
-    setCurrentView('groups');
+    setCurrentView("groups");
   };
 
   const handleAddMember = async (email: string) => {
@@ -790,18 +807,22 @@ function AppContent() {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      throw new Error(
+        errorData.error || `HTTP error! status: ${response.status}`
+      );
     }
 
-    setShowAddMember(false);
     // Refresh group details
-    if (groupDetails) {
-      const detailsResponse = await fetch(`${API_URL}/groups/${selectedGroup.id}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
+    if (groupDetails && selectedGroup) {
+      const detailsResponse = await fetch(
+        `${API_URL}/groups/${selectedGroup.id}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
       if (detailsResponse.ok) {
         const updatedGroup: GroupWithMembers = await detailsResponse.json();
         setGroupDetails(updatedGroup);
@@ -854,36 +875,6 @@ function AppContent() {
     );
   }
 
-  // Show add member screen (no bottom nav)
-  if (showAddMember && selectedGroup) {
-    return (
-      <>
-        <AddMemberScreen
-          groupId={selectedGroup.id}
-          onAddMember={handleAddMember}
-          onCancel={() => {
-            setShowAddMember(false);
-            setSelectedGroup(null);
-          }}
-        />
-        <StatusBar style="auto" />
-      </>
-    );
-  }
-
-  // Show create group screen (no bottom nav)
-  if (showCreateGroup) {
-    return (
-      <>
-        <CreateGroupScreen
-          onCreateGroup={handleCreateGroup}
-          onCancel={() => setShowCreateGroup(false)}
-        />
-        <StatusBar style="auto" />
-      </>
-    );
-  }
-
   // Show group details screen (with bottom nav)
   if (groupDetails && selectedGroup) {
     return (
@@ -893,20 +884,20 @@ function AppContent() {
           onBack={() => {
             setGroupDetails(null);
             setSelectedGroup(null);
-            setCurrentRoute('groups');
+            setCurrentRoute("groups");
           }}
           onAddMember={() => setShowAddMember(true)}
           onLeaveGroup={() => {
             setGroupDetails(null);
             setSelectedGroup(null);
-            setCurrentView('groups');
-            setCurrentRoute('groups');
+            setCurrentView("groups");
+            setCurrentRoute("groups");
           }}
           onDeleteGroup={() => {
             setGroupDetails(null);
             setSelectedGroup(null);
-            setCurrentView('groups');
-            setCurrentRoute('groups');
+            setCurrentView("groups");
+            setCurrentRoute("groups");
           }}
         />
         <BottomNavBar
@@ -914,10 +905,23 @@ function AppContent() {
           onGroupsPress={() => {
             setGroupDetails(null);
             setSelectedGroup(null);
-            setCurrentRoute('groups');
+            setCurrentRoute("groups");
           }}
           onLogoutPress={signOut}
         />
+        {showAddMember && selectedGroup && (
+          <AddMemberScreen
+            visible={showAddMember}
+            groupId={selectedGroup.id}
+            onAddMember={async (email) => {
+              await handleAddMember(email);
+              setShowAddMember(false);
+            }}
+            onDismiss={() => {
+              setShowAddMember(false);
+            }}
+          />
+        )}
         <StatusBar style="auto" />
       </>
     );
@@ -928,11 +932,11 @@ function AppContent() {
     <>
       <GroupsListScreen
         onGroupPress={handleGroupPress}
-        onCreateGroup={() => setShowCreateGroup(true)}
+        onCreateGroup={handleCreateGroup}
       />
       <BottomNavBar
         currentRoute={currentRoute}
-        onGroupsPress={() => setCurrentRoute('groups')}
+        onGroupsPress={() => setCurrentRoute("groups")}
         onLogoutPress={signOut}
       />
       <StatusBar style="auto" />
