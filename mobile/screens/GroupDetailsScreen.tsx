@@ -23,15 +23,18 @@ interface GroupDetailsScreenProps {
   group: GroupWithMembers;
   onBack: () => void;
   onAddMember: () => void;
+  onLeaveGroup?: () => void;
 }
 
 export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   group: initialGroup,
   onBack,
   onAddMember,
+  onLeaveGroup,
 }) => {
   const [group, setGroup] = useState<GroupWithMembers>(initialGroup);
   const [loading, setLoading] = useState<boolean>(false);
+  const [leaving, setLeaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const { session, signOut } = useAuth();
   const theme = useTheme();
@@ -101,7 +104,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     fetchGroupDetails();
   }, [fetchGroupDetails]);
 
-  const handleLeaveGroup = () => {
+  const handleLeaveGroup = async () => {
     Alert.alert(
       "Leave Group",
       `Are you sure you want to leave "${group.name}"?`,
@@ -111,8 +114,66 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           text: "Leave",
           style: "destructive",
           onPress: async () => {
-            // TODO: Implement leave group functionality
-            Alert.alert("Info", "Leave group functionality will be implemented");
+            if (!API_URL) {
+              Alert.alert("Error", "Unable to connect to the server");
+              return;
+            }
+
+            try {
+              setLeaving(true);
+
+              let {
+                data: { session: currentSession },
+              } = await supabase.auth.getSession();
+
+              if (!currentSession) {
+                Alert.alert("Error", "Not authenticated");
+                return;
+              }
+
+              const token = currentSession.access_token;
+              const currentUserId = session?.user?.id;
+
+              if (!currentUserId) {
+                Alert.alert("Error", "Unable to identify user");
+                return;
+              }
+
+              const response = await fetch(
+                `${API_URL}/group-members?group_id=${group.id}&user_id=${currentUserId}`,
+                {
+                  method: "DELETE",
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                  },
+                }
+              );
+
+              if (!response.ok) {
+                if (response.status === 401) {
+                  await signOut();
+                  return;
+                }
+
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+              }
+
+              // Call the onLeaveGroup callback if provided, otherwise just go back
+              if (onLeaveGroup) {
+                onLeaveGroup();
+              } else {
+                onBack();
+              }
+            } catch (err) {
+              Alert.alert(
+                "Error",
+                err instanceof Error ? err.message : "Failed to leave group"
+              );
+            } finally {
+              setLeaving(false);
+            }
           },
         },
       ]
@@ -131,6 +192,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const currentUserId = session?.user?.id;
   const isOwner = group.created_by === currentUserId || 
     group.members?.some(m => m.user_id === currentUserId && m.role === 'owner');
+  const isMember = group.members?.some(m => m.user_id === currentUserId);
 
   if (loading && !group.members) {
     return (
@@ -250,6 +312,19 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           label="Add Member"
         />
       )}
+
+      {isMember && (
+        <Button
+          mode="outlined"
+          onPress={handleLeaveGroup}
+          disabled={leaving}
+          loading={leaving}
+          style={styles.leaveButton}
+          textColor={theme.colors.error}
+        >
+          Leave Group
+        </Button>
+      )}
     </SafeAreaView>
   );
 };
@@ -306,5 +381,10 @@ const styles = StyleSheet.create({
     margin: 16,
     right: 0,
     bottom: 0,
+  },
+  leaveButton: {
+    margin: 16,
+    marginTop: 8,
+    borderColor: theme.colors.error,
   },
 });
