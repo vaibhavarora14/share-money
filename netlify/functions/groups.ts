@@ -247,16 +247,12 @@ export const handler: Handler = async (event, context) => {
         };
       }
 
-      // Create group - must set created_by to current user for RLS policy
-      const { data: group, error } = await supabase
-        .from('groups')
-        .insert({
-          name: groupData.name.trim(),
-          description: groupData.description?.trim() || null,
-          created_by: user.id, // Explicitly set created_by to pass RLS policy
-        })
-        .select()
-        .single();
+      // Create group using SECURITY DEFINER function to bypass RLS issues
+      // This ensures auth.uid() is properly recognized
+      const { data: groupResult, error } = await supabase.rpc('create_group', {
+        group_name: groupData.name.trim(),
+        group_description: groupData.description?.trim() || null,
+      });
 
       if (error) {
         console.error('Supabase error:', error);
@@ -264,6 +260,22 @@ export const handler: Handler = async (event, context) => {
           statusCode: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           body: JSON.stringify({ error: 'Failed to create group', details: error.message }),
+        };
+      }
+
+      // Fetch the created group to return full details
+      const { data: group, error: fetchError } = await supabase
+        .from('groups')
+        .select('*')
+        .eq('id', groupResult)
+        .single();
+
+      if (fetchError || !group) {
+        console.error('Supabase error fetching group:', fetchError);
+        return {
+          statusCode: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Failed to fetch created group', details: fetchError?.message }),
         };
       }
 
