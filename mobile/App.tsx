@@ -1,7 +1,14 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { StatusBar } from "expo-status-bar";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, ScrollView, StyleSheet, View } from "react-native";
+import { ErrorBoundary } from "react-error-boundary";
+import {
+  Alert,
+  Text as RNText,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 import {
   ActivityIndicator,
   Appbar,
@@ -944,15 +951,47 @@ function AppContent() {
   );
 }
 
+// Error Fallback Component
+function ErrorFallback({
+  error,
+  resetErrorBoundary,
+}: {
+  error: Error;
+  resetErrorBoundary: () => void;
+}) {
+  console.error("App Error:", error);
+  return (
+    <View style={styles.errorContainer}>
+      <RNText style={styles.errorTitle}>Something went wrong</RNText>
+      <RNText style={styles.errorMessage}>{error.message}</RNText>
+      <RNText style={styles.errorStack}>{error.stack}</RNText>
+      <Button onPress={resetErrorBoundary} mode="contained">
+        Try Again
+      </Button>
+    </View>
+  );
+}
+
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <PaperProvider>
-        <AuthProvider>
-          <AppContent />
-        </AuthProvider>
-      </PaperProvider>
-    </SafeAreaProvider>
+    <ErrorBoundary
+      FallbackComponent={ErrorFallback}
+      onError={(error, errorInfo) => {
+        console.error("ErrorBoundary caught error:", error);
+        console.error("Error info:", errorInfo);
+      }}
+      onReset={() => {
+        console.log("ErrorBoundary: Resetting...");
+      }}
+    >
+      <SafeAreaProvider>
+        <PaperProvider>
+          <AuthProvider>
+            <AppContent />
+          </AuthProvider>
+        </PaperProvider>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }
 
@@ -1053,5 +1092,30 @@ const styles = StyleSheet.create({
     margin: 16,
     left: 0,
     bottom: 0,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+    backgroundColor: "#fff",
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 10,
+    color: "#ef4444",
+  },
+  errorMessage: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  errorStack: {
+    fontSize: 12,
+    color: "#999",
+    marginBottom: 20,
+    textAlign: "center",
   },
 });
