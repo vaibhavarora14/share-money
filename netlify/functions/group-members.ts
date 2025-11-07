@@ -226,7 +226,14 @@ export const handler: Handler = async (event, context) => {
     // Handle DELETE - Remove member from group (or leave group)
     if (httpMethod === 'DELETE') {
       const groupId = event.queryStringParameters?.group_id;
-      const userId = event.queryStringParameters?.user_id || currentUser.id;
+      const providedUserId = event.queryStringParameters?.user_id;
+      
+      // Use provided user_id if valid UUID, otherwise default to current user
+      // Validate UUID format if provided
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const userId = providedUserId && uuidRegex.test(providedUserId) 
+        ? providedUserId 
+        : currentUser.id;
 
       if (!groupId) {
         return {
@@ -236,54 +243,64 @@ export const handler: Handler = async (event, context) => {
         };
       }
 
-      // Users can remove themselves, or owners can remove any member
-      const { data: membership } = await supabase
-        .from('group_members')
-        .select('role')
-        .eq('group_id', groupId)
-        .eq('user_id', currentUser.id)
-        .single();
-
-      const isOwner = membership?.role === 'owner';
-      const isRemovingSelf = userId === currentUser.id;
-
-      if (!isOwner && !isRemovingSelf) {
+      // Validate group_id is a valid UUID
+      if (!uuidRegex.test(groupId)) {
         return {
-          statusCode: 403,
+          statusCode: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'You can only remove yourself or be removed by group owner' }),
+          body: JSON.stringify({ error: 'Invalid group_id format' }),
         };
       }
 
-      // Prevent removing the last owner
-      if (isOwner && userId !== currentUser.id) {
-        const { data: owners } = await supabase
-          .from('group_members')
-          .select('id')
-          .eq('group_id', groupId)
-          .eq('role', 'owner');
+      // Use the database function to atomically check and remove member
+      // This prevents race conditions when removing the last owner
+      const { data, error: rpcError } = await supabase.rpc('remove_group_member', {
+        p_group_id: groupId,
+        p_user_id: userId,
+      });
 
-        if (owners && owners.length === 1) {
+      if (rpcError) {
+        console.error('Supabase RPC error:', rpcError);
+        
+        // Handle specific error cases
+        const errorMessage = rpcError.message || 'Failed to remove member';
+        
+        if (errorMessage.includes('last owner')) {
           return {
             statusCode: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             body: JSON.stringify({ error: 'Cannot remove the last owner of the group' }),
           };
         }
-      }
+        
+        if (errorMessage.includes('not authenticated') || errorMessage.includes('Unauthorized')) {
+          return {
+            statusCode: 401,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ error: 'Unauthorized' }),
+          };
+        }
+        
+        if (errorMessage.includes('not a member')) {
+          return {
+            statusCode: 404,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ error: 'User is not a member of this group' }),
+          };
+        }
+        
+        if (errorMessage.includes('Only group owners')) {
+          return {
+            statusCode: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ error: 'You can only remove yourself or be removed by group owner' }),
+          };
+        }
 
-      const { error: deleteError } = await supabase
-        .from('group_members')
-        .delete()
-        .eq('group_id', groupId)
-        .eq('user_id', userId);
-
-      if (deleteError) {
-        console.error('Supabase error:', deleteError);
         return {
           statusCode: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Failed to remove member', details: deleteError.message }),
+          body: JSON.stringify({ error: 'Failed to remove member', details: errorMessage }),
         };
       }
 
