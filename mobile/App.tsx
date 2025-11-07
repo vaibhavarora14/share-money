@@ -837,20 +837,36 @@ function AppContent() {
       throw new Error("Not authenticated");
     }
 
-    const response = await fetch(`${API_URL}/group-members`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        group_id: selectedGroup.id,
-        email: email,
-      }),
-    });
+    let response;
+    try {
+      response = await fetch(`${API_URL}/group-members`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          group_id: selectedGroup.id,
+          email: email,
+        }),
+      });
+    } catch (networkError: any) {
+      // Handle network errors (connection refused, timeout, etc.)
+      throw new Error(
+        `Network error: Unable to connect to server. ${networkError.message || "Please check your internet connection and try again."}`
+      );
+    }
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      let errorData;
+      try {
+        errorData = await response.json();
+      } catch (parseError) {
+        // If response is not JSON, use status text
+        throw new Error(
+          `Server error: ${response.status} ${response.statusText || "Unknown error"}`
+        );
+      }
       throw new Error(
         errorData.error || `HTTP error! status: ${response.status}`
       );
@@ -858,18 +874,23 @@ function AppContent() {
 
     // Refresh group details
     if (groupDetails && selectedGroup) {
-      const detailsResponse = await fetch(
-        `${API_URL}/groups/${selectedGroup.id}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+      try {
+        const detailsResponse = await fetch(
+          `${API_URL}/groups/${selectedGroup.id}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+        if (detailsResponse.ok) {
+          const updatedGroup: GroupWithMembers = await detailsResponse.json();
+          setGroupDetails(updatedGroup);
         }
-      );
-      if (detailsResponse.ok) {
-        const updatedGroup: GroupWithMembers = await detailsResponse.json();
-        setGroupDetails(updatedGroup);
+      } catch (refreshError) {
+        // Silently fail refresh - member was already added
+        console.warn("Failed to refresh group details:", refreshError);
       }
     }
   };
