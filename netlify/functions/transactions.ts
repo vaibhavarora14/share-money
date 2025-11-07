@@ -194,6 +194,7 @@ export const handler: Handler = async (event, context) => {
       const { data: transaction, error } = await supabase
         .from('transactions')
         .insert({
+          user_id: user.id,
           amount: transactionData.amount,
           description: transactionData.description,
           date: transactionData.date,
