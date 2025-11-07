@@ -83,7 +83,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      edges={["top", "bottom"]}
+    >
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardView}
@@ -201,7 +204,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
   },
   keyboardView: {
     flex: 1,

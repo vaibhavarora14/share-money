@@ -7,6 +7,7 @@ import {
   Text as RNText,
   ScrollView,
   StyleSheet,
+  useColorScheme,
   View,
 } from "react-native";
 import {
@@ -17,6 +18,8 @@ import {
   Chip,
   FAB,
   IconButton,
+  MD3DarkTheme,
+  MD3LightTheme,
   Provider as PaperProvider,
   Surface,
   Text,
@@ -445,19 +448,29 @@ function TransactionsScreen({
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
+      <View
+        style={[
+          styles.centerContainer,
+          { backgroundColor: theme.colors.background },
+        ]}
+      >
         <ActivityIndicator size="large" />
         <Text variant="bodyLarge" style={{ marginTop: 16 }}>
           Loading transactions...
         </Text>
-        <StatusBar style="auto" />
+        <StatusBar style={theme.dark ? "light" : "dark"} />
       </View>
     );
   }
 
   if (error) {
     return (
-      <View style={styles.centerContainer}>
+      <View
+        style={[
+          styles.centerContainer,
+          { backgroundColor: theme.colors.background },
+        ]}
+      >
         <Text
           variant="headlineSmall"
           style={{ color: theme.colors.error, marginBottom: 16 }}
@@ -473,13 +486,16 @@ function TransactionsScreen({
         <Button mode="contained" onPress={fetchTransactions}>
           Retry
         </Button>
-        <StatusBar style="auto" />
+        <StatusBar style={theme.dark ? "light" : "dark"} />
       </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      edges={["top"]}
+    >
       <Appbar.Header>
         <Appbar.Content
           title="Transactions"
@@ -517,7 +533,12 @@ function TransactionsScreen({
                 </Text>
               )}
             </View>
-            <View style={styles.summaryDivider} />
+            <View
+              style={[
+                styles.summaryDivider,
+                { backgroundColor: theme.colors.outlineVariant },
+              ]}
+            />
             <View style={styles.summaryItem}>
               <Text
                 variant="labelSmall"
@@ -540,7 +561,12 @@ function TransactionsScreen({
                 </Text>
               )}
             </View>
-            <View style={styles.summaryDivider} />
+            <View
+              style={[
+                styles.summaryDivider,
+                { backgroundColor: theme.colors.outlineVariant },
+              ]}
+            />
             <View style={styles.summaryItem}>
               <Text
                 variant="labelSmall"
@@ -599,8 +625,18 @@ function TransactionsScreen({
             const isIncome = transaction.type === "income";
             const amountColor = isIncome ? INCOME_COLOR : EXPENSE_COLOR;
             const chipColor = isIncome
-              ? { backgroundColor: "#d1fae5", textColor: "#065f46" }
-              : { backgroundColor: "#fee2e2", textColor: "#991b1b" };
+              ? {
+                  backgroundColor: theme.dark
+                    ? "rgba(16, 185, 129, 0.2)"
+                    : "#d1fae5",
+                  textColor: theme.dark ? "#10b981" : "#065f46",
+                }
+              : {
+                  backgroundColor: theme.dark
+                    ? "rgba(239, 68, 68, 0.2)"
+                    : "#fee2e2",
+                  textColor: theme.dark ? "#ef4444" : "#991b1b",
+                };
 
             return (
               <React.Fragment key={transaction.id}>
@@ -721,6 +757,7 @@ function TransactionsScreen({
 
 function AppContent() {
   const { session, loading, signOut } = useAuth();
+  const theme = useTheme();
   const [isSignUp, setIsSignUp] = useState(false);
   const [currentView, setCurrentView] = useState<"transactions" | "groups">(
     "groups"
@@ -863,9 +900,14 @@ function AppContent() {
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
+      <View
+        style={[
+          styles.centerContainer,
+          { backgroundColor: theme.colors.background },
+        ]}
+      >
         <ActivityIndicator size="large" />
-        <StatusBar style="auto" />
+        <StatusBar style={theme.dark ? "light" : "dark"} />
       </View>
     );
   }
@@ -877,7 +919,7 @@ function AppContent() {
           isSignUp={isSignUp}
           onToggleMode={() => setIsSignUp(!isSignUp)}
         />
-        <StatusBar style="auto" />
+        <StatusBar style={theme.dark ? "light" : "dark"} />
       </>
     );
   }
@@ -929,7 +971,7 @@ function AppContent() {
             }}
           />
         )}
-        <StatusBar style="auto" />
+        <StatusBar style={theme.dark ? "light" : "dark"} />
       </>
     );
   }
@@ -946,7 +988,7 @@ function AppContent() {
         onGroupsPress={() => setCurrentRoute("groups")}
         onLogoutPress={signOut}
       />
-      <StatusBar style="auto" />
+      <StatusBar style={theme.dark ? "light" : "dark"} />
     </>
   );
 }
@@ -959,12 +1001,26 @@ function ErrorFallback({
   error: Error;
   resetErrorBoundary: () => void;
 }) {
+  const theme = useTheme();
   console.error("App Error:", error);
   return (
-    <View style={styles.errorContainer}>
-      <RNText style={styles.errorTitle}>Something went wrong</RNText>
-      <RNText style={styles.errorMessage}>{error.message}</RNText>
-      <RNText style={styles.errorStack}>{error.stack}</RNText>
+    <View
+      style={[
+        styles.errorContainer,
+        { backgroundColor: theme.colors.background },
+      ]}
+    >
+      <RNText style={[styles.errorTitle, { color: theme.colors.error }]}>
+        Something went wrong
+      </RNText>
+      <RNText style={[styles.errorMessage, { color: theme.colors.onSurface }]}>
+        {error.message}
+      </RNText>
+      <RNText
+        style={[styles.errorStack, { color: theme.colors.onSurfaceVariant }]}
+      >
+        {error.stack}
+      </RNText>
       <Button onPress={resetErrorBoundary} mode="contained">
         Try Again
       </Button>
@@ -973,6 +1029,9 @@ function ErrorFallback({
 }
 
 export default function App() {
+  const colorScheme = useColorScheme();
+  const theme = colorScheme === "dark" ? MD3DarkTheme : MD3LightTheme;
+
   return (
     <ErrorBoundary
       FallbackComponent={ErrorFallback}
@@ -985,7 +1044,7 @@ export default function App() {
       }}
     >
       <SafeAreaProvider>
-        <PaperProvider>
+        <PaperProvider theme={theme}>
           <AuthProvider>
             <AppContent />
           </AuthProvider>
@@ -998,7 +1057,6 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
   },
   centerContainer: {
     flex: 1,
@@ -1030,7 +1088,6 @@ const styles = StyleSheet.create({
   summaryDivider: {
     width: 1,
     height: 40,
-    backgroundColor: "#e0e0e0",
     marginHorizontal: 8,
   },
   emptyContainer: {
@@ -1098,23 +1155,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
-    backgroundColor: "#fff",
   },
   errorTitle: {
     fontSize: 20,
     fontWeight: "bold",
     marginBottom: 10,
-    color: "#ef4444",
   },
   errorMessage: {
     fontSize: 14,
-    color: "#666",
     marginBottom: 20,
     textAlign: "center",
   },
   errorStack: {
     fontSize: 12,
-    color: "#999",
     marginBottom: 20,
     textAlign: "center",
   },
