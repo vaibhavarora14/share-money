@@ -22,13 +22,11 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL;
 interface GroupsListScreenProps {
   onGroupPress: (group: Group) => void;
   onCreateGroup: () => void;
-  onNavigateToTransactions?: () => void;
 }
 
 export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   onGroupPress,
   onCreateGroup,
-  onNavigateToTransactions,
 }) => {
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -161,10 +159,6 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
     <SafeAreaView style={styles.container} edges={["top"]}>
       <Appbar.Header>
         <Appbar.Content title="Groups" subtitle={`${groups.length} total`} />
-        <Appbar.Action 
-          icon="wallet" 
-          onPress={onNavigateToTransactions || (() => {})}
-        />
         <Appbar.Action icon="logout" onPress={signOut} />
       </Appbar.Header>
 
