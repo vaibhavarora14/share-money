@@ -1,23 +1,31 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { StatusBar } from "expo-status-bar";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { Alert, ScrollView, StyleSheet, View } from "react-native";
 import {
   ActivityIndicator,
   Appbar,
   Button,
   Card,
   Chip,
+  FAB,
+  IconButton,
   Provider as PaperProvider,
   Surface,
   Text,
   useTheme,
 } from "react-native-paper";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { BottomNavBar } from "./components/BottomNavBar";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { AddMemberScreen } from "./screens/AddMemberScreen";
 import { AuthScreen } from "./screens/AuthScreen";
+import { GroupDetailsScreen } from "./screens/GroupDetailsScreen";
+import { GroupsListScreen } from "./screens/GroupsListScreen";
+import { TransactionFormScreen } from "./screens/TransactionFormScreen";
 import { supabase } from "./supabase";
-import { Transaction } from "./types";
+import { Group, GroupWithMembers, Transaction } from "./types";
+import { formatCurrency } from "./utils/currency";
 
 // Constants
 const TOKEN_REFRESH_BUFFER_SECONDS = 60;
@@ -28,10 +36,17 @@ const EXPENSE_COLOR = "#ef4444";
 // API URL - must be set via EXPO_PUBLIC_API_URL environment variable
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
-function TransactionsScreen() {
+function TransactionsScreen({
+  onNavigateToGroups,
+}: {
+  onNavigateToGroups: () => void;
+}) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState<boolean>(false);
+  const [editingTransaction, setEditingTransaction] =
+    useState<Transaction | null>(null);
   const { session, signOut } = useAuth();
   const fetchingRef = React.useRef<boolean>(false);
   const theme = useTheme();
@@ -209,17 +224,22 @@ function TransactionsScreen() {
 
   // Memoize calculations to avoid recalculating on every render
   // Must be called before any early returns to maintain hook order
-  const { totalIncome, totalExpense, balance } = useMemo(() => {
+  // Note: Totals are calculated without currency conversion (mixed currencies possible)
+  const { totalIncome, totalExpense, balance, currencies } = useMemo(() => {
     const income = transactions
       .filter((t) => t.type === "income")
       .reduce((sum, t) => sum + t.amount, 0);
     const expense = transactions
       .filter((t) => t.type === "expense")
       .reduce((sum, t) => sum + t.amount, 0);
+    const uniqueCurrencies = Array.from(
+      new Set(transactions.map((t) => t.currency || "USD").filter(Boolean))
+    );
     return {
       totalIncome: income,
       totalExpense: expense,
       balance: income - expense,
+      currencies: uniqueCurrencies,
     };
   }, [transactions]);
 
@@ -232,9 +252,188 @@ function TransactionsScreen() {
     });
   };
 
-  const formatAmount = (amount: number, type: "income" | "expense"): string => {
+  const formatAmount = (
+    amount: number,
+    type: "income" | "expense",
+    currency?: string
+  ): string => {
     const sign = type === "income" ? "+" : "-";
-    return `${sign}$${Math.abs(amount).toFixed(2)}`;
+    return `${sign}${formatCurrency(amount, currency || "USD")}`;
+  };
+
+  const getAuthToken = async (): Promise<string | null> => {
+    if (!session) return null;
+
+    let {
+      data: { session: currentSession },
+    } = await supabase.auth.getSession();
+
+    if (!currentSession) return null;
+
+    // Check if token is expired (with buffer)
+    const now = Math.floor(Date.now() / 1000);
+    const expiresAt = currentSession.expires_at || 0;
+
+    if (expiresAt && expiresAt < now + TOKEN_REFRESH_BUFFER_SECONDS) {
+      const { data: refreshData, error: refreshError } =
+        await supabase.auth.refreshSession();
+
+      if (refreshError || !refreshData.session) {
+        await signOut();
+        return null;
+      }
+
+      currentSession = refreshData.session;
+    }
+
+    return currentSession.access_token;
+  };
+
+  const handleCreateTransaction = async (
+    transactionData: Omit<Transaction, "id" | "created_at" | "user_id">
+  ): Promise<void> => {
+    if (!API_URL) {
+      throw new Error(
+        "Unable to connect to the server. Please check your app configuration and try again."
+      );
+    }
+
+    const token = await getAuthToken();
+    if (!token) {
+      throw new Error("Not authenticated");
+    }
+
+    const response = await fetch(`${API_URL}/transactions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(transactionData),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        errorData.error || `HTTP error! status: ${response.status}`
+      );
+    }
+
+    await fetchTransactions();
+    setShowForm(false);
+    setEditingTransaction(null);
+  };
+
+  const handleUpdateTransaction = async (
+    transactionData: Omit<Transaction, "id" | "created_at" | "user_id">
+  ): Promise<void> => {
+    if (!API_URL || !editingTransaction) {
+      throw new Error("Invalid request");
+    }
+
+    const token = await getAuthToken();
+    if (!token) {
+      throw new Error("Not authenticated");
+    }
+
+    const response = await fetch(`${API_URL}/transactions`, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ...transactionData,
+        id: editingTransaction.id,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        errorData.error || `HTTP error! status: ${response.status}`
+      );
+    }
+
+    await fetchTransactions();
+    setShowForm(false);
+    setEditingTransaction(null);
+  };
+
+  const handleDeleteTransaction = async (
+    transactionId: number
+  ): Promise<void> => {
+    if (!API_URL) {
+      throw new Error(
+        "Unable to connect to the server. Please check your app configuration and try again."
+      );
+    }
+
+    const token = await getAuthToken();
+    if (!token) {
+      throw new Error("Not authenticated");
+    }
+
+    const response = await fetch(
+      `${API_URL}/transactions?id=${transactionId}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        errorData.error || `HTTP error! status: ${response.status}`
+      );
+    }
+
+    await fetchTransactions();
+  };
+
+  const handleEditClick = (transaction: Transaction) => {
+    setEditingTransaction(transaction);
+    setShowForm(true);
+  };
+
+  const handleDeleteClick = (transaction: Transaction) => {
+    Alert.alert(
+      "Delete Transaction",
+      `Are you sure you want to delete "${transaction.description}"?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await handleDeleteTransaction(transaction.id);
+            } catch (error) {
+              Alert.alert(
+                "Error",
+                error instanceof Error
+                  ? error.message
+                  : "Failed to delete transaction"
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleFormSave = async (
+    transactionData: Omit<Transaction, "id" | "created_at" | "user_id">
+  ) => {
+    if (editingTransaction) {
+      await handleUpdateTransaction(transactionData);
+    } else {
+      await handleCreateTransaction(transactionData);
+    }
   };
 
   if (loading) {
@@ -279,6 +478,10 @@ function TransactionsScreen() {
           title="Transactions"
           subtitle={`${transactions.length} total`}
         />
+        <Appbar.Action
+          icon="account-multiple"
+          onPress={onNavigateToGroups || (() => {})}
+        />
         <Appbar.Action icon="logout" onPress={signOut} />
       </Appbar.Header>
 
@@ -296,8 +499,16 @@ function TransactionsScreen() {
                 variant="titleMedium"
                 style={{ color: INCOME_COLOR, fontWeight: "bold" }}
               >
-                ${totalIncome.toFixed(2)}
+                {formatCurrency(totalIncome, currencies[0] || "USD")}
               </Text>
+              {currencies.length > 1 && (
+                <Text
+                  variant="bodySmall"
+                  style={{ color: theme.colors.onSurfaceVariant, fontSize: 10 }}
+                >
+                  Mixed currencies
+                </Text>
+              )}
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
@@ -311,8 +522,16 @@ function TransactionsScreen() {
                 variant="titleMedium"
                 style={{ color: EXPENSE_COLOR, fontWeight: "bold" }}
               >
-                ${totalExpense.toFixed(2)}
+                {formatCurrency(totalExpense, currencies[0] || "USD")}
               </Text>
+              {currencies.length > 1 && (
+                <Text
+                  variant="bodySmall"
+                  style={{ color: theme.colors.onSurfaceVariant, fontSize: 10 }}
+                >
+                  Mixed currencies
+                </Text>
+              )}
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
@@ -329,8 +548,16 @@ function TransactionsScreen() {
                   fontWeight: "bold",
                 }}
               >
-                ${balance.toFixed(2)}
+                {formatCurrency(balance, currencies[0] || "USD")}
               </Text>
+              {currencies.length > 1 && (
+                <Text
+                  variant="bodySmall"
+                  style={{ color: theme.colors.onSurfaceVariant, fontSize: 10 }}
+                >
+                  Mixed currencies
+                </Text>
+              )}
             </View>
           </View>
         </Surface>
@@ -351,6 +578,14 @@ function TransactionsScreen() {
             >
               Your transactions will appear here
             </Text>
+            <Button
+              mode="contained"
+              icon="account-multiple"
+              onPress={onNavigateToGroups}
+              style={{ marginTop: 24 }}
+            >
+              Go to Groups
+            </Button>
           </View>
         ) : (
           transactions.map((transaction, index) => {
@@ -405,21 +640,41 @@ function TransactionsScreen() {
                         variant="titleLarge"
                         style={[styles.amount, { color: amountColor }]}
                       >
-                        {formatAmount(transaction.amount, transaction.type)}
+                        {formatAmount(
+                          transaction.amount,
+                          transaction.type,
+                          transaction.currency
+                        )}
                       </Text>
-                      <Chip
-                        style={[
-                          styles.typeChip,
-                          { backgroundColor: chipColor.backgroundColor },
-                        ]}
-                        textStyle={{
-                          color: chipColor.textColor,
-                          fontSize: 11,
-                          fontWeight: "600",
-                        }}
-                      >
-                        {transaction.type}
-                      </Chip>
+                      <View style={styles.chipAndActions}>
+                        <Chip
+                          style={[
+                            styles.typeChip,
+                            { backgroundColor: chipColor.backgroundColor },
+                          ]}
+                          textStyle={{
+                            color: chipColor.textColor,
+                            fontSize: 11,
+                            fontWeight: "600",
+                          }}
+                        >
+                          {transaction.type}
+                        </Chip>
+                        <View style={styles.actionButtons}>
+                          <IconButton
+                            icon="pencil"
+                            size={20}
+                            onPress={() => handleEditClick(transaction)}
+                            iconColor={theme.colors.primary}
+                          />
+                          <IconButton
+                            icon="delete"
+                            size={20}
+                            onPress={() => handleDeleteClick(transaction)}
+                            iconColor={theme.colors.error}
+                          />
+                        </View>
+                      </View>
                     </View>
                   </Card.Content>
                 </Card>
@@ -432,14 +687,172 @@ function TransactionsScreen() {
         )}
       </ScrollView>
 
-      <StatusBar style="auto" />
+      <FAB
+        icon="plus"
+        style={styles.fab}
+        onPress={() => setShowForm(true)}
+        label="Add"
+      />
+
+      <TransactionFormScreen
+        visible={showForm}
+        transaction={editingTransaction}
+        onSave={async (transactionData) => {
+          await handleFormSave(transactionData);
+          setShowForm(false);
+          setEditingTransaction(null);
+        }}
+        onDismiss={() => {
+          setShowForm(false);
+          setEditingTransaction(null);
+        }}
+        defaultCurrency={editingTransaction?.currency || "USD"}
+      />
     </SafeAreaView>
   );
 }
 
 function AppContent() {
-  const { session, loading } = useAuth();
+  const { session, loading, signOut } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
+  const [currentView, setCurrentView] = useState<"transactions" | "groups">(
+    "groups"
+  );
+  const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
+  const [showAddMember, setShowAddMember] = useState(false);
+  const [groupDetails, setGroupDetails] = useState<GroupWithMembers | null>(
+    null
+  );
+  const [currentRoute, setCurrentRoute] = useState<string>("groups");
+
+  const getAuthToken = async (): Promise<string | null> => {
+    if (!session) return null;
+
+    let {
+      data: { session: currentSession },
+    } = await supabase.auth.getSession();
+
+    if (!currentSession) return null;
+
+    const now = Math.floor(Date.now() / 1000);
+    const expiresAt = currentSession.expires_at || 0;
+
+    if (expiresAt && expiresAt < now + TOKEN_REFRESH_BUFFER_SECONDS) {
+      const { data: refreshData, error: refreshError } =
+        await supabase.auth.refreshSession();
+
+      if (refreshError || !refreshData.session) {
+        return null;
+      }
+
+      currentSession = refreshData.session;
+    }
+
+    return currentSession.access_token;
+  };
+
+  const handleCreateGroup = async (groupData: {
+    name: string;
+    description?: string;
+  }) => {
+    if (!API_URL) {
+      throw new Error("Unable to connect to the server");
+    }
+
+    const token = await getAuthToken();
+    if (!token) {
+      throw new Error("Not authenticated");
+    }
+
+    const response = await fetch(`${API_URL}/groups`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(groupData),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        errorData.error || `HTTP error! status: ${response.status}`
+      );
+    }
+
+    setCurrentView("groups");
+  };
+
+  const handleAddMember = async (email: string) => {
+    if (!API_URL || !selectedGroup) {
+      throw new Error("Invalid request");
+    }
+
+    const token = await getAuthToken();
+    if (!token) {
+      throw new Error("Not authenticated");
+    }
+
+    const response = await fetch(`${API_URL}/group-members`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        group_id: selectedGroup.id,
+        email: email,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        errorData.error || `HTTP error! status: ${response.status}`
+      );
+    }
+
+    // Refresh group details
+    if (groupDetails && selectedGroup) {
+      const detailsResponse = await fetch(
+        `${API_URL}/groups/${selectedGroup.id}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      if (detailsResponse.ok) {
+        const updatedGroup: GroupWithMembers = await detailsResponse.json();
+        setGroupDetails(updatedGroup);
+      }
+    }
+  };
+
+  const handleGroupPress = async (group: Group) => {
+    if (!API_URL) return;
+
+    const token = await getAuthToken();
+    if (!token) return;
+
+    try {
+      const response = await fetch(`${API_URL}/groups/${group.id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (response.ok) {
+        const groupWithMembers: GroupWithMembers = await response.json();
+        setGroupDetails(groupWithMembers);
+        setSelectedGroup(group);
+      }
+    } catch (error) {
+      console.error("Error fetching group details:", error);
+    }
+  };
 
   if (loading) {
     return (
@@ -462,7 +875,73 @@ function AppContent() {
     );
   }
 
-  return <TransactionsScreen />;
+  // Show group details screen (with bottom nav)
+  if (groupDetails && selectedGroup) {
+    return (
+      <>
+        <GroupDetailsScreen
+          group={groupDetails}
+          onBack={() => {
+            setGroupDetails(null);
+            setSelectedGroup(null);
+            setCurrentRoute("groups");
+          }}
+          onAddMember={() => setShowAddMember(true)}
+          onLeaveGroup={() => {
+            setGroupDetails(null);
+            setSelectedGroup(null);
+            setCurrentView("groups");
+            setCurrentRoute("groups");
+          }}
+          onDeleteGroup={() => {
+            setGroupDetails(null);
+            setSelectedGroup(null);
+            setCurrentView("groups");
+            setCurrentRoute("groups");
+          }}
+        />
+        <BottomNavBar
+          currentRoute={currentRoute}
+          onGroupsPress={() => {
+            setGroupDetails(null);
+            setSelectedGroup(null);
+            setCurrentRoute("groups");
+          }}
+          onLogoutPress={signOut}
+        />
+        {showAddMember && selectedGroup && (
+          <AddMemberScreen
+            visible={showAddMember}
+            groupId={selectedGroup.id}
+            onAddMember={async (email) => {
+              await handleAddMember(email);
+              setShowAddMember(false);
+            }}
+            onDismiss={() => {
+              setShowAddMember(false);
+            }}
+          />
+        )}
+        <StatusBar style="auto" />
+      </>
+    );
+  }
+
+  // Show groups list (with bottom nav)
+  return (
+    <>
+      <GroupsListScreen
+        onGroupPress={handleGroupPress}
+        onCreateGroup={handleCreateGroup}
+      />
+      <BottomNavBar
+        currentRoute={currentRoute}
+        onGroupsPress={() => setCurrentRoute("groups")}
+        onLogoutPress={signOut}
+      />
+      <StatusBar style="auto" />
+    </>
+  );
 }
 
 export default function App() {
@@ -554,5 +1033,25 @@ const styles = StyleSheet.create({
   },
   typeChip: {
     height: 24,
+  },
+  chipAndActions: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  actionButtons: {
+    flexDirection: "row",
+    marginLeft: 8,
+  },
+  fab: {
+    position: "absolute",
+    margin: 16,
+    right: 0,
+    bottom: 0,
+  },
+  groupsButton: {
+    position: "absolute",
+    margin: 16,
+    left: 0,
+    bottom: 0,
   },
 });
