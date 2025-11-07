@@ -28,6 +28,15 @@ interface TransactionFormScreenProps {
   defaultCurrency?: string;
 }
 
+// Currency icon component that re-renders when currency changes
+const CurrencyIcon: React.FC<{ currency: string; theme: any }> = ({ currency, theme }) => (
+  <View style={{ justifyContent: 'center', alignItems: 'center', paddingLeft: 12, minWidth: 30 }}>
+    <Text style={{ fontSize: 18, fontWeight: 'bold', color: theme.colors.onSurface }}>
+      {getCurrencySymbol(currency)}
+    </Text>
+  </View>
+);
+
 export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   transaction,
   onSave,
@@ -92,7 +101,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
         date: date.trim(),
         type,
         category: category.trim() || undefined,
-        currency: currency || defaultCurrency,
+        currency: currency || defaultCurrency || 'USD',
       });
     } catch (error) {
       Alert.alert(
@@ -140,13 +149,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                   keyboardType="decimal-pad"
                   disabled={loading}
                   style={styles.amountInput}
-                  left={
-                    <View style={{ justifyContent: 'center', alignItems: 'center', paddingLeft: 12 }}>
-                      <Text style={{ fontSize: 18, fontWeight: 'bold', color: theme.colors.onSurface }}>
-                        {getCurrencySymbol(currency)}
-                      </Text>
-                    </View>
-                  }
+                  left={<CurrencyIcon currency={currency} theme={theme} />}
                   placeholder="0.00"
                 />
                 <Menu
