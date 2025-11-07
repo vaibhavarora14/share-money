@@ -23,6 +23,7 @@ import { GroupsListScreen } from "./screens/GroupsListScreen";
 import { CreateGroupScreen } from "./screens/CreateGroupScreen";
 import { GroupDetailsScreen } from "./screens/GroupDetailsScreen";
 import { AddMemberScreen } from "./screens/AddMemberScreen";
+import { BottomNavBar } from "./components/BottomNavBar";
 import { supabase } from "./supabase";
 import { Transaction, Group, GroupWithMembers } from "./types";
 
@@ -671,13 +672,14 @@ function TransactionsScreen({ onNavigateToGroups }: { onNavigateToGroups: () => 
 }
 
 function AppContent() {
-  const { session, loading } = useAuth();
+  const { session, loading, signOut } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
   const [currentView, setCurrentView] = useState<'transactions' | 'groups'>('groups');
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
   const [groupDetails, setGroupDetails] = useState<GroupWithMembers | null>(null);
+  const [currentRoute, setCurrentRoute] = useState<string>('groups');
 
   const getAuthToken = async (): Promise<string | null> => {
     if (!session) return null;
@@ -821,7 +823,7 @@ function AppContent() {
     );
   }
 
-  // Show add member screen
+  // Show add member screen (no bottom nav)
   if (showAddMember && selectedGroup) {
     return (
       <>
@@ -838,29 +840,7 @@ function AppContent() {
     );
   }
 
-  // Show group details screen
-  if (groupDetails && selectedGroup) {
-    return (
-      <>
-        <GroupDetailsScreen
-          group={groupDetails}
-          onBack={() => {
-            setGroupDetails(null);
-            setSelectedGroup(null);
-          }}
-          onAddMember={() => setShowAddMember(true)}
-          onLeaveGroup={() => {
-            setGroupDetails(null);
-            setSelectedGroup(null);
-            setCurrentView('groups');
-          }}
-        />
-        <StatusBar style="auto" />
-      </>
-    );
-  }
-
-  // Show create group screen
+  // Show create group screen (no bottom nav)
   if (showCreateGroup) {
     return (
       <>
@@ -873,12 +853,56 @@ function AppContent() {
     );
   }
 
-  // Show groups list (transactions view is hidden for now)
+  // Show group details screen (with bottom nav)
+  if (groupDetails && selectedGroup) {
+    return (
+      <>
+        <GroupDetailsScreen
+          group={groupDetails}
+          onBack={() => {
+            setGroupDetails(null);
+            setSelectedGroup(null);
+            setCurrentRoute('groups');
+          }}
+          onAddMember={() => setShowAddMember(true)}
+          onLeaveGroup={() => {
+            setGroupDetails(null);
+            setSelectedGroup(null);
+            setCurrentView('groups');
+            setCurrentRoute('groups');
+          }}
+          onDeleteGroup={() => {
+            setGroupDetails(null);
+            setSelectedGroup(null);
+            setCurrentView('groups');
+            setCurrentRoute('groups');
+          }}
+        />
+        <BottomNavBar
+          currentRoute={currentRoute}
+          onGroupsPress={() => {
+            setGroupDetails(null);
+            setSelectedGroup(null);
+            setCurrentRoute('groups');
+          }}
+          onLogoutPress={signOut}
+        />
+        <StatusBar style="auto" />
+      </>
+    );
+  }
+
+  // Show groups list (with bottom nav)
   return (
     <>
       <GroupsListScreen
         onGroupPress={handleGroupPress}
         onCreateGroup={() => setShowCreateGroup(true)}
+      />
+      <BottomNavBar
+        currentRoute={currentRoute}
+        onGroupsPress={() => setCurrentRoute('groups')}
+        onLogoutPress={signOut}
       />
       <StatusBar style="auto" />
     </>
