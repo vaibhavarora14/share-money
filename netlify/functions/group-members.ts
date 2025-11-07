@@ -141,10 +141,19 @@ export const handler: Handler = async (event, context) => {
 
       // Find user by email
       // Note: Supabase Admin API is needed to search by email
-      // For now, we'll use a workaround by querying auth.users via RPC or admin API
-      // Since we don't have admin access, we'll need to create an RPC function or use admin API
-      // Let's use the admin API endpoint
-      const adminKey = process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseKey;
+      // This requires SUPABASE_SERVICE_ROLE_KEY to be set in environment variables
+      const adminKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      
+      if (!adminKey) {
+        console.error('SUPABASE_SERVICE_ROLE_KEY is not set. Cannot search users by email.');
+        return {
+          statusCode: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            error: 'Server configuration error: Service role key not configured. Please contact support.' 
+          }),
+        };
+      }
       
       const findUserResponse = await fetch(
         `${supabaseUrl}/auth/v1/admin/users?email=${encodeURIComponent(requestData.email)}`,
@@ -157,10 +166,24 @@ export const handler: Handler = async (event, context) => {
       );
 
       if (!findUserResponse.ok) {
+        const errorText = await findUserResponse.text();
+        let errorMessage = 'User not found with the provided email';
+        
+        // Provide more specific error messages
+        if (findUserResponse.status === 401 || findUserResponse.status === 403) {
+          errorMessage = 'Server configuration error: Invalid service role key. Please contact support.';
+          console.error('Admin API authentication failed:', errorText);
+        } else if (findUserResponse.status === 404) {
+          errorMessage = 'User not found with the provided email. Please make sure the user has signed up.';
+        } else {
+          console.error('Admin API error:', findUserResponse.status, errorText);
+          errorMessage = `Failed to search for user: ${errorText || 'Unknown error'}`;
+        }
+        
         return {
-          statusCode: 404,
+          statusCode: findUserResponse.status === 401 || findUserResponse.status === 403 ? 500 : 404,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'User not found with the provided email' }),
+          body: JSON.stringify({ error: errorMessage }),
         };
       }
 
@@ -255,8 +278,18 @@ export const handler: Handler = async (event, context) => {
         };
       }
 
-      // Prevent removing the last owner
-      if (isOwner && userId !== currentUser.id) {
+      // Check if the user being removed is an owner
+      const { data: memberToRemove } = await supabase
+        .from('group_members')
+        .select('role')
+        .eq('group_id', groupId)
+        .eq('user_id', userId)
+        .single();
+
+      const isRemovingOwner = memberToRemove?.role === 'owner';
+
+      // Prevent removing the last owner (only if the person being removed is an owner)
+      if (isRemovingOwner) {
         const { data: owners } = await supabase
           .from('group_members')
           .select('id')
