@@ -18,8 +18,20 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
   const isGroupsActive = currentRoute === "groups";
 
   return (
-    <SafeAreaView edges={["bottom"]} style={styles.container}>
-      <Surface style={styles.bar} elevation={4}>
+    <SafeAreaView
+      edges={["bottom"]}
+      style={[styles.container, { backgroundColor: theme.colors.surface }]}
+    >
+      <Surface
+        style={[
+          styles.bar,
+          {
+            backgroundColor: theme.colors.surface,
+            borderTopColor: theme.colors.outlineVariant,
+          },
+        ]}
+        elevation={4}
+      >
         <View style={styles.navContent}>
           <View style={styles.navItem}>
             <IconButton
@@ -64,13 +76,9 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
 };
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: "#fff",
-  },
+  container: {},
   bar: {
-    backgroundColor: "#fff",
     borderTopWidth: 1,
-    borderTopColor: "#e0e0e0",
   },
   navContent: {
     flexDirection: "row",
