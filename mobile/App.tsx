@@ -19,8 +19,12 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { AuthScreen } from "./screens/AuthScreen";
 import { TransactionFormScreen } from "./screens/TransactionFormScreen";
+import { GroupsListScreen } from "./screens/GroupsListScreen";
+import { CreateGroupScreen } from "./screens/CreateGroupScreen";
+import { GroupDetailsScreen } from "./screens/GroupDetailsScreen";
+import { AddMemberScreen } from "./screens/AddMemberScreen";
 import { supabase } from "./supabase";
-import { Transaction } from "./types";
+import { Transaction, Group, GroupWithMembers } from "./types";
 
 // Constants
 const TOKEN_REFRESH_BUFFER_SECONDS = 60;
@@ -31,7 +35,7 @@ const EXPENSE_COLOR = "#ef4444";
 // API URL - must be set via EXPO_PUBLIC_API_URL environment variable
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
-function TransactionsScreen() {
+function TransactionsScreen({ onNavigateToGroups }: { onNavigateToGroups?: () => void }) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -464,6 +468,9 @@ function TransactionsScreen() {
           title="Transactions"
           subtitle={`${transactions.length} total`}
         />
+        {onNavigateToGroups && (
+          <Appbar.Action icon="account-group" onPress={onNavigateToGroups} />
+        )}
         <Appbar.Action icon="logout" onPress={signOut} />
       </Appbar.Header>
 
@@ -648,6 +655,132 @@ function TransactionsScreen() {
 function AppContent() {
   const { session, loading } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
+  const [currentView, setCurrentView] = useState<'transactions' | 'groups'>('transactions');
+  const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [showAddMember, setShowAddMember] = useState(false);
+  const [groupDetails, setGroupDetails] = useState<GroupWithMembers | null>(null);
+
+  const getAuthToken = async (): Promise<string | null> => {
+    if (!session) return null;
+
+    let {
+      data: { session: currentSession },
+    } = await supabase.auth.getSession();
+
+    if (!currentSession) return null;
+
+    const now = Math.floor(Date.now() / 1000);
+    const expiresAt = currentSession.expires_at || 0;
+
+    if (expiresAt && expiresAt < now + TOKEN_REFRESH_BUFFER_SECONDS) {
+      const { data: refreshData, error: refreshError } =
+        await supabase.auth.refreshSession();
+
+      if (refreshError || !refreshData.session) {
+        return null;
+      }
+
+      currentSession = refreshData.session;
+    }
+
+    return currentSession.access_token;
+  };
+
+  const handleCreateGroup = async (groupData: { name: string; description?: string }) => {
+    if (!API_URL) {
+      throw new Error("Unable to connect to the server");
+    }
+
+    const token = await getAuthToken();
+    if (!token) {
+      throw new Error("Not authenticated");
+    }
+
+    const response = await fetch(`${API_URL}/groups`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(groupData),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    setShowCreateGroup(false);
+    setCurrentView('groups');
+  };
+
+  const handleAddMember = async (email: string) => {
+    if (!API_URL || !selectedGroup) {
+      throw new Error("Invalid request");
+    }
+
+    const token = await getAuthToken();
+    if (!token) {
+      throw new Error("Not authenticated");
+    }
+
+    const response = await fetch(`${API_URL}/group-members`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        group_id: selectedGroup.id,
+        email: email,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+
+    setShowAddMember(false);
+    // Refresh group details
+    if (groupDetails) {
+      const detailsResponse = await fetch(`${API_URL}/groups/${selectedGroup.id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+      if (detailsResponse.ok) {
+        const updatedGroup: GroupWithMembers = await detailsResponse.json();
+        setGroupDetails(updatedGroup);
+      }
+    }
+  };
+
+  const handleGroupPress = async (group: Group) => {
+    if (!API_URL) return;
+
+    const token = await getAuthToken();
+    if (!token) return;
+
+    try {
+      const response = await fetch(`${API_URL}/groups/${group.id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (response.ok) {
+        const groupWithMembers: GroupWithMembers = await response.json();
+        setGroupDetails(groupWithMembers);
+        setSelectedGroup(group);
+      }
+    } catch (error) {
+      console.error("Error fetching group details:", error);
+    }
+  };
 
   if (loading) {
     return (
@@ -670,7 +803,73 @@ function AppContent() {
     );
   }
 
-  return <TransactionsScreen />;
+  // Show add member screen
+  if (showAddMember && selectedGroup) {
+    return (
+      <>
+        <AddMemberScreen
+          groupId={selectedGroup.id}
+          onAddMember={handleAddMember}
+          onCancel={() => {
+            setShowAddMember(false);
+            setSelectedGroup(null);
+          }}
+        />
+        <StatusBar style="auto" />
+      </>
+    );
+  }
+
+  // Show group details screen
+  if (groupDetails && selectedGroup) {
+    return (
+      <>
+        <GroupDetailsScreen
+          group={groupDetails}
+          onBack={() => {
+            setGroupDetails(null);
+            setSelectedGroup(null);
+          }}
+          onAddMember={() => setShowAddMember(true)}
+        />
+        <StatusBar style="auto" />
+      </>
+    );
+  }
+
+  // Show create group screen
+  if (showCreateGroup) {
+    return (
+      <>
+        <CreateGroupScreen
+          onCreateGroup={handleCreateGroup}
+          onCancel={() => setShowCreateGroup(false)}
+        />
+        <StatusBar style="auto" />
+      </>
+    );
+  }
+
+  // Show groups list or transactions based on current view
+  if (currentView === 'groups') {
+    return (
+      <>
+        <GroupsListScreen
+          onGroupPress={handleGroupPress}
+          onCreateGroup={() => setShowCreateGroup(true)}
+          onNavigateToTransactions={() => setCurrentView('transactions')}
+        />
+        <StatusBar style="auto" />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <TransactionsScreen onNavigateToGroups={() => setCurrentView('groups')} />
+      <StatusBar style="auto" />
+    </>
+  );
 }
 
 export default function App() {
