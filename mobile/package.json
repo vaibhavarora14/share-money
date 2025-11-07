@@ -4,6 +4,7 @@
   "main": "index.js",
   "scripts": {
     "start": "expo start",
+    "start:go": "concurrently \"cd ../netlify && npm run dev\" \"expo start\"",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
@@ -44,6 +45,7 @@
   "private": true,
   "devDependencies": {
     "@types/react": "~19.1.10",
+    "concurrently": "^9.1.0",
     "typescript": "^5.9.3"
   }
 }
