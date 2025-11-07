@@ -400,9 +400,19 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         )}
 
         <View style={styles.section}>
-          <Text variant="titleMedium" style={styles.sectionTitle}>
-            Members ({group.members?.length || 0})
-          </Text>
+          <View style={styles.sectionHeader}>
+            <Text variant="titleMedium" style={styles.sectionTitle}>
+              Members ({group.members?.length || 0})
+            </Text>
+            {isOwner && (
+              <IconButton
+                icon="plus"
+                size={20}
+                iconColor={theme.colors.primary}
+                onPress={onAddMember}
+              />
+            )}
+          </View>
 
           {group.members && group.members.length > 0 ? (
             group.members.map((member, index) => (
@@ -523,14 +533,18 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         </View>
       </ScrollView>
 
-      {isOwner && (
-        <FAB
-          icon="account-plus"
-          style={styles.fab}
-          onPress={onAddMember}
-          label="Add Member"
-        />
-      )}
+      <Button
+        mode="contained"
+        icon="plus"
+        onPress={() => {
+          // TODO: Navigate to add transaction screen
+          Alert.alert("Info", "Add transaction functionality coming soon");
+        }}
+        style={styles.addTransactionButton}
+        contentStyle={styles.addTransactionButtonContent}
+      >
+        Add Transaction
+      </Button>
     </SafeAreaView>
   );
 };
@@ -558,9 +572,14 @@ const styles = StyleSheet.create({
   section: {
     marginTop: 8,
   },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
   sectionTitle: {
     fontWeight: "600",
-    marginBottom: 12,
   },
   memberCard: {
     marginBottom: 0,
@@ -602,10 +621,11 @@ const styles = StyleSheet.create({
   transactionAmount: {
     fontWeight: "bold",
   },
-  fab: {
-    position: "absolute",
+  addTransactionButton: {
     margin: 16,
-    right: 0,
-    bottom: 80, // Space for bottom navigation bar
+    marginBottom: 8,
+  },
+  addTransactionButtonContent: {
+    paddingVertical: 8,
   },
 });
