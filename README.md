@@ -1,13 +1,20 @@
-# ShareMoney - Transactions App
+# ShareMoney
 
-A React Native Expo mobile app with Netlify Edge Functions backend, integrated with Supabase database to display transactions.
+React Native Expo mobile app with Netlify Functions backend and Supabase database.
+
+## Tech Stack
+
+- **Frontend**: React Native (Expo), TypeScript, React Native Paper
+- **Backend**: Netlify Functions (Node.js/TypeScript)
+- **Database**: Supabase (PostgreSQL)
+- **Auth**: Supabase Auth (Email/Password + Google OAuth)
 
 ## Project Structure
 
 ```
 ShareMoney/
-├── netlify/              # Netlify Edge Functions backend
-│   ├── edge-functions/   # Edge Functions
+├── netlify/              # Netlify Functions backend
+│   ├── functions/        # Netlify Functions
 │   │   └── transactions.ts
 │   └── package.json      # Backend dependencies
 ├── supabase/             # Supabase migrations
@@ -25,186 +32,159 @@ ShareMoney/
 
 ## Prerequisites
 
-- Node.js (v18 or higher)
-- npm or yarn
-- Expo CLI (installed globally or via npx)
-- Supabase account (free tier works)
-- Netlify account (free tier works)
+- Node.js (v18+)
+- npm/yarn
+- Supabase account
+- Netlify account
+- Expo CLI (via npx or global)
 
-## Setup Instructions
+## Development Setup
 
-### 1. Supabase Database Setup
+### 1. Clone and Install
 
-1. Create a new project at [supabase.com](https://supabase.com)
-2. Go to **Project Settings > API** and copy:
-   - **Project URL** (your `SUPABASE_URL`)
-   - **anon public** key (your `SUPABASE_ANON_KEY`)
-3. Set up the database using Supabase CLI:
-   ```bash
-   # Install Supabase CLI
-   brew install supabase/tap/supabase
-   
-   # Login to Supabase
-   supabase login
-   
-   # Link your project (replace with your project ref)
-   supabase link --project-ref YOUR_PROJECT_REF
-   
-   # Push migrations to create table and seed data
-   supabase db push
-   ```
-   
-   Alternatively, you can run the migration SQL manually in the Supabase SQL Editor from `supabase/migrations/20240101000000_create_transactions.sql`
+```bash
+# Install root dependencies (if any)
+npm install
 
-### 2. Netlify Backend Setup
+# Install backend dependencies
+cd netlify && npm install
 
-1. Install dependencies:
-   ```bash
-   cd netlify
-   npm install
-   ```
+# Install mobile dependencies
+cd ../mobile && npm install
+```
 
-2. Set up environment variables in Netlify:
-   - Go to your Netlify site dashboard
-   - Navigate to **Site settings > Environment variables**
-   - Add the following:
-     - `SUPABASE_URL` = your Supabase project URL
-     - `SUPABASE_ANON_KEY` = your Supabase anon key
+### 2. Environment Variables
 
-3. For local development, create a `.env` file in the root directory:
-   ```
-   SUPABASE_URL=your_supabase_url
-   SUPABASE_ANON_KEY=your_supabase_anon_key
-   ```
+**Root `.env`** (for Netlify):
+```env
+SUPABASE_URL=your_supabase_url
+SUPABASE_ANON_KEY=your_supabase_anon_key
+```
 
-4. Deploy to Netlify:
-   
-   **Option A: Deploy from the netlify directory**
-   ```bash
-   # Install Netlify CLI if not already installed
-   npm install -g netlify-cli
-   
-   # Login to Netlify
-   netlify login
-   
-   # Navigate to netlify directory and deploy
-   cd netlify
-   netlify deploy --prod
-   ```
-   
-   **Option B: Deploy from root (move netlify.toml to root)**
-   - Move `netlify/netlify.toml` to the project root
-   - Update paths in `netlify.toml` to point to `netlify/edge-functions`
-   - Deploy from root: `netlify deploy --prod`
+**`mobile/.env`** (must use `EXPO_PUBLIC_` prefix):
+```env
+EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+EXPO_PUBLIC_API_URL=http://YOUR_LOCAL_IP:8888/api  # Optional, defaults based on __DEV__
+```
 
-5. Note your Netlify site URL (e.g., `https://your-site.netlify.app`)
+### 3. Database Setup
 
-### 3. Mobile App Setup
+```bash
+# Using Supabase CLI
+supabase link --project-ref YOUR_PROJECT_REF
+supabase db push
 
-1. Navigate to the mobile directory:
-   ```bash
-   cd mobile
-   ```
+# Or manually run migrations in Supabase SQL Editor:
+# - supabase/migrations/20240101000000_create_transactions.sql
+# - supabase/migrations/20240102000000_add_user_authentication.sql
+```
 
-2. Update the API URL in `App.tsx`:
-   - Open `mobile/App.tsx`
-   - Find the `API_URL` constant near the top
-   - Replace `https://your-site.netlify.app/api/transactions` with your actual Netlify URL
+### 4. Run Locally
 
-3. For local development (if running Netlify dev locally):
-   - Change `API_URL` to `http://localhost:8888/api/transactions`
-   - Make sure your mobile device/emulator can access localhost (use your computer's IP for physical devices)
-
-4. Start the Expo development server:
-   ```bash
-   npm start
-   ```
-
-5. Run on your preferred platform:
-   - Press `i` for iOS simulator
-   - Press `a` for Android emulator
-   - Scan QR code with Expo Go app on your physical device
-
-## Running the Project
-
-### Backend (Netlify)
-
-For local development:
+**Terminal 1 - Backend:**
 ```bash
 cd netlify
 netlify dev
+# Available at http://localhost:8888/api/transactions
 ```
 
-The Edge Function will be available at `http://localhost:8888/api/transactions`
-
-### Mobile App
-
+**Terminal 2 - Mobile:**
 ```bash
 cd mobile
 npm start
+# Press 'i' for iOS, 'a' for Android, or scan QR code
 ```
 
-Then choose your platform (iOS, Android, or Web).
+**Note**: For physical devices, use your local IP instead of `localhost` in `EXPO_PUBLIC_API_URL`.
 
-## API Endpoint
+## Deployment
 
-- **Endpoint**: `/api/transactions`
-- **Method**: GET
-- **Response**: JSON array of transactions
+### Netlify
 
-Example response:
-```json
-[
-  {
-    "id": 1,
-    "amount": 150.00,
-    "description": "Grocery shopping at Whole Foods",
-    "date": "2024-01-15",
-    "type": "expense",
-    "category": "Food"
-  },
-  ...
-]
-```
+1. Set environment variables in Netlify dashboard:
+   - `SUPABASE_URL`
+   - `SUPABASE_ANON_KEY`
 
-## Features
+2. Deploy:
+   ```bash
+   cd netlify
+   netlify deploy --prod
+   ```
 
-- ✅ Netlify Edge Functions backend (TypeScript)
-- ✅ Supabase PostgreSQL database integration
-- ✅ React Native Expo mobile app (TypeScript)
-- ✅ Beautiful transaction list UI
-- ✅ Loading and error states
-- ✅ Transaction categorization (income/expense)
-- ✅ Formatted dates and amounts
-- ✅ Full TypeScript support with type safety
+### Mobile (Expo)
+
+See `mobile/EXPO_PUBLISH.md` for EAS build and OTA update instructions.
+
+## API
+
+**Endpoint**: `GET /api/transactions`
+
+- **Auth**: Bearer token required
+- **Response**: JSON array of transactions (filtered by user via RLS)
+
+**Implementation**: `netlify/functions/transactions.ts`
+
+## Architecture
+
+- **Database**: Supabase PostgreSQL with Row Level Security (RLS)
+- **Auth**: Supabase Auth (JWT tokens, AsyncStorage persistence)
+- **API**: Netlify Functions with CORS and auth validation
+- **Mobile**: Expo with React Native Paper UI
+
+## Key Implementation Details
+
+### Authentication Flow
+
+1. User signs in via Supabase Auth (email/password or Google OAuth)
+2. JWT token stored in AsyncStorage
+3. Token sent in `Authorization: Bearer <token>` header to API
+4. Netlify Function validates token with Supabase
+5. RLS policies filter transactions by `user_id`
+
+### Google OAuth Setup
+
+1. Create OAuth credentials in Google Cloud Console (Web application type)
+2. Add redirect URI: `https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback`
+3. Configure in Supabase Dashboard > Authentication > Providers
+4. Add mobile redirect URL: `com.sharemoney.app://auth/callback` (in Supabase URL Configuration)
+
+### Environment Variables
+
+- **Expo requirement**: All mobile env vars must use `EXPO_PUBLIC_` prefix
+- **Netlify**: Loads from root `.env` automatically in dev
+- **Mobile**: Loads from `mobile/.env` (Expo SDK 49+ native support)
 
 ## Troubleshooting
 
-### Mobile app can't connect to API
+- **Port 8888 in use**: Change port or kill process
+- **Physical device can't connect**: Use local IP in `EXPO_PUBLIC_API_URL`, not `localhost`
+- **Auth errors**: Verify env vars have correct prefix, check Supabase dashboard config
+- **RLS issues**: Ensure migrations ran, verify policies in Supabase dashboard
 
-- Verify the `API_URL` in `App.js` is correct
-- For physical devices, use your computer's local IP instead of `localhost`
-- Check that Netlify Edge Function is deployed and accessible
-- Verify CORS headers are set correctly in the Edge Function
+## Development
 
-### Database connection errors
+### Testing API
 
-- Verify Supabase environment variables are set correctly in Netlify
-- Check that the `transactions` table exists in Supabase
-- Run migrations: `supabase db push`
-- Or use the seed script: `./scripts/seed-db.sh`
+```bash
+curl http://localhost:8888/api/transactions
+```
 
-### Netlify deployment issues
+### Code Structure
 
-- Make sure `netlify.toml` is in the correct location
-- Verify Edge Function file is in `netlify/edge-functions/` directory
-- Check Netlify build logs for errors
+- `mobile/App.tsx` - Main app component, transaction list
+- `mobile/screens/AuthScreen.tsx` - Login/signup UI
+- `mobile/contexts/AuthContext.tsx` - Auth state management
+- `mobile/supabase.ts` - Supabase client configuration
+- `netlify/functions/transactions.ts` - API endpoint handler
 
-## Next Steps
+## Scripts
 
-- Add authentication
-- Implement transaction creation/editing
-- Add filtering and sorting
-- Implement pull-to-refresh
-- Add transaction details screen
+- `./scripts/seed-db.sh` - Seed database with sample data
+- `./scripts/seed-db.ts` - TypeScript version of seed script
+
+## Resources
+
+- Expo publishing: `mobile/EXPO_PUBLISH.md`
+- Supabase migrations: `supabase/migrations/`
 
