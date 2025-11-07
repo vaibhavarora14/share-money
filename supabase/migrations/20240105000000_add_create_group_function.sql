@@ -1,5 +1,8 @@
 -- Create a SECURITY DEFINER function to create groups
--- This bypasses RLS for the insert but uses auth.uid() for security
+-- SECURITY DEFINER is needed here to bypass RLS for the insert operation,
+-- which allows the function to insert into the groups table and trigger
+-- the automatic addition of the creator as owner. The function still uses
+-- auth.uid() to ensure only authenticated users can call it, maintaining security.
 CREATE OR REPLACE FUNCTION create_group(
   group_name VARCHAR(255),
   group_description TEXT DEFAULT NULL

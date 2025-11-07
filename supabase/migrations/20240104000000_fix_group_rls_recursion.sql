@@ -7,6 +7,9 @@ DROP POLICY IF EXISTS "Group owners can update member roles" ON group_members;
 DROP POLICY IF EXISTS "Users can leave groups or owners can remove members" ON group_members;
 
 -- Create a SECURITY DEFINER function to check membership (bypasses RLS)
+-- SECURITY DEFINER is needed here to bypass RLS when checking membership,
+-- which prevents infinite recursion in RLS policies. The function uses
+-- direct table access without RLS checks to break the circular dependency.
 CREATE OR REPLACE FUNCTION is_user_group_member(check_group_id UUID, check_user_id UUID)
 RETURNS BOOLEAN AS $$
 BEGIN
