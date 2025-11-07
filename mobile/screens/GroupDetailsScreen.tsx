@@ -17,8 +17,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../supabase";
 import { GroupWithMembers, Transaction } from "../types";
-import { TransactionFormScreen } from "./TransactionFormScreen";
 import { formatCurrency } from "../utils/currency";
+import { TransactionFormScreen } from "./TransactionFormScreen";
 
 // API URL - must be set via EXPO_PUBLIC_API_URL environment variable
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -718,25 +718,28 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                             style={{ color: theme.colors.onSurfaceVariant }}
                           >
                             {formatDate(transaction.date)}
-                            {transaction.category && ` • ${transaction.category}`}
+                            {transaction.category &&
+                              ` • ${transaction.category}`}
                           </Text>
-                          {transaction.currency && transaction.currency !== "USD" && (
-                            <Chip
-                              style={[
-                                styles.currencyChip,
-                                {
-                                  backgroundColor: theme.colors.surfaceVariant,
-                                  marginLeft: 8,
-                                },
-                              ]}
-                              textStyle={[
-                                styles.currencyChipText,
-                                { color: theme.colors.onSurfaceVariant },
-                              ]}
-                            >
-                              {transaction.currency}
-                            </Chip>
-                          )}
+                          {transaction.currency &&
+                            transaction.currency !== "USD" && (
+                              <Chip
+                                style={[
+                                  styles.currencyChip,
+                                  {
+                                    backgroundColor:
+                                      theme.colors.surfaceVariant,
+                                    marginLeft: 8,
+                                  },
+                                ]}
+                                textStyle={[
+                                  styles.currencyChipText,
+                                  { color: theme.colors.onSurfaceVariant },
+                                ]}
+                              >
+                                {transaction.currency}
+                              </Chip>
+                            )}
                         </View>
                       </View>
                       <View style={styles.transactionRight}>
@@ -802,8 +805,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       {isMember && (
         <FAB
           icon="plus"
+          label="Add"
           onPress={() => setShowTransactionForm(true)}
-          style={styles.addTransactionFab}
+          style={styles.addTransactionButton}
         />
       )}
     </SafeAreaView>
@@ -902,11 +906,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     marginTop: 4,
   },
-  addTransactionFab: {
+  addTransactionButton: {
     position: "absolute",
-    margin: 16,
-    marginBottom: 0,
-    right: 0,
-    bottom: 0,
+    right: 16,
+    bottom: 16, // Space for bottom navigation bar
   },
 });
