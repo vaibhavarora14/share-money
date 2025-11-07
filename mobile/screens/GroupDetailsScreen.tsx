@@ -648,15 +648,11 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       </ScrollView>
 
       {isMember && (
-        <Button
-          mode="contained"
+        <FAB
           icon="plus"
           onPress={() => setShowTransactionForm(true)}
-          style={styles.addTransactionButton}
-          contentStyle={styles.addTransactionButtonContent}
-        >
-          Add Transaction
-        </Button>
+          style={styles.addTransactionFab}
+        />
       )}
     </SafeAreaView>
   );
@@ -746,11 +742,11 @@ const styles = StyleSheet.create({
   transactionAmount: {
     fontWeight: "bold",
   },
-  addTransactionButton: {
+  addTransactionFab: {
+    position: "absolute",
     margin: 16,
-    marginBottom: 80, // Space for bottom navigation bar
-  },
-  addTransactionButtonContent: {
-    paddingVertical: 8,
+    marginBottom: 0,
+    right: 0,
+    bottom: 0,
   },
 });
