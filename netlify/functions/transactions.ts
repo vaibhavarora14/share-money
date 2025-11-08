@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { Handler } from '@netlify/functions';
 import { createClient } from '@supabase/supabase-js';
 
@@ -42,21 +43,21 @@ export const handler: Handler = async (event, context) => {
     }
 
     // Get authorization header - Netlify Functions headers are lowercase
-    const authHeader = 
-      event.headers.authorization || 
+    const authHeader =
+      event.headers.authorization ||
       event.headers.Authorization ||
       event.headers['authorization'] ||
       event.headers['Authorization'] ||
-      (event.multiValueHeaders && (
-        event.multiValueHeaders.authorization?.[0] ||
-        event.multiValueHeaders.Authorization?.[0]
-      ));
-    
+      (event.multiValueHeaders &&
+        (event.multiValueHeaders.authorization?.[0] || event.multiValueHeaders.Authorization?.[0]));
+
     if (!authHeader) {
       return {
         statusCode: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: 'Unauthorized: Missing authorization header' }),
+        body: JSON.stringify({
+          error: 'Unauthorized: Missing authorization header',
+        }),
       };
     }
 
@@ -64,8 +65,8 @@ export const handler: Handler = async (event, context) => {
     // This is more reliable for serverless functions
     const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
       headers: {
-        'Authorization': authHeader,
-        'apikey': supabaseKey,
+        Authorization: authHeader,
+        apikey: supabaseKey,
       },
     });
 
@@ -73,20 +74,20 @@ export const handler: Handler = async (event, context) => {
       return {
         statusCode: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          error: 'Unauthorized: Invalid or expired token'
+        body: JSON.stringify({
+          error: 'Unauthorized: Invalid or expired token',
         }),
       };
     }
 
     const user = await userResponse.json();
-    
+
     if (!user || !user.id) {
       return {
         statusCode: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          error: 'Unauthorized: Invalid user data'
+        body: JSON.stringify({
+          error: 'Unauthorized: Invalid user data',
         }),
       };
     }
@@ -111,10 +112,8 @@ export const handler: Handler = async (event, context) => {
     // Handle GET - Fetch transactions (optionally filtered by group_id)
     if (httpMethod === 'GET') {
       const groupId = event.queryStringParameters?.group_id;
-      
-      let query = supabase
-        .from('transactions')
-        .select('*');
+
+      let query = supabase.from('transactions').select('*');
 
       // Filter by group_id if provided
       if (groupId) {
@@ -130,7 +129,10 @@ export const handler: Handler = async (event, context) => {
         return {
           statusCode: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Failed to fetch transactions', details: error.message }),
+          body: JSON.stringify({
+            error: 'Failed to fetch transactions',
+            details: error.message,
+          }),
         };
       }
 
@@ -155,11 +157,18 @@ export const handler: Handler = async (event, context) => {
       }
 
       // Validate required fields
-      if (!transactionData.amount || !transactionData.description || !transactionData.date || !transactionData.type) {
+      if (
+        !transactionData.amount ||
+        !transactionData.description ||
+        !transactionData.date ||
+        !transactionData.type
+      ) {
         return {
           statusCode: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Missing required fields: amount, description, date, type' }),
+          body: JSON.stringify({
+            error: 'Missing required fields: amount, description, date, type',
+          }),
         };
       }
 
@@ -168,7 +177,9 @@ export const handler: Handler = async (event, context) => {
         return {
           statusCode: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Type must be either "income" or "expense"' }),
+          body: JSON.stringify({
+            error: 'Type must be either "income" or "expense"',
+          }),
         };
       }
 
@@ -185,7 +196,9 @@ export const handler: Handler = async (event, context) => {
           return {
             statusCode: 403,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ error: 'You must be a member of the group to add transactions' }),
+            body: JSON.stringify({
+              error: 'You must be a member of the group to add transactions',
+            }),
           };
         }
       }
@@ -211,7 +224,10 @@ export const handler: Handler = async (event, context) => {
         return {
           statusCode: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Failed to create transaction', details: error.message }),
+          body: JSON.stringify({
+            error: 'Failed to create transaction',
+            details: error.message,
+          }),
         };
       }
 
@@ -244,22 +260,31 @@ export const handler: Handler = async (event, context) => {
       }
 
       // Validate type if provided
-      if (transactionData.type && transactionData.type !== 'income' && transactionData.type !== 'expense') {
+      if (
+        transactionData.type &&
+        transactionData.type !== 'income' &&
+        transactionData.type !== 'expense'
+      ) {
         return {
           statusCode: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Type must be either "income" or "expense"' }),
+          body: JSON.stringify({
+            error: 'Type must be either "income" or "expense"',
+          }),
         };
       }
 
       // Build update object (exclude id and user_id)
       const updateData: any = {};
       if (transactionData.amount !== undefined) updateData.amount = transactionData.amount;
-      if (transactionData.description !== undefined) updateData.description = transactionData.description;
+      if (transactionData.description !== undefined)
+        updateData.description = transactionData.description;
       if (transactionData.date !== undefined) updateData.date = transactionData.date;
       if (transactionData.type !== undefined) updateData.type = transactionData.type;
-      if (transactionData.category !== undefined) updateData.category = transactionData.category || null;
-      if (transactionData.currency !== undefined) updateData.currency = transactionData.currency || 'USD';
+      if (transactionData.category !== undefined)
+        updateData.category = transactionData.category || null;
+      if (transactionData.currency !== undefined)
+        updateData.currency = transactionData.currency || 'USD';
 
       const { data: transaction, error } = await supabase
         .from('transactions')
@@ -273,7 +298,10 @@ export const handler: Handler = async (event, context) => {
         return {
           statusCode: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Failed to update transaction', details: error.message }),
+          body: JSON.stringify({
+            error: 'Failed to update transaction',
+            details: error.message,
+          }),
         };
       }
 
@@ -296,12 +324,14 @@ export const handler: Handler = async (event, context) => {
     if (httpMethod === 'DELETE') {
       // Get transaction ID from query string
       const transactionId = event.queryStringParameters?.id;
-      
+
       if (!transactionId) {
         return {
           statusCode: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Missing transaction id in query parameters' }),
+          body: JSON.stringify({
+            error: 'Missing transaction id in query parameters',
+          }),
         };
       }
 
@@ -314,24 +344,27 @@ export const handler: Handler = async (event, context) => {
         };
       }
 
-      const { error } = await supabase
-        .from('transactions')
-        .delete()
-        .eq('id', id);
+      const { error } = await supabase.from('transactions').delete().eq('id', id);
 
       if (error) {
         console.error('Supabase error:', error);
         return {
           statusCode: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Failed to delete transaction', details: error.message }),
+          body: JSON.stringify({
+            error: 'Failed to delete transaction',
+            details: error.message,
+          }),
         };
       }
 
       return {
         statusCode: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ success: true, message: 'Transaction deleted successfully' }),
+        body: JSON.stringify({
+          success: true,
+          message: 'Transaction deleted successfully',
+        }),
       };
     }
 
@@ -346,8 +379,10 @@ export const handler: Handler = async (event, context) => {
     return {
       statusCode: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Internal server error', details: error.message }),
+      body: JSON.stringify({
+        error: 'Internal server error',
+        details: error.message,
+      }),
     };
   }
 };
-
