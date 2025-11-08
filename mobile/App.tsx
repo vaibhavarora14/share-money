@@ -856,6 +856,8 @@ function AppContent() {
       );
     }
 
+    const result = await response.json();
+
     // Refresh group details
     if (groupDetails && selectedGroup) {
       const detailsResponse = await fetch(
@@ -872,6 +874,8 @@ function AppContent() {
         setGroupDetails(updatedGroup);
       }
     }
+
+    return result;
   };
 
   const handleRemoveMember = async (userId: string) => {
