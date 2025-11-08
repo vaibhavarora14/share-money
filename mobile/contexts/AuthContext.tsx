@@ -41,6 +41,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       setLoading(false);
     });
 
+    // Track if we've processed invitations for the current session to avoid duplicates
+    let lastProcessedUserId: string | null = null;
+
     // Listen for auth changes
     const {
       data: { subscription },
@@ -51,6 +54,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+
+      // Process pending invitations only on SIGNED_IN event (not TOKEN_REFRESHED)
+      // and only once per user session to avoid redundant calls
+      if (session?.user && event === 'SIGNED_IN' && session.user.id !== lastProcessedUserId) {
+        try {
+          lastProcessedUserId = session.user.id;
+          // Call the function to accept pending invitations
+          const { error: inviteError } = await supabase.rpc('accept_pending_invitations');
+          if (inviteError) {
+            console.error('Error processing pending invitations:', inviteError);
+            // Don't block the auth flow if invitation processing fails
+          }
+        } catch (err) {
+          console.error('Error processing pending invitations:', err);
+          // Don't block the auth flow if invitation processing fails
+        }
+      }
+
+      // Reset tracking when user signs out
+      if (event === 'SIGNED_OUT') {
+        lastProcessedUserId = null;
+      }
     });
 
     return () => {
@@ -93,14 +118,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       return { error };
     }
 
+    // Note: Invitation processing is handled by onAuthStateChange to avoid duplicates
     return { error: null };
   };
 
   const signUp = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
     });
+    
+    // Note: Invitation processing is handled by onAuthStateChange when session is confirmed
+    // This avoids duplicate processing and handles email confirmation flows correctly
     return { error };
   };
 
@@ -188,7 +217,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         }
 
         // Wait for the session to propagate through onAuthStateChange
+        // Note: Invitation processing is handled by onAuthStateChange to avoid duplicates
         await new Promise((resolve) => setTimeout(resolve, 1000));
+        
         return { error: null };
       }
 
