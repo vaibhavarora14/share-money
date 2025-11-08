@@ -1,27 +1,26 @@
-import "dotenv/config";
-import { Handler } from "@netlify/functions";
-import { createClient } from "@supabase/supabase-js";
+import 'dotenv/config';
+import { Handler } from '@netlify/functions';
+import { createClient } from '@supabase/supabase-js';
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
 };
 
 interface AddMemberRequest {
   group_id: string;
   email: string;
-  role?: "owner" | "member";
+  role?: 'owner' | 'member';
 }
 
 export const handler: Handler = async (event, context) => {
   // Handle CORS preflight
-  if (event.httpMethod === "OPTIONS") {
+  if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 200,
       headers: corsHeaders,
-      body: "",
+      body: '',
     };
   }
 
@@ -33,8 +32,8 @@ export const handler: Handler = async (event, context) => {
     if (!supabaseUrl || !supabaseKey) {
       return {
         statusCode: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ error: "Missing Supabase credentials" }),
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'Missing Supabase credentials' }),
       };
     }
 
@@ -42,18 +41,17 @@ export const handler: Handler = async (event, context) => {
     const authHeader =
       event.headers.authorization ||
       event.headers.Authorization ||
-      event.headers["authorization"] ||
-      event.headers["Authorization"] ||
+      event.headers['authorization'] ||
+      event.headers['Authorization'] ||
       (event.multiValueHeaders &&
-        (event.multiValueHeaders.authorization?.[0] ||
-          event.multiValueHeaders.Authorization?.[0]));
+        (event.multiValueHeaders.authorization?.[0] || event.multiValueHeaders.Authorization?.[0]));
 
     if (!authHeader) {
       return {
         statusCode: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          error: "Unauthorized: Missing authorization header",
+          error: 'Unauthorized: Missing authorization header',
         }),
       };
     }
@@ -69,9 +67,9 @@ export const handler: Handler = async (event, context) => {
     if (!userResponse.ok) {
       return {
         statusCode: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          error: "Unauthorized: Invalid or expired token",
+          error: 'Unauthorized: Invalid or expired token',
         }),
       };
     }
@@ -81,9 +79,9 @@ export const handler: Handler = async (event, context) => {
     if (!currentUser || !currentUser.id) {
       return {
         statusCode: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          error: "Unauthorized: Invalid user data",
+          error: 'Unauthorized: Invalid user data',
         }),
       };
     }
@@ -105,15 +103,15 @@ export const handler: Handler = async (event, context) => {
     const httpMethod = event.httpMethod;
 
     // Handle POST - Add member to group
-    if (httpMethod === "POST") {
+    if (httpMethod === 'POST') {
       let requestData: AddMemberRequest;
       try {
-        requestData = JSON.parse(event.body || "{}");
+        requestData = JSON.parse(event.body || '{}');
       } catch (e) {
         return {
           statusCode: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          body: JSON.stringify({ error: "Invalid JSON in request body" }),
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Invalid JSON in request body' }),
         };
       }
 
@@ -121,26 +119,26 @@ export const handler: Handler = async (event, context) => {
       if (!requestData.group_id || !requestData.email) {
         return {
           statusCode: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            error: "Missing required fields: group_id, email",
+            error: 'Missing required fields: group_id, email',
           }),
         };
       }
 
       // Verify user is owner of the group
       const { data: membership, error: membershipError } = await supabase
-        .from("group_members")
-        .select("role")
-        .eq("group_id", requestData.group_id)
-        .eq("user_id", currentUser.id)
+        .from('group_members')
+        .select('role')
+        .eq('group_id', requestData.group_id)
+        .eq('user_id', currentUser.id)
         .single();
 
-      if (membershipError || !membership || membership.role !== "owner") {
+      if (membershipError || !membership || membership.role !== 'owner') {
         return {
           statusCode: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          body: JSON.stringify({ error: "Only group owners can add members" }),
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Only group owners can add members' }),
         };
       }
 
@@ -151,8 +149,8 @@ export const handler: Handler = async (event, context) => {
       if (!emailRegex.test(normalizedEmail)) {
         return {
           statusCode: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          body: JSON.stringify({ error: "Invalid email address format" }),
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Invalid email address format' }),
         };
       }
 
@@ -162,23 +160,19 @@ export const handler: Handler = async (event, context) => {
       const adminKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
       if (!adminKey) {
-        console.error(
-          "SUPABASE_SERVICE_ROLE_KEY is not set. Cannot search users by email."
-        );
+        console.error('SUPABASE_SERVICE_ROLE_KEY is not set. Cannot search users by email.');
         return {
           statusCode: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             error:
-              "Server configuration error: Service role key not configured. Please contact support.",
+              'Server configuration error: Service role key not configured. Please contact support.',
           }),
         };
       }
 
       const findUserResponse = await fetch(
-        `${supabaseUrl}/auth/v1/admin/users?email=${encodeURIComponent(
-          normalizedEmail
-        )}`,
+        `${supabaseUrl}/auth/v1/admin/users?email=${encodeURIComponent(normalizedEmail)}`,
         {
           headers: {
             Authorization: `Bearer ${adminKey}`,
@@ -197,31 +191,30 @@ export const handler: Handler = async (event, context) => {
           // Note: UNIQUE constraint on (group_id, email) prevents duplicates
           // If duplicate, we'll get a constraint violation error which we handle below
           const { data: invitation, error: inviteError } = await supabase
-            .from("group_invitations")
+            .from('group_invitations')
             .insert({
               group_id: requestData.group_id,
               email: normalizedEmail,
-              role: requestData.role || "member",
+              role: requestData.role || 'member',
               invited_by: currentUser.id,
             })
             .select()
             .single();
 
           if (inviteError) {
-            console.error("Error creating invitation:", inviteError);
+            console.error('Error creating invitation:', inviteError);
 
             // Handle duplicate invitation (UNIQUE constraint violation)
             if (
-              inviteError.code === "23505" ||
-              inviteError.message.includes("duplicate") ||
-              inviteError.message.includes("unique")
+              inviteError.code === '23505' ||
+              inviteError.message.includes('duplicate') ||
+              inviteError.message.includes('unique')
             ) {
               return {
                 statusCode: 400,
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  error:
-                    "An invitation has already been sent to this email address",
+                  error: 'An invitation has already been sent to this email address',
                   is_invitation: true,
                 }),
               };
@@ -229,9 +222,9 @@ export const handler: Handler = async (event, context) => {
 
             return {
               statusCode: 500,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                error: "Failed to create invitation",
+                error: 'Failed to create invitation',
                 details: inviteError.message,
               }),
             };
@@ -239,48 +232,38 @@ export const handler: Handler = async (event, context) => {
 
           return {
             statusCode: 201,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             body: JSON.stringify({
               ...invitation,
               email: normalizedEmail,
               is_invitation: true,
-              message:
-                "Invitation sent. The user will be added to the group when they sign up.",
+              message: 'Invitation sent. The user will be added to the group when they sign up.',
             }),
           };
         }
 
         // Handle other errors
-        let errorMessage = "Failed to search for user";
-        if (
-          findUserResponse.status === 401 ||
-          findUserResponse.status === 403
-        ) {
+        let errorMessage = 'Failed to search for user';
+        if (findUserResponse.status === 401 || findUserResponse.status === 403) {
           errorMessage =
-            "Server configuration error: Invalid service role key. Please contact support.";
-          console.error("Admin API authentication failed:", errorText);
+            'Server configuration error: Invalid service role key. Please contact support.';
+          console.error('Admin API authentication failed:', errorText);
         } else {
-          console.error("Admin API error:", findUserResponse.status, errorText);
-          errorMessage = `Failed to search for user: ${
-            errorText || "Unknown error"
-          }`;
+          console.error('Admin API error:', findUserResponse.status, errorText);
+          errorMessage = `Failed to search for user: ${errorText || 'Unknown error'}`;
         }
 
         return {
           statusCode:
-            findUserResponse.status === 401 || findUserResponse.status === 403
-              ? 500
-              : 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+            findUserResponse.status === 401 || findUserResponse.status === 403 ? 500 : 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           body: JSON.stringify({ error: errorMessage }),
         };
       }
 
       const usersData = await findUserResponse.json();
       const targetUser = Array.isArray(usersData.users)
-        ? usersData.users.find(
-            (u: any) => u.email?.toLowerCase() === normalizedEmail
-          )
+        ? usersData.users.find((u: any) => u.email?.toLowerCase() === normalizedEmail)
         : usersData.users?.[0];
 
       // If user still not found in response, create invitation
@@ -288,31 +271,30 @@ export const handler: Handler = async (event, context) => {
         // Create pending invitation
         // Note: UNIQUE constraint on (group_id, email) prevents duplicates
         const { data: invitation, error: inviteError } = await supabase
-          .from("group_invitations")
+          .from('group_invitations')
           .insert({
             group_id: requestData.group_id,
             email: normalizedEmail,
-            role: requestData.role || "member",
+            role: requestData.role || 'member',
             invited_by: currentUser.id,
           })
           .select()
           .single();
 
         if (inviteError) {
-          console.error("Error creating invitation:", inviteError);
+          console.error('Error creating invitation:', inviteError);
 
           // Handle duplicate invitation (UNIQUE constraint violation)
           if (
-            inviteError.code === "23505" ||
-            inviteError.message.includes("duplicate") ||
-            inviteError.message.includes("unique")
+            inviteError.code === '23505' ||
+            inviteError.message.includes('duplicate') ||
+            inviteError.message.includes('unique')
           ) {
             return {
               statusCode: 400,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                error:
-                  "An invitation has already been sent to this email address",
+                error: 'An invitation has already been sent to this email address',
                 is_invitation: true,
               }),
             };
@@ -320,9 +302,9 @@ export const handler: Handler = async (event, context) => {
 
           return {
             statusCode: 500,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              error: "Failed to create invitation",
+              error: 'Failed to create invitation',
               details: inviteError.message,
             }),
           };
@@ -330,53 +312,52 @@ export const handler: Handler = async (event, context) => {
 
         return {
           statusCode: 201,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ...invitation,
             email: normalizedEmail,
             is_invitation: true,
-            message:
-              "Invitation sent. The user will be added to the group when they sign up.",
+            message: 'Invitation sent. The user will be added to the group when they sign up.',
           }),
         };
       }
 
       // User exists - check if already a member
       const { data: existingMember } = await supabase
-        .from("group_members")
-        .select("id")
-        .eq("group_id", requestData.group_id)
-        .eq("user_id", targetUser.id)
+        .from('group_members')
+        .select('id')
+        .eq('group_id', requestData.group_id)
+        .eq('user_id', targetUser.id)
         .single();
 
       if (existingMember) {
         return {
           statusCode: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            error: "User is already a member of this group",
+            error: 'User is already a member of this group',
           }),
         };
       }
 
       // Add member to group
       const { data: member, error: addError } = await supabase
-        .from("group_members")
+        .from('group_members')
         .insert({
           group_id: requestData.group_id,
           user_id: targetUser.id,
-          role: requestData.role || "member",
+          role: requestData.role || 'member',
         })
         .select()
         .single();
 
       if (addError) {
-        console.error("Supabase error:", addError);
+        console.error('Supabase error:', addError);
         return {
           statusCode: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            error: "Failed to add member",
+            error: 'Failed to add member',
             details: addError.message,
           }),
         };
@@ -384,7 +365,7 @@ export const handler: Handler = async (event, context) => {
 
       return {
         statusCode: 201,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...member,
           email: normalizedEmail,
@@ -394,22 +375,21 @@ export const handler: Handler = async (event, context) => {
     }
 
     // Handle DELETE - Remove member from group (or leave group)
-    if (httpMethod === "DELETE") {
+    if (httpMethod === 'DELETE') {
       const groupId = event.queryStringParameters?.group_id;
       const providedUserId = event.queryStringParameters?.user_id;
 
       // Use provided user_id if valid UUID, otherwise default to current user
       // Validate UUID format if provided
-      const uuidRegex =
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       const userId = providedUserId || currentUser.id;
 
       if (!groupId) {
         return {
           statusCode: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            error: "Missing group_id in query parameters",
+            error: 'Missing group_id in query parameters',
           }),
         };
       }
@@ -418,8 +398,8 @@ export const handler: Handler = async (event, context) => {
       if (!uuidRegex.test(groupId)) {
         return {
           statusCode: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          body: JSON.stringify({ error: "Invalid group_id format" }),
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Invalid group_id format' }),
         };
       }
 
@@ -427,74 +407,67 @@ export const handler: Handler = async (event, context) => {
       if (providedUserId && !uuidRegex.test(providedUserId)) {
         return {
           statusCode: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          body: JSON.stringify({ error: "Invalid user_id format" }),
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Invalid user_id format' }),
         };
       }
 
       // Use the database function to atomically check and remove member
       // This prevents race conditions when removing the last owner
-      const { data, error: rpcError } = await supabase.rpc(
-        "remove_group_member",
-        {
-          p_group_id: groupId,
-          p_user_id: userId,
-        }
-      );
+      const { data, error: rpcError } = await supabase.rpc('remove_group_member', {
+        p_group_id: groupId,
+        p_user_id: userId,
+      });
 
       if (rpcError) {
-        console.error("Supabase RPC error:", rpcError);
+        console.error('Supabase RPC error:', rpcError);
 
         // Handle specific error cases
-        const errorMessage = rpcError.message || "Failed to remove member";
+        const errorMessage = rpcError.message || 'Failed to remove member';
 
-        if (errorMessage.includes("last owner")) {
+        if (errorMessage.includes('last owner')) {
           return {
             statusCode: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              error: "Cannot remove the last owner of the group",
+              error: 'Cannot remove the last owner of the group',
             }),
           };
         }
 
-        if (
-          errorMessage.includes("not authenticated") ||
-          errorMessage.includes("Unauthorized")
-        ) {
+        if (errorMessage.includes('not authenticated') || errorMessage.includes('Unauthorized')) {
           return {
             statusCode: 401,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-            body: JSON.stringify({ error: "Unauthorized" }),
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ error: 'Unauthorized' }),
           };
         }
 
-        if (errorMessage.includes("not a member")) {
+        if (errorMessage.includes('not a member')) {
           return {
             statusCode: 404,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              error: "User is not a member of this group",
+              error: 'User is not a member of this group',
             }),
           };
         }
 
-        if (errorMessage.includes("Only group owners")) {
+        if (errorMessage.includes('Only group owners')) {
           return {
             statusCode: 403,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              error:
-                "You can only remove yourself or be removed by group owner",
+              error: 'You can only remove yourself or be removed by group owner',
             }),
           };
         }
 
         return {
           statusCode: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            error: "Failed to remove member",
+            error: 'Failed to remove member',
             details: errorMessage,
           }),
         };
@@ -502,10 +475,10 @@ export const handler: Handler = async (event, context) => {
 
       return {
         statusCode: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           success: true,
-          message: "Member removed successfully",
+          message: 'Member removed successfully',
         }),
       };
     }
@@ -513,16 +486,16 @@ export const handler: Handler = async (event, context) => {
     // Method not allowed
     return {
       statusCode: 405,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      body: JSON.stringify({ error: "Method not allowed" }),
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'Method not allowed' }),
     };
   } catch (error: any) {
-    console.error("Error:", error);
+    console.error('Error:', error);
     return {
       statusCode: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        error: "Internal server error",
+        error: 'Internal server error',
         details: error.message,
       }),
     };
