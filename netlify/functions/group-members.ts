@@ -177,59 +177,17 @@ export const handler: Handler = async (event, context) => {
         }
       );
 
-      // If user doesn't exist (404), create an invitation instead
+      // If user doesn't exist, return error
       if (!findUserResponse.ok) {
         const errorText = await findUserResponse.text();
         
-        // If it's a 404, the user doesn't exist - create an invitation
+        // If it's a 404, the user doesn't exist
         if (findUserResponse.status === 404) {
-          // Create pending invitation
-          // Note: UNIQUE constraint on (group_id, email) prevents duplicates
-          // If duplicate, we'll get a constraint violation error which we handle below
-          const { data: invitation, error: inviteError } = await supabase
-            .from('group_invitations')
-            .insert({
-              group_id: requestData.group_id,
-              email: normalizedEmail,
-              role: requestData.role || 'member',
-              invited_by: currentUser.id,
-            })
-            .select()
-            .single();
-
-          if (inviteError) {
-            console.error('Error creating invitation:', inviteError);
-            
-            // Handle duplicate invitation (UNIQUE constraint violation)
-            if (inviteError.code === '23505' || inviteError.message.includes('duplicate') || inviteError.message.includes('unique')) {
-              return {
-                statusCode: 400,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                  error: 'An invitation has already been sent to this email address',
-                  is_invitation: true,
-                }),
-              };
-            }
-            
-            return {
-              statusCode: 500,
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ 
-                error: 'Failed to create invitation', 
-                details: inviteError.message 
-              }),
-            };
-          }
-
           return {
-            statusCode: 201,
+            statusCode: 404,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              ...invitation,
-              email: normalizedEmail,
-              is_invitation: true,
-              message: 'Invitation sent. The user will be added to the group when they sign up.',
+            body: JSON.stringify({ 
+              error: 'User not found with the provided email. Please make sure the user has signed up.'
             }),
           };
         }
@@ -256,54 +214,13 @@ export const handler: Handler = async (event, context) => {
         ? usersData.users.find((u: any) => u.email?.toLowerCase() === normalizedEmail)
         : usersData.users?.[0];
 
-      // If user still not found in response, create invitation
+      // If user still not found in response, return error
       if (!targetUser || !targetUser.id) {
-        // Create pending invitation
-        // Note: UNIQUE constraint on (group_id, email) prevents duplicates
-        const { data: invitation, error: inviteError } = await supabase
-          .from('group_invitations')
-          .insert({
-            group_id: requestData.group_id,
-            email: normalizedEmail,
-            role: requestData.role || 'member',
-            invited_by: currentUser.id,
-          })
-          .select()
-          .single();
-
-        if (inviteError) {
-          console.error('Error creating invitation:', inviteError);
-          
-          // Handle duplicate invitation (UNIQUE constraint violation)
-          if (inviteError.code === '23505' || inviteError.message.includes('duplicate') || inviteError.message.includes('unique')) {
-            return {
-              statusCode: 400,
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ 
-                error: 'An invitation has already been sent to this email address',
-                is_invitation: true,
-              }),
-            };
-          }
-          
-          return {
-            statusCode: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              error: 'Failed to create invitation', 
-              details: inviteError.message 
-            }),
-          };
-        }
-
         return {
-          statusCode: 201,
+          statusCode: 404,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...invitation,
-            email: normalizedEmail,
-            is_invitation: true,
-            message: 'Invitation sent. The user will be added to the group when they sign up.',
+          body: JSON.stringify({ 
+            error: 'User not found with the provided email. Please make sure the user has signed up.'
           }),
         };
       }
@@ -350,7 +267,6 @@ export const handler: Handler = async (event, context) => {
         body: JSON.stringify({
           ...member,
           email: normalizedEmail,
-          is_invitation: false,
         }),
       };
     }

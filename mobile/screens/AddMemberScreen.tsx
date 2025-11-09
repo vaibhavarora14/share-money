@@ -79,21 +79,12 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
 
     setLoading(true);
     try {
-      const result = await onAddMember(email.trim());
-      // Check if it's an invitation (for non-existent users)
-      if (result && typeof result === 'object' && 'is_invitation' in result && result.is_invitation) {
-        Alert.alert(
-          "Invitation Sent",
-          result.message || "The user will be added to the group when they sign up.",
-          [{ text: "OK", onPress: handleDismiss }]
-        );
-      } else {
-        Alert.alert(
-          "Success",
-          "Member added successfully!",
-          [{ text: "OK", onPress: handleDismiss }]
-        );
-      }
+      await onAddMember(email.trim());
+      Alert.alert(
+        "Success",
+        "Member added successfully!",
+        [{ text: "OK", onPress: handleDismiss }]
+      );
     } catch (error) {
       Alert.alert(
         "Error",
@@ -164,7 +155,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                   { color: theme.colors.onSurfaceVariant },
                 ]}
               >
-                Enter the email address of the user you want to add to this group. If they don't have an account yet, they'll receive an invitation that will be processed when they sign up.
+                Enter the email address of the user you want to add to this group. The user must have an account to be added.
               </Text>
 
               <TextInput
