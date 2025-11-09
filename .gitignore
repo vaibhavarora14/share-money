@@ -11,7 +11,6 @@ netlify/node_modules/
 .env.local
 .env.*.local
 netlify/.env
-netlify/.env.*
 
 # Build outputs
 dist/
