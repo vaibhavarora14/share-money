@@ -162,7 +162,7 @@ export const handler: Handler = async (event, context) => {
           statusCode: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
-            error: 'Server configuration error: Service role key not configured. Please contact support.' 
+            error: 'Server configuration error: Service role key not configured. This is required for user lookup by email. Please configure SUPABASE_SERVICE_ROLE_KEY in your environment variables.' 
           }),
         };
       }
@@ -187,23 +187,27 @@ export const handler: Handler = async (event, context) => {
             statusCode: 404,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-              error: 'User not found with the provided email. Please make sure the user has signed up.'
+              error: 'User not found. The email address must belong to an existing account. Please ask the user to sign up first, or verify the email address is correct.'
             }),
           };
         }
         
         // Handle other errors
         let errorMessage = 'Failed to search for user';
+        let statusCode = 500;
+        
         if (findUserResponse.status === 401 || findUserResponse.status === 403) {
-          errorMessage = 'Server configuration error: Invalid service role key. Please contact support.';
+          errorMessage = 'Server configuration error: Invalid service role key. Please verify SUPABASE_SERVICE_ROLE_KEY is correctly configured in your environment variables.';
+          statusCode = 500;
           console.error('Admin API authentication failed:', errorText);
         } else {
           console.error('Admin API error:', findUserResponse.status, errorText);
           errorMessage = `Failed to search for user: ${errorText || 'Unknown error'}`;
+          statusCode = 500;
         }
         
         return {
-          statusCode: findUserResponse.status === 401 || findUserResponse.status === 403 ? 500 : 500,
+          statusCode,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           body: JSON.stringify({ error: errorMessage }),
         };
@@ -220,7 +224,7 @@ export const handler: Handler = async (event, context) => {
           statusCode: 404,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
-            error: 'User not found with the provided email. Please make sure the user has signed up.'
+            error: 'User not found. The email address must belong to an existing account. Please ask the user to sign up first, or verify the email address is correct.'
           }),
         };
       }
