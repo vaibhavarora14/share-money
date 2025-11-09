@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+.netlify/
+
+# Lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+deno.lock
+
+# Generated files
+*.min.js
+*.min.css
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Mobile build artifacts
+mobile/.expo/
+mobile/dist/
+mobile/android/
+mobile/ios/
+
+# Supabase
+supabase/.branches/
+supabase/.temp/
