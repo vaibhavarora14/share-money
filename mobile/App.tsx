@@ -858,20 +858,43 @@ function AppContent() {
 
     const result = await response.json();
 
-    // Refresh group details
+    // Refresh group details with retry logic
     if (groupDetails && selectedGroup) {
-      const detailsResponse = await fetch(
-        `${API_URL}/groups/${selectedGroup.id}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+      let retries = 2;
+      let success = false;
+      
+      while (retries > 0 && !success) {
+        try {
+          const detailsResponse = await fetch(
+            `${API_URL}/groups/${selectedGroup.id}`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+            }
+          );
+          
+          if (detailsResponse.ok) {
+            const updatedGroup: GroupWithMembers = await detailsResponse.json();
+            setGroupDetails(updatedGroup);
+            success = true;
+          } else if (retries === 1) {
+            // Only log error on last retry to avoid noise
+            console.warn('Failed to refresh group details after adding member:', detailsResponse.status);
+          }
+        } catch (error) {
+          if (retries === 1) {
+            // Only log error on last retry
+            console.warn('Error refreshing group details after adding member:', error);
+          }
         }
-      );
-      if (detailsResponse.ok) {
-        const updatedGroup: GroupWithMembers = await detailsResponse.json();
-        setGroupDetails(updatedGroup);
+        
+        retries--;
+        if (!success && retries > 0) {
+          // Wait 200ms before retry
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
       }
     }
 
@@ -906,20 +929,43 @@ function AppContent() {
       );
     }
 
-    // Refresh group details
+    // Refresh group details with retry logic
     if (groupDetails && selectedGroup) {
-      const detailsResponse = await fetch(
-        `${API_URL}/groups/${selectedGroup.id}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+      let retries = 2;
+      let success = false;
+      
+      while (retries > 0 && !success) {
+        try {
+          const detailsResponse = await fetch(
+            `${API_URL}/groups/${selectedGroup.id}`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+            }
+          );
+          
+          if (detailsResponse.ok) {
+            const updatedGroup: GroupWithMembers = await detailsResponse.json();
+            setGroupDetails(updatedGroup);
+            success = true;
+          } else if (retries === 1) {
+            // Only log error on last retry to avoid noise
+            console.warn('Failed to refresh group details after removing member:', detailsResponse.status);
+          }
+        } catch (error) {
+          if (retries === 1) {
+            // Only log error on last retry
+            console.warn('Error refreshing group details after removing member:', error);
+          }
         }
-      );
-      if (detailsResponse.ok) {
-        const updatedGroup: GroupWithMembers = await detailsResponse.json();
-        setGroupDetails(updatedGroup);
+        
+        retries--;
+        if (!success && retries > 0) {
+          // Wait 200ms before retry
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
       }
     }
   };
