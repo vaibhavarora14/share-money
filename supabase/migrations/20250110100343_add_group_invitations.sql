@@ -197,6 +197,13 @@ CREATE POLICY "Users can view relevant invitations"
         )
       )
     )
+    OR
+    -- Any group member can see invitations for their groups
+    EXISTS (
+      SELECT 1 FROM group_members
+      WHERE group_members.group_id = group_invitations.group_id
+      AND group_members.user_id = auth.uid()
+    )
   );
 
 -- Group owners can create invitations
