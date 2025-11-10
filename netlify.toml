@@ -16,3 +16,8 @@
   to = "/.netlify/functions/group-members"
   status = 200
 
+[[redirects]]
+  from = "/api/invitations/*"
+  to = "/.netlify/functions/invitations/:splat"
+  status = 200
+
