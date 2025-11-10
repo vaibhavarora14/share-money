@@ -21,12 +21,15 @@ async function createInvitation(
   email: string,
   invitedBy: string
 ): Promise<{ id: string } | null> {
+  // Normalize email to prevent duplicate invitations with different casing
+  const normalizedEmail = email.toLowerCase().trim();
+  
   // Check if there's already a pending invitation
   const { data: existingInvitation } = await supabase
     .from('group_invitations')
     .select('id')
     .eq('group_id', groupId)
-    .eq('email', email)
+    .eq('email', normalizedEmail)
     .eq('status', 'pending')
     .single();
 
@@ -42,7 +45,7 @@ async function createInvitation(
     .from('group_invitations')
     .insert({
       group_id: groupId,
-      email: email,
+      email: normalizedEmail,
       invited_by: invitedBy,
       token: token,
       status: 'pending',
@@ -177,11 +180,20 @@ export const handler: Handler = async (event, context) => {
         .single();
 
       if (membershipError || !membership || membership.role !== 'owner') {
-        return {
-          statusCode: 403,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Only group owners can add members' }),
-        };
+        // Also check if user created the group
+        const { data: group } = await supabase
+          .from('groups')
+          .select('created_by')
+          .eq('id', requestData.group_id)
+          .single();
+
+        if (!group || group.created_by !== currentUser.id) {
+          return {
+            statusCode: 403,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ error: 'Only group owners can add members' }),
+          };
+        }
       }
 
       // Validate and normalize email
