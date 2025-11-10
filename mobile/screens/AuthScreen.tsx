@@ -48,17 +48,22 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
     setLoading(true);
     try {
-      const { error } = isSignUp
+      const result = isSignUp
         ? await signUp(email.trim(), password)
         : await signIn(email.trim(), password);
 
-      if (error) {
+      if (result.error) {
+        const errorMessage = result.error.message || "An error occurred";
+        const errorTitle = isSignUp ? "Sign Up Failed" : "Sign In Failed";
+        
         Alert.alert(
-          isSignUp ? "Sign Up Error" : "Sign In Error",
-          error.message || "An error occurred"
+          errorTitle,
+          errorMessage,
+          [{ text: "OK", style: "default" }]
         );
       }
     } catch (err) {
+      console.error("Unexpected error in authentication:", err);
       Alert.alert("Error", "An unexpected error occurred");
     } finally {
       setLoading(false);
@@ -70,13 +75,20 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     try {
       const { error } = await signInWithGoogle();
       if (error) {
+        const errorMessage = error.message || "Failed to sign in with Google";
         Alert.alert(
-          "Google Sign In Error",
-          error.message || "Failed to sign in with Google"
+          "Google Sign In Failed",
+          errorMessage,
+          [{ text: "OK", style: "default" }]
         );
       }
     } catch (err) {
-      Alert.alert("Error", "An unexpected error occurred");
+      console.error("Error in Google sign in:", err);
+      Alert.alert(
+        "Error",
+        "An unexpected error occurred. Please try again.",
+        [{ text: "OK", style: "default" }]
+      );
     } finally {
       setGoogleLoading(false);
     }
