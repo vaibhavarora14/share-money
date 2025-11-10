@@ -23,7 +23,7 @@ import {
 } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Transaction } from "../types";
-import { CURRENCIES, getCurrencySymbol } from "../utils/currency";
+import { CURRENCIES, DEFAULT_CURRENCY, getCurrencySymbol } from "../utils/currency";
 
 interface TransactionFormScreenProps {
   visible: boolean;
@@ -42,7 +42,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   onSave,
   onDismiss,
   onDelete,
-  defaultCurrency = "USD",
+  defaultCurrency = DEFAULT_CURRENCY,
 }) => {
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
@@ -162,7 +162,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
         date: date.trim(),
         type,
         category: category.trim() || undefined,
-        currency: currency || defaultCurrency || "USD",
+        currency: currency || defaultCurrency || DEFAULT_CURRENCY,
       });
       handleDismiss();
     } catch (error) {

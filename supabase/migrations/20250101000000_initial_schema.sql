@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS groups (
   name VARCHAR(255) NOT NULL,
   description TEXT,
   created_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  currency VARCHAR(3) DEFAULT 'USD',
+  currency VARCHAR(3) DEFAULT 'INR',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   category VARCHAR(50),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
-  currency VARCHAR(3) DEFAULT 'USD',
+  currency VARCHAR(3) DEFAULT 'INR',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
