@@ -162,7 +162,7 @@ export const handler: Handler = async (event, context) => {
           statusCode: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
-            error: 'Server configuration error: Service role key not configured. Please contact support.' 
+            error: 'Server configuration error: Service role key not configured. This is required for user lookup by email. Please configure SUPABASE_SERVICE_ROLE_KEY in your environment variables.' 
           }),
         };
       }
@@ -177,75 +177,37 @@ export const handler: Handler = async (event, context) => {
         }
       );
 
-      // If user doesn't exist (404), create an invitation instead
+      // If user doesn't exist, return error
       if (!findUserResponse.ok) {
         const errorText = await findUserResponse.text();
         
-        // If it's a 404, the user doesn't exist - create an invitation
+        // If it's a 404, the user doesn't exist
         if (findUserResponse.status === 404) {
-          // Create pending invitation
-          // Note: UNIQUE constraint on (group_id, email) prevents duplicates
-          // If duplicate, we'll get a constraint violation error which we handle below
-          const { data: invitation, error: inviteError } = await supabase
-            .from('group_invitations')
-            .insert({
-              group_id: requestData.group_id,
-              email: normalizedEmail,
-              role: requestData.role || 'member',
-              invited_by: currentUser.id,
-            })
-            .select()
-            .single();
-
-          if (inviteError) {
-            console.error('Error creating invitation:', inviteError);
-            
-            // Handle duplicate invitation (UNIQUE constraint violation)
-            if (inviteError.code === '23505' || inviteError.message.includes('duplicate') || inviteError.message.includes('unique')) {
-              return {
-                statusCode: 400,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                  error: 'An invitation has already been sent to this email address',
-                  is_invitation: true,
-                }),
-              };
-            }
-            
-            return {
-              statusCode: 500,
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ 
-                error: 'Failed to create invitation', 
-                details: inviteError.message 
-              }),
-            };
-          }
-
           return {
-            statusCode: 201,
+            statusCode: 404,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              ...invitation,
-              email: normalizedEmail,
-              is_invitation: true,
-              message: 'Invitation sent. The user will be added to the group when they sign up.',
+            body: JSON.stringify({ 
+              error: 'User not found. The email address must belong to an existing account. Please ask the user to sign up first, or verify the email address is correct.'
             }),
           };
         }
         
         // Handle other errors
         let errorMessage = 'Failed to search for user';
+        let statusCode = 500;
+        
         if (findUserResponse.status === 401 || findUserResponse.status === 403) {
-          errorMessage = 'Server configuration error: Invalid service role key. Please contact support.';
+          errorMessage = 'Server configuration error: Invalid service role key. Please verify SUPABASE_SERVICE_ROLE_KEY is correctly configured in your environment variables.';
+          statusCode = 500;
           console.error('Admin API authentication failed:', errorText);
         } else {
           console.error('Admin API error:', findUserResponse.status, errorText);
           errorMessage = `Failed to search for user: ${errorText || 'Unknown error'}`;
+          statusCode = 500;
         }
         
         return {
-          statusCode: findUserResponse.status === 401 || findUserResponse.status === 403 ? 500 : 500,
+          statusCode,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           body: JSON.stringify({ error: errorMessage }),
         };
@@ -256,54 +218,13 @@ export const handler: Handler = async (event, context) => {
         ? usersData.users.find((u: any) => u.email?.toLowerCase() === normalizedEmail)
         : usersData.users?.[0];
 
-      // If user still not found in response, create invitation
+      // If user still not found in response, return error
       if (!targetUser || !targetUser.id) {
-        // Create pending invitation
-        // Note: UNIQUE constraint on (group_id, email) prevents duplicates
-        const { data: invitation, error: inviteError } = await supabase
-          .from('group_invitations')
-          .insert({
-            group_id: requestData.group_id,
-            email: normalizedEmail,
-            role: requestData.role || 'member',
-            invited_by: currentUser.id,
-          })
-          .select()
-          .single();
-
-        if (inviteError) {
-          console.error('Error creating invitation:', inviteError);
-          
-          // Handle duplicate invitation (UNIQUE constraint violation)
-          if (inviteError.code === '23505' || inviteError.message.includes('duplicate') || inviteError.message.includes('unique')) {
-            return {
-              statusCode: 400,
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ 
-                error: 'An invitation has already been sent to this email address',
-                is_invitation: true,
-              }),
-            };
-          }
-          
-          return {
-            statusCode: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              error: 'Failed to create invitation', 
-              details: inviteError.message 
-            }),
-          };
-        }
-
         return {
-          statusCode: 201,
+          statusCode: 404,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...invitation,
-            email: normalizedEmail,
-            is_invitation: true,
-            message: 'Invitation sent. The user will be added to the group when they sign up.',
+          body: JSON.stringify({ 
+            error: 'User not found. The email address must belong to an existing account. Please ask the user to sign up first, or verify the email address is correct.'
           }),
         };
       }
@@ -350,7 +271,6 @@ export const handler: Handler = async (event, context) => {
         body: JSON.stringify({
           ...member,
           email: normalizedEmail,
-          is_invitation: false,
         }),
       };
     }

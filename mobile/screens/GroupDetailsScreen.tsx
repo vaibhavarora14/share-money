@@ -23,6 +23,7 @@ import { TransactionFormScreen } from "./TransactionFormScreen";
 // API URL - must be set via EXPO_PUBLIC_API_URL environment variable
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
+
 interface GroupDetailsScreenProps {
   group: GroupWithMembers;
   onBack: () => void;
@@ -784,68 +785,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             >
               No members yet
             </Text>
-          )}
-
-          {/* Pending Invitations Section */}
-          {isOwner && group.invitations && group.invitations.length > 0 && (
-            <>
-              <View style={{ height: 24 }} />
-              <Text variant="titleSmall" style={[styles.sectionTitle, { marginBottom: 12 }]}>
-                Pending Invitations ({group.invitations.length})
-              </Text>
-              {group.invitations.map((invitation, index) => (
-                <React.Fragment key={invitation.id}>
-                  <Card style={styles.memberCard} mode="outlined">
-                    <Card.Content style={styles.memberContent}>
-                      <View style={styles.memberLeft}>
-                        <Text variant="titleSmall" style={styles.memberName}>
-                          {invitation.email}
-                        </Text>
-                        <Text
-                          variant="bodySmall"
-                          style={{ color: theme.colors.onSurfaceVariant }}
-                        >
-                          Invited {formatDate(invitation.created_at)}
-                        </Text>
-                      </View>
-                      <View style={styles.memberRight}>
-                        <Chip
-                          style={[
-                            styles.roleChip,
-                            {
-                              backgroundColor: theme.colors.surfaceVariant,
-                            },
-                          ]}
-                          textStyle={{
-                            color: theme.colors.onSurfaceVariant,
-                          }}
-                        >
-                          {invitation.role}
-                        </Chip>
-                        <Chip
-                          style={[
-                            styles.roleChip,
-                            {
-                              backgroundColor: theme.colors.secondaryContainer,
-                              marginLeft: 8,
-                            },
-                          ]}
-                          textStyle={{
-                            color: theme.colors.onSecondaryContainer,
-                            fontSize: 11,
-                          }}
-                        >
-                          Pending
-                        </Chip>
-                      </View>
-                    </Card.Content>
-                  </Card>
-                  {index < group.invitations.length - 1 && (
-                    <View style={{ height: 8 }} />
-                  )}
-                </React.Fragment>
-              ))}
-            </>
           )}
         </View>
 

@@ -1,7 +1,16 @@
 {
+  "name": "sharemoney",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "mobile",
+    "netlify"
+  ],
   "scripts": {
-    "dev:mobile": "cd mobile && npm start",
-    "dev:server": "cd netlify && npm run dev"
+    "install": "npm install",
+    "dev:mobile": "npm run start --workspace=mobile",
+    "dev:server": "npm run dev --workspace=netlify",
+    "dev": "npm run dev:server & npm run dev:mobile"
   },
   "devDependencies": {
     "@supabase/supabase-js": "^2.80.0"

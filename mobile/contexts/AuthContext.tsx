@@ -41,9 +41,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       setLoading(false);
     });
 
-    // Track if we've processed invitations for the current session to avoid duplicates
-    let lastProcessedUserId: string | null = null;
-
     // Listen for auth changes
     const {
       data: { subscription },
@@ -54,28 +51,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
-
-      // Process pending invitations only on SIGNED_IN event (not TOKEN_REFRESHED)
-      // and only once per user session to avoid redundant calls
-      if (session?.user && event === 'SIGNED_IN' && session.user.id !== lastProcessedUserId) {
-        try {
-          lastProcessedUserId = session.user.id;
-          // Call the function to accept pending invitations
-          const { error: inviteError } = await supabase.rpc('accept_pending_invitations');
-          if (inviteError) {
-            console.error('Error processing pending invitations:', inviteError);
-            // Don't block the auth flow if invitation processing fails
-          }
-        } catch (err) {
-          console.error('Error processing pending invitations:', err);
-          // Don't block the auth flow if invitation processing fails
-        }
-      }
-
-      // Reset tracking when user signs out
-      if (event === 'SIGNED_OUT') {
-        lastProcessedUserId = null;
-      }
     });
 
     return () => {
@@ -85,52 +60,123 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    if (error) {
-      // Check for rate limit errors
-      if (
-        error.status === 429 ||
-        error.message.includes("rate limit") ||
-        error.message.includes("429")
-      ) {
-        return {
-          error: new Error(
-            "Too many sign-in attempts. Please wait a moment and try again."
-          ),
-        };
+      if (error) {
+        // Check for invalid credentials (400 error)
+        if (
+          error.status === 400 &&
+          (error.message.includes("Invalid login credentials") ||
+            error.message.includes("invalid_credentials") ||
+            (error as any).code === "invalid_credentials")
+        ) {
+          return {
+            error: new Error(
+              "Invalid email or password. Please check your credentials and try again."
+            ),
+          };
+        }
+
+        // Check for rate limit errors
+        if (
+          error.status === 429 ||
+          error.message.includes("rate limit") ||
+          error.message.includes("429")
+        ) {
+          return {
+            error: new Error(
+              "Too many sign-in attempts. Please wait a moment and try again."
+            ),
+          };
+        }
+
+        // Check if it's an email confirmation error
+        if (
+          error.message.includes("email") &&
+          error.message.includes("confirm")
+        ) {
+          return {
+            error: new Error(
+              "Please check your email and confirm your account before signing in."
+            ),
+          };
+        }
+        return { error };
       }
 
-      // Check if it's an email confirmation error
-      if (
-        error.message.includes("email") &&
-        error.message.includes("confirm")
-      ) {
-        return {
-          error: new Error(
-            "Please check your email and confirm your account before signing in."
-          ),
-        };
-      }
-      return { error };
+      return { error: null };
+    } catch (err) {
+      console.error("Error in signIn:", err);
+      return {
+        error:
+          err instanceof Error ? err : new Error("Unknown error in signIn"),
+      };
     }
-
-    // Note: Invitation processing is handled by onAuthStateChange to avoid duplicates
-    return { error: null };
   };
 
   const signUp = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
-    
-    // Note: Invitation processing is handled by onAuthStateChange when session is confirmed
-    // This avoids duplicate processing and handles email confirmation flows correctly
-    return { error };
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (error) {
+        // Check for user already exists (400 error)
+        if (
+          error.status === 400 &&
+          (error.message.includes("User already registered") ||
+            error.message.includes("already registered") ||
+            error.message.includes("email address is already registered") ||
+            (error as any).code === "user_already_registered")
+        ) {
+          return {
+            error: new Error(
+              "An account with this email already exists. Please sign in instead."
+            ),
+          };
+        }
+
+        // Check for invalid email format
+        if (
+          error.status === 400 &&
+          (error.message.includes("Invalid email") ||
+            error.message.includes("email format") ||
+            (error as any).code === "invalid_email")
+        ) {
+          return {
+            error: new Error("Please enter a valid email address."),
+          };
+        }
+
+        // Check for weak password
+        if (
+          error.status === 400 &&
+          ((error.message.includes("Password") &&
+            error.message.includes("weak")) ||
+            error.message.includes("password is too weak") ||
+            (error as any).code === "weak_password")
+        ) {
+          return {
+            error: new Error(
+              "Password is too weak. Please choose a stronger password."
+            ),
+          };
+        }
+      }
+
+      return { error };
+    } catch (err) {
+      console.error("Error in signUp:", err);
+      return {
+        error:
+          err instanceof Error ? err : new Error("Unknown error in signUp"),
+      };
+    }
   };
 
   const signInWithGoogle = async () => {
@@ -216,10 +262,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           };
         }
 
-        // Wait for the session to propagate through onAuthStateChange
-        // Note: Invitation processing is handled by onAuthStateChange to avoid duplicates
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        
         return { error: null };
       }
 
