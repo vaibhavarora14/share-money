@@ -102,7 +102,6 @@ export const handler: Handler = async (event, context) => {
 
     // Extract email from user object (could be user.email or user.user?.email)
     const currentUserEmail = user.email || user.user?.email || null;
-    console.log('Current user:', { id: user.id, email: currentUserEmail, userObject: JSON.stringify(user) });
 
     // Create Supabase client
     const supabase = createClient(supabaseUrl, supabaseKey, {
@@ -184,10 +183,6 @@ export const handler: Handler = async (event, context) => {
       // Try to get user emails using admin API if service role key is available
       // Also include current user's email if they're a member
       const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-      console.log('Service role key available:', !!serviceRoleKey);
-      console.log('Members to process:', members?.length || 0);
-      console.log('Current user ID:', user.id);
-      console.log('Current user email:', currentUserEmail);
       let membersWithEmails = members || [];
 
       if (serviceRoleKey) {
@@ -204,7 +199,6 @@ export const handler: Handler = async (event, context) => {
 
               // Otherwise, fetch from Admin API
               try {
-                console.log(`Fetching user ${member.user_id} from Admin API`);
                 const userResponse = await fetch(
                   `${supabaseUrl}/auth/v1/admin/users/${member.user_id}`,
                   {
@@ -214,12 +208,9 @@ export const handler: Handler = async (event, context) => {
                     },
                   }
                 );
-                console.log(`Admin API response status for ${member.user_id}:`, userResponse.status);
                 if (userResponse.ok) {
                   const userData = await userResponse.json();
-                  console.log(`Admin API response for ${member.user_id}:`, JSON.stringify(userData));
                   const email = userData.user?.email || userData.email || userData?.email || null;
-                  console.log(`Extracted email for ${member.user_id}:`, email);
                   return {
                     ...member,
                     email: email,
@@ -250,8 +241,6 @@ export const handler: Handler = async (event, context) => {
         });
       }
 
-      console.log('Final members with emails:', JSON.stringify(membersWithEmails.map(m => ({ id: m.id, user_id: m.user_id, email: m.email }))));
-      
       const groupWithMembers: GroupWithMembers = {
         ...group,
         members: membersWithEmails,

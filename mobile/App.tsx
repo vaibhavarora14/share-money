@@ -768,6 +768,7 @@ function AppContent() {
     null
   );
   const [currentRoute, setCurrentRoute] = useState<string>("groups");
+  const [invitationsRefreshTrigger, setInvitationsRefreshTrigger] = useState<number>(0);
 
   const getAuthToken = async (): Promise<string | null> => {
     if (!session) return null;
@@ -857,6 +858,12 @@ function AppContent() {
     }
 
     const result = await response.json();
+
+    // Always trigger invitations refresh after adding a member
+    // This handles both cases:
+    // 1. Invitation was created (need to show it)
+    // 2. Member was added directly (need to remove any pending invitation for that user)
+    setInvitationsRefreshTrigger(prev => prev + 1);
 
     // Refresh group details with retry logic
     if (groupDetails && selectedGroup) {
@@ -1026,6 +1033,7 @@ function AppContent() {
       <>
         <GroupDetailsScreen
           group={groupDetails}
+          refreshTrigger={invitationsRefreshTrigger}
           onBack={() => {
             setGroupDetails(null);
             setSelectedGroup(null);
@@ -1062,8 +1070,9 @@ function AppContent() {
             visible={showAddMember}
             groupId={selectedGroup.id}
             onAddMember={async (email) => {
-              await handleAddMember(email);
-              setShowAddMember(false);
+              const result = await handleAddMember(email);
+              // Don't close modal automatically - let AddMemberScreen handle it
+              return result;
             }}
             onDismiss={() => {
               setShowAddMember(false);
@@ -1139,7 +1148,7 @@ export default function App() {
         console.error("Error info:", errorInfo);
       }}
       onReset={() => {
-        console.log("ErrorBoundary: Resetting...");
+        // Error boundary reset
       }}
     >
       <SafeAreaProvider>
