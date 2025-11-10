@@ -180,20 +180,11 @@ export const handler: Handler = async (event, context) => {
         .single();
 
       if (membershipError || !membership || membership.role !== 'owner') {
-        // Also check if user created the group
-        const { data: group } = await supabase
-          .from('groups')
-          .select('created_by')
-          .eq('id', requestData.group_id)
-          .single();
-
-        if (!group || group.created_by !== currentUser.id) {
-          return {
-            statusCode: 403,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ error: 'Only group owners can add members' }),
-          };
-        }
+        return {
+          statusCode: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Only group owners can add members' }),
+        };
       }
 
       // Validate and normalize email
