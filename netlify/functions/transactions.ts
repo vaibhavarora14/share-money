@@ -16,6 +16,7 @@ interface Transaction {
   category?: string;
   user_id?: string;
   group_id?: string;
+  currency?: string;
 }
 
 export const handler: Handler = async (event, context) => {

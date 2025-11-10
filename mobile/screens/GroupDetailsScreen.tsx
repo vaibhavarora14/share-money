@@ -1,6 +1,5 @@
-import { StatusBar } from "expo-status-bar";
-import React, { useCallback, useEffect, useState } from "react";
-import { Alert, ScrollView, StyleSheet, View } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import {
   ActivityIndicator,
   Appbar,
@@ -16,13 +15,12 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../supabase";
-import { GroupWithMembers, Transaction } from "../types";
+import { GroupInvitation, GroupWithMembers, Transaction } from "../types";
 import { formatCurrency } from "../utils/currency";
 import { TransactionFormScreen } from "./TransactionFormScreen";
 
 // API URL - must be set via EXPO_PUBLIC_API_URL environment variable
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
-
 
 interface GroupDetailsScreenProps {
   group: GroupWithMembers;
@@ -32,6 +30,7 @@ interface GroupDetailsScreenProps {
   onLeaveGroup?: () => void;
   onDeleteGroup?: () => void;
   onTransactionAdded?: () => void;
+  refreshTrigger?: number; // When this changes, refresh invitations
 }
 
 export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
@@ -42,6 +41,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   onLeaveGroup,
   onDeleteGroup,
   onTransactionAdded,
+  refreshTrigger,
 }) => {
   const [group, setGroup] = useState<GroupWithMembers>(initialGroup);
   const [loading, setLoading] = useState<boolean>(false);
@@ -55,7 +55,13 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [transactionsLoading, setTransactionsLoading] =
     useState<boolean>(false);
+  const [invitations, setInvitations] = useState<GroupInvitation[]>([]);
+  const [invitationsLoading, setInvitationsLoading] = useState<boolean>(false);
+  const [cancellingInvitationId, setCancellingInvitationId] = useState<
+    string | null
+  >(null);
   const [error, setError] = useState<string | null>(null);
+  const [membersExpanded, setMembersExpanded] = useState<boolean>(false);
   const { session, signOut } = useAuth();
   const theme = useTheme();
 
@@ -108,6 +114,14 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
       const data: GroupWithMembers = await response.json();
       setGroup(data);
+
+      // If invitations are included in the response, update state
+      if (data.invitations) {
+        const pendingInvitations = data.invitations.filter(
+          (inv) => inv.status === "pending"
+        );
+        setInvitations(pendingInvitations);
+      }
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Unknown error occurred";
@@ -163,10 +177,91 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     setGroup(initialGroup);
   }, [initialGroup]);
 
+  const fetchInvitations = useCallback(async (): Promise<void> => {
+    if (!API_URL || !session) return;
+
+    try {
+      setInvitationsLoading(true);
+      let {
+        data: { session: currentSession },
+      } = await supabase.auth.getSession();
+
+      if (!currentSession) return;
+
+      const token = currentSession.access_token;
+
+      const response = await fetch(
+        `${API_URL}/invitations?group_id=${group.id}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data: GroupInvitation[] = await response.json();
+        // Filter to only show pending invitations
+        const pendingInvitations = data.filter(
+          (inv) => inv.status === "pending"
+        );
+        setInvitations(pendingInvitations);
+      } else {
+        // Log error for debugging
+        const errorData = await response.json().catch(() => ({}));
+        console.error(
+          "Error fetching invitations:",
+          response.status,
+          errorData.error || "Unknown error"
+        );
+        // Set empty array on error (don't show invitations if fetch fails)
+        setInvitations([]);
+      }
+    } catch (err) {
+      console.error("Error fetching invitations:", err);
+      // Set empty array on error
+      setInvitations([]);
+    } finally {
+      setInvitationsLoading(false);
+    }
+  }, [session, group.id]);
+
   useEffect(() => {
     fetchGroupDetails();
     fetchTransactions();
   }, [fetchGroupDetails, fetchTransactions]);
+
+  // Fetch invitations separately, only when group ID changes
+  // Use a ref to track the last fetched group ID to prevent infinite loops
+  const lastFetchedGroupId = useRef<string | null>(null);
+  useEffect(() => {
+    // Only fetch if we haven't fetched for this group ID yet
+    // All members can view invitations, but only owners can cancel them
+    // This prevents infinite loops from group.members array reference changes
+    if (
+      group.id &&
+      session?.user?.id &&
+      lastFetchedGroupId.current !== group.id
+    ) {
+      fetchInvitations();
+      lastFetchedGroupId.current = group.id;
+    }
+  }, [group.id, session?.user?.id, fetchInvitations]);
+
+  // Refresh invitations when refreshTrigger changes (e.g., after adding a member)
+  useEffect(() => {
+    if (
+      refreshTrigger !== undefined &&
+      refreshTrigger > 0 &&
+      group.id &&
+      session?.user?.id
+    ) {
+      // Reset the last fetched group ID to force a refresh
+      lastFetchedGroupId.current = null;
+      fetchInvitations();
+    }
+  }, [refreshTrigger, group.id, session?.user?.id, fetchInvitations]);
 
   const handleDeleteGroup = async () => {
     Alert.alert(
@@ -290,10 +385,11 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 }
 
                 const errorData = await response.json().catch(() => ({}));
-                const errorMessage = errorData.error || `HTTP error! status: ${response.status}`;
-                
+                const errorMessage =
+                  errorData.error || `HTTP error! status: ${response.status}`;
+
                 // Show user-friendly error messages for specific cases
-                if (errorMessage.includes('last owner')) {
+                if (errorMessage.includes("last owner")) {
                   Alert.alert(
                     "Cannot Leave Group",
                     "You cannot leave the group because you are the last owner. Please transfer ownership to another member first or delete the group.",
@@ -301,7 +397,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                   );
                   return;
                 }
-                
+
                 throw new Error(errorMessage);
               }
 
@@ -478,15 +574,21 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     }
   };
 
-  const handleRemoveMember = async (memberUserId: string, memberEmail?: string) => {
+  const handleRemoveMember = async (
+    memberUserId: string,
+    memberEmail?: string
+  ) => {
     if (!onRemoveMember) {
       return;
     }
 
     const memberName = memberEmail || `User ${memberUserId.substring(0, 8)}...`;
     const isRemovingSelf = memberUserId === session?.user?.id;
-    const ownerCount = group.members?.filter((m) => m.role === "owner").length || 0;
-    const memberToRemove = group.members?.find((m) => m.user_id === memberUserId);
+    const ownerCount =
+      group.members?.filter((m) => m.role === "owner").length || 0;
+    const memberToRemove = group.members?.find(
+      (m) => m.user_id === memberUserId
+    );
     const isRemovingOwner = memberToRemove?.role === "owner";
 
     // Check if trying to remove the last owner
@@ -519,7 +621,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             } catch (error) {
               Alert.alert(
                 "Error",
-                error instanceof Error ? error.message : "Failed to remove member"
+                error instanceof Error
+                  ? error.message
+                  : "Failed to remove member"
               );
             } finally {
               setRemovingMemberId(null);
@@ -545,7 +649,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     }
   };
 
-
   const currentUserId = session?.user?.id;
   const isOwner =
     group.created_by === currentUserId ||
@@ -553,6 +656,90 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       (m) => m.user_id === currentUserId && m.role === "owner"
     );
   const isMember = group.members?.some((m) => m.user_id === currentUserId);
+
+  // Memoize isOwner to prevent unnecessary re-renders
+  const memoizedIsOwner = React.useMemo(
+    () => isOwner,
+    [
+      group.created_by,
+      currentUserId,
+      group.members?.length,
+      group.members?.find(
+        (m) => m.user_id === currentUserId && m.role === "owner"
+      )?.id,
+    ]
+  );
+
+  const handleCancelInvitation = async (invitationId: string) => {
+    if (!API_URL) {
+      Alert.alert("Error", "Unable to connect to the server");
+      return;
+    }
+
+    Alert.alert(
+      "Cancel Invitation",
+      "Are you sure you want to cancel this invitation?",
+      [
+        { text: "No", style: "cancel" },
+        {
+          text: "Yes",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setCancellingInvitationId(invitationId);
+
+              let {
+                data: { session: currentSession },
+              } = await supabase.auth.getSession();
+
+              if (!currentSession) {
+                Alert.alert("Error", "Not authenticated");
+                return;
+              }
+
+              const token = currentSession.access_token;
+
+              const response = await fetch(
+                `${API_URL}/invitations/${invitationId}`,
+                {
+                  method: "DELETE",
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                  },
+                }
+              );
+
+              if (!response.ok) {
+                if (response.status === 401) {
+                  await signOut();
+                  return;
+                }
+
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(
+                  errorData.error || `HTTP error! status: ${response.status}`
+                );
+              }
+
+              // Refresh invitations and reset fetch tracking
+              lastFetchedGroupId.current = null;
+              await fetchInvitations();
+            } catch (err) {
+              Alert.alert(
+                "Error",
+                err instanceof Error
+                  ? err.message
+                  : "Failed to cancel invitation"
+              );
+            } finally {
+              setCancellingInvitationId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   if (loading && !group.members) {
     return (
@@ -569,7 +756,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       </View>
     );
   }
-
 
   if (error) {
     return (
@@ -671,10 +857,22 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text variant="titleMedium" style={styles.sectionTitle}>
-              Members ({group.members?.length || 0})
-            </Text>
-            {isOwner && (
+            <Pressable
+              style={styles.sectionTitleRow}
+              onPress={() => setMembersExpanded(!membersExpanded)}
+            >
+              <IconButton
+                icon={membersExpanded ? "chevron-down" : "chevron-right"}
+                size={20}
+                iconColor={theme.colors.onSurface}
+                onPress={() => setMembersExpanded(!membersExpanded)}
+                style={styles.expandButton}
+              />
+              <Text variant="titleMedium" style={styles.sectionTitle}>
+                Members ({(group.members?.length || 0) + invitations.length})
+              </Text>
+            </Pressable>
+            {memoizedIsOwner && (
               <IconButton
                 icon="plus"
                 size={20}
@@ -684,111 +882,220 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             )}
           </View>
 
-          {group.members && group.members.length > 0 ? (
-            group.members.map((member, index) => {
-              const memberName = member.email || `User ${member.user_id.substring(0, 8)}...`;
-              const isCurrentUser = member.user_id === session?.user?.id;
-              const ownerCount = group.members?.filter((m) => m.role === "owner").length || 0;
-              // Owners can remove any member (including themselves if not last owner)
-              // Regular members can remove themselves
-              const canRemove = 
-                (isOwner && (!isCurrentUser || (isCurrentUser && (ownerCount > 1 || member.role !== "owner")))) ||
-                (!isOwner && isCurrentUser);
-              const isRemoving = removingMemberId === member.user_id;
+          {membersExpanded && (
+            <>
+              {group.members && group.members.length > 0 ? (
+                <>
+                  {group.members.map((member, index) => {
+                    const memberName =
+                      member.email ||
+                      `User ${member.user_id.substring(0, 8)}...`;
+                    const isCurrentUser = member.user_id === session?.user?.id;
+                    const ownerCount =
+                      group.members?.filter((m) => m.role === "owner").length ||
+                      0;
+                    // Owners can remove any member (including themselves if not last owner)
+                    // Regular members can remove themselves
+                    const canRemove =
+                      (isOwner &&
+                        (!isCurrentUser ||
+                          (isCurrentUser &&
+                            (ownerCount > 1 || member.role !== "owner")))) ||
+                      (!isOwner && isCurrentUser);
+                    const isRemoving = removingMemberId === member.user_id;
 
-              return (
-                <React.Fragment key={member.id}>
-                  <Card 
-                    style={[
-                      styles.memberCard,
-                      isRemoving && styles.memberCardRemoving
-                    ]} 
-                    mode="outlined"
-                  >
-                    <Card.Content style={styles.memberContent}>
-                      <View style={styles.memberLeft}>
-                        <Text 
-                          variant="titleSmall" 
+                    return (
+                      <React.Fragment key={member.id}>
+                        <Card
                           style={[
-                            styles.memberName,
-                            isRemoving && { opacity: 0.6 }
+                            styles.memberCard,
+                            isRemoving && styles.memberCardRemoving,
                           ]}
+                          mode="outlined"
                         >
-                          {memberName}
-                        </Text>
-                        <Text
-                          variant="bodySmall"
-                          style={{ 
-                            color: theme.colors.onSurfaceVariant,
-                            opacity: isRemoving ? 0.6 : 1
-                          }}
-                        >
-                          Joined {formatDate(member.joined_at)}
-                        </Text>
-                      </View>
-                      <View style={styles.memberRight}>
-                        {isRemoving ? (
-                          <ActivityIndicator 
-                            size="small" 
-                            color={theme.colors.primary}
-                            style={styles.removingIndicator}
-                          />
-                        ) : (
-                          <>
-                            <Chip
-                              style={[
-                                styles.roleChip,
-                                {
-                                  backgroundColor:
-                                    member.role === "owner"
-                                      ? theme.colors.primaryContainer
-                                      : theme.colors.surfaceVariant,
-                                },
-                              ]}
-                              textStyle={{
-                                color:
-                                  member.role === "owner"
-                                    ? theme.colors.onPrimaryContainer
-                                    : theme.colors.onSurfaceVariant,
-                              }}
-                            >
-                              {member.role}
-                            </Chip>
-                            {canRemove && (
-                              <IconButton
-                                icon="delete-outline"
-                                size={20}
-                                iconColor={theme.colors.error}
-                                onPress={() => handleRemoveMember(member.user_id, member.email)}
-                                style={styles.removeMemberButton}
-                                disabled={removingMemberId !== null}
-                              />
-                            )}
-                          </>
+                          <Card.Content style={styles.memberContent}>
+                            <View style={styles.memberLeft}>
+                              <Text
+                                variant="titleSmall"
+                                style={[
+                                  styles.memberName,
+                                  isRemoving && { opacity: 0.6 },
+                                ]}
+                              >
+                                {memberName}
+                              </Text>
+                              <Text
+                                variant="bodySmall"
+                                style={{
+                                  color: theme.colors.onSurfaceVariant,
+                                  opacity: isRemoving ? 0.6 : 1,
+                                }}
+                              >
+                                Joined {formatDate(member.joined_at)}
+                              </Text>
+                            </View>
+                            <View style={styles.memberRight}>
+                              {isRemoving ? (
+                                <ActivityIndicator
+                                  size="small"
+                                  color={theme.colors.primary}
+                                  style={styles.removingIndicator}
+                                />
+                              ) : (
+                                <>
+                                  <Chip
+                                    style={[
+                                      styles.roleChip,
+                                      {
+                                        backgroundColor:
+                                          member.role === "owner"
+                                            ? theme.colors.primaryContainer
+                                            : theme.colors.surfaceVariant,
+                                      },
+                                    ]}
+                                    textStyle={{
+                                      color:
+                                        member.role === "owner"
+                                          ? theme.colors.onPrimaryContainer
+                                          : theme.colors.onSurfaceVariant,
+                                    }}
+                                  >
+                                    {member.role}
+                                  </Chip>
+                                  {canRemove && (
+                                    <IconButton
+                                      icon="delete-outline"
+                                      size={20}
+                                      iconColor={theme.colors.error}
+                                      onPress={() =>
+                                        handleRemoveMember(
+                                          member.user_id,
+                                          member.email
+                                        )
+                                      }
+                                      style={styles.removeMemberButton}
+                                      disabled={removingMemberId !== null}
+                                    />
+                                  )}
+                                </>
+                              )}
+                            </View>
+                          </Card.Content>
+                        </Card>
+                        {index < group.members!.length - 1 && (
+                          <View style={{ height: 8 }} />
                         )}
-                      </View>
-                    </Card.Content>
-                  </Card>
-                  {index < group.members!.length - 1 && (
+                      </React.Fragment>
+                    );
+                  })}
+                </>
+              ) : (
+                <Text
+                  variant="bodyMedium"
+                  style={{
+                    color: theme.colors.onSurfaceVariant,
+                    textAlign: "center",
+                  }}
+                >
+                  No members yet
+                </Text>
+              )}
+
+              {invitations.length > 0 && (
+                <>
+                  {group.members && group.members.length > 0 && (
                     <View style={{ height: 8 }} />
                   )}
-                </React.Fragment>
-              );
-            })
-          ) : (
-            <Text
-              variant="bodyMedium"
-              style={{
-                color: theme.colors.onSurfaceVariant,
-                textAlign: "center",
-              }}
-            >
-              No members yet
-            </Text>
+                  {invitationsLoading ? (
+                    <ActivityIndicator
+                      size="small"
+                      style={{ marginVertical: 16 }}
+                    />
+                  ) : (
+                    invitations.map((invitation, index) => {
+                      const isCancelling =
+                        cancellingInvitationId === invitation.id;
+                      const expiresDate = new Date(invitation.expires_at);
+                      const isExpired = expiresDate < new Date();
+
+                      return (
+                        <React.Fragment key={invitation.id}>
+                          <Card
+                            style={[
+                              styles.memberCard,
+                              isCancelling && styles.memberCardRemoving,
+                              isExpired && { opacity: 0.6 },
+                            ]}
+                            mode="outlined"
+                          >
+                            <Card.Content style={styles.memberContent}>
+                              <View style={styles.memberLeft}>
+                                <Text
+                                  variant="titleSmall"
+                                  style={[
+                                    styles.memberName,
+                                    isCancelling && { opacity: 0.6 },
+                                  ]}
+                                >
+                                  {invitation.email}
+                                </Text>
+                                <Text
+                                  variant="bodySmall"
+                                  style={{
+                                    color: theme.colors.onSurfaceVariant,
+                                    opacity: isCancelling ? 0.6 : 1,
+                                  }}
+                                >
+                                  Invited {formatDate(invitation.created_at)}
+                                  {isExpired
+                                    ? " • Expired"
+                                    : ` • Expires ${formatDate(
+                                        invitation.expires_at
+                                      )}`}
+                                </Text>
+                              </View>
+                              <View style={styles.memberRight}>
+                                {memoizedIsOwner && (
+                                  <>
+                                    {isCancelling ? (
+                                      <ActivityIndicator
+                                        size="small"
+                                        color={theme.colors.primary}
+                                        style={styles.removingIndicator}
+                                      />
+                                    ) : (
+                                      <IconButton
+                                        icon="close-circle-outline"
+                                        size={20}
+                                        iconColor={theme.colors.error}
+                                        onPress={() =>
+                                          handleCancelInvitation(invitation.id)
+                                        }
+                                        style={styles.removeMemberButton}
+                                        disabled={
+                                          cancellingInvitationId !== null
+                                        }
+                                      />
+                                    )}
+                                  </>
+                                )}
+                              </View>
+                            </Card.Content>
+                          </Card>
+                          {index < invitations.length - 1 && (
+                            <View style={{ height: 8 }} />
+                          )}
+                        </React.Fragment>
+                      );
+                    })
+                  )}
+                </>
+              )}
+            </>
           )}
         </View>
 
-        <View style={styles.section}>
+        <View style={[styles.section, { marginTop: 24 }]}>
           <Text variant="titleMedium" style={styles.sectionTitle}>
             Transactions ({transactions.length})
           </Text>
@@ -851,15 +1158,38 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               );
             })
           ) : (
-            <Text
-              variant="bodyMedium"
-              style={{
-                color: theme.colors.onSurfaceVariant,
-                textAlign: "center",
-              }}
-            >
-              No transactions yet
-            </Text>
+            <Card style={styles.emptyStateCard} mode="outlined">
+              <Card.Content style={styles.emptyStateContent}>
+                <Text
+                  variant="headlineSmall"
+                  style={[
+                    styles.emptyStateIcon,
+                    { color: theme.colors.onSurfaceVariant },
+                  ]}
+                >
+                  💰
+                </Text>
+                <Text
+                  variant="titleMedium"
+                  style={[
+                    styles.emptyStateTitle,
+                    { color: theme.colors.onSurface },
+                  ]}
+                >
+                  No Transactions Yet
+                </Text>
+                <Text
+                  variant="bodyMedium"
+                  style={[
+                    styles.emptyStateMessage,
+                    { color: theme.colors.onSurfaceVariant },
+                  ]}
+                >
+                  Start tracking expenses and income for this group by adding
+                  your first transaction.
+                </Text>
+              </Card.Content>
+            </Card>
           )}
 
           {transactions.length > 5 && (
@@ -944,10 +1274,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 6,
   },
   sectionTitle: {
     fontWeight: "600",
+  },
+  sectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  expandButton: {
+    margin: 0,
+    marginLeft: -8,
   },
   memberCard: {
     marginBottom: 0,
@@ -1015,5 +1354,26 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 16,
     bottom: 16, // Space for bottom navigation bar
+  },
+  emptyStateCard: {
+    marginTop: 8,
+  },
+  emptyStateContent: {
+    alignItems: "center",
+    paddingVertical: 32,
+    paddingHorizontal: 16,
+  },
+  emptyStateIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  emptyStateTitle: {
+    fontWeight: "600",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  emptyStateMessage: {
+    textAlign: "center",
+    lineHeight: 20,
   },
 });
