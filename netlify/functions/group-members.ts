@@ -1,5 +1,6 @@
 import { Handler } from '@netlify/functions';
 import { createClient } from '@supabase/supabase-js';
+import { randomBytes } from 'crypto';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,6 +12,53 @@ interface AddMemberRequest {
   group_id: string;
   email: string;
   role?: 'owner' | 'member';
+}
+
+// Helper function to create an invitation
+async function createInvitation(
+  supabase: any,
+  groupId: string,
+  email: string,
+  invitedBy: string
+): Promise<{ id: string } | null> {
+  // Normalize email to prevent duplicate invitations with different casing
+  const normalizedEmail = email.toLowerCase().trim();
+  
+  // Check if there's already a pending invitation
+  const { data: existingInvitation } = await supabase
+    .from('group_invitations')
+    .select('id')
+    .eq('group_id', groupId)
+    .eq('email', normalizedEmail)
+    .eq('status', 'pending')
+    .single();
+
+  if (existingInvitation) {
+    return null; // Invitation already exists
+  }
+
+  // Generate a unique token for the invitation
+  const token = randomBytes(32).toString('hex');
+
+  // Create invitation
+  const { data: invitation, error: inviteError } = await supabase
+    .from('group_invitations')
+    .insert({
+      group_id: groupId,
+      email: normalizedEmail,
+      invited_by: invitedBy,
+      token: token,
+      status: 'pending',
+    })
+    .select()
+    .single();
+
+  if (inviteError) {
+    console.error('Supabase error creating invitation:', inviteError);
+    throw new Error(`Failed to create invitation: ${inviteError.message}`);
+  }
+
+  return invitation;
 }
 
 export const handler: Handler = async (event, context) => {
@@ -177,19 +225,49 @@ export const handler: Handler = async (event, context) => {
         }
       );
 
-      // If user doesn't exist, return error
+      // If user lookup fails, try to create invitation
       if (!findUserResponse.ok) {
         const errorText = await findUserResponse.text();
         
-        // If it's a 404, the user doesn't exist
-        if (findUserResponse.status === 404) {
-          return {
-            statusCode: 404,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              error: 'User not found. The email address must belong to an existing account. Please ask the user to sign up first, or verify the email address is correct.'
-            }),
-          };
+        // If it's a 404 or empty result, user doesn't exist - create invitation
+        if (findUserResponse.status === 404 || findUserResponse.status === 200) {
+          try {
+            const invitation = await createInvitation(
+              supabase,
+              requestData.group_id,
+              normalizedEmail,
+              currentUser.id
+            );
+
+            if (!invitation) {
+              return {
+                statusCode: 200,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  invitation: true,
+                  message: 'An invitation has already been sent to this email address. The user will be added to the group when they sign up.',
+                  email: normalizedEmail,
+                }),
+              };
+            }
+
+            return {
+              statusCode: 201,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                invitation: true,
+                message: 'Invitation sent successfully. The user will be added to the group when they sign up.',
+                email: normalizedEmail,
+                invitation_id: invitation.id,
+              }),
+            };
+          } catch (error: any) {
+            return {
+              statusCode: 500,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ error: error.message || 'Failed to create invitation' }),
+            };
+          }
         }
         
         // Handle other errors
@@ -218,15 +296,45 @@ export const handler: Handler = async (event, context) => {
         ? usersData.users.find((u: any) => u.email?.toLowerCase() === normalizedEmail)
         : usersData.users?.[0];
 
-      // If user still not found in response, return error
+      // If user doesn't exist, create an invitation instead
       if (!targetUser || !targetUser.id) {
-        return {
-          statusCode: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            error: 'User not found. The email address must belong to an existing account. Please ask the user to sign up first, or verify the email address is correct.'
-          }),
-        };
+        try {
+          const invitation = await createInvitation(
+            supabase,
+            requestData.group_id,
+            normalizedEmail,
+            currentUser.id
+          );
+
+          if (!invitation) {
+            return {
+              statusCode: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                invitation: true,
+                message: 'An invitation has already been sent to this email address. The user will be added to the group when they sign up.',
+                email: normalizedEmail,
+              }),
+            };
+          }
+
+          return {
+            statusCode: 201,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              invitation: true,
+              message: 'Invitation sent successfully. The user will be added to the group when they sign up.',
+              email: normalizedEmail,
+              invitation_id: invitation.id,
+            }),
+          };
+        } catch (error: any) {
+          return {
+            statusCode: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ error: error.message || 'Failed to create invitation' }),
+          };
+        }
       }
 
       // User exists - check if already a member
@@ -243,6 +351,47 @@ export const handler: Handler = async (event, context) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           body: JSON.stringify({ error: 'User is already a member of this group' }),
         };
+      }
+
+      // Check if there's a pending invitation for this user and accept it
+      const { data: pendingInvitation } = await supabase
+        .from('group_invitations')
+        .select('id')
+        .eq('group_id', requestData.group_id)
+        .eq('email', normalizedEmail)
+        .eq('status', 'pending')
+        .single();
+
+      if (pendingInvitation) {
+        // Accept the invitation (this will add the user to the group)
+        const { error: acceptError } = await supabase.rpc('accept_group_invitation', {
+          invitation_id: pendingInvitation.id,
+          accepting_user_id: targetUser.id,
+        });
+
+        if (acceptError) {
+          console.error('Error accepting invitation:', acceptError);
+          // Continue to add member directly if accepting invitation fails
+        } else {
+          // Invitation accepted successfully, fetch the member record
+          const { data: member } = await supabase
+            .from('group_members')
+            .select('*')
+            .eq('group_id', requestData.group_id)
+            .eq('user_id', targetUser.id)
+            .single();
+
+          if (member) {
+            return {
+              statusCode: 201,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ...member,
+                email: normalizedEmail,
+              }),
+            };
+          }
+        }
       }
 
       // Add member to group
