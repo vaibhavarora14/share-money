@@ -1,6 +1,9 @@
 import { Handler } from '@netlify/functions';
 import { createClient } from '@supabase/supabase-js';
 
+// Get default currency from environment variable, default to INR
+const DEFAULT_CURRENCY = process.env.DEFAULT_CURRENCY || 'INR';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -201,7 +204,7 @@ export const handler: Handler = async (event, context) => {
           type: transactionData.type,
           category: transactionData.category || null,
           group_id: transactionData.group_id || null,
-          currency: transactionData.currency || 'USD',
+          currency: transactionData.currency || DEFAULT_CURRENCY,
         })
         .select()
         .single();
@@ -259,7 +262,7 @@ export const handler: Handler = async (event, context) => {
       if (transactionData.date !== undefined) updateData.date = transactionData.date;
       if (transactionData.type !== undefined) updateData.type = transactionData.type;
       if (transactionData.category !== undefined) updateData.category = transactionData.category || null;
-      if (transactionData.currency !== undefined) updateData.currency = transactionData.currency || 'USD';
+      if (transactionData.currency !== undefined) updateData.currency = transactionData.currency || DEFAULT_CURRENCY;
 
       const { data: transaction, error } = await supabase
         .from('transactions')

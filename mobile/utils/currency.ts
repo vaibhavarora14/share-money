@@ -1,5 +1,8 @@
 import { Currency } from "../types";
 
+// Get default currency from environment variable, default to INR
+export const DEFAULT_CURRENCY = process.env.EXPO_PUBLIC_DEFAULT_CURRENCY || 'INR';
+
 // Common currencies with their symbols
 export const CURRENCIES: Currency[] = [
   { code: 'USD', symbol: '$', name: 'US Dollar' },
@@ -19,12 +22,12 @@ export const CURRENCIES: Currency[] = [
   { code: 'KRW', symbol: '₩', name: 'South Korean Won' },
 ];
 
-export function getCurrencySymbol(currencyCode: string = 'USD'): string {
+export function getCurrencySymbol(currencyCode: string = DEFAULT_CURRENCY): string {
   const currency = CURRENCIES.find(c => c.code === currencyCode);
   return currency?.symbol || '$';
 }
 
-export function formatCurrency(amount: number, currencyCode: string = 'USD'): string {
+export function formatCurrency(amount: number, currencyCode: string = DEFAULT_CURRENCY): string {
   const symbol = getCurrencySymbol(currencyCode);
   // For currencies like JPY that don't use decimals
   const decimals = ['JPY', 'KRW'].includes(currencyCode) ? 0 : 2;

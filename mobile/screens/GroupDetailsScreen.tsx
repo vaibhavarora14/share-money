@@ -17,7 +17,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../supabase";
 import { GroupWithMembers, Transaction } from "../types";
-import { formatCurrency } from "../utils/currency";
+import { formatCurrency, DEFAULT_CURRENCY } from "../utils/currency";
 import { TransactionFormScreen } from "./TransactionFormScreen";
 
 // API URL - must be set via EXPO_PUBLIC_API_URL environment variable
@@ -362,7 +362,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         body: JSON.stringify({
           ...transactionData,
           group_id: group.id,
-          currency: transactionData.currency || group.currency || "USD",
+          currency: transactionData.currency || group.currency || DEFAULT_CURRENCY,
         }),
       });
 
@@ -411,7 +411,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         body: JSON.stringify({
           ...transactionData,
           id: editingTransaction.id,
-          currency: transactionData.currency || group.currency || "USD",
+          currency: transactionData.currency || group.currency || DEFAULT_CURRENCY,
         }),
       });
 
@@ -912,7 +912,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               }
             : undefined
         }
-        defaultCurrency={group.currency || "USD"}
+        defaultCurrency={group.currency || DEFAULT_CURRENCY}
       />
     </SafeAreaView>
   );

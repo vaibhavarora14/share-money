@@ -110,6 +110,9 @@ SUPABASE_SERVICE_ROLE_KEY=sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz
 # SUPABASE_URL=https://your-project.supabase.co
 # SUPABASE_ANON_KEY=your_anon_key
 # SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+
+# Default Currency (optional - defaults to INR)
+# DEFAULT_CURRENCY=INR
 ```
 
 #### Mobile `.env`
@@ -134,6 +137,9 @@ EXPO_PUBLIC_API_URL=http://localhost:8888/api
 # EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 # EXPO_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 # EXPO_PUBLIC_API_URL=https://sharemoney-app.netlify.app/api
+
+# Default Currency (optional - defaults to INR)
+# EXPO_PUBLIC_DEFAULT_CURRENCY=INR
 ```
 
 **Get your local IP:**
@@ -217,6 +223,7 @@ npm start
    - `SUPABASE_URL`
    - `SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY`
+   - `DEFAULT_CURRENCY` (optional, defaults to INR)
 
 2. Deploy:
    ```bash
@@ -283,6 +290,12 @@ Automatic Supabase migrations are configured via GitHub Actions.
 - **Expo requirement**: All mobile env vars must use `EXPO_PUBLIC_` prefix
 - **Netlify**: Loads from root `.env` automatically in dev
 - **Mobile**: Loads from `mobile/.env` (Expo SDK 49+ native support)
+
+#### Currency Configuration
+
+- **Mobile App**: Set `EXPO_PUBLIC_DEFAULT_CURRENCY` in `mobile/.env` (defaults to INR)
+- **Server-side**: Set `DEFAULT_CURRENCY` in root `.env` or Netlify dashboard (defaults to INR)
+- **Database**: Default currency is set to INR in the migration schema
 
 ## Debugging
 
