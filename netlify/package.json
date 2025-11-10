@@ -4,7 +4,7 @@
   "description": "Netlify Functions for ShareMoney",
   "type": "module",
   "scripts": {
-    "dev": "echo 'Current IP Address:' && ipconfig getifaddr en0 && echo '' && netlify dev",
+    "dev": "echo 'Current IP Address:' && node get-ip.js && echo '' && netlify dev --offline",
     "format": "prettier --write \"**/*.{ts,js,json}\"",
     "format:check": "prettier --check \"**/*.{ts,js,json}\""
   },

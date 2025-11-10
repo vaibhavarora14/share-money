@@ -25,19 +25,8 @@ interface GroupMember {
   joined_at: string;
 }
 
-interface GroupInvitation {
-  id: string;
-  group_id: string;
-  email: string;
-  role: 'owner' | 'member';
-  invited_by: string;
-  created_at: string;
-  accepted_at: string | null;
-}
-
 interface GroupWithMembers extends Group {
   members?: Array<GroupMember & { email?: string }>;
-  invitations?: Array<GroupInvitation>;
 }
 
 export const handler: Handler = async (event, _context) => {
@@ -235,18 +224,6 @@ export const handler: Handler = async (event, _context) => {
         };
       }
 
-      // Get pending invitations for this group
-      const { data: invitations, error: invitationsError } = await supabase
-        .from('group_invitations')
-        .select('*')
-        .eq('group_id', groupId)
-        .is('accepted_at', null)
-        .order('created_at', { ascending: true });
-
-      if (invitationsError) {
-        console.error('Supabase error fetching invitations:', invitationsError);
-        // Don't fail the request if invitations can't be fetched
-      }
 
       // Try to get user emails using admin API if service role key is available
       // Also include current user's email if they're a member
@@ -352,7 +329,6 @@ export const handler: Handler = async (event, _context) => {
       const groupWithMembers: GroupWithMembers = {
         ...group,
         members: membersWithEmails,
-        invitations: invitations || [],
       };
 
       return {

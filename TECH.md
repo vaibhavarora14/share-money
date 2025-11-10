@@ -13,19 +13,11 @@
 ShareMoney/
 ├── netlify/              # Netlify Functions backend
 │   ├── functions/        # Netlify Functions
-│   │   └── transactions.ts
-│   └── package.json      # Backend dependencies
 ├── supabase/             # Supabase migrations
 │   └── migrations/       # Database migrations
-│       └── 20240101000000_create_transactions.sql
 ├── scripts/              # Utility scripts
-│   ├── seed-db.sh        # Database seeding script
-│   └── seed-db.ts        # Database seeding TypeScript
+│   ├── seed-db*          # Database seeding
 └── mobile/               # React Native Expo app
-    ├── App.tsx           # Main app component (TypeScript)
-    ├── types.ts          # TypeScript type definitions
-    ├── tsconfig.json     # TypeScript configuration
-    └── package.json      # Mobile app dependencies
 ```
 
 ## Prerequisites
@@ -35,74 +27,196 @@ ShareMoney/
 - Supabase account
 - Netlify account
 - Expo CLI (via npx or global)
+- Docker (for local Supabase development)
+- Supabase CLI (for local development)
 
 ## Development Setup
 
 ### 1. Clone and Install
 
+This project uses **npm workspaces** for monorepo management. Install all dependencies from the root:
+
 ```bash
-# Install root dependencies (if any)
+# Install all dependencies (root, mobile, and netlify)
 npm install
-
-# Install backend dependencies
-cd netlify && npm install
-
-# Install mobile dependencies
-cd ../mobile && npm install
 ```
 
-### 2. Environment Variables
+This will automatically install dependencies for:
+- Root workspace
+- `mobile/` workspace
+- `netlify/` workspace
 
-**Root `.env`** (for Netlify):
-```env
-SUPABASE_URL=your_supabase_url
-SUPABASE_ANON_KEY=your_supabase_anon_key
-```
+**Note:** All dependencies are installed in a single `node_modules` at the root, with workspace-specific dependencies hoisted appropriately.
 
-**`mobile/.env`** (must use `EXPO_PUBLIC_` prefix):
-```env
-EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
-EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-EXPO_PUBLIC_API_URL=http://YOUR_LOCAL_IP:8888/api  # Optional, defaults based on __DEV__
-```
+### 2. Local Supabase Setup
 
-### 3. Database Setup
+#### Start Local Supabase
 
 ```bash
-# Using Supabase CLI
-supabase link --project-ref YOUR_PROJECT_REF
+# Start local Supabase (requires Docker)
+supabase start
+
+# Check status
+supabase status
+```
+
+**Connection Details:**
+- API URL: `http://127.0.0.1:54321`
+- Database URL: `postgresql://postgres:postgres@127.0.0.1:54322/postgres`
+- Studio URL: `http://127.0.0.1:54323` (Supabase Dashboard)
+- Mailpit URL: `http://127.0.0.1:54324` (Email testing)
+
+**Local Keys:**
+- Publishable key: `sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH`
+- Secret key: `sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz`
+
+#### Database Management
+
+```bash
+# Reset database (drops everything, re-applies all migrations)
+supabase db reset
+
+# Apply new migrations
 supabase db push
 
-# Or manually run migrations in Supabase SQL Editor:
-# - supabase/migrations/20240101000000_create_transactions.sql
-# - supabase/migrations/20240102000000_add_user_authentication.sql
+# Create new migration
+supabase migration new migration_name
+
+# View migration status
+supabase migration list
+```
+
+#### Access Supabase Studio
+
+Open in browser: **http://127.0.0.1:54323**
+
+- View tables, data, and run SQL queries
+- Test authentication
+- View logs and metrics
+
+### 3. Environment Variables
+
+#### Root `.env` (for Netlify Functions)
+
+Create `.env` in the root directory:
+
+```env
+# For Local Development
+SUPABASE_URL=http://127.0.0.1:54321
+SUPABASE_ANON_KEY=sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
+SUPABASE_SERVICE_ROLE_KEY=sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz
+
+# For Production (update with your cloud Supabase credentials)
+# SUPABASE_URL=https://your-project.supabase.co
+# SUPABASE_ANON_KEY=your_anon_key
+# SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+```
+
+#### Mobile `.env`
+
+Create `mobile/.env` (must use `EXPO_PUBLIC_` prefix):
+
+```env
+# For iOS Simulator
+EXPO_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
+EXPO_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
+EXPO_PUBLIC_API_URL=http://localhost:8888/api
+
+# For Android Emulator (uncomment and comment iOS settings above)
+# EXPO_PUBLIC_SUPABASE_URL=http://10.0.2.2:54321
+# EXPO_PUBLIC_API_URL=http://10.0.2.2:8888/api
+
+# For Physical Device (uncomment and update IP)
+# EXPO_PUBLIC_SUPABASE_URL=http://YOUR_LOCAL_IP:54321
+# EXPO_PUBLIC_API_URL=http://YOUR_LOCAL_IP:8888/api
+
+# For Production
+# EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+# EXPO_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+# EXPO_PUBLIC_API_URL=https://sharemoney-app.netlify.app/api
+```
+
+**Get your local IP:**
+```bash
+# macOS
+ipconfig getifaddr en0
+
+# Linux
+ip addr show | grep "inet "
 ```
 
 ### 4. Run Locally
 
-**Terminal 1 - Backend:**
+**Option 1: Run from root (using workspaces):**
 ```bash
-cd netlify
-netlify dev
-# Available at http://localhost:8888/api/transactions
+# Terminal 1 - Backend
+npm run dev:server
+
+# Terminal 2 - Mobile
+npm run dev:mobile
 ```
 
-**Terminal 2 - Mobile:**
+**Option 2: Run from individual directories:**
 ```bash
+# Terminal 1 - Backend
+cd netlify
+npm run dev
+# Available at http://localhost:8888/api
+
+# Terminal 2 - Mobile
 cd mobile
 npm start
 # Press 'i' for iOS, 'a' for Android, or scan QR code
 ```
 
-**Note**: For physical devices, use your local IP instead of `localhost` in `EXPO_PUBLIC_API_URL`.
+### 5. Expo Go vs Development Builds
+
+#### Using Expo Go (Quick Development)
+
+1. Start the dev server:
+   ```bash
+   cd mobile
+   npm start
+   ```
+
+2. Open Expo Go app on your device and scan the QR code
+
+3. That's it! No build required. Perfect for quick iterations.
+
+**Note:** Expo Go doesn't support the new React Native architecture, so some features might behave slightly differently.
+
+#### Using Development Builds (Full Features)
+
+1. Build the development client:
+   ```bash
+   cd mobile
+   npm run build:android    # For Android
+   # or
+   npm run build:ios        # For iOS
+   ```
+
+2. Install the built app on your device/emulator
+
+3. Start the dev server:
+   ```bash
+   npm start
+   ```
+
+4. Open the development build app - it will automatically connect to the dev server
+
+**Benefits:**
+- Full access to new React Native architecture
+- Custom native modules support
+- Production-like environment
 
 ## Deployment
 
-### Netlify
+### Netlify (Backend)
 
 1. Set environment variables in Netlify dashboard:
    - `SUPABASE_URL`
    - `SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
 
 2. Deploy:
    ```bash
@@ -112,16 +226,33 @@ npm start
 
 ### Mobile (Expo)
 
-See `mobile/EXPO_PUBLISH.md` for EAS build and OTA update instructions.
+See `mobile/EXPO_PUBLISH.md` for detailed EAS build and OTA update instructions.
 
-## API
+**Quick commands:**
+```bash
+cd mobile
 
-**Endpoint**: `GET /api/transactions`
+# OTA Updates
+eas update --branch production --message "Your update message"
 
-- **Auth**: Bearer token required
-- **Response**: JSON array of transactions (filtered by user via RLS)
+# Production Builds
+eas build --platform ios
+eas build --platform android
+```
 
-**Implementation**: `netlify/functions/transactions.ts`
+### GitHub Actions (CI/CD)
+
+Automatic Supabase migrations are configured via GitHub Actions.
+
+**Setup:**
+1. Get Supabase Access Token: https://supabase.com/dashboard/account/tokens
+2. Add GitHub Secrets:
+   - `SUPABASE_ACCESS_TOKEN`
+   - `SUPABASE_PROJECT_REF`
+   - `SUPABASE_DB_PASSWORD`
+3. Push to `main` branch - migrations apply automatically!
+
+**Workflow:** `.github/workflows/supabase-migrations.yml`
 
 ## Architecture
 
@@ -138,7 +269,7 @@ See `mobile/EXPO_PUBLISH.md` for EAS build and OTA update instructions.
 2. JWT token stored in AsyncStorage
 3. Token sent in `Authorization: Bearer <token>` header to API
 4. Netlify Function validates token with Supabase
-5. RLS policies filter transactions by `user_id`
+5. RLS policies filter data by `user_id`
 
 ### Google OAuth Setup
 
@@ -153,31 +284,39 @@ See `mobile/EXPO_PUBLISH.md` for EAS build and OTA update instructions.
 - **Netlify**: Loads from root `.env` automatically in dev
 - **Mobile**: Loads from `mobile/.env` (Expo SDK 49+ native support)
 
-## Troubleshooting
+## Debugging
 
-- **Port 8888 in use**: Change port or kill process
-- **Physical device can't connect**: Use local IP in `EXPO_PUBLIC_API_URL`, not `localhost`
-- **Auth errors**: Verify env vars have correct prefix, check Supabase dashboard config
-- **RLS issues**: Ensure migrations ran, verify policies in Supabase dashboard
-
-## Development
-
-### Testing API
+### View Android Logs
 
 ```bash
-curl http://localhost:8888/api/transactions
+# Connect device via USB
+adb devices
+
+# View filtered logs
+adb logcat | grep -E "ReactNative|ShareMoney|com.sharemoney|ERROR|FATAL"
+
+# View only errors
+adb logcat *:E
+
+# View logs for specific app
+adb logcat | grep "com.sharemoney.app"
 ```
 
-### Code Structure
+### Enable Remote Debugging
 
-- `mobile/App.tsx` - Main app component, transaction list
-- `mobile/screens/AuthScreen.tsx` - Login/signup UI
-- `mobile/contexts/AuthContext.tsx` - Auth state management
-- `mobile/supabase.ts` - Supabase client configuration
-- `netlify/functions/transactions.ts` - API endpoint handler
+1. Shake device or press `Cmd+M` (Mac) / `Ctrl+M` (Windows/Linux)
+2. Select "Debug Remote JS"
+3. Open Chrome DevTools at `http://localhost:19000/debugger-ui`
 
-## Scripts
+### Common Debug Commands
 
-- `./scripts/seed-db.sh` - Seed database with sample data
-- `./scripts/seed-db.ts` - TypeScript version of seed script
+```bash
+# Clear logs
+adb logcat -c
 
+# Monitor logs in real-time
+adb logcat | grep -E "ReactNativeJS|ERROR|FATAL|Exception"
+
+# Clear app data
+adb shell pm clear com.sharemoney.app
+```
