@@ -23,9 +23,8 @@ module.exports = ({ config }) => {
       orientation: "portrait",
       icon: "./assets/icon.png",
       userInterfaceStyle: "light",
-      // Only enable new architecture for development builds
-      // Expo Go doesn't support new architecture yet
-      newArchEnabled: isDevelopmentBuild ? true : false,
+      // Enable new architecture - supported in both Expo Go and development builds
+      newArchEnabled: true,
       splash: {
         image: "./assets/splash-icon.png",
         resizeMode: "contain",
