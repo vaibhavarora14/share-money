@@ -23,7 +23,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 interface AddMemberScreenProps {
   visible: boolean;
   groupId: string;
-  onAddMember: (email: string) => Promise<void>;
+  onAddMember: (email: string) => Promise<any>;
   onDismiss: () => void;
 }
 
@@ -79,12 +79,21 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
 
     setLoading(true);
     try {
-      await onAddMember(email.trim());
-      Alert.alert(
-        "Success",
-        "Member added successfully!",
-        [{ text: "OK", onPress: handleDismiss }]
-      );
+      const result = await onAddMember(email.trim());
+      // Check if result indicates an invitation was created
+      if (result && typeof result === 'object' && 'invitation' in result && result.invitation) {
+        Alert.alert(
+          "Invitation Sent",
+          result.message || "Invitation sent successfully! The user will be added to the group when they sign up.",
+          [{ text: "OK", onPress: handleDismiss }]
+        );
+      } else {
+        Alert.alert(
+          "Success",
+          "Member added successfully!",
+          [{ text: "OK", onPress: handleDismiss }]
+        );
+      }
     } catch (error) {
       Alert.alert(
         "Error",
@@ -155,7 +164,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                   { color: theme.colors.onSurfaceVariant },
                 ]}
               >
-                Enter the email address of the user you want to add to this group. The user must have an account to be added.
+                Enter the email address of the user you want to add to this group. If the user doesn't have an account yet, an invitation will be sent and they'll be added automatically when they sign up.
               </Text>
 
               <TextInput

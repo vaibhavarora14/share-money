@@ -41,7 +41,20 @@ export interface GroupMember {
   email?: string;
 }
 
+export interface GroupInvitation {
+  id: string;
+  group_id: string;
+  email: string;
+  invited_by: string;
+  status: 'pending' | 'accepted' | 'expired' | 'cancelled';
+  token?: string;
+  expires_at: string;
+  created_at: string;
+  accepted_at?: string;
+}
+
 export interface GroupWithMembers extends Group {
   members?: GroupMember[];
+  invitations?: GroupInvitation[];
 }
 
