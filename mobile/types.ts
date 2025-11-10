@@ -41,18 +41,7 @@ export interface GroupMember {
   email?: string;
 }
 
-export interface GroupInvitation {
-  id: string;
-  group_id: string;
-  email: string;
-  role: 'owner' | 'member';
-  invited_by: string;
-  created_at: string;
-  accepted_at: string | null;
-}
-
 export interface GroupWithMembers extends Group {
   members?: GroupMember[];
-  invitations?: GroupInvitation[];
 }
 
