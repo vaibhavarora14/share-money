@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Session } from "@supabase/supabase-js";
 import { StatusBar } from "expo-status-bar";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
@@ -768,7 +769,26 @@ function AppContent() {
     null
   );
   const [currentRoute, setCurrentRoute] = useState<string>("groups");
-  const [invitationsRefreshTrigger, setInvitationsRefreshTrigger] = useState<number>(0);
+  const [invitationsRefreshTrigger, setInvitationsRefreshTrigger] =
+    useState<number>(0);
+  const prevSessionRef = React.useRef<Session | null>(null);
+
+  // Reset navigation state on logout and login (only when session state changes)
+  useEffect(() => {
+    const hadSession = prevSessionRef.current !== null;
+    const hasSession = session !== null;
+
+    // Only reset when transitioning between logged in/out states
+    if (hadSession !== hasSession) {
+      setCurrentView("groups");
+      setCurrentRoute("groups");
+      setSelectedGroup(null);
+      setGroupDetails(null);
+      setShowAddMember(false);
+    }
+
+    prevSessionRef.current = session;
+  }, [session]);
 
   const getAuthToken = async (): Promise<string | null> => {
     if (!session) return null;
@@ -863,13 +883,13 @@ function AppContent() {
     // This handles both cases:
     // 1. Invitation was created (need to show it)
     // 2. Member was added directly (need to remove any pending invitation for that user)
-    setInvitationsRefreshTrigger(prev => prev + 1);
+    setInvitationsRefreshTrigger((prev) => prev + 1);
 
     // Refresh group details with retry logic
     if (groupDetails && selectedGroup) {
       let retries = 2;
       let success = false;
-      
+
       while (retries > 0 && !success) {
         try {
           const detailsResponse = await fetch(
@@ -881,26 +901,32 @@ function AppContent() {
               },
             }
           );
-          
+
           if (detailsResponse.ok) {
             const updatedGroup: GroupWithMembers = await detailsResponse.json();
             setGroupDetails(updatedGroup);
             success = true;
           } else if (retries === 1) {
             // Only log error on last retry to avoid noise
-            console.warn('Failed to refresh group details after adding member:', detailsResponse.status);
+            console.warn(
+              "Failed to refresh group details after adding member:",
+              detailsResponse.status
+            );
           }
         } catch (error) {
           if (retries === 1) {
             // Only log error on last retry
-            console.warn('Error refreshing group details after adding member:', error);
+            console.warn(
+              "Error refreshing group details after adding member:",
+              error
+            );
           }
         }
-        
+
         retries--;
         if (!success && retries > 0) {
           // Wait 200ms before retry
-          await new Promise(resolve => setTimeout(resolve, 200));
+          await new Promise((resolve) => setTimeout(resolve, 200));
         }
       }
     }
@@ -940,7 +966,7 @@ function AppContent() {
     if (groupDetails && selectedGroup) {
       let retries = 2;
       let success = false;
-      
+
       while (retries > 0 && !success) {
         try {
           const detailsResponse = await fetch(
@@ -952,26 +978,32 @@ function AppContent() {
               },
             }
           );
-          
+
           if (detailsResponse.ok) {
             const updatedGroup: GroupWithMembers = await detailsResponse.json();
             setGroupDetails(updatedGroup);
             success = true;
           } else if (retries === 1) {
             // Only log error on last retry to avoid noise
-            console.warn('Failed to refresh group details after removing member:', detailsResponse.status);
+            console.warn(
+              "Failed to refresh group details after removing member:",
+              detailsResponse.status
+            );
           }
         } catch (error) {
           if (retries === 1) {
             // Only log error on last retry
-            console.warn('Error refreshing group details after removing member:', error);
+            console.warn(
+              "Error refreshing group details after removing member:",
+              error
+            );
           }
         }
-        
+
         retries--;
         if (!success && retries > 0) {
           // Wait 200ms before retry
-          await new Promise(resolve => setTimeout(resolve, 200));
+          await new Promise((resolve) => setTimeout(resolve, 200));
         }
       }
     }

@@ -280,13 +280,13 @@ export const handler: Handler = async (event, context) => {
         .order('created_at', { ascending: false });
 
       if (groupId) {
-        // Verify user is owner of the group
-        const { data: membership } = await supabase
+        // Verify user is a member of the group (any member can view invitations)
+        const { data: membership, error: membershipError } = await supabase
           .from('group_members')
-          .select('role')
+          .select('id')
           .eq('group_id', groupId)
           .eq('user_id', currentUser.id)
-          .single();
+          .maybeSingle();
 
         const { data: group } = await supabase
           .from('groups')
@@ -294,13 +294,13 @@ export const handler: Handler = async (event, context) => {
           .eq('id', groupId)
           .single();
 
-        const isOwner = (membership && membership.role === 'owner') || (group && group.created_by === currentUser.id);
+        const isMember = membership || (group && group.created_by === currentUser.id);
 
-        if (!isOwner) {
+        if (!isMember) {
           return {
             statusCode: 403,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ error: 'Only group owners can view group invitations' }),
+            body: JSON.stringify({ error: 'You must be a member of the group to view invitations' }),
           };
         }
 

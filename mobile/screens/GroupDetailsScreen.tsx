@@ -207,9 +207,21 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           (inv) => inv.status === "pending"
         );
         setInvitations(pendingInvitations);
+      } else {
+        // Log error for debugging
+        const errorData = await response.json().catch(() => ({}));
+        console.error(
+          "Error fetching invitations:",
+          response.status,
+          errorData.error || "Unknown error"
+        );
+        // Set empty array on error (don't show invitations if fetch fails)
+        setInvitations([]);
       }
     } catch (err) {
       console.error("Error fetching invitations:", err);
+      // Set empty array on error
+      setInvitations([]);
     } finally {
       setInvitationsLoading(false);
     }
@@ -225,7 +237,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const lastFetchedGroupId = useRef<string | null>(null);
   useEffect(() => {
     // Only fetch if we haven't fetched for this group ID yet
-    // The API will return 403 if user is not owner, so we don't need to check ownership here
+    // All members can view invitations, but only owners can cancel them
     // This prevents infinite loops from group.members array reference changes
     if (
       group.id &&
@@ -857,7 +869,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 style={styles.expandButton}
               />
               <Text variant="titleMedium" style={styles.sectionTitle}>
-                Members ({group.members?.length || 0})
+                Members ({(group.members?.length || 0) + invitations.length})
               </Text>
             </Pressable>
             {memoizedIsOwner && (
@@ -989,7 +1001,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 </Text>
               )}
 
-              {memoizedIsOwner && invitations.length > 0 && (
+              {invitations.length > 0 && (
                 <>
                   {group.members && group.members.length > 0 && (
                     <View style={{ height: 8 }} />
@@ -1043,23 +1055,29 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                                 </Text>
                               </View>
                               <View style={styles.memberRight}>
-                                {isCancelling ? (
-                                  <ActivityIndicator
-                                    size="small"
-                                    color={theme.colors.primary}
-                                    style={styles.removingIndicator}
-                                  />
-                                ) : (
-                                  <IconButton
-                                    icon="close-circle-outline"
-                                    size={20}
-                                    iconColor={theme.colors.error}
-                                    onPress={() =>
-                                      handleCancelInvitation(invitation.id)
-                                    }
-                                    style={styles.removeMemberButton}
-                                    disabled={cancellingInvitationId !== null}
-                                  />
+                                {memoizedIsOwner && (
+                                  <>
+                                    {isCancelling ? (
+                                      <ActivityIndicator
+                                        size="small"
+                                        color={theme.colors.primary}
+                                        style={styles.removingIndicator}
+                                      />
+                                    ) : (
+                                      <IconButton
+                                        icon="close-circle-outline"
+                                        size={20}
+                                        iconColor={theme.colors.error}
+                                        onPress={() =>
+                                          handleCancelInvitation(invitation.id)
+                                        }
+                                        style={styles.removeMemberButton}
+                                        disabled={
+                                          cancellingInvitationId !== null
+                                        }
+                                      />
+                                    )}
+                                  </>
                                 )}
                               </View>
                             </Card.Content>
