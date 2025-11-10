@@ -5,6 +5,33 @@ import * as WebBrowser from "expo-web-browser";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "../supabase";
 
+// API URL - must be set via EXPO_PUBLIC_API_URL environment variable
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
+
+// Helper function to accept pending invitations for a user
+const acceptPendingInvitations = async (userEmail: string, accessToken: string): Promise<number> => {
+  if (!API_URL || !userEmail) {
+    return 0;
+  }
+
+  try {
+    // Call the database function to accept all pending invitations for this email
+    const { data, error } = await supabase.rpc('accept_pending_invitations_for_user', {
+      user_email: userEmail,
+    });
+
+    if (error) {
+      console.error('Error accepting pending invitations:', error);
+      return 0;
+    }
+
+    return data || 0;
+  } catch (error) {
+    console.error('Error in acceptPendingInvitations:', error);
+    return 0;
+  }
+};
+
 // Complete the auth session when browser closes
 WebBrowser.maybeCompleteAuthSession();
 
@@ -51,6 +78,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+
+      // Auto-accept pending invitations when user signs in or signs up
+      if (session?.user?.email && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
+        try {
+          await acceptPendingInvitations(
+            session.user.email,
+            session.access_token
+          );
+        } catch (error) {
+          console.error('Error auto-accepting invitations:', error);
+        }
+      }
     });
 
     return () => {
@@ -106,6 +145,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           };
         }
         return { error };
+      }
+
+      // Auto-accept pending invitations after successful sign in
+      if (data?.user?.email && data?.session?.access_token) {
+        try {
+          await acceptPendingInvitations(
+            data.user.email,
+            data.session.access_token
+          );
+        } catch (err) {
+          console.error('Error auto-accepting invitations on sign in:', err);
+        }
       }
 
       return { error: null };
@@ -166,6 +217,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
               "Password is too weak. Please choose a stronger password."
             ),
           };
+        }
+      }
+
+      // Auto-accept pending invitations after successful sign up
+      if (data?.user?.email && data?.session?.access_token) {
+        try {
+          await acceptPendingInvitations(
+            data.user.email,
+            data.session.access_token
+          );
+        } catch (err) {
+          console.error('Error auto-accepting invitations on sign up:', err);
         }
       }
 
@@ -260,6 +323,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           return {
             error: new Error("Session was not created after setting tokens"),
           };
+        }
+
+        // Auto-accept pending invitations after successful Google sign in
+        if (verifySession?.user?.email && verifySession?.access_token) {
+          try {
+            await acceptPendingInvitations(
+              verifySession.user.email,
+              verifySession.access_token
+            );
+          } catch (err) {
+            console.error('Error auto-accepting invitations on Google sign in:', err);
+          }
         }
 
         return { error: null };
