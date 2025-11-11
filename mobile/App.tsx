@@ -45,6 +45,7 @@ import {
   useUpdateTransaction,
   useDeleteTransaction,
 } from "./hooks/useTransactionMutations";
+import { useCreateGroup, useAddMember, useRemoveMember } from "./hooks/useGroupMutations";
 
 // Constants
 const TOKEN_REFRESH_BUFFER_SECONDS = 60;
@@ -507,8 +508,10 @@ function AppContent() {
     null
   );
   const [currentRoute, setCurrentRoute] = useState<string>("groups");
-  const [invitationsRefreshTrigger, setInvitationsRefreshTrigger] =
-    useState<number>(0);
+  // React Query mutations for groups/members
+  const createGroupMutation = useCreateGroup();
+  const addMemberMutation = useAddMember();
+  const removeMemberMutation = useRemoveMember();
   const prevSessionRef = React.useRef<Session | null>(null);
 
   // Reset navigation state on logout and login (only when session state changes)
@@ -529,246 +532,34 @@ function AppContent() {
   }, [session]);
 
   const getAuthToken = async (): Promise<string | null> => {
+    // Deprecated: no longer used for groups/members with React Query mutations
     if (!session) return null;
-
-    let {
+    const {
       data: { session: currentSession },
     } = await supabase.auth.getSession();
-
-    if (!currentSession) return null;
-
-    const now = Math.floor(Date.now() / 1000);
-    const expiresAt = currentSession.expires_at || 0;
-
-    if (expiresAt && expiresAt < now + TOKEN_REFRESH_BUFFER_SECONDS) {
-      const { data: refreshData, error: refreshError } =
-        await supabase.auth.refreshSession();
-
-      if (refreshError || !refreshData.session) {
-        return null;
-      }
-
-      currentSession = refreshData.session;
-    }
-
-    return currentSession.access_token;
+    return currentSession?.access_token ?? null;
   };
 
-  const handleCreateGroup = async (groupData: {
-    name: string;
-    description?: string;
-  }) => {
-    if (!API_URL) {
-      throw new Error("Unable to connect to the server");
-    }
-
-    const token = await getAuthToken();
-    if (!token) {
-      throw new Error("Not authenticated");
-    }
-
-    const response = await fetch(`${API_URL}/groups`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(groupData),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        errorData.error || `HTTP error! status: ${response.status}`
-      );
-    }
-
+  const handleCreateGroup = async (groupData: { name: string; description?: string }) => {
+    await createGroupMutation.mutateAsync(groupData);
     setCurrentView("groups");
   };
 
   const handleAddMember = async (email: string) => {
-    if (!API_URL || !selectedGroup) {
-      throw new Error("Invalid request");
-    }
-
-    const token = await getAuthToken();
-    if (!token) {
-      throw new Error("Not authenticated");
-    }
-
-    const response = await fetch(`${API_URL}/group-members`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        group_id: selectedGroup.id,
-        email: email,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        errorData.error || `HTTP error! status: ${response.status}`
-      );
-    }
-
-    const result = await response.json();
-
-    // Always trigger invitations refresh after adding a member
-    // This handles both cases:
-    // 1. Invitation was created (need to show it)
-    // 2. Member was added directly (need to remove any pending invitation for that user)
-    setInvitationsRefreshTrigger((prev) => prev + 1);
-
-    // Refresh group details with retry logic
-    if (groupDetails && selectedGroup) {
-      let retries = 2;
-      let success = false;
-
-      while (retries > 0 && !success) {
-        try {
-          const detailsResponse = await fetch(
-            `${API_URL}/groups/${selectedGroup.id}`,
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-              },
-            }
-          );
-
-          if (detailsResponse.ok) {
-            const updatedGroup: GroupWithMembers = await detailsResponse.json();
-            setGroupDetails(updatedGroup);
-            success = true;
-          } else if (retries === 1) {
-            // Only log error on last retry to avoid noise
-            console.warn(
-              "Failed to refresh group details after adding member:",
-              detailsResponse.status
-            );
-          }
-        } catch (error) {
-          if (retries === 1) {
-            // Only log error on last retry
-            console.warn(
-              "Error refreshing group details after adding member:",
-              error
-            );
-          }
-        }
-
-        retries--;
-        if (!success && retries > 0) {
-          // Wait 200ms before retry
-          await new Promise((resolve) => setTimeout(resolve, 200));
-        }
-      }
-    }
-
+    if (!selectedGroup) throw new Error("Invalid request");
+    const result = await addMemberMutation.mutateAsync({ groupId: selectedGroup.id, email });
     return result;
   };
 
   const handleRemoveMember = async (userId: string) => {
-    if (!API_URL || !selectedGroup) {
-      throw new Error("Invalid request");
-    }
-
-    const token = await getAuthToken();
-    if (!token) {
-      throw new Error("Not authenticated");
-    }
-
-    const response = await fetch(
-      `${API_URL}/group-members?group_id=${selectedGroup.id}&user_id=${userId}`,
-      {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        errorData.error || `HTTP error! status: ${response.status}`
-      );
-    }
-
-    // Refresh group details with retry logic
-    if (groupDetails && selectedGroup) {
-      let retries = 2;
-      let success = false;
-
-      while (retries > 0 && !success) {
-        try {
-          const detailsResponse = await fetch(
-            `${API_URL}/groups/${selectedGroup.id}`,
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-              },
-            }
-          );
-
-          if (detailsResponse.ok) {
-            const updatedGroup: GroupWithMembers = await detailsResponse.json();
-            setGroupDetails(updatedGroup);
-            success = true;
-          } else if (retries === 1) {
-            // Only log error on last retry to avoid noise
-            console.warn(
-              "Failed to refresh group details after removing member:",
-              detailsResponse.status
-            );
-          }
-        } catch (error) {
-          if (retries === 1) {
-            // Only log error on last retry
-            console.warn(
-              "Error refreshing group details after removing member:",
-              error
-            );
-          }
-        }
-
-        retries--;
-        if (!success && retries > 0) {
-          // Wait 200ms before retry
-          await new Promise((resolve) => setTimeout(resolve, 200));
-        }
-      }
-    }
+    if (!selectedGroup) throw new Error("Invalid request");
+    await removeMemberMutation.mutateAsync({ groupId: selectedGroup.id, userId });
   };
 
   const handleGroupPress = async (group: Group) => {
-    if (!API_URL) return;
-
-    const token = await getAuthToken();
-    if (!token) return;
-
-    try {
-      const response = await fetch(`${API_URL}/groups/${group.id}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (response.ok) {
-        const groupWithMembers: GroupWithMembers = await response.json();
-        setGroupDetails(groupWithMembers);
-        setSelectedGroup(group);
-      }
-    } catch (error) {
-      console.error("Error fetching group details:", error);
-    }
+    setSelectedGroup(group);
+    // Minimal object; GroupDetailsScreen will fetch details via React Query
+    setGroupDetails({ ...(group as unknown as GroupWithMembers) });
   };
 
   if (loading) {
@@ -803,7 +594,6 @@ function AppContent() {
       <>
         <GroupDetailsScreen
           group={groupDetails}
-          refreshTrigger={invitationsRefreshTrigger}
           onBack={() => {
             setGroupDetails(null);
             setSelectedGroup(null);
