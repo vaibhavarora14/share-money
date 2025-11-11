@@ -1,11 +1,10 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import {
   ActivityIndicator,
   Appbar,
   Button,
   Card,
-  Chip,
   FAB,
   IconButton,
   Menu,
@@ -14,13 +13,23 @@ import {
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
-import { supabase } from "../supabase";
 import { GroupInvitation, GroupWithMembers, Transaction } from "../types";
-import { formatCurrency, getDefaultCurrency } from "../utils/currency";
+import { getDefaultCurrency } from "../utils/currency";
+import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
+import { MembersList } from "../components/MembersList";
+import { InvitationsList } from "../components/InvitationsList";
+import { TransactionsSection } from "../components/TransactionsSection";
 import { TransactionFormScreen } from "./TransactionFormScreen";
-
-// API URL - must be set via EXPO_PUBLIC_API_URL environment variable
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+import { useDeleteGroup, useRemoveMember } from "../hooks/useGroupMutations";
+import { useCancelInvitation } from "../hooks/useInvitationMutations";
+import { useGroupDetails } from "../hooks/useGroupDetails";
+import { useTransactions } from "../hooks/useTransactions";
+import { useGroupInvitations } from "../hooks/useGroupInvitations";
+import {
+  useCreateTransaction,
+  useUpdateTransaction,
+  useDeleteTransaction,
+} from "../hooks/useTransactionMutations";
 
 interface GroupDetailsScreenProps {
   group: GroupWithMembers;
@@ -43,8 +52,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   onTransactionAdded,
   refreshTrigger,
 }) => {
-  const [group, setGroup] = useState<GroupWithMembers>(initialGroup);
-  const [loading, setLoading] = useState<boolean>(false);
   const [leaving, setLeaving] = useState<boolean>(false);
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
   const [menuVisible, setMenuVisible] = useState<boolean>(false);
@@ -52,216 +59,36 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     useState<boolean>(false);
   const [editingTransaction, setEditingTransaction] =
     useState<Transaction | null>(null);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [transactionsLoading, setTransactionsLoading] =
-    useState<boolean>(false);
-  const [invitations, setInvitations] = useState<GroupInvitation[]>([]);
-  const [invitationsLoading, setInvitationsLoading] = useState<boolean>(false);
+  // React Query data - use directly, no local state needed
+  const { data: groupData, isLoading: groupLoading, error: groupError, refetch: refetchGroup } = useGroupDetails(initialGroup.id);
+  const { data: txData = [] as Transaction[], isLoading: txLoading, refetch: refetchTx } = useTransactions(initialGroup.id);
+  const { data: invitations = [] as GroupInvitation[], isLoading: invitationsLoading, refetch: refetchInvites } = useGroupInvitations(initialGroup.id);
   const [cancellingInvitationId, setCancellingInvitationId] = useState<
     string | null
   >(null);
-  const [error, setError] = useState<string | null>(null);
   const [membersExpanded, setMembersExpanded] = useState<boolean>(false);
   const { session, signOut } = useAuth();
   const theme = useTheme();
+  // Mutations
+  const createTx = useCreateTransaction();
+  const updateTx = useUpdateTransaction();
+  const deleteTx = useDeleteTransaction();
+  const deleteGroupMutation = useDeleteGroup();
+  const removeMemberMutation = useRemoveMember();
+  const cancelInvite = useCancelInvitation();
 
-  const fetchGroupDetails = useCallback(async (): Promise<void> => {
-    if (!API_URL) {
-      setError(
-        "Unable to connect to the server. Please check your app configuration and try again."
-      );
-      setLoading(false);
-      return;
-    }
-
-    if (!session) {
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      let {
-        data: { session: currentSession },
-      } = await supabase.auth.getSession();
-
-      if (!currentSession) {
-        setLoading(false);
-        return;
-      }
-
-      const token = currentSession.access_token;
-
-      const response = await fetch(`${API_URL}/groups/${group.id}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          await signOut();
-          return;
-        }
-
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.error || `HTTP error! status: ${response.status}`
-        );
-      }
-
-      const data: GroupWithMembers = await response.json();
-      setGroup(data);
-
-      // If invitations are included in the response, update state
-      if (data.invitations) {
-        const pendingInvitations = data.invitations.filter(
-          (inv) => inv.status === "pending"
-        );
-        setInvitations(pendingInvitations);
-      }
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Unknown error occurred";
-      if (
-        !errorMessage.includes("401") &&
-        !errorMessage.includes("Unauthorized")
-      ) {
-        setError(errorMessage);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [group.id, session, signOut]);
-
-  const fetchTransactions = useCallback(async (): Promise<void> => {
-    if (!API_URL || !session) return;
-
-    try {
-      setTransactionsLoading(true);
-      let {
-        data: { session: currentSession },
-      } = await supabase.auth.getSession();
-
-      if (!currentSession) return;
-
-      const token = currentSession.access_token;
-
-      const response = await fetch(
-        `${API_URL}/transactions?group_id=${group.id}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data: Transaction[] = await response.json();
-        // Filter to only show transactions for this group
-        const groupTransactions = data.filter((t) => t.group_id === group.id);
-        setTransactions(groupTransactions);
-      }
-    } catch (err) {
-      console.error("Error fetching transactions:", err);
-    } finally {
-      setTransactionsLoading(false);
-    }
-  }, [session, group.id]);
-
-  // Update local state when initialGroup prop changes
-  useEffect(() => {
-    setGroup(initialGroup);
-  }, [initialGroup]);
-
-  const fetchInvitations = useCallback(async (): Promise<void> => {
-    if (!API_URL || !session) return;
-
-    try {
-      setInvitationsLoading(true);
-      let {
-        data: { session: currentSession },
-      } = await supabase.auth.getSession();
-
-      if (!currentSession) return;
-
-      const token = currentSession.access_token;
-
-      const response = await fetch(
-        `${API_URL}/invitations?group_id=${group.id}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data: GroupInvitation[] = await response.json();
-        // Filter to only show pending invitations
-        const pendingInvitations = data.filter(
-          (inv) => inv.status === "pending"
-        );
-        setInvitations(pendingInvitations);
-      } else {
-        // Log error for debugging
-        const errorData = await response.json().catch(() => ({}));
-        console.error(
-          "Error fetching invitations:",
-          response.status,
-          errorData.error || "Unknown error"
-        );
-        // Set empty array on error (don't show invitations if fetch fails)
-        setInvitations([]);
-      }
-    } catch (err) {
-      console.error("Error fetching invitations:", err);
-      // Set empty array on error
-      setInvitations([]);
-    } finally {
-      setInvitationsLoading(false);
-    }
-  }, [session, group.id]);
-
-  useEffect(() => {
-    fetchGroupDetails();
-    fetchTransactions();
-  }, [fetchGroupDetails, fetchTransactions]);
-
-  // Fetch invitations separately, only when group ID changes
-  // Use a ref to track the last fetched group ID to prevent infinite loops
-  const lastFetchedGroupId = useRef<string | null>(null);
-  useEffect(() => {
-    // Only fetch if we haven't fetched for this group ID yet
-    // All members can view invitations, but only owners can cancel them
-    // This prevents infinite loops from group.members array reference changes
-    if (
-      group.id &&
-      session?.user?.id &&
-      lastFetchedGroupId.current !== group.id
-    ) {
-      fetchInvitations();
-      lastFetchedGroupId.current = group.id;
-    }
-  }, [group.id, session?.user?.id, fetchInvitations]);
+  // Use groupData directly, fallback to initialGroup while loading
+  const group = groupData || initialGroup;
+  
+  // API already filters by group_id, so no need for client-side filtering
+  const transactions = txData;
 
   // Refresh invitations when refreshTrigger changes (e.g., after adding a member)
   useEffect(() => {
-    if (
-      refreshTrigger !== undefined &&
-      refreshTrigger > 0 &&
-      group.id &&
-      session?.user?.id
-    ) {
-      // Reset the last fetched group ID to force a refresh
-      lastFetchedGroupId.current = null;
-      fetchInvitations();
+    if (refreshTrigger !== undefined && refreshTrigger > 0) {
+      refetchInvites();
     }
-  }, [refreshTrigger, group.id, session?.user?.id, fetchInvitations]);
+  }, [refreshTrigger, refetchInvites]);
 
   const handleDeleteGroup = async () => {
     Alert.alert(
@@ -273,45 +100,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           text: "Delete",
           style: "destructive",
           onPress: async () => {
-            if (!API_URL) {
-              Alert.alert("Error", "Unable to connect to the server");
-              return;
-            }
-
             try {
               setLeaving(true);
-
-              let {
-                data: { session: currentSession },
-              } = await supabase.auth.getSession();
-
-              if (!currentSession) {
-                Alert.alert("Error", "Not authenticated");
-                return;
-              }
-
-              const token = currentSession.access_token;
-
-              const response = await fetch(`${API_URL}/groups/${group.id}`, {
-                method: "DELETE",
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                  "Content-Type": "application/json",
-                },
-              });
-
-              if (!response.ok) {
-                if (response.status === 401) {
-                  await signOut();
-                  return;
-                }
-
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(
-                  errorData.error || `HTTP error! status: ${response.status}`
-                );
-              }
-
+              await deleteGroupMutation.mutateAsync(group.id);
               if (onDeleteGroup) {
                 onDeleteGroup();
               } else {
@@ -320,7 +111,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             } catch (err) {
               Alert.alert(
                 "Error",
-                err instanceof Error ? err.message : "Failed to delete group"
+                getUserFriendlyErrorMessage(err)
               );
             } finally {
               setLeaving(false);
@@ -342,65 +133,18 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           text: "Leave",
           style: "destructive",
           onPress: async () => {
-            if (!API_URL) {
-              Alert.alert("Error", "Unable to connect to the server");
+            const currentUserId = session?.user?.id;
+            if (!currentUserId) {
+              Alert.alert("Error", "Unable to identify user");
               return;
             }
 
             try {
               setLeaving(true);
-
-              let {
-                data: { session: currentSession },
-              } = await supabase.auth.getSession();
-
-              if (!currentSession) {
-                Alert.alert("Error", "Not authenticated");
-                return;
-              }
-
-              const token = currentSession.access_token;
-              const currentUserId = session?.user?.id;
-
-              if (!currentUserId) {
-                Alert.alert("Error", "Unable to identify user");
-                return;
-              }
-
-              const response = await fetch(
-                `${API_URL}/group-members?group_id=${group.id}&user_id=${currentUserId}`,
-                {
-                  method: "DELETE",
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/json",
-                  },
-                }
-              );
-
-              if (!response.ok) {
-                if (response.status === 401) {
-                  await signOut();
-                  return;
-                }
-
-                const errorData = await response.json().catch(() => ({}));
-                const errorMessage =
-                  errorData.error || `HTTP error! status: ${response.status}`;
-
-                // Show user-friendly error messages for specific cases
-                if (errorMessage.includes("last owner")) {
-                  Alert.alert(
-                    "Cannot Leave Group",
-                    "You cannot leave the group because you are the last owner. Please transfer ownership to another member first or delete the group.",
-                    [{ text: "OK" }]
-                  );
-                  return;
-                }
-
-                throw new Error(errorMessage);
-              }
-
+              await removeMemberMutation.mutateAsync({
+                groupId: group.id,
+                userId: currentUserId,
+              });
               // Call the onLeaveGroup callback if provided, otherwise just go back
               if (onLeaveGroup) {
                 onLeaveGroup();
@@ -408,10 +152,19 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 onBack();
               }
             } catch (err) {
-              Alert.alert(
-                "Error",
-                err instanceof Error ? err.message : "Failed to leave group"
-              );
+              const errorMessage = getUserFriendlyErrorMessage(err);
+              
+              // Show user-friendly error messages for specific cases
+              if (errorMessage.includes("last owner")) {
+                Alert.alert(
+                  "Cannot Leave Group",
+                  "You cannot leave the group because you are the last owner. Please transfer ownership to another member first or delete the group.",
+                  [{ text: "OK" }]
+                );
+                return;
+              }
+
+              Alert.alert("Error", errorMessage);
             } finally {
               setLeaving(false);
               setMenuVisible(false);
@@ -422,156 +175,30 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     );
   };
 
-  const formatDate = (dateString: string): string => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  };
 
   const handleCreateTransaction = async (
     transactionData: Omit<Transaction, "id" | "created_at" | "user_id">
   ): Promise<void> => {
-    if (!API_URL) {
-      throw new Error("Unable to connect to the server");
-    }
-
-    try {
-      let {
-        data: { session: currentSession },
-      } = await supabase.auth.getSession();
-
-      if (!currentSession) {
-        throw new Error("Not authenticated");
-      }
-
-      const token = currentSession.access_token;
-
-      const response = await fetch(`${API_URL}/transactions`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ...transactionData,
-          group_id: group.id,
-          currency: transactionData.currency || getDefaultCurrency(),
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.error || `HTTP error! status: ${response.status}`
-        );
-      }
-
-      setShowTransactionForm(false);
-      setEditingTransaction(null);
-      await fetchTransactions();
-      if (onTransactionAdded) {
-        onTransactionAdded();
-      }
-    } catch (error) {
-      throw error;
-    }
+    await createTx.mutateAsync({
+      ...transactionData,
+      group_id: group.id,
+      currency: transactionData.currency || getDefaultCurrency(),
+    });
   };
 
   const handleUpdateTransaction = async (
     transactionData: Omit<Transaction, "id" | "created_at" | "user_id">
   ): Promise<void> => {
-    if (!API_URL || !editingTransaction) {
-      throw new Error("Invalid request");
-    }
-
-    try {
-      let {
-        data: { session: currentSession },
-      } = await supabase.auth.getSession();
-
-      if (!currentSession) {
-        throw new Error("Not authenticated");
-      }
-
-      const token = currentSession.access_token;
-
-      const response = await fetch(`${API_URL}/transactions`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ...transactionData,
-          id: editingTransaction.id,
-          currency: transactionData.currency || getDefaultCurrency(),
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.error || `HTTP error! status: ${response.status}`
-        );
-      }
-
-      setShowTransactionForm(false);
-      setEditingTransaction(null);
-      await fetchTransactions();
-      if (onTransactionAdded) {
-        onTransactionAdded();
-      }
-    } catch (error) {
-      throw error;
-    }
+    if (!editingTransaction) throw new Error("Invalid request");
+    await updateTx.mutateAsync({
+      ...transactionData,
+      id: editingTransaction.id,
+      currency: transactionData.currency || getDefaultCurrency(),
+    });
   };
 
-  const handleDeleteTransaction = async (
-    transactionId: number
-  ): Promise<void> => {
-    if (!API_URL) {
-      throw new Error("Unable to connect to the server");
-    }
-
-    try {
-      let {
-        data: { session: currentSession },
-      } = await supabase.auth.getSession();
-
-      if (!currentSession) {
-        throw new Error("Not authenticated");
-      }
-
-      const token = currentSession.access_token;
-
-      const response = await fetch(
-        `${API_URL}/transactions?id=${transactionId}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.error || `HTTP error! status: ${response.status}`
-        );
-      }
-
-      await fetchTransactions();
-      if (onTransactionAdded) {
-        onTransactionAdded();
-      }
-    } catch (error) {
-      throw error;
-    }
+  const handleDeleteTransaction = async (transactionId: number): Promise<void> => {
+    await deleteTx.mutateAsync({ id: transactionId, group_id: group.id });
   };
 
   const handleRemoveMember = async (
@@ -621,9 +248,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             } catch (error) {
               Alert.alert(
                 "Error",
-                error instanceof Error
-                  ? error.message
-                  : "Failed to remove member"
+                getUserFriendlyErrorMessage(error)
               );
             } finally {
               setRemovingMemberId(null);
@@ -671,11 +296,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   );
 
   const handleCancelInvitation = async (invitationId: string) => {
-    if (!API_URL) {
-      Alert.alert("Error", "Unable to connect to the server");
-      return;
-    }
-
     Alert.alert(
       "Cancel Invitation",
       "Are you sure you want to cancel this invitation?",
@@ -687,50 +307,14 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           onPress: async () => {
             try {
               setCancellingInvitationId(invitationId);
-
-              let {
-                data: { session: currentSession },
-              } = await supabase.auth.getSession();
-
-              if (!currentSession) {
-                Alert.alert("Error", "Not authenticated");
-                return;
-              }
-
-              const token = currentSession.access_token;
-
-              const response = await fetch(
-                `${API_URL}/invitations/${invitationId}`,
-                {
-                  method: "DELETE",
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/json",
-                  },
-                }
-              );
-
-              if (!response.ok) {
-                if (response.status === 401) {
-                  await signOut();
-                  return;
-                }
-
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(
-                  errorData.error || `HTTP error! status: ${response.status}`
-                );
-              }
-
-              // Refresh invitations and reset fetch tracking
-              lastFetchedGroupId.current = null;
-              await fetchInvitations();
+              await cancelInvite.mutateAsync({
+                invitationId,
+                groupId: group.id,
+              });
             } catch (err) {
               Alert.alert(
                 "Error",
-                err instanceof Error
-                  ? err.message
-                  : "Failed to cancel invitation"
+                getUserFriendlyErrorMessage(err)
               );
             } finally {
               setCancellingInvitationId(null);
@@ -741,7 +325,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     );
   };
 
-  if (loading && !group.members) {
+  if (groupLoading && !group.members) {
     return (
       <View
         style={[
@@ -757,7 +341,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     );
   }
 
-  if (error) {
+  if (groupError) {
     return (
       <View
         style={[
@@ -775,9 +359,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           variant="bodyMedium"
           style={{ marginBottom: 24, textAlign: "center" }}
         >
-          {error}
+          {getUserFriendlyErrorMessage(groupError)}
         </Text>
-        <Button mode="contained" onPress={fetchGroupDetails}>
+        <Button mode="contained" onPress={() => { void refetchGroup(); }}>
           Retry
         </Button>
       </View>
@@ -884,327 +468,32 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
           {membersExpanded && (
             <>
-              {group.members && group.members.length > 0 ? (
-                <>
-                  {group.members.map((member, index) => {
-                    const memberName =
-                      member.email ||
-                      `User ${member.user_id.substring(0, 8)}...`;
-                    const isCurrentUser = member.user_id === session?.user?.id;
-                    const ownerCount =
-                      group.members?.filter((m) => m.role === "owner").length ||
-                      0;
-                    // Owners can remove any member (including themselves if not last owner)
-                    // Regular members can remove themselves
-                    const canRemove =
-                      (isOwner &&
-                        (!isCurrentUser ||
-                          (isCurrentUser &&
-                            (ownerCount > 1 || member.role !== "owner")))) ||
-                      (!isOwner && isCurrentUser);
-                    const isRemoving = removingMemberId === member.user_id;
-
-                    return (
-                      <React.Fragment key={member.id}>
-                        <Card
-                          style={[
-                            styles.memberCard,
-                            isRemoving && styles.memberCardRemoving,
-                          ]}
-                          mode="outlined"
-                        >
-                          <Card.Content style={styles.memberContent}>
-                            <View style={styles.memberLeft}>
-                              <Text
-                                variant="titleSmall"
-                                style={[
-                                  styles.memberName,
-                                  isRemoving && { opacity: 0.6 },
-                                ]}
-                              >
-                                {memberName}
-                              </Text>
-                              <Text
-                                variant="bodySmall"
-                                style={{
-                                  color: theme.colors.onSurfaceVariant,
-                                  opacity: isRemoving ? 0.6 : 1,
-                                }}
-                              >
-                                Joined {formatDate(member.joined_at)}
-                              </Text>
-                            </View>
-                            <View style={styles.memberRight}>
-                              {isRemoving ? (
-                                <ActivityIndicator
-                                  size="small"
-                                  color={theme.colors.primary}
-                                  style={styles.removingIndicator}
-                                />
-                              ) : (
-                                <>
-                                  <Chip
-                                    style={[
-                                      styles.roleChip,
-                                      {
-                                        backgroundColor:
-                                          member.role === "owner"
-                                            ? theme.colors.primaryContainer
-                                            : theme.colors.surfaceVariant,
-                                      },
-                                    ]}
-                                    textStyle={{
-                                      color:
-                                        member.role === "owner"
-                                          ? theme.colors.onPrimaryContainer
-                                          : theme.colors.onSurfaceVariant,
-                                    }}
-                                  >
-                                    {member.role}
-                                  </Chip>
-                                  {canRemove && (
-                                    <IconButton
-                                      icon="delete-outline"
-                                      size={20}
-                                      iconColor={theme.colors.error}
-                                      onPress={() =>
-                                        handleRemoveMember(
-                                          member.user_id,
-                                          member.email
-                                        )
-                                      }
-                                      style={styles.removeMemberButton}
-                                      disabled={removingMemberId !== null}
-                                    />
-                                  )}
-                                </>
-                              )}
-                            </View>
-                          </Card.Content>
-                        </Card>
-                        {index < group.members!.length - 1 && (
-                          <View style={{ height: 8 }} />
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </>
-              ) : (
-                <Text
-                  variant="bodyMedium"
-                  style={{
-                    color: theme.colors.onSurfaceVariant,
-                    textAlign: "center",
-                  }}
-                >
-                  No members yet
-                </Text>
+              <MembersList
+                members={group.members || []}
+                currentUserId={session?.user?.id}
+                isOwner={isOwner}
+                removingMemberId={removingMemberId}
+                onRemove={handleRemoveMember}
+              />
+              {group.members && group.members.length > 0 && invitations.length > 0 && (
+                <View style={{ height: 8 }} />
               )}
-
-              {invitations.length > 0 && (
-                <>
-                  {group.members && group.members.length > 0 && (
-                    <View style={{ height: 8 }} />
-                  )}
-                  {invitationsLoading ? (
-                    <ActivityIndicator
-                      size="small"
-                      style={{ marginVertical: 16 }}
-                    />
-                  ) : (
-                    invitations.map((invitation, index) => {
-                      const isCancelling =
-                        cancellingInvitationId === invitation.id;
-                      const expiresDate = new Date(invitation.expires_at);
-                      const isExpired = expiresDate < new Date();
-
-                      return (
-                        <React.Fragment key={invitation.id}>
-                          <Card
-                            style={[
-                              styles.memberCard,
-                              isCancelling && styles.memberCardRemoving,
-                              isExpired && { opacity: 0.6 },
-                            ]}
-                            mode="outlined"
-                          >
-                            <Card.Content style={styles.memberContent}>
-                              <View style={styles.memberLeft}>
-                                <Text
-                                  variant="titleSmall"
-                                  style={[
-                                    styles.memberName,
-                                    isCancelling && { opacity: 0.6 },
-                                  ]}
-                                >
-                                  {invitation.email}
-                                </Text>
-                                <Text
-                                  variant="bodySmall"
-                                  style={{
-                                    color: theme.colors.onSurfaceVariant,
-                                    opacity: isCancelling ? 0.6 : 1,
-                                  }}
-                                >
-                                  Invited {formatDate(invitation.created_at)}
-                                  {isExpired
-                                    ? " • Expired"
-                                    : ` • Expires ${formatDate(
-                                        invitation.expires_at
-                                      )}`}
-                                </Text>
-                              </View>
-                              <View style={styles.memberRight}>
-                                {memoizedIsOwner && (
-                                  <>
-                                    {isCancelling ? (
-                                      <ActivityIndicator
-                                        size="small"
-                                        color={theme.colors.primary}
-                                        style={styles.removingIndicator}
-                                      />
-                                    ) : (
-                                      <IconButton
-                                        icon="close-circle-outline"
-                                        size={20}
-                                        iconColor={theme.colors.error}
-                                        onPress={() =>
-                                          handleCancelInvitation(invitation.id)
-                                        }
-                                        style={styles.removeMemberButton}
-                                        disabled={
-                                          cancellingInvitationId !== null
-                                        }
-                                      />
-                                    )}
-                                  </>
-                                )}
-                              </View>
-                            </Card.Content>
-                          </Card>
-                          {index < invitations.length - 1 && (
-                            <View style={{ height: 8 }} />
-                          )}
-                        </React.Fragment>
-                      );
-                    })
-                  )}
-                </>
-              )}
+              <InvitationsList
+                invitations={invitations}
+                loading={invitationsLoading}
+                isOwner={memoizedIsOwner}
+                cancellingInvitationId={cancellingInvitationId}
+                onCancel={handleCancelInvitation}
+              />
             </>
           )}
         </View>
 
-        <View style={[styles.section, { marginTop: 24 }]}>
-          <Text variant="titleMedium" style={styles.sectionTitle}>
-            Transactions ({transactions.length})
-          </Text>
-
-          {transactionsLoading ? (
-            <ActivityIndicator size="small" style={{ marginVertical: 16 }} />
-          ) : transactions.length > 0 ? (
-            transactions.slice(0, 5).map((transaction, index) => {
-              const isIncome = transaction.type === "income";
-              const amountColor = isIncome ? "#10b981" : "#ef4444";
-              const sign = isIncome ? "+" : "-";
-
-              return (
-                <React.Fragment key={transaction.id}>
-                  <Card
-                    style={styles.transactionCard}
-                    mode="outlined"
-                    onPress={() => handleEditTransaction(transaction)}
-                  >
-                    <Card.Content style={styles.transactionContent}>
-                      <View style={styles.transactionLeft}>
-                        <Text
-                          variant="titleSmall"
-                          style={styles.transactionDescription}
-                        >
-                          {transaction.description || "No description"}
-                        </Text>
-                        <View style={styles.transactionMeta}>
-                          <Text
-                            variant="bodySmall"
-                            style={{ color: theme.colors.onSurfaceVariant }}
-                          >
-                            {formatDate(transaction.date)}
-                            {transaction.category &&
-                              ` • ${transaction.category}`}
-                          </Text>
-                        </View>
-                      </View>
-                      <View style={styles.transactionRight}>
-                        <Text
-                          variant="titleMedium"
-                          style={[
-                            styles.transactionAmount,
-                            { color: amountColor },
-                          ]}
-                        >
-                          {sign}
-                          {formatCurrency(
-                            transaction.amount,
-                            transaction.currency
-                          )}
-                        </Text>
-                      </View>
-                    </Card.Content>
-                  </Card>
-                  {index < Math.min(transactions.length, 5) - 1 && (
-                    <View style={{ height: 8 }} />
-                  )}
-                </React.Fragment>
-              );
-            })
-          ) : (
-            <Card style={styles.emptyStateCard} mode="outlined">
-              <Card.Content style={styles.emptyStateContent}>
-                <Text
-                  variant="headlineSmall"
-                  style={[
-                    styles.emptyStateIcon,
-                    { color: theme.colors.onSurfaceVariant },
-                  ]}
-                >
-                  💰
-                </Text>
-                <Text
-                  variant="titleMedium"
-                  style={[
-                    styles.emptyStateTitle,
-                    { color: theme.colors.onSurface },
-                  ]}
-                >
-                  No Transactions Yet
-                </Text>
-                <Text
-                  variant="bodyMedium"
-                  style={[
-                    styles.emptyStateMessage,
-                    { color: theme.colors.onSurfaceVariant },
-                  ]}
-                >
-                  Start tracking expenses and income for this group by adding
-                  your first transaction.
-                </Text>
-              </Card.Content>
-            </Card>
-          )}
-
-          {transactions.length > 5 && (
-            <Text
-              variant="bodySmall"
-              style={{
-                color: theme.colors.primary,
-                textAlign: "center",
-                marginTop: 8,
-              }}
-            >
-              Showing 5 of {transactions.length} transactions
-            </Text>
-          )}
-        </View>
+        <TransactionsSection
+          items={transactions}
+          loading={txLoading}
+          onEdit={handleEditTransaction}
+        />
       </ScrollView>
 
       {isMember && (
