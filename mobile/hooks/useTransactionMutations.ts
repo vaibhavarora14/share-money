@@ -61,26 +61,62 @@ export function useDeleteTransaction() {
 
   return useMutation({
     mutationFn: async (
-      variables:
-        | number
-        | {
-            id: number;
-            group_id?: string;
-          }
+      variables: {
+        id: number;
+        group_id?: string;
+      }
     ) => {
-      const id = typeof variables === "number" ? variables : variables.id;
-      const response = await fetchWithAuth(`/transactions?id=${id}`, {
+      const response = await fetchWithAuth(`/transactions?id=${variables.id}`, {
         method: "DELETE",
       });
       if (response.status === 204) return null;
       return response.json();
     },
-    onSuccess: (_, variables) => {
+    onMutate: async (variables) => {
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: ["transactions"] }),
+        variables.group_id
+          ? queryClient.cancelQueries({
+              queryKey: ["transactions", "group", variables.group_id],
+            })
+          : Promise.resolve(),
+      ]);
+      const prevAll = queryClient.getQueryData(["transactions"]) as any[] | undefined;
+      const prevGroup = variables.group_id
+        ? (queryClient.getQueryData(["transactions", "group", variables.group_id]) as
+            | any[]
+            | undefined)
+        : undefined;
+      if (prevAll) {
+        queryClient.setQueryData(
+          ["transactions"],
+          prevAll.filter((t) => t.id !== variables.id)
+        );
+      }
+      if (prevGroup && variables.group_id) {
+        queryClient.setQueryData(
+          ["transactions", "group", variables.group_id],
+          prevGroup.filter((t) => t.id !== variables.id)
+        );
+      }
+      return { prevAll, prevGroup };
+    },
+    onError: (_err, variables, context) => {
+      if (context?.prevAll) {
+        queryClient.setQueryData(["transactions"], context.prevAll);
+      }
+      if (context?.prevGroup && variables.group_id) {
+        queryClient.setQueryData(
+          ["transactions", "group", variables.group_id],
+          context.prevGroup
+        );
+      }
+    },
+    onSettled: (_data, _error, variables) => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      const groupId = typeof variables === "number" ? undefined : variables.group_id;
-      if (groupId) {
+      if (variables.group_id) {
         queryClient.invalidateQueries({
-          queryKey: ["transactions", "group", groupId],
+          queryKey: ["transactions", "group", variables.group_id],
         });
       }
     },

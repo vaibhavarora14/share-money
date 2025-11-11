@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Session } from "@supabase/supabase-js";
 import { StatusBar } from "expo-status-bar";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -53,8 +52,6 @@ import {
 } from "./hooks/useGroupMutations";
 
 // Constants
-const TOKEN_REFRESH_BUFFER_SECONDS = 60;
-const FETCH_DELAY_MS = 500;
 const INCOME_COLOR = "#10b981";
 const EXPENSE_COLOR = "#ef4444";
 

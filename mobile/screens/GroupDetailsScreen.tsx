@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import {
   ActivityIndicator,
@@ -14,10 +14,17 @@ import {
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
-import { supabase } from "../supabase";
 import { GroupInvitation, GroupWithMembers, Transaction } from "../types";
 import { formatCurrency, getDefaultCurrency } from "../utils/currency";
 import { TransactionFormScreen } from "./TransactionFormScreen";
+import { useGroupDetails } from "../hooks/useGroupDetails";
+import { useTransactions } from "../hooks/useTransactions";
+import { useGroupInvitations } from "../hooks/useGroupInvitations";
+import {
+  useCreateTransaction,
+  useUpdateTransaction,
+  useDeleteTransaction,
+} from "../hooks/useTransactionMutations";
 
 // API URL - must be set via EXPO_PUBLIC_API_URL environment variable
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -44,7 +51,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   refreshTrigger,
 }) => {
   const [group, setGroup] = useState<GroupWithMembers>(initialGroup);
-  const [loading, setLoading] = useState<boolean>(false);
   const [leaving, setLeaving] = useState<boolean>(false);
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
   const [menuVisible, setMenuVisible] = useState<boolean>(false);
@@ -52,185 +58,42 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     useState<boolean>(false);
   const [editingTransaction, setEditingTransaction] =
     useState<Transaction | null>(null);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [transactionsLoading, setTransactionsLoading] =
-    useState<boolean>(false);
-  const [invitations, setInvitations] = useState<GroupInvitation[]>([]);
-  const [invitationsLoading, setInvitationsLoading] = useState<boolean>(false);
+  // React Query data
+  const { data: groupData, isLoading: groupLoading, error: groupError, refetch: refetchGroup } = useGroupDetails(initialGroup.id);
+  const { data: txData = [], isLoading: txLoading, refetch: refetchTx } = useTransactions(initialGroup.id);
+  const { data: invitations = [], isLoading: invitationsLoading, refetch: refetchInvites } = useGroupInvitations(initialGroup.id);
   const [cancellingInvitationId, setCancellingInvitationId] = useState<
     string | null
   >(null);
-  const [error, setError] = useState<string | null>(null);
   const [membersExpanded, setMembersExpanded] = useState<boolean>(false);
   const { session, signOut } = useAuth();
   const theme = useTheme();
+  // Transaction mutations
+  const createTx = useCreateTransaction();
+  const updateTx = useUpdateTransaction();
+  const deleteTx = useDeleteTransaction();
 
-  const fetchGroupDetails = useCallback(async (): Promise<void> => {
-    if (!API_URL) {
-      setError(
-        "Unable to connect to the server. Please check your app configuration and try again."
-      );
-      setLoading(false);
-      return;
-    }
+  // Sync latest group data into local state
+  useEffect(() => {
+    if (groupData) setGroup(groupData);
+  }, [groupData]);
 
-    if (!session) {
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      let {
-        data: { session: currentSession },
-      } = await supabase.auth.getSession();
-
-      if (!currentSession) {
-        setLoading(false);
-        return;
-      }
-
-      const token = currentSession.access_token;
-
-      const response = await fetch(`${API_URL}/groups/${group.id}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          await signOut();
-          return;
-        }
-
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.error || `HTTP error! status: ${response.status}`
-        );
-      }
-
-      const data: GroupWithMembers = await response.json();
-      setGroup(data);
-
-      // If invitations are included in the response, update state
-      if (data.invitations) {
-        const pendingInvitations = data.invitations.filter(
-          (inv) => inv.status === "pending"
-        );
-        setInvitations(pendingInvitations);
-      }
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Unknown error occurred";
-      if (
-        !errorMessage.includes("401") &&
-        !errorMessage.includes("Unauthorized")
-      ) {
-        setError(errorMessage);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [group.id, session, signOut]);
-
-  const fetchTransactions = useCallback(async (): Promise<void> => {
-    if (!API_URL || !session) return;
-
-    try {
-      setTransactionsLoading(true);
-      let {
-        data: { session: currentSession },
-      } = await supabase.auth.getSession();
-
-      if (!currentSession) return;
-
-      const token = currentSession.access_token;
-
-      const response = await fetch(
-        `${API_URL}/transactions?group_id=${group.id}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data: Transaction[] = await response.json();
-        // Filter to only show transactions for this group
-        const groupTransactions = data.filter((t) => t.group_id === group.id);
-        setTransactions(groupTransactions);
-      }
-    } catch (err) {
-      console.error("Error fetching transactions:", err);
-    } finally {
-      setTransactionsLoading(false);
-    }
-  }, [session, group.id]);
+  const transactions = useMemo(
+    () => txData.filter((t) => t.group_id === group.id),
+    [txData, group.id]
+  );
 
   // Update local state when initialGroup prop changes
   useEffect(() => {
     setGroup(initialGroup);
   }, [initialGroup]);
 
-  const fetchInvitations = useCallback(async (): Promise<void> => {
-    if (!API_URL || !session) return;
-
-    try {
-      setInvitationsLoading(true);
-      let {
-        data: { session: currentSession },
-      } = await supabase.auth.getSession();
-
-      if (!currentSession) return;
-
-      const token = currentSession.access_token;
-
-      const response = await fetch(
-        `${API_URL}/invitations?group_id=${group.id}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data: GroupInvitation[] = await response.json();
-        // Filter to only show pending invitations
-        const pendingInvitations = data.filter(
-          (inv) => inv.status === "pending"
-        );
-        setInvitations(pendingInvitations);
-      } else {
-        // Log error for debugging
-        const errorData = await response.json().catch(() => ({}));
-        console.error(
-          "Error fetching invitations:",
-          response.status,
-          errorData.error || "Unknown error"
-        );
-        // Set empty array on error (don't show invitations if fetch fails)
-        setInvitations([]);
-      }
-    } catch (err) {
-      console.error("Error fetching invitations:", err);
-      // Set empty array on error
-      setInvitations([]);
-    } finally {
-      setInvitationsLoading(false);
-    }
-  }, [session, group.id]);
+  // invitations handled by useGroupInvitations
 
   useEffect(() => {
-    fetchGroupDetails();
-    fetchTransactions();
-  }, [fetchGroupDetails, fetchTransactions]);
+    refetchGroup();
+    refetchTx();
+  }, [refetchGroup, refetchTx]);
 
   // Fetch invitations separately, only when group ID changes
   // Use a ref to track the last fetched group ID to prevent infinite loops
@@ -244,10 +107,10 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       session?.user?.id &&
       lastFetchedGroupId.current !== group.id
     ) {
-      fetchInvitations();
+      refetchInvites();
       lastFetchedGroupId.current = group.id;
     }
-  }, [group.id, session?.user?.id, fetchInvitations]);
+  }, [group.id, session?.user?.id, refetchInvites]);
 
   // Refresh invitations when refreshTrigger changes (e.g., after adding a member)
   useEffect(() => {
@@ -259,9 +122,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     ) {
       // Reset the last fetched group ID to force a refresh
       lastFetchedGroupId.current = null;
-      fetchInvitations();
+      refetchInvites();
     }
-  }, [refreshTrigger, group.id, session?.user?.id, fetchInvitations]);
+  }, [refreshTrigger, group.id, session?.user?.id, refetchInvites]);
 
   const handleDeleteGroup = async () => {
     Alert.alert(
@@ -434,144 +297,26 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const handleCreateTransaction = async (
     transactionData: Omit<Transaction, "id" | "created_at" | "user_id">
   ): Promise<void> => {
-    if (!API_URL) {
-      throw new Error("Unable to connect to the server");
-    }
-
-    try {
-      let {
-        data: { session: currentSession },
-      } = await supabase.auth.getSession();
-
-      if (!currentSession) {
-        throw new Error("Not authenticated");
-      }
-
-      const token = currentSession.access_token;
-
-      const response = await fetch(`${API_URL}/transactions`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ...transactionData,
-          group_id: group.id,
-          currency: transactionData.currency || getDefaultCurrency(),
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.error || `HTTP error! status: ${response.status}`
-        );
-      }
-
-      setShowTransactionForm(false);
-      setEditingTransaction(null);
-      await fetchTransactions();
-      if (onTransactionAdded) {
-        onTransactionAdded();
-      }
-    } catch (error) {
-      throw error;
-    }
+    await createTx.mutateAsync({
+      ...transactionData,
+      group_id: group.id,
+      currency: transactionData.currency || getDefaultCurrency(),
+    });
   };
 
   const handleUpdateTransaction = async (
     transactionData: Omit<Transaction, "id" | "created_at" | "user_id">
   ): Promise<void> => {
-    if (!API_URL || !editingTransaction) {
-      throw new Error("Invalid request");
-    }
-
-    try {
-      let {
-        data: { session: currentSession },
-      } = await supabase.auth.getSession();
-
-      if (!currentSession) {
-        throw new Error("Not authenticated");
-      }
-
-      const token = currentSession.access_token;
-
-      const response = await fetch(`${API_URL}/transactions`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ...transactionData,
-          id: editingTransaction.id,
-          currency: transactionData.currency || getDefaultCurrency(),
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.error || `HTTP error! status: ${response.status}`
-        );
-      }
-
-      setShowTransactionForm(false);
-      setEditingTransaction(null);
-      await fetchTransactions();
-      if (onTransactionAdded) {
-        onTransactionAdded();
-      }
-    } catch (error) {
-      throw error;
-    }
+    if (!editingTransaction) throw new Error("Invalid request");
+    await updateTx.mutateAsync({
+      ...transactionData,
+      id: editingTransaction.id,
+      currency: transactionData.currency || getDefaultCurrency(),
+    });
   };
 
-  const handleDeleteTransaction = async (
-    transactionId: number
-  ): Promise<void> => {
-    if (!API_URL) {
-      throw new Error("Unable to connect to the server");
-    }
-
-    try {
-      let {
-        data: { session: currentSession },
-      } = await supabase.auth.getSession();
-
-      if (!currentSession) {
-        throw new Error("Not authenticated");
-      }
-
-      const token = currentSession.access_token;
-
-      const response = await fetch(
-        `${API_URL}/transactions?id=${transactionId}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.error || `HTTP error! status: ${response.status}`
-        );
-      }
-
-      await fetchTransactions();
-      if (onTransactionAdded) {
-        onTransactionAdded();
-      }
-    } catch (error) {
-      throw error;
-    }
+  const handleDeleteTransaction = async (transactionId: number): Promise<void> => {
+    await deleteTx.mutateAsync({ id: transactionId, group_id: group.id });
   };
 
   const handleRemoveMember = async (
@@ -741,7 +486,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     );
   };
 
-  if (loading && !group.members) {
+  if (groupLoading && !group.members) {
     return (
       <View
         style={[
@@ -757,7 +502,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     );
   }
 
-  if (error) {
+  if (groupError) {
     return (
       <View
         style={[
@@ -775,9 +520,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           variant="bodyMedium"
           style={{ marginBottom: 24, textAlign: "center" }}
         >
-          {error}
+          {groupError instanceof Error ? groupError.message : String(groupError)}
         </Text>
-        <Button mode="contained" onPress={fetchGroupDetails}>
+        <Button mode="contained" onPress={refetchGroup}>
           Retry
         </Button>
       </View>
@@ -1100,7 +845,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             Transactions ({transactions.length})
           </Text>
 
-          {transactionsLoading ? (
+          {txLoading ? (
             <ActivityIndicator size="small" style={{ marginVertical: 16 }} />
           ) : transactions.length > 0 ? (
             transactions.slice(0, 5).map((transaction, index) => {
