@@ -81,7 +81,7 @@ function TransactionsScreen({
   const theme = useTheme();
 
   const {
-    data: transactions = [],
+    data: transactions = [] as Transaction[],
     isLoading: loading,
     error,
     refetch,
@@ -89,14 +89,6 @@ function TransactionsScreen({
   const createTransaction = useCreateTransaction();
   const updateTransaction = useUpdateTransaction();
   const deleteTransaction = useDeleteTransaction();
-  const createGroupMutation = useCreateGroupMutation();
-  const addMemberMutation = useAddMemberMutation();
-  const removeMemberMutation = useRemoveMemberMutation();
-  
-  // Get group details when a group is selected
-  const { data: selectedGroupDetails } = useGroupDetails(
-    selectedGroup?.id || null
-  );
 
   // Memoize calculations to avoid recalculating on every render
   // Must be called before any early returns to maintain hook order
@@ -542,6 +534,13 @@ function AppContent() {
   const [invitationsRefreshTrigger, setInvitationsRefreshTrigger] =
     useState<number>(0);
   const prevSessionRef = React.useRef<Session | null>(null);
+
+  // Mutations (declare in the scope where used)
+  const createGroupMutation = useCreateGroupMutation();
+  const addMemberMutation = useAddMemberMutation();
+  const removeMemberMutation = useRemoveMemberMutation();
+  // Fetch selected group details via query when selectedGroup changes
+  const { data: selectedGroupDetails } = useGroupDetails(selectedGroup?.id ?? null);
 
   // Reset navigation state on logout and login (only when session state changes)
   useEffect(() => {

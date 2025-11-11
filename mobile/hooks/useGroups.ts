@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData as keepPreviousValue } from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
 import { Group } from "../types";
 import { fetchWithAuth } from "../utils/api";
@@ -18,6 +18,6 @@ export function useGroups() {
       return response.json();
     },
     enabled: !!session,
-    keepPreviousData: true,
+    placeholderData: keepPreviousValue,
   });
 }

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData as keepPreviousValue } from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
 import { Transaction } from "../types";
 import { fetchWithAuth } from "../utils/api";
@@ -24,6 +24,6 @@ export function useTransactions(groupId?: string | null) {
       return data;
     },
     enabled: !!session,
-    keepPreviousData: true,
+    placeholderData: keepPreviousValue,
   });
 }
