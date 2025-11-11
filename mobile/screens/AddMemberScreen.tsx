@@ -19,6 +19,7 @@ import {
   useTheme,
 } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 
 interface AddMemberScreenProps {
   visible: boolean;
@@ -97,7 +98,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
     } catch (error) {
       Alert.alert(
         "Error",
-        error instanceof Error ? error.message : "Failed to add member"
+        getUserFriendlyErrorMessage(error)
       );
     } finally {
       setLoading(false);

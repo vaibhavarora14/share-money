@@ -28,6 +28,7 @@ import {
   getCurrencySymbol,
   getDefaultCurrency,
 } from "../utils/currency";
+import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 
 interface TransactionFormScreenProps {
   visible: boolean;
@@ -175,7 +176,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     } catch (error) {
       Alert.alert(
         "Error",
-        error instanceof Error ? error.message : "Failed to save transaction"
+        getUserFriendlyErrorMessage(error)
       );
     } finally {
       setLoading(false);
@@ -203,9 +204,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
             } catch (error) {
               Alert.alert(
                 "Error",
-                error instanceof Error
-                  ? error.message
-                  : "Failed to delete transaction"
+                getUserFriendlyErrorMessage(error)
               );
             } finally {
               setLoading(false);
