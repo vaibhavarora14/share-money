@@ -285,24 +285,6 @@ Automatic Supabase migrations are configured via GitHub Actions.
 - **Netlify**: Loads from root `.env` automatically in dev
 - **Mobile**: Loads from `mobile/.env` (Expo SDK 49+ native support)
 
-### Currency Configuration
-
-The default currency can be configured via environment variables:
-
-- **Mobile App**: Set `EXPO_PUBLIC_DEFAULT_CURRENCY` in `mobile/.env` (defaults to `INR`)
-- **Server-side**: Set `DEFAULT_CURRENCY` in root `.env` or Netlify environment variables (defaults to `INR`)
-
-**Example:**
-```env
-# Mobile app
-EXPO_PUBLIC_DEFAULT_CURRENCY=USD
-
-# Server-side (Netlify Functions)
-DEFAULT_CURRENCY=USD
-```
-
-**Note:** The database migration sets the default currency to `INR` for new groups and transactions. Existing records are not affected.
-
 ## Debugging
 
 ### View Android Logs
