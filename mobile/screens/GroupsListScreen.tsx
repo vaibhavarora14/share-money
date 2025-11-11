@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import {
   ActivityIndicator,
@@ -11,13 +11,9 @@ import {
   useTheme,
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useAuth } from "../contexts/AuthContext";
-import { supabase } from "../supabase";
+import { useGroups } from "../hooks/useGroups";
 import { Group } from "../types";
 import { CreateGroupScreen } from "./CreateGroupScreen";
-
-// API URL - must be set via EXPO_PUBLIC_API_URL environment variable
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 interface GroupsListScreenProps {
   onGroupPress: (group: Group) => void;
@@ -32,95 +28,9 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   onGroupPress,
   onCreateGroup,
 }) => {
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
   const [showCreateGroup, setShowCreateGroup] = useState<boolean>(false);
-  const { session, signOut } = useAuth();
-  const fetchingRef = React.useRef<boolean>(false);
   const theme = useTheme();
-
-  const fetchGroups = useCallback(async (): Promise<void> => {
-    if (!API_URL) {
-      setError(
-        "Unable to connect to the server. Please check your app configuration and try again."
-      );
-      setLoading(false);
-      return;
-    }
-
-    if (!session) {
-      return;
-    }
-
-    if (fetchingRef.current) {
-      return;
-    }
-
-    try {
-      fetchingRef.current = true;
-      setLoading(true);
-      setError(null);
-
-      // Get the latest session from Supabase
-      let {
-        data: { session: currentSession },
-      } = await supabase.auth.getSession();
-
-      if (!currentSession) {
-        setLoading(false);
-        return;
-      }
-
-      const token = currentSession.access_token;
-
-      const fullUrl = `${API_URL}/groups`;
-      const response = await fetch(fullUrl, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          await signOut();
-          return;
-        }
-
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.error || `HTTP error! status: ${response.status}`
-        );
-      }
-
-      const data: Group[] = await response.json();
-      setGroups(data);
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Unknown error occurred";
-      console.error("Error fetching groups:", errorMessage);
-      if (
-        !errorMessage.includes("401") &&
-        !errorMessage.includes("Unauthorized")
-      ) {
-        setError(errorMessage);
-      }
-    } finally {
-      fetchingRef.current = false;
-      setLoading(false);
-    }
-  }, [session, signOut]);
-
-  useEffect(() => {
-    if (session) {
-      fetchGroups();
-    } else {
-      setGroups([]);
-      setLoading(false);
-      setError(null);
-    }
-  }, [session, fetchGroups]);
+  const { data: groups = [], isLoading: loading, error, refetch } = useGroups();
 
   const formatDate = (dateString: string): string => {
     const date = new Date(dateString);
@@ -165,9 +75,9 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
           variant="bodyMedium"
           style={{ marginBottom: 24, textAlign: "center" }}
         >
-          {error}
+          {error instanceof Error ? error.message : "An error occurred"}
         </Text>
-        <Button mode="contained" onPress={fetchGroups}>
+        <Button mode="contained" onPress={() => refetch()}>
           Retry
         </Button>
       </View>
@@ -256,8 +166,6 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
         onCreateGroup={async (groupData) => {
           await onCreateGroup(groupData);
           setShowCreateGroup(false);
-          // Refresh the groups list after creating a new group
-          await fetchGroups();
         }}
         onDismiss={() => setShowCreateGroup(false)}
       />

@@ -17,6 +17,7 @@
     "update:production": "eas update --branch production"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.56.2",
     "@expo/vector-icons": "^15.0.3",
     "@react-native-async-storage/async-storage": "^2.1.0",
     "@react-native-community/datetimepicker": "^8.5.0",
