@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Transaction } from "../types";
 import { fetchWithAuth } from "../utils/api";
+import { queryKeys } from "../utils/queryKeys";
 
 export function useCreateTransaction() {
   const queryClient = useQueryClient();
@@ -17,10 +18,10 @@ export function useCreateTransaction() {
       return response.json();
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.transactions() });
       if (variables.group_id) {
         queryClient.invalidateQueries({
-          queryKey: ["transactions", "group", variables.group_id],
+          queryKey: queryKeys.transactionsByGroup(variables.group_id),
         });
       }
     },
@@ -46,10 +47,10 @@ export function useUpdateTransaction() {
       return response.json();
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.transactions() });
       if (variables.group_id) {
         queryClient.invalidateQueries({
-          queryKey: ["transactions", "group", variables.group_id],
+          queryKey: queryKeys.transactionsByGroup(variables.group_id),
         });
       }
     },
@@ -74,28 +75,28 @@ export function useDeleteTransaction() {
     },
     onMutate: async (variables) => {
       await Promise.all([
-        queryClient.cancelQueries({ queryKey: ["transactions"] }),
+        queryClient.cancelQueries({ queryKey: queryKeys.transactions() }),
         variables.group_id
           ? queryClient.cancelQueries({
-              queryKey: ["transactions", "group", variables.group_id],
+              queryKey: queryKeys.transactionsByGroup(variables.group_id),
             })
           : Promise.resolve(),
       ]);
-      const prevAll = queryClient.getQueryData(["transactions"]) as any[] | undefined;
+      const prevAll = queryClient.getQueryData(queryKeys.transactions()) as any[] | undefined;
       const prevGroup = variables.group_id
-        ? (queryClient.getQueryData(["transactions", "group", variables.group_id]) as
+        ? (queryClient.getQueryData(queryKeys.transactionsByGroup(variables.group_id)) as
             | any[]
             | undefined)
         : undefined;
       if (prevAll) {
         queryClient.setQueryData(
-          ["transactions"],
+          queryKeys.transactions(),
           prevAll.filter((t) => t.id !== variables.id)
         );
       }
       if (prevGroup && variables.group_id) {
         queryClient.setQueryData(
-          ["transactions", "group", variables.group_id],
+          queryKeys.transactionsByGroup(variables.group_id),
           prevGroup.filter((t) => t.id !== variables.id)
         );
       }
@@ -103,20 +104,20 @@ export function useDeleteTransaction() {
     },
     onError: (_err, variables, context) => {
       if (context?.prevAll) {
-        queryClient.setQueryData(["transactions"], context.prevAll);
+        queryClient.setQueryData(queryKeys.transactions(), context.prevAll);
       }
       if (context?.prevGroup && variables.group_id) {
         queryClient.setQueryData(
-          ["transactions", "group", variables.group_id],
+          queryKeys.transactionsByGroup(variables.group_id),
           context.prevGroup
         );
       }
     },
     onSettled: (_data, _error, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.transactions() });
       if (variables.group_id) {
         queryClient.invalidateQueries({
-          queryKey: ["transactions", "group", variables.group_id],
+          queryKey: queryKeys.transactionsByGroup(variables.group_id),
         });
       }
     },

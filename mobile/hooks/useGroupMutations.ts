@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
 import { Group } from "../types";
 import { fetchWithAuth } from "../utils/api";
+import { queryKeys } from "../utils/queryKeys";
 
 export function useCreateGroup() {
   const queryClient = useQueryClient();
@@ -20,7 +21,7 @@ export function useCreateGroup() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["groups"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.groups });
     },
   });
 }
@@ -48,40 +49,39 @@ export function useAddMember() {
     },
     onMutate: async (variables) => {
       await Promise.all([
-        queryClient.cancelQueries({ queryKey: ["group", variables.groupId] }),
+        queryClient.cancelQueries({ queryKey: queryKeys.group(variables.groupId) }),
         queryClient.cancelQueries({
-          queryKey: ["group-invitations", variables.groupId],
+          queryKey: queryKeys.invitationsByGroup(variables.groupId),
         }),
       ]);
-      const previousGroup = queryClient.getQueryData(["group", variables.groupId]);
-      const previousInvitations = queryClient.getQueryData([
-        "group-invitations",
-        variables.groupId,
-      ]) as any[] | undefined;
+      const previousGroup = queryClient.getQueryData(queryKeys.group(variables.groupId));
+      const previousInvitations = queryClient.getQueryData(
+        queryKeys.invitationsByGroup(variables.groupId)
+      ) as any[] | undefined;
       // Optimistically add a pending invitation entry
       if (previousInvitations) {
-        queryClient.setQueryData([
-          "group-invitations",
-          variables.groupId,
-        ], [...previousInvitations, { id: `tmp-${Date.now()}`, group_id: variables.groupId, email: variables.email, status: "pending" }]);
+        queryClient.setQueryData(
+          queryKeys.invitationsByGroup(variables.groupId),
+          [...previousInvitations, { id: `tmp-${Date.now()}`, group_id: variables.groupId, email: variables.email, status: "pending" }]
+        );
       }
       return { previousGroup, previousInvitations };
     },
     onError: (_err, variables, context) => {
       if (context?.previousGroup) {
-        queryClient.setQueryData(["group", variables.groupId], context.previousGroup);
+        queryClient.setQueryData(queryKeys.group(variables.groupId), context.previousGroup);
       }
       if (context?.previousInvitations) {
-        queryClient.setQueryData([
-          "group-invitations",
-          variables.groupId,
-        ], context.previousInvitations);
+        queryClient.setQueryData(
+          queryKeys.invitationsByGroup(variables.groupId),
+          context.previousInvitations
+        );
       }
     },
     onSettled: (_data, _error, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["group", variables.groupId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.group(variables.groupId) });
       queryClient.invalidateQueries({
-        queryKey: ["group-invitations", variables.groupId],
+        queryKey: queryKeys.invitationsByGroup(variables.groupId),
       });
     },
   });
@@ -109,12 +109,12 @@ export function useRemoveMember() {
     },
     onMutate: async (variables) => {
       await Promise.all([
-        queryClient.cancelQueries({ queryKey: ["group", variables.groupId] }),
-        queryClient.cancelQueries({ queryKey: ["groups"] }),
+        queryClient.cancelQueries({ queryKey: queryKeys.group(variables.groupId) }),
+        queryClient.cancelQueries({ queryKey: queryKeys.groups }),
       ]);
-      const previousGroup = queryClient.getQueryData(["group", variables.groupId]) as any;
+      const previousGroup = queryClient.getQueryData(queryKeys.group(variables.groupId)) as any;
       if (previousGroup?.members) {
-        queryClient.setQueryData(["group", variables.groupId], {
+        queryClient.setQueryData(queryKeys.group(variables.groupId), {
           ...previousGroup,
           members: previousGroup.members.filter((m: any) => m.user_id !== variables.userId),
         });
@@ -123,12 +123,12 @@ export function useRemoveMember() {
     },
     onError: (_err, variables, context) => {
       if (context?.previousGroup) {
-        queryClient.setQueryData(["group", variables.groupId], context.previousGroup);
+        queryClient.setQueryData(queryKeys.group(variables.groupId), context.previousGroup);
       }
     },
     onSettled: (_data, _error, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["group", variables.groupId] });
-      queryClient.invalidateQueries({ queryKey: ["groups"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.group(variables.groupId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.groups });
     },
   });
 }
@@ -145,7 +145,7 @@ export function useDeleteGroup() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["groups"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.groups });
     },
   });
 }

@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchWithAuth } from "../utils/api";
+import { queryKeys } from "../utils/queryKeys";
 
 export function useCreateInvitation() {
   const queryClient = useQueryClient();
@@ -24,7 +25,7 @@ export function useCreateInvitation() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
-        queryKey: ["group-invitations", variables.groupId],
+        queryKey: queryKeys.invitationsByGroup(variables.groupId),
       });
     },
   });
@@ -49,15 +50,14 @@ export function useCancelInvitation() {
     },
     onMutate: async ({ invitationId, groupId }) => {
       await queryClient.cancelQueries({
-        queryKey: ["group-invitations", groupId],
+        queryKey: queryKeys.invitationsByGroup(groupId),
       });
-      const previousInvites = queryClient.getQueryData([
-        "group-invitations",
-        groupId,
-      ]) as any[] | undefined;
+      const previousInvites = queryClient.getQueryData(
+        queryKeys.invitationsByGroup(groupId)
+      ) as any[] | undefined;
       if (previousInvites) {
         queryClient.setQueryData(
-          ["group-invitations", groupId],
+          queryKeys.invitationsByGroup(groupId),
           previousInvites.filter((inv) => inv.id !== invitationId)
         );
       }
@@ -66,14 +66,14 @@ export function useCancelInvitation() {
     onError: (_err, { groupId }, context) => {
       if (context?.previousInvites) {
         queryClient.setQueryData(
-          ["group-invitations", groupId],
+          queryKeys.invitationsByGroup(groupId),
           context.previousInvites
         );
       }
     },
     onSettled: (_data, _error, { groupId }) => {
       queryClient.invalidateQueries({
-        queryKey: ["group-invitations", groupId],
+        queryKey: queryKeys.invitationsByGroup(groupId),
       });
     },
   });
