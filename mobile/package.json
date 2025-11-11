@@ -14,10 +14,7 @@
     "build:production": "eas build --platform all --profile production",
     "build:local": "./build-preview-local.sh",
     "update": "eas update --branch development",
-    "update:production": "eas update --branch production",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "update:production": "eas update --branch production"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -44,12 +41,7 @@
   "private": true,
   "devDependencies": {
     "@tanstack/react-query-devtools": "^5.90.2",
-    "@testing-library/react": "^16.3.0",
-    "@testing-library/react-hooks": "^8.0.1",
-    "@types/jest": "^30.0.0",
     "@types/react": "~19.1.10",
-    "jest": "^30.2.0",
-    "jest-expo": "^54.0.13",
     "typescript": "^5.9.3"
   }
 }
