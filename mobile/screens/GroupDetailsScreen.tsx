@@ -136,45 +136,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           text: "Delete",
           style: "destructive",
           onPress: async () => {
-            if (!API_URL) {
-              Alert.alert("Error", "Unable to connect to the server");
-              return;
-            }
-
             try {
               setLeaving(true);
-
-              let {
-                data: { session: currentSession },
-              } = await supabase.auth.getSession();
-
-              if (!currentSession) {
-                Alert.alert("Error", "Not authenticated");
-                return;
-              }
-
-              const token = currentSession.access_token;
-
-              const response = await fetch(`${API_URL}/groups/${group.id}`, {
-                method: "DELETE",
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                  "Content-Type": "application/json",
-                },
-              });
-
-              if (!response.ok) {
-                if (response.status === 401) {
-                  await signOut();
-                  return;
-                }
-
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(
-                  errorData.error || `HTTP error! status: ${response.status}`
-                );
-              }
-
+              await deleteGroupMutation.mutateAsync(group.id);
               if (onDeleteGroup) {
                 onDeleteGroup();
               } else {
@@ -205,65 +169,18 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           text: "Leave",
           style: "destructive",
           onPress: async () => {
-            if (!API_URL) {
-              Alert.alert("Error", "Unable to connect to the server");
+            const currentUserId = session?.user?.id;
+            if (!currentUserId) {
+              Alert.alert("Error", "Unable to identify user");
               return;
             }
 
             try {
               setLeaving(true);
-
-              let {
-                data: { session: currentSession },
-              } = await supabase.auth.getSession();
-
-              if (!currentSession) {
-                Alert.alert("Error", "Not authenticated");
-                return;
-              }
-
-              const token = currentSession.access_token;
-              const currentUserId = session?.user?.id;
-
-              if (!currentUserId) {
-                Alert.alert("Error", "Unable to identify user");
-                return;
-              }
-
-              const response = await fetch(
-                `${API_URL}/group-members?group_id=${group.id}&user_id=${currentUserId}`,
-                {
-                  method: "DELETE",
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/json",
-                  },
-                }
-              );
-
-              if (!response.ok) {
-                if (response.status === 401) {
-                  await signOut();
-                  return;
-                }
-
-                const errorData = await response.json().catch(() => ({}));
-                const errorMessage =
-                  errorData.error || `HTTP error! status: ${response.status}`;
-
-                // Show user-friendly error messages for specific cases
-                if (errorMessage.includes("last owner")) {
-                  Alert.alert(
-                    "Cannot Leave Group",
-                    "You cannot leave the group because you are the last owner. Please transfer ownership to another member first or delete the group.",
-                    [{ text: "OK" }]
-                  );
-                  return;
-                }
-
-                throw new Error(errorMessage);
-              }
-
+              await removeMemberMutation.mutateAsync({
+                groupId: group.id,
+                userId: currentUserId,
+              });
               // Call the onLeaveGroup callback if provided, otherwise just go back
               if (onLeaveGroup) {
                 onLeaveGroup();
@@ -271,10 +188,20 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 onBack();
               }
             } catch (err) {
-              Alert.alert(
-                "Error",
-                err instanceof Error ? err.message : "Failed to leave group"
-              );
+              const errorMessage =
+                err instanceof Error ? err.message : "Failed to leave group";
+              
+              // Show user-friendly error messages for specific cases
+              if (errorMessage.includes("last owner")) {
+                Alert.alert(
+                  "Cannot Leave Group",
+                  "You cannot leave the group because you are the last owner. Please transfer ownership to another member first or delete the group.",
+                  [{ text: "OK" }]
+                );
+                return;
+              }
+
+              Alert.alert("Error", errorMessage);
             } finally {
               setLeaving(false);
               setMenuVisible(false);

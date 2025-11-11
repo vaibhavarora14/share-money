@@ -62,12 +62,14 @@ import {
   useCreateGroup as useCreateGroupMutation,
   useRemoveMember as useRemoveMemberMutation,
 } from "./hooks/useGroupMutations";
+import { useGroupDetails } from "./hooks/useGroupDetails";
 
 // Constants
 const INCOME_COLOR = "#10b981";
 const EXPENSE_COLOR = "#ef4444";
 
 // API URL - must be set via EXPO_PUBLIC_API_URL environment variable
+// Note: This is only used in legacy code paths and should be removed
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 function TransactionsScreen({
@@ -93,6 +95,11 @@ function TransactionsScreen({
   const createGroupMutation = useCreateGroupMutation();
   const addMemberMutation = useAddMemberMutation();
   const removeMemberMutation = useRemoveMemberMutation();
+  
+  // Get group details when a group is selected
+  const { data: selectedGroupDetails } = useGroupDetails(
+    selectedGroup?.id || null
+  );
 
   // Memoize calculations to avoid recalculating on every render
   // Must be called before any early returns to maintain hook order
@@ -557,6 +564,7 @@ function AppContent() {
   }, [session]);
 
   // Use shared token helper from utils/api to avoid drift
+  // Note: getAuthToken is still used in some places but should be replaced with hooks
 
   const handleCreateGroup = async (groupData: {
     name: string;
@@ -594,29 +602,17 @@ function AppContent() {
     });
   };
 
-  const handleGroupPress = async (group: Group) => {
-    if (!API_URL) return;
-
-    const token = await getAuthToken();
-    if (!token) return;
-
-    try {
-      const response = await fetch(`${API_URL}/groups/${group.id}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (response.ok) {
-        const groupWithMembers: GroupWithMembers = await response.json();
-        setGroupDetails(groupWithMembers);
-        setSelectedGroup(group);
-      }
-    } catch (error) {
-      console.error("Error fetching group details:", error);
-    }
+  const handleGroupPress = (group: Group) => {
+    setSelectedGroup(group);
+    // Group details will be fetched via useGroupDetails hook
   };
+
+  // Update groupDetails when selectedGroupDetails changes
+  useEffect(() => {
+    if (selectedGroupDetails && selectedGroup) {
+      setGroupDetails(selectedGroupDetails);
+    }
+  }, [selectedGroupDetails, selectedGroup]);
 
   if (loading) {
     return (
