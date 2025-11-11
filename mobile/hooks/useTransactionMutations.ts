@@ -13,6 +13,7 @@ export function useCreateTransaction() {
         method: "POST",
         body: JSON.stringify(transactionData),
       });
+      if (response.status === 204) return null;
       return response.json();
     },
     onSuccess: (_, variables) => {
@@ -41,6 +42,7 @@ export function useUpdateTransaction() {
           id,
         }),
       });
+      if (response.status === 204) return null;
       return response.json();
     },
     onSuccess: (_, variables) => {
@@ -58,17 +60,29 @@ export function useDeleteTransaction() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (transactionId: number) => {
-      const response = await fetchWithAuth(
-        `/transactions?id=${transactionId}`,
-        {
-          method: "DELETE",
-        }
-      );
+    mutationFn: async (
+      variables:
+        | number
+        | {
+            id: number;
+            group_id?: string;
+          }
+    ) => {
+      const id = typeof variables === "number" ? variables : variables.id;
+      const response = await fetchWithAuth(`/transactions?id=${id}`, {
+        method: "DELETE",
+      });
+      if (response.status === 204) return null;
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      const groupId = typeof variables === "number" ? undefined : variables.group_id;
+      if (groupId) {
+        queryClient.invalidateQueries({
+          queryKey: ["transactions", "group", groupId],
+        });
+      }
     },
   });
 }
