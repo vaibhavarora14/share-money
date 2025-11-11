@@ -27,5 +27,6 @@ export function useTransactions(groupId?: string | null) {
       return data;
     },
     enabled: !!session,
+    keepPreviousData: true,
   });
 }
