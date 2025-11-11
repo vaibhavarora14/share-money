@@ -27,11 +27,17 @@ import {
 } from "react-native-paper";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { QueryClientProvider } from "@tanstack/react-query";
-// DevTools for React Query in RN (Flipper)
+// DevTools for React Query - support RN (Flipper) or Web
 let ReactQueryDevtools: React.ComponentType | null = null;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  ReactQueryDevtools = require("@tanstack/react-query-devtools-flipper").ReactQueryDevtools;
+  ReactQueryDevtools = require("react-query-native-devtools").ReactQueryDevtools;
+} catch {}
+try {
+  if (!ReactQueryDevtools) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    ReactQueryDevtools = require("@tanstack/react-query-devtools").ReactQueryDevtools;
+  }
 } catch {}
 import { BottomNavBar } from "./components/BottomNavBar";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
