@@ -19,12 +19,16 @@ export const CURRENCIES: Currency[] = [
   { code: 'KRW', symbol: '₩', name: 'South Korean Won' },
 ];
 
-export function getCurrencySymbol(currencyCode: string = 'USD'): string {
+export function getDefaultCurrency(): string {
+  return process.env.EXPO_PUBLIC_DEFAULT_CURRENCY || 'INR';
+}
+
+export function getCurrencySymbol(currencyCode: string = getDefaultCurrency()): string {
   const currency = CURRENCIES.find(c => c.code === currencyCode);
   return currency?.symbol || '$';
 }
 
-export function formatCurrency(amount: number, currencyCode: string = 'USD'): string {
+export function formatCurrency(amount: number, currencyCode: string = getDefaultCurrency()): string {
   const symbol = getCurrencySymbol(currencyCode);
   // For currencies like JPY that don't use decimals
   const decimals = ['JPY', 'KRW'].includes(currencyCode) ? 0 : 2;
