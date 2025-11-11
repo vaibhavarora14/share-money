@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
-import { Group } from "../types";
+import { Group, GroupInvitation, GroupWithMembers } from "../types";
 import { fetchWithAuth } from "../utils/api";
 import { queryKeys } from "../utils/queryKeys";
 
@@ -54,10 +54,12 @@ export function useAddMember() {
           queryKey: queryKeys.invitationsByGroup(variables.groupId),
         }),
       ]);
-      const previousGroup = queryClient.getQueryData(queryKeys.group(variables.groupId));
-      const previousInvitations = queryClient.getQueryData(
+      const previousGroup = queryClient.getQueryData<GroupWithMembers>(
+        queryKeys.group(variables.groupId)
+      );
+      const previousInvitations = queryClient.getQueryData<GroupInvitation[]>(
         queryKeys.invitationsByGroup(variables.groupId)
-      ) as any[] | undefined;
+      );
       // Optimistically add a pending invitation entry
       if (previousInvitations) {
         queryClient.setQueryData(
@@ -112,11 +114,13 @@ export function useRemoveMember() {
         queryClient.cancelQueries({ queryKey: queryKeys.group(variables.groupId) }),
         queryClient.cancelQueries({ queryKey: queryKeys.groups }),
       ]);
-      const previousGroup = queryClient.getQueryData(queryKeys.group(variables.groupId)) as any;
+      const previousGroup = queryClient.getQueryData<GroupWithMembers>(
+        queryKeys.group(variables.groupId)
+      );
       if (previousGroup?.members) {
         queryClient.setQueryData(queryKeys.group(variables.groupId), {
           ...previousGroup,
-          members: previousGroup.members.filter((m: any) => m.user_id !== variables.userId),
+          members: previousGroup.members.filter((m) => m.user_id !== variables.userId),
         });
       }
       return { previousGroup };

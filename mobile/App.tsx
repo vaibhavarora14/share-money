@@ -48,6 +48,8 @@ import { GroupsListScreen } from "./screens/GroupsListScreen";
 import { TransactionFormScreen } from "./screens/TransactionFormScreen";
 import { Group, GroupWithMembers, Transaction } from "./types";
 import { formatCurrency, getDefaultCurrency } from "./utils/currency";
+import { formatDate } from "./utils/date";
+import { getUserFriendlyErrorMessage } from "./utils/errorMessages";
 import { queryClient } from "./utils/queryClient";
 // Devtools disabled
 
@@ -103,14 +105,6 @@ function TransactionsScreen({
     };
   }, [transactions]);
 
-  const formatDate = (dateString: string): string => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  };
 
   const formatAmount = (
     amount: number,
@@ -222,7 +216,7 @@ function TransactionsScreen({
           variant="bodyMedium"
           style={{ marginBottom: 24, textAlign: "center" }}
         >
-          {error instanceof Error ? error.message : "An error occurred"}
+          {getUserFriendlyErrorMessage(error)}
         </Text>
         <Button mode="contained" onPress={() => refetch()}>
           Retry

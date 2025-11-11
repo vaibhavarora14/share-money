@@ -18,6 +18,7 @@ import {
   TextInput,
   useTheme,
 } from "react-native-paper";
+import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 
 interface CreateGroupScreenProps {
   visible: boolean;
@@ -80,7 +81,7 @@ export const CreateGroupScreen: React.FC<CreateGroupScreenProps> = ({
     } catch (error) {
       Alert.alert(
         "Error",
-        error instanceof Error ? error.message : "Failed to create group"
+        getUserFriendlyErrorMessage(error)
       );
     } finally {
       setLoading(false);

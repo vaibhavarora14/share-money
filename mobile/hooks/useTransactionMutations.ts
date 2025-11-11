@@ -82,11 +82,13 @@ export function useDeleteTransaction() {
             })
           : Promise.resolve(),
       ]);
-      const prevAll = queryClient.getQueryData(queryKeys.transactions()) as any[] | undefined;
+      const prevAll = queryClient.getQueryData<Transaction[]>(
+        queryKeys.transactions()
+      );
       const prevGroup = variables.group_id
-        ? (queryClient.getQueryData(queryKeys.transactionsByGroup(variables.group_id)) as
-            | any[]
-            | undefined)
+        ? queryClient.getQueryData<Transaction[]>(
+            queryKeys.transactionsByGroup(variables.group_id)
+          )
         : undefined;
       if (prevAll) {
         queryClient.setQueryData(

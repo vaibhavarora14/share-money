@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "../supabase";
+import { ApiErrorResponse } from "../types/api";
 
 const TOKEN_REFRESH_BUFFER_SECONDS = 60;
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -87,12 +88,12 @@ export async function fetchWithAuth(
   });
 
   if (response.status === 401) {
-    let errorData: any = null;
+    let errorData: ApiErrorResponse | null = null;
     try {
       const responseText = await response.text();
       if (responseText) {
         try {
-          errorData = JSON.parse(responseText);
+          errorData = JSON.parse(responseText) as ApiErrorResponse;
         } catch {
           // Not JSON
         }
@@ -127,12 +128,12 @@ export async function fetchWithAuth(
   }
 
   if (!response.ok) {
-    let errorData: any = null;
+    let errorData: ApiErrorResponse | null = null;
     try {
       const responseText = await response.text();
       if (responseText) {
         try {
-          errorData = JSON.parse(responseText);
+          errorData = JSON.parse(responseText) as ApiErrorResponse;
         } catch {
           // Not JSON, use text as error message
         }
