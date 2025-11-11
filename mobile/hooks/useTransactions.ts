@@ -20,11 +20,7 @@ export function useTransactions(groupId?: string | null) {
       const response = await fetchWithAuth(endpoint);
       const data: Transaction[] = await response.json();
 
-      // If filtering by group, ensure we only return transactions for that group
-      if (groupId) {
-        return data.filter((t) => t.group_id === groupId);
-      }
-
+      // API already filters by group_id when query param is provided
       return data;
     },
     enabled: !!session,

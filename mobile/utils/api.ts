@@ -4,6 +4,40 @@ import { supabase } from "../supabase";
 const TOKEN_REFRESH_BUFFER_SECONDS = 60;
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
+/**
+ * Sanitizes error messages to remove sensitive information before showing to users
+ */
+function sanitizeErrorMessage(message: string): string {
+  // Remove stack traces (lines starting with "at" or file paths)
+  let sanitized = message
+    .split("\n")
+    .filter((line) => {
+      const trimmed = line.trim();
+      return (
+        !trimmed.startsWith("at ") &&
+        !trimmed.includes("/node_modules/") &&
+        !trimmed.includes("\\node_modules\\") &&
+        !trimmed.match(/^[A-Z]:\\/) && // Windows absolute paths
+        !trimmed.startsWith("/") && // Unix absolute paths (but allow relative)
+        !trimmed.match(/^\w+:\/\//) // URLs
+      );
+    })
+    .join("\n")
+    .trim();
+
+  // If we filtered everything out, return a generic message
+  if (!sanitized) {
+    return "An error occurred. Please try again.";
+  }
+
+  // Limit message length to prevent UI issues
+  if (sanitized.length > 200) {
+    sanitized = sanitized.substring(0, 197) + "...";
+  }
+
+  return sanitized;
+}
+
 export async function getAuthToken(): Promise<string | null> {
   let {
     data: { session: currentSession },
@@ -107,13 +141,17 @@ export async function fetchWithAuth(
       // Ignore
     }
 
-    const errorMessage =
+    const rawErrorMessage =
       errorData?.error ||
       errorData?.message ||
       errorData?.details ||
       `HTTP error! status: ${response.status}`;
 
-    throw new Error(errorMessage);
+    // Sanitize error messages for user-facing display
+    // Remove potentially sensitive information like stack traces, file paths, etc.
+    const sanitizedMessage = sanitizeErrorMessage(rawErrorMessage);
+
+    throw new Error(sanitizedMessage);
   }
 
   return response;
