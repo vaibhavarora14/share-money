@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { GroupInvitation } from "../types";
 import { fetchWithAuth } from "../utils/api";
 import { queryKeys } from "../utils/queryKeys";
 
@@ -52,9 +53,9 @@ export function useCancelInvitation() {
       await queryClient.cancelQueries({
         queryKey: queryKeys.invitationsByGroup(groupId),
       });
-      const previousInvites = queryClient.getQueryData(
+      const previousInvites = queryClient.getQueryData<GroupInvitation[]>(
         queryKeys.invitationsByGroup(groupId)
-      ) as any[] | undefined;
+      );
       if (previousInvites) {
         queryClient.setQueryData(
           queryKeys.invitationsByGroup(groupId),

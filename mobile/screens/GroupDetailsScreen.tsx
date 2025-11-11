@@ -111,7 +111,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             } catch (err) {
               Alert.alert(
                 "Error",
-                err instanceof Error ? err.message : "Failed to delete group"
+                getUserFriendlyErrorMessage(err)
               );
             } finally {
               setLeaving(false);
@@ -248,9 +248,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             } catch (error) {
               Alert.alert(
                 "Error",
-                error instanceof Error
-                  ? error.message
-                  : "Failed to remove member"
+                getUserFriendlyErrorMessage(error)
               );
             } finally {
               setRemovingMemberId(null);
@@ -316,9 +314,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             } catch (err) {
               Alert.alert(
                 "Error",
-                err instanceof Error
-                  ? err.message
-                  : "Failed to cancel invitation"
+                getUserFriendlyErrorMessage(err)
               );
             } finally {
               setCancellingInvitationId(null);
@@ -363,7 +359,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           variant="bodyMedium"
           style={{ marginBottom: 24, textAlign: "center" }}
         >
-          {groupError instanceof Error ? groupError.message : String(groupError)}
+          {getUserFriendlyErrorMessage(groupError)}
         </Text>
         <Button mode="contained" onPress={() => { void refetchGroup(); }}>
           Retry
