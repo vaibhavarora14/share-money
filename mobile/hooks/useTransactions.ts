@@ -2,12 +2,13 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
 import { Transaction } from "../types";
 import { fetchWithAuth } from "../utils/api";
+import { queryKeys } from "../utils/queryKeys";
 
 export function useTransactions(groupId?: string | null) {
   const { session } = useAuth();
 
   return useQuery<Transaction[]>({
-    queryKey: groupId ? ["transactions", "group", groupId] : ["transactions"],
+    queryKey: groupId ? queryKeys.transactionsByGroup(groupId) : queryKeys.transactions(),
     queryFn: async () => {
       if (!session) {
         throw new Error("Not authenticated");
