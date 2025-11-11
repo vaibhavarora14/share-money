@@ -1,6 +1,7 @@
 import { Session } from "@supabase/supabase-js";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { StatusBar } from "expo-status-bar";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import {
   Alert,
@@ -26,42 +27,29 @@ import {
   useTheme,
 } from "react-native-paper";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
-import { QueryClientProvider } from "@tanstack/react-query";
-// DevTools for React Query - support RN (Flipper) or Web
-let ReactQueryDevtools: React.ComponentType | null = null;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  ReactQueryDevtools = require("react-query-native-devtools").ReactQueryDevtools;
-} catch {}
-try {
-  if (!ReactQueryDevtools) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    ReactQueryDevtools = require("@tanstack/react-query-devtools").ReactQueryDevtools;
-  }
-} catch {}
 import { BottomNavBar } from "./components/BottomNavBar";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { AddMemberScreen } from "./screens/AddMemberScreen";
-import { AuthScreen } from "./screens/AuthScreen";
-import { GroupDetailsScreen } from "./screens/GroupDetailsScreen";
-import { GroupsListScreen } from "./screens/GroupsListScreen";
-import { TransactionFormScreen } from "./screens/TransactionFormScreen";
-import { supabase } from "./supabase";
-import { Group, GroupWithMembers, Transaction } from "./types";
-import { formatCurrency, getDefaultCurrency } from "./utils/currency";
-import { queryClient } from "./utils/queryClient";
-import { useTransactions } from "./hooks/useTransactions";
-import {
-  useCreateTransaction,
-  useUpdateTransaction,
-  useDeleteTransaction,
-} from "./hooks/useTransactionMutations";
+import { useGroupDetails } from "./hooks/useGroupDetails";
 import {
   useAddMember as useAddMemberMutation,
   useCreateGroup as useCreateGroupMutation,
   useRemoveMember as useRemoveMemberMutation,
 } from "./hooks/useGroupMutations";
-import { useGroupDetails } from "./hooks/useGroupDetails";
+import {
+  useCreateTransaction,
+  useDeleteTransaction,
+  useUpdateTransaction,
+} from "./hooks/useTransactionMutations";
+import { useTransactions } from "./hooks/useTransactions";
+import { AddMemberScreen } from "./screens/AddMemberScreen";
+import { AuthScreen } from "./screens/AuthScreen";
+import { GroupDetailsScreen } from "./screens/GroupDetailsScreen";
+import { GroupsListScreen } from "./screens/GroupsListScreen";
+import { TransactionFormScreen } from "./screens/TransactionFormScreen";
+import { Group, GroupWithMembers, Transaction } from "./types";
+import { formatCurrency, getDefaultCurrency } from "./utils/currency";
+import { queryClient } from "./utils/queryClient";
+// Devtools disabled
 
 // Constants
 const INCOME_COLOR = "#10b981";
@@ -156,9 +144,7 @@ function TransactionsScreen({
     setEditingTransaction(null);
   };
 
-  const handleDeleteTransaction = async (
-    tx: Transaction
-  ): Promise<void> => {
+  const handleDeleteTransaction = async (tx: Transaction): Promise<void> => {
     await deleteTransaction.mutateAsync({ id: tx.id, group_id: tx.group_id });
   };
 
@@ -540,7 +526,9 @@ function AppContent() {
   const addMemberMutation = useAddMemberMutation();
   const removeMemberMutation = useRemoveMemberMutation();
   // Fetch selected group details via query when selectedGroup changes
-  const { data: selectedGroupDetails } = useGroupDetails(selectedGroup?.id ?? null);
+  const { data: selectedGroupDetails } = useGroupDetails(
+    selectedGroup?.id ?? null
+  );
 
   // Reset navigation state on logout and login (only when session state changes)
   useEffect(() => {
@@ -749,27 +737,26 @@ export default function App() {
   const theme = colorScheme === "dark" ? MD3DarkTheme : MD3LightTheme;
 
   return (
-    <ErrorBoundary
-      FallbackComponent={ErrorFallback}
-      onError={(error, errorInfo) => {
-        console.error("ErrorBoundary caught error:", error);
-        console.error("Error info:", errorInfo);
-      }}
-      onReset={() => {
-        // Error boundary reset
-      }}
-    >
-      <SafeAreaProvider>
-        <PaperProvider theme={theme}>
-          <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={queryClient}>
+      <ErrorBoundary
+        FallbackComponent={ErrorFallback}
+        onError={(error, errorInfo) => {
+          console.error("ErrorBoundary caught error:", error);
+          console.error("Error info:", errorInfo);
+        }}
+        onReset={() => {
+          // Error boundary reset
+        }}
+      >
+        <SafeAreaProvider>
+          <PaperProvider theme={theme}>
             <AuthProvider>
               <AppContent />
             </AuthProvider>
-            {ReactQueryDevtools && __DEV__ ? <ReactQueryDevtools /> : null}
-          </QueryClientProvider>
-        </PaperProvider>
-      </SafeAreaProvider>
-    </ErrorBoundary>
+          </PaperProvider>
+        </SafeAreaProvider>
+      </ErrorBoundary>
+    </QueryClientProvider>
   );
 }
 
