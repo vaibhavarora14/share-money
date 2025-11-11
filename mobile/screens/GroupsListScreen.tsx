@@ -30,7 +30,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
 }) => {
   const [showCreateGroup, setShowCreateGroup] = useState<boolean>(false);
   const theme = useTheme();
-  const { data: groups = [], isLoading: loading, error, refetch } = useGroups();
+  const { data: groups = [] as Group[], isLoading: loading, error, refetch } = useGroups();
 
   const formatDate = (dateString: string): string => {
     const date = new Date(dateString);

@@ -17,6 +17,8 @@ import { useAuth } from "../contexts/AuthContext";
 import { GroupInvitation, GroupWithMembers, Transaction } from "../types";
 import { formatCurrency, getDefaultCurrency } from "../utils/currency";
 import { TransactionFormScreen } from "./TransactionFormScreen";
+import { useDeleteGroup, useRemoveMember } from "../hooks/useGroupMutations";
+import { useCancelInvitation } from "../hooks/useInvitationMutations";
 import { useGroupDetails } from "../hooks/useGroupDetails";
 import { useTransactions } from "../hooks/useTransactions";
 import { useGroupInvitations } from "../hooks/useGroupInvitations";
@@ -59,18 +61,21 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     useState<Transaction | null>(null);
   // React Query data - use directly, no local state needed
   const { data: groupData, isLoading: groupLoading, error: groupError, refetch: refetchGroup } = useGroupDetails(initialGroup.id);
-  const { data: txData = [], isLoading: txLoading, refetch: refetchTx } = useTransactions(initialGroup.id);
-  const { data: invitations = [], isLoading: invitationsLoading, refetch: refetchInvites } = useGroupInvitations(initialGroup.id);
+  const { data: txData = [] as Transaction[], isLoading: txLoading, refetch: refetchTx } = useTransactions(initialGroup.id);
+  const { data: invitations = [] as GroupInvitation[], isLoading: invitationsLoading, refetch: refetchInvites } = useGroupInvitations(initialGroup.id);
   const [cancellingInvitationId, setCancellingInvitationId] = useState<
     string | null
   >(null);
   const [membersExpanded, setMembersExpanded] = useState<boolean>(false);
   const { session, signOut } = useAuth();
   const theme = useTheme();
-  // Transaction mutations
+  // Mutations
   const createTx = useCreateTransaction();
   const updateTx = useUpdateTransaction();
   const deleteTx = useDeleteTransaction();
+  const deleteGroupMutation = useDeleteGroup();
+  const removeMemberMutation = useRemoveMember();
+  const cancelInvite = useCancelInvitation();
 
   // Use groupData directly, fallback to initialGroup while loading
   const group = groupData || initialGroup;
@@ -369,7 +374,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         >
           {groupError instanceof Error ? groupError.message : String(groupError)}
         </Text>
-        <Button mode="contained" onPress={refetchGroup}>
+        <Button mode="contained" onPress={() => { void refetchGroup(); }}>
           Retry
         </Button>
       </View>
