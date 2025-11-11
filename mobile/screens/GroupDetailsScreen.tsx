@@ -14,8 +14,9 @@ import {
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
-import { GroupInvitation, GroupWithMembers, Transaction } from "../types";
+import { GroupInvitation, GroupMember, GroupWithMembers, Transaction } from "../types";
 import { formatCurrency, getDefaultCurrency } from "../utils/currency";
+import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 import { TransactionFormScreen } from "./TransactionFormScreen";
 import { useDeleteGroup, useRemoveMember } from "../hooks/useGroupMutations";
 import { useCancelInvitation } from "../hooks/useInvitationMutations";
@@ -82,6 +83,326 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   
   // API already filters by group_id, so no need for client-side filtering
   const transactions = txData;
+
+  // Local presentational components (extracted for clarity)
+  const MembersList: React.FC<{
+    members: GroupMember[];
+    currentUserId?: string;
+    isOwner: boolean;
+    removingMemberId: string | null;
+    onRemove: (userId: string, email?: string) => void;
+  }> = ({ members, currentUserId, isOwner, removingMemberId, onRemove }) => {
+    if (members.length === 0) {
+      return (
+        <Text
+          variant="bodyMedium"
+          style={{
+            color: theme.colors.onSurfaceVariant,
+            textAlign: "center",
+          }}
+        >
+          No members yet
+        </Text>
+      );
+    }
+
+    return (
+      <>
+        {members.map((member, index) => {
+          const memberName =
+            member.email || `User ${member.user_id.substring(0, 8)}...`;
+          const isCurrentUser = member.user_id === currentUserId;
+          const ownerCount =
+            members.filter((m) => m.role === "owner").length || 0;
+          const canRemove =
+            (isOwner &&
+              (!isCurrentUser ||
+                (isCurrentUser && (ownerCount > 1 || member.role !== "owner")))) ||
+            (!isOwner && isCurrentUser);
+          const isRemoving = removingMemberId === member.user_id;
+
+          return (
+            <React.Fragment key={member.id}>
+              <Card
+                style={[
+                  styles.memberCard,
+                  isRemoving && styles.memberCardRemoving,
+                ]}
+                mode="outlined"
+              >
+                <Card.Content style={styles.memberContent}>
+                  <View style={styles.memberLeft}>
+                    <Text
+                      variant="titleSmall"
+                      style={[
+                        styles.memberName,
+                        isRemoving && { opacity: 0.6 },
+                      ]}
+                    >
+                      {memberName}
+                    </Text>
+                    <Text
+                      variant="bodySmall"
+                      style={{
+                        color: theme.colors.onSurfaceVariant,
+                        opacity: isRemoving ? 0.6 : 1,
+                      }}
+                    >
+                      Joined {formatDate(member.joined_at)}
+                    </Text>
+                  </View>
+                  <View style={styles.memberRight}>
+                    {isRemoving ? (
+                      <ActivityIndicator
+                        size="small"
+                        color={theme.colors.primary}
+                        style={styles.removingIndicator}
+                      />
+                    ) : (
+                      <>
+                        <Chip
+                          style={[
+                            styles.roleChip,
+                            {
+                              backgroundColor:
+                                member.role === "owner"
+                                  ? theme.colors.primaryContainer
+                                  : theme.colors.surfaceVariant,
+                            },
+                          ]}
+                          textStyle={{
+                            color:
+                              member.role === "owner"
+                                ? theme.colors.onPrimaryContainer
+                                : theme.colors.onSurfaceVariant,
+                          }}
+                        >
+                          {member.role}
+                        </Chip>
+                        {canRemove && (
+                          <IconButton
+                            icon="delete-outline"
+                            size={20}
+                            iconColor={theme.colors.error}
+                            onPress={() => onRemove(member.user_id, member.email)}
+                            style={styles.removeMemberButton}
+                            disabled={removingMemberId !== null}
+                          />
+                        )}
+                      </>
+                    )}
+                  </View>
+                </Card.Content>
+              </Card>
+              {index < members.length - 1 && <View style={{ height: 8 }} />}
+            </React.Fragment>
+          );
+        })}
+      </>
+    );
+  };
+
+  const InvitationsList: React.FC<{
+    invitations: GroupInvitation[];
+    loading: boolean;
+    isOwner: boolean;
+    cancellingInvitationId: string | null;
+    onCancel: (invitationId: string) => void;
+  }> = ({ invitations, loading, isOwner, cancellingInvitationId, onCancel }) => {
+    if (invitations.length === 0) {
+      return null;
+    }
+
+    if (loading) {
+      return (
+        <ActivityIndicator size="small" style={{ marginVertical: 16 }} />
+      );
+    }
+
+    return (
+      <>
+        {invitations.map((invitation, index) => {
+          const isCancelling = cancellingInvitationId === invitation.id;
+          const expiresDate = new Date(invitation.expires_at);
+          const isExpired = expiresDate < new Date();
+
+          return (
+            <React.Fragment key={invitation.id}>
+              <Card
+                style={[
+                  styles.memberCard,
+                  isCancelling && styles.memberCardRemoving,
+                  isExpired && { opacity: 0.6 },
+                ]}
+                mode="outlined"
+              >
+                <Card.Content style={styles.memberContent}>
+                  <View style={styles.memberLeft}>
+                    <Text
+                      variant="titleSmall"
+                      style={[
+                        styles.memberName,
+                        isCancelling && { opacity: 0.6 },
+                      ]}
+                    >
+                      {invitation.email}
+                    </Text>
+                    <Text
+                      variant="bodySmall"
+                      style={{
+                        color: theme.colors.onSurfaceVariant,
+                        opacity: isCancelling ? 0.6 : 1,
+                      }}
+                    >
+                      Invited {formatDate(invitation.created_at)}
+                      {isExpired
+                        ? " • Expired"
+                        : ` • Expires ${formatDate(invitation.expires_at)}`}
+                    </Text>
+                  </View>
+                  <View style={styles.memberRight}>
+                    {isOwner && (
+                      <>
+                        {isCancelling ? (
+                          <ActivityIndicator
+                            size="small"
+                            color={theme.colors.primary}
+                            style={styles.removingIndicator}
+                          />
+                        ) : (
+                          <IconButton
+                            icon="close-circle-outline"
+                            size={20}
+                            iconColor={theme.colors.error}
+                            onPress={() => onCancel(invitation.id)}
+                            style={styles.removeMemberButton}
+                            disabled={cancellingInvitationId !== null}
+                          />
+                        )}
+                      </>
+                    )}
+                  </View>
+                </Card.Content>
+              </Card>
+              {index < invitations.length - 1 && (
+                <View style={{ height: 8 }} />
+              )}
+            </React.Fragment>
+          );
+        })}
+      </>
+    );
+  };
+
+  const TransactionsSection: React.FC<{
+    items: Transaction[];
+    loading: boolean;
+    onEdit: (t: Transaction) => void;
+  }> = ({ items, loading, onEdit }) => (
+    <View style={[styles.section, { marginTop: 24 }]}>
+      <Text variant="titleMedium" style={styles.sectionTitle}>
+        Transactions ({items.length})
+      </Text>
+      {loading ? (
+        <ActivityIndicator size="small" style={{ marginVertical: 16 }} />
+      ) : items.length > 0 ? (
+        items.slice(0, 5).map((transaction, index) => {
+          const isIncome = transaction.type === "income";
+          const amountColor = isIncome ? "#10b981" : "#ef4444";
+          const sign = isIncome ? "+" : "-";
+          return (
+            <React.Fragment key={transaction.id}>
+              <Card
+                style={styles.transactionCard}
+                mode="outlined"
+                onPress={() => onEdit(transaction)}
+              >
+                <Card.Content style={styles.transactionContent}>
+                  <View style={styles.transactionLeft}>
+                    <Text
+                      variant="titleSmall"
+                      style={styles.transactionDescription}
+                    >
+                      {transaction.description || "No description"}
+                    </Text>
+                    <View style={styles.transactionMeta}>
+                      <Text
+                        variant="bodySmall"
+                        style={{ color: theme.colors.onSurfaceVariant }}
+                      >
+                        {formatDate(transaction.date)}
+                        {transaction.category && ` • ${transaction.category}`}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.transactionRight}>
+                    <Text
+                      variant="titleMedium"
+                      style={[styles.transactionAmount, { color: amountColor }]}
+                    >
+                      {sign}
+                      {formatCurrency(
+                        transaction.amount,
+                        transaction.currency
+                      )}
+                    </Text>
+                  </View>
+                </Card.Content>
+              </Card>
+              {index < Math.min(items.length, 5) - 1 && (
+                <View style={{ height: 8 }} />
+              )}
+            </React.Fragment>
+          );
+        })
+      ) : (
+        <Card style={styles.emptyStateCard} mode="outlined">
+          <Card.Content style={styles.emptyStateContent}>
+            <Text
+              variant="headlineSmall"
+              style={[
+                styles.emptyStateIcon,
+                { color: theme.colors.onSurfaceVariant },
+              ]}
+            >
+              💰
+            </Text>
+            <Text
+              variant="titleMedium"
+              style={[
+                styles.emptyStateTitle,
+                { color: theme.colors.onSurface },
+              ]}
+            >
+              No Transactions Yet
+            </Text>
+            <Text
+              variant="bodyMedium"
+              style={[
+                styles.emptyStateMessage,
+                { color: theme.colors.onSurfaceVariant },
+              ]}
+            >
+              Start tracking expenses and income for this group by adding your
+              first transaction.
+            </Text>
+          </Card.Content>
+        </Card>
+      )}
+      {items.length > 5 && (
+        <Text
+          variant="bodySmall"
+          style={{
+            color: theme.colors.primary,
+            textAlign: "center",
+            marginTop: 8,
+          }}
+        >
+          Showing 5 of {items.length} transactions
+        </Text>
+      )}
+    </View>
+  );
 
   // Refresh invitations when refreshTrigger changes (e.g., after adding a member)
   useEffect(() => {
@@ -152,8 +473,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 onBack();
               }
             } catch (err) {
-              const errorMessage =
-                err instanceof Error ? err.message : "Failed to leave group";
+              const errorMessage = getUserFriendlyErrorMessage(err);
               
               // Show user-friendly error messages for specific cases
               if (errorMessage.includes("last owner")) {
@@ -481,327 +801,32 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
           {membersExpanded && (
             <>
-              {group.members && group.members.length > 0 ? (
-                <>
-                  {group.members.map((member, index) => {
-                    const memberName =
-                      member.email ||
-                      `User ${member.user_id.substring(0, 8)}...`;
-                    const isCurrentUser = member.user_id === session?.user?.id;
-                    const ownerCount =
-                      group.members?.filter((m) => m.role === "owner").length ||
-                      0;
-                    // Owners can remove any member (including themselves if not last owner)
-                    // Regular members can remove themselves
-                    const canRemove =
-                      (isOwner &&
-                        (!isCurrentUser ||
-                          (isCurrentUser &&
-                            (ownerCount > 1 || member.role !== "owner")))) ||
-                      (!isOwner && isCurrentUser);
-                    const isRemoving = removingMemberId === member.user_id;
-
-                    return (
-                      <React.Fragment key={member.id}>
-                        <Card
-                          style={[
-                            styles.memberCard,
-                            isRemoving && styles.memberCardRemoving,
-                          ]}
-                          mode="outlined"
-                        >
-                          <Card.Content style={styles.memberContent}>
-                            <View style={styles.memberLeft}>
-                              <Text
-                                variant="titleSmall"
-                                style={[
-                                  styles.memberName,
-                                  isRemoving && { opacity: 0.6 },
-                                ]}
-                              >
-                                {memberName}
-                              </Text>
-                              <Text
-                                variant="bodySmall"
-                                style={{
-                                  color: theme.colors.onSurfaceVariant,
-                                  opacity: isRemoving ? 0.6 : 1,
-                                }}
-                              >
-                                Joined {formatDate(member.joined_at)}
-                              </Text>
-                            </View>
-                            <View style={styles.memberRight}>
-                              {isRemoving ? (
-                                <ActivityIndicator
-                                  size="small"
-                                  color={theme.colors.primary}
-                                  style={styles.removingIndicator}
-                                />
-                              ) : (
-                                <>
-                                  <Chip
-                                    style={[
-                                      styles.roleChip,
-                                      {
-                                        backgroundColor:
-                                          member.role === "owner"
-                                            ? theme.colors.primaryContainer
-                                            : theme.colors.surfaceVariant,
-                                      },
-                                    ]}
-                                    textStyle={{
-                                      color:
-                                        member.role === "owner"
-                                          ? theme.colors.onPrimaryContainer
-                                          : theme.colors.onSurfaceVariant,
-                                    }}
-                                  >
-                                    {member.role}
-                                  </Chip>
-                                  {canRemove && (
-                                    <IconButton
-                                      icon="delete-outline"
-                                      size={20}
-                                      iconColor={theme.colors.error}
-                                      onPress={() =>
-                                        handleRemoveMember(
-                                          member.user_id,
-                                          member.email
-                                        )
-                                      }
-                                      style={styles.removeMemberButton}
-                                      disabled={removingMemberId !== null}
-                                    />
-                                  )}
-                                </>
-                              )}
-                            </View>
-                          </Card.Content>
-                        </Card>
-                        {index < group.members!.length - 1 && (
-                          <View style={{ height: 8 }} />
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </>
-              ) : (
-                <Text
-                  variant="bodyMedium"
-                  style={{
-                    color: theme.colors.onSurfaceVariant,
-                    textAlign: "center",
-                  }}
-                >
-                  No members yet
-                </Text>
+              <MembersList
+                members={group.members || []}
+                currentUserId={session?.user?.id}
+                isOwner={isOwner}
+                removingMemberId={removingMemberId}
+                onRemove={handleRemoveMember}
+              />
+              {group.members && group.members.length > 0 && invitations.length > 0 && (
+                <View style={{ height: 8 }} />
               )}
-
-              {invitations.length > 0 && (
-                <>
-                  {group.members && group.members.length > 0 && (
-                    <View style={{ height: 8 }} />
-                  )}
-                  {invitationsLoading ? (
-                    <ActivityIndicator
-                      size="small"
-                      style={{ marginVertical: 16 }}
-                    />
-                  ) : (
-                    invitations.map((invitation, index) => {
-                      const isCancelling =
-                        cancellingInvitationId === invitation.id;
-                      const expiresDate = new Date(invitation.expires_at);
-                      const isExpired = expiresDate < new Date();
-
-                      return (
-                        <React.Fragment key={invitation.id}>
-                          <Card
-                            style={[
-                              styles.memberCard,
-                              isCancelling && styles.memberCardRemoving,
-                              isExpired && { opacity: 0.6 },
-                            ]}
-                            mode="outlined"
-                          >
-                            <Card.Content style={styles.memberContent}>
-                              <View style={styles.memberLeft}>
-                                <Text
-                                  variant="titleSmall"
-                                  style={[
-                                    styles.memberName,
-                                    isCancelling && { opacity: 0.6 },
-                                  ]}
-                                >
-                                  {invitation.email}
-                                </Text>
-                                <Text
-                                  variant="bodySmall"
-                                  style={{
-                                    color: theme.colors.onSurfaceVariant,
-                                    opacity: isCancelling ? 0.6 : 1,
-                                  }}
-                                >
-                                  Invited {formatDate(invitation.created_at)}
-                                  {isExpired
-                                    ? " • Expired"
-                                    : ` • Expires ${formatDate(
-                                        invitation.expires_at
-                                      )}`}
-                                </Text>
-                              </View>
-                              <View style={styles.memberRight}>
-                                {memoizedIsOwner && (
-                                  <>
-                                    {isCancelling ? (
-                                      <ActivityIndicator
-                                        size="small"
-                                        color={theme.colors.primary}
-                                        style={styles.removingIndicator}
-                                      />
-                                    ) : (
-                                      <IconButton
-                                        icon="close-circle-outline"
-                                        size={20}
-                                        iconColor={theme.colors.error}
-                                        onPress={() =>
-                                          handleCancelInvitation(invitation.id)
-                                        }
-                                        style={styles.removeMemberButton}
-                                        disabled={
-                                          cancellingInvitationId !== null
-                                        }
-                                      />
-                                    )}
-                                  </>
-                                )}
-                              </View>
-                            </Card.Content>
-                          </Card>
-                          {index < invitations.length - 1 && (
-                            <View style={{ height: 8 }} />
-                          )}
-                        </React.Fragment>
-                      );
-                    })
-                  )}
-                </>
-              )}
+              <InvitationsList
+                invitations={invitations}
+                loading={invitationsLoading}
+                isOwner={memoizedIsOwner}
+                cancellingInvitationId={cancellingInvitationId}
+                onCancel={handleCancelInvitation}
+              />
             </>
           )}
         </View>
 
-        <View style={[styles.section, { marginTop: 24 }]}>
-          <Text variant="titleMedium" style={styles.sectionTitle}>
-            Transactions ({transactions.length})
-          </Text>
-
-          {txLoading ? (
-            <ActivityIndicator size="small" style={{ marginVertical: 16 }} />
-          ) : transactions.length > 0 ? (
-            transactions.slice(0, 5).map((transaction, index) => {
-              const isIncome = transaction.type === "income";
-              const amountColor = isIncome ? "#10b981" : "#ef4444";
-              const sign = isIncome ? "+" : "-";
-
-              return (
-                <React.Fragment key={transaction.id}>
-                  <Card
-                    style={styles.transactionCard}
-                    mode="outlined"
-                    onPress={() => handleEditTransaction(transaction)}
-                  >
-                    <Card.Content style={styles.transactionContent}>
-                      <View style={styles.transactionLeft}>
-                        <Text
-                          variant="titleSmall"
-                          style={styles.transactionDescription}
-                        >
-                          {transaction.description || "No description"}
-                        </Text>
-                        <View style={styles.transactionMeta}>
-                          <Text
-                            variant="bodySmall"
-                            style={{ color: theme.colors.onSurfaceVariant }}
-                          >
-                            {formatDate(transaction.date)}
-                            {transaction.category &&
-                              ` • ${transaction.category}`}
-                          </Text>
-                        </View>
-                      </View>
-                      <View style={styles.transactionRight}>
-                        <Text
-                          variant="titleMedium"
-                          style={[
-                            styles.transactionAmount,
-                            { color: amountColor },
-                          ]}
-                        >
-                          {sign}
-                          {formatCurrency(
-                            transaction.amount,
-                            transaction.currency
-                          )}
-                        </Text>
-                      </View>
-                    </Card.Content>
-                  </Card>
-                  {index < Math.min(transactions.length, 5) - 1 && (
-                    <View style={{ height: 8 }} />
-                  )}
-                </React.Fragment>
-              );
-            })
-          ) : (
-            <Card style={styles.emptyStateCard} mode="outlined">
-              <Card.Content style={styles.emptyStateContent}>
-                <Text
-                  variant="headlineSmall"
-                  style={[
-                    styles.emptyStateIcon,
-                    { color: theme.colors.onSurfaceVariant },
-                  ]}
-                >
-                  💰
-                </Text>
-                <Text
-                  variant="titleMedium"
-                  style={[
-                    styles.emptyStateTitle,
-                    { color: theme.colors.onSurface },
-                  ]}
-                >
-                  No Transactions Yet
-                </Text>
-                <Text
-                  variant="bodyMedium"
-                  style={[
-                    styles.emptyStateMessage,
-                    { color: theme.colors.onSurfaceVariant },
-                  ]}
-                >
-                  Start tracking expenses and income for this group by adding
-                  your first transaction.
-                </Text>
-              </Card.Content>
-            </Card>
-          )}
-
-          {transactions.length > 5 && (
-            <Text
-              variant="bodySmall"
-              style={{
-                color: theme.colors.primary,
-                textAlign: "center",
-                marginTop: 8,
-              }}
-            >
-              Showing 5 of {transactions.length} transactions
-            </Text>
-          )}
-        </View>
+        <TransactionsSection
+          items={transactions}
+          loading={txLoading}
+          onEdit={handleEditTransaction}
+        />
       </ScrollView>
 
       {isMember && (
