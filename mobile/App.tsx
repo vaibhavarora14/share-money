@@ -50,7 +50,6 @@ import { supabase } from "./supabase";
 import { Group, GroupWithMembers, Transaction } from "./types";
 import { formatCurrency, getDefaultCurrency } from "./utils/currency";
 import { queryClient } from "./utils/queryClient";
-import { getAuthToken } from "./utils/api";
 import { useTransactions } from "./hooks/useTransactions";
 import {
   useCreateTransaction,
@@ -68,9 +67,7 @@ import { useGroupDetails } from "./hooks/useGroupDetails";
 const INCOME_COLOR = "#10b981";
 const EXPENSE_COLOR = "#ef4444";
 
-// API URL - must be set via EXPO_PUBLIC_API_URL environment variable
-// Note: This is only used in legacy code paths and should be removed
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+// API_URL removed - all API calls now go through fetchWithAuth in utils/api.ts
 
 function TransactionsScreen({
   onNavigateToGroups,
@@ -563,8 +560,7 @@ function AppContent() {
     prevSessionRef.current = session;
   }, [session]);
 
-  // Use shared token helper from utils/api to avoid drift
-  // Note: getAuthToken is still used in some places but should be replaced with hooks
+  // All API calls now use React Query hooks or fetchWithAuth utility
 
   const handleCreateGroup = async (groupData: {
     name: string;
