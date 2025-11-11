@@ -7,11 +7,11 @@
     "netlify"
   ],
   "scripts": {
-    "install": "npm install",
+    "bootstrap": "npm install --workspaces --include-workspace-root",
     "dev:mobile": "npm run start --workspace=mobile",
     "dev:server": "npm run dev --workspace=netlify"
   },
   "devDependencies": {
-    "@supabase/supabase-js": "^2.80.0"
+    "supabase": "^2.58.5"
   }
 }

@@ -1,3 +1,4 @@
+import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
@@ -12,7 +13,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import {
   Appbar,
   Button,
@@ -23,7 +23,11 @@ import {
 } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Transaction } from "../types";
-import { CURRENCIES, DEFAULT_CURRENCY, getCurrencySymbol } from "../utils/currency";
+import {
+  CURRENCIES,
+  getCurrencySymbol,
+  getDefaultCurrency,
+} from "../utils/currency";
 
 interface TransactionFormScreenProps {
   visible: boolean;
@@ -42,14 +46,17 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   onSave,
   onDismiss,
   onDelete,
-  defaultCurrency = DEFAULT_CURRENCY,
+  defaultCurrency,
 }) => {
+  // Use the prop if provided, otherwise get from environment variable at runtime
+  const effectiveDefaultCurrency = defaultCurrency || getDefaultCurrency();
+
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState("");
   const [type, setType] = useState<"income" | "expense">("expense");
   const [category, setCategory] = useState("");
-  const [currency, setCurrency] = useState<string>(defaultCurrency);
+  const [currency, setCurrency] = useState<string>(effectiveDefaultCurrency);
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
   const [loading, setLoading] = useState(false);
   const [slideAnim] = useState(new Animated.Value(0));
@@ -71,15 +78,15 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       setDate(transaction.date || "");
       setType(transaction.type || "expense");
       setCategory(transaction.category || "");
-      setCurrency(transaction.currency || defaultCurrency);
+      setCurrency(transaction.currency || effectiveDefaultCurrency);
     } else {
       // Set default date to today
       const today = new Date();
       setSelectedDate(today);
       setDate(today.toISOString().split("T")[0]);
-      setCurrency(defaultCurrency);
+      setCurrency(effectiveDefaultCurrency);
     }
-  }, [transaction, defaultCurrency]);
+  }, [transaction, effectiveDefaultCurrency]);
 
   const formatDateForInput = (date: Date): string => {
     return date.toISOString().split("T")[0];
@@ -127,7 +134,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     setDate("");
     setType("expense");
     setCategory("");
-    setCurrency(defaultCurrency);
+    setCurrency(effectiveDefaultCurrency);
     onDismiss();
   };
 
@@ -162,7 +169,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
         date: date.trim(),
         type,
         category: category.trim() || undefined,
-        currency: currency || defaultCurrency || DEFAULT_CURRENCY,
+        currency: currency || effectiveDefaultCurrency,
       });
       handleDismiss();
     } catch (error) {
@@ -447,7 +454,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
           </KeyboardAvoidingView>
         </Animated.View>
       </View>
-      
+
       {/* Currency Picker Modal */}
       <Modal
         visible={showCurrencyPicker}
@@ -474,7 +481,9 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
               ]}
             >
               <Text variant="titleLarge">Select Currency</Text>
-              <Button onPress={() => setShowCurrencyPicker(false)}>Close</Button>
+              <Button onPress={() => setShowCurrencyPicker(false)}>
+                Close
+              </Button>
             </View>
             <FlatList
               data={CURRENCIES}
