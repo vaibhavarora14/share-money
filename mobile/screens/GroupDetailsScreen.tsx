@@ -31,9 +31,6 @@ import {
   useDeleteTransaction,
 } from "../hooks/useTransactionMutations";
 
-// API URL - must be set via EXPO_PUBLIC_API_URL environment variable
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
-
 interface GroupDetailsScreenProps {
   group: GroupWithMembers;
   onBack: () => void;
