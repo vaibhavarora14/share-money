@@ -13,6 +13,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useGroups } from "../hooks/useGroups";
 import { Group } from "../types";
+import { formatDate } from "../utils/date";
+import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 import { CreateGroupScreen } from "./CreateGroupScreen";
 
 interface GroupsListScreenProps {
@@ -32,14 +34,6 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   const theme = useTheme();
   const { data: groups = [] as Group[], isLoading: loading, error, refetch } = useGroups();
 
-  const formatDate = (dateString: string): string => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  };
 
   if (loading) {
     return (
@@ -75,7 +69,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
           variant="bodyMedium"
           style={{ marginBottom: 24, textAlign: "center" }}
         >
-          {error instanceof Error ? error.message : "An error occurred"}
+          {getUserFriendlyErrorMessage(error)}
         </Text>
         <Button mode="contained" onPress={() => refetch()}>
           Retry
