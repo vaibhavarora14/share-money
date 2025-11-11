@@ -2,12 +2,13 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
 import { Group } from "../types";
 import { fetchWithAuth } from "../utils/api";
+import { queryKeys } from "../utils/queryKeys";
 
 export function useGroups() {
   const { session } = useAuth();
 
   return useQuery<Group[]>({
-    queryKey: ["groups"],
+    queryKey: queryKeys.groups,
     queryFn: async () => {
       if (!session) {
         throw new Error("Not authenticated");
@@ -17,5 +18,6 @@ export function useGroups() {
       return response.json();
     },
     enabled: !!session,
+    keepPreviousData: true,
   });
 }
