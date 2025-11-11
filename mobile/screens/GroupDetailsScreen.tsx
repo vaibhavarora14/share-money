@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import {
   ActivityIndicator,
@@ -50,7 +50,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   onTransactionAdded,
   refreshTrigger,
 }) => {
-  const [group, setGroup] = useState<GroupWithMembers>(initialGroup);
   const [leaving, setLeaving] = useState<boolean>(false);
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
   const [menuVisible, setMenuVisible] = useState<boolean>(false);
@@ -58,7 +57,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     useState<boolean>(false);
   const [editingTransaction, setEditingTransaction] =
     useState<Transaction | null>(null);
-  // React Query data
+  // React Query data - use directly, no local state needed
   const { data: groupData, isLoading: groupLoading, error: groupError, refetch: refetchGroup } = useGroupDetails(initialGroup.id);
   const { data: txData = [], isLoading: txLoading, refetch: refetchTx } = useTransactions(initialGroup.id);
   const { data: invitations = [], isLoading: invitationsLoading, refetch: refetchInvites } = useGroupInvitations(initialGroup.id);
@@ -73,58 +72,18 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const updateTx = useUpdateTransaction();
   const deleteTx = useDeleteTransaction();
 
-  // Sync latest group data into local state
-  useEffect(() => {
-    if (groupData) setGroup(groupData);
-  }, [groupData]);
-
-  const transactions = useMemo(
-    () => txData.filter((t) => t.group_id === group.id),
-    [txData, group.id]
-  );
-
-  // Update local state when initialGroup prop changes
-  useEffect(() => {
-    setGroup(initialGroup);
-  }, [initialGroup]);
-
-  // invitations handled by useGroupInvitations
-
-  useEffect(() => {
-    refetchGroup();
-    refetchTx();
-  }, [refetchGroup, refetchTx]);
-
-  // Fetch invitations separately, only when group ID changes
-  // Use a ref to track the last fetched group ID to prevent infinite loops
-  const lastFetchedGroupId = useRef<string | null>(null);
-  useEffect(() => {
-    // Only fetch if we haven't fetched for this group ID yet
-    // All members can view invitations, but only owners can cancel them
-    // This prevents infinite loops from group.members array reference changes
-    if (
-      group.id &&
-      session?.user?.id &&
-      lastFetchedGroupId.current !== group.id
-    ) {
-      refetchInvites();
-      lastFetchedGroupId.current = group.id;
-    }
-  }, [group.id, session?.user?.id, refetchInvites]);
+  // Use groupData directly, fallback to initialGroup while loading
+  const group = groupData || initialGroup;
+  
+  // API already filters by group_id, so no need for client-side filtering
+  const transactions = txData;
 
   // Refresh invitations when refreshTrigger changes (e.g., after adding a member)
   useEffect(() => {
-    if (
-      refreshTrigger !== undefined &&
-      refreshTrigger > 0 &&
-      group.id &&
-      session?.user?.id
-    ) {
-      // Reset the last fetched group ID to force a refresh
-      lastFetchedGroupId.current = null;
+    if (refreshTrigger !== undefined && refreshTrigger > 0) {
       refetchInvites();
     }
-  }, [refreshTrigger, group.id, session?.user?.id, refetchInvites]);
+  }, [refreshTrigger, refetchInvites]);
 
   const handleDeleteGroup = async () => {
     Alert.alert(
