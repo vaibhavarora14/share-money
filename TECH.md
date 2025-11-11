@@ -217,7 +217,6 @@ npm start
    - `SUPABASE_URL`
    - `SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY`
-   - `DEFAULT_CURRENCY` (optional, defaults to `INR`)
 
 2. Deploy:
    ```bash
