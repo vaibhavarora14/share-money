@@ -202,7 +202,7 @@ export const handler: Handler = async (event, context) => {
           type: transactionData.type,
           category: transactionData.category || null,
           group_id: transactionData.group_id || null,
-          currency: transactionData.currency || 'USD',
+          currency: transactionData.currency,
         })
         .select()
         .single();
@@ -260,7 +260,7 @@ export const handler: Handler = async (event, context) => {
       if (transactionData.date !== undefined) updateData.date = transactionData.date;
       if (transactionData.type !== undefined) updateData.type = transactionData.type;
       if (transactionData.category !== undefined) updateData.category = transactionData.category || null;
-      if (transactionData.currency !== undefined) updateData.currency = transactionData.currency || 'USD';
+      if (transactionData.currency !== undefined) updateData.currency = transactionData.currency;
 
       const { data: transaction, error } = await supabase
         .from('transactions')
