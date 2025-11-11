@@ -168,9 +168,7 @@ function TransactionsScreen({
             } catch (error) {
               Alert.alert(
                 "Error",
-                error instanceof Error
-                  ? error.message
-                  : "Failed to delete transaction"
+                getUserFriendlyErrorMessage(error)
               );
             }
           },
