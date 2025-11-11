@@ -37,7 +37,7 @@ import { GroupsListScreen } from "./screens/GroupsListScreen";
 import { TransactionFormScreen } from "./screens/TransactionFormScreen";
 import { supabase } from "./supabase";
 import { Group, GroupWithMembers, Transaction } from "./types";
-import { formatCurrency } from "./utils/currency";
+import { formatCurrency, getDefaultCurrency } from "./utils/currency";
 import { queryClient } from "./utils/queryClient";
 import { useTransactions } from "./hooks/useTransactions";
 import {
@@ -87,7 +87,11 @@ function TransactionsScreen({
       .filter((t) => t.type === "expense")
       .reduce((sum, t) => sum + t.amount, 0);
     const uniqueCurrencies = Array.from(
-      new Set(transactions.map((t) => t.currency || "USD").filter(Boolean))
+      new Set(
+        transactions
+          .map((t) => t.currency || getDefaultCurrency())
+          .filter(Boolean)
+      )
     );
     return {
       totalIncome: income,
@@ -112,7 +116,7 @@ function TransactionsScreen({
     currency?: string
   ): string => {
     const sign = type === "income" ? "+" : "-";
-    return `${sign}${formatCurrency(amount, currency || "USD")}`;
+    return `${sign}${formatCurrency(amount, currency || getDefaultCurrency())}`;
   };
 
   const handleCreateTransaction = async (
@@ -261,7 +265,10 @@ function TransactionsScreen({
                 variant="titleMedium"
                 style={{ color: INCOME_COLOR, fontWeight: "bold" }}
               >
-                {formatCurrency(totalIncome, currencies[0] || "USD")}
+                {formatCurrency(
+                  totalIncome,
+                  currencies[0] || getDefaultCurrency()
+                )}
               </Text>
               {currencies.length > 1 && (
                 <Text
@@ -289,7 +296,10 @@ function TransactionsScreen({
                 variant="titleMedium"
                 style={{ color: EXPENSE_COLOR, fontWeight: "bold" }}
               >
-                {formatCurrency(totalExpense, currencies[0] || "USD")}
+                {formatCurrency(
+                  totalExpense,
+                  currencies[0] || getDefaultCurrency()
+                )}
               </Text>
               {currencies.length > 1 && (
                 <Text
@@ -320,7 +330,7 @@ function TransactionsScreen({
                   fontWeight: "bold",
                 }}
               >
-                {formatCurrency(balance, currencies[0] || "USD")}
+                {formatCurrency(balance, currencies[0] || getDefaultCurrency())}
               </Text>
               {currencies.length > 1 && (
                 <Text
@@ -488,7 +498,7 @@ function TransactionsScreen({
           setShowForm(false);
           setEditingTransaction(null);
         }}
-        defaultCurrency={editingTransaction?.currency || "USD"}
+        defaultCurrency={editingTransaction?.currency || getDefaultCurrency()}
       />
     </SafeAreaView>
   );
