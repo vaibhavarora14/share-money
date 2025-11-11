@@ -416,11 +416,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   );
 
   const handleCancelInvitation = async (invitationId: string) => {
-    if (!API_URL) {
-      Alert.alert("Error", "Unable to connect to the server");
-      return;
-    }
-
     Alert.alert(
       "Cancel Invitation",
       "Are you sure you want to cancel this invitation?",
@@ -432,44 +427,10 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           onPress: async () => {
             try {
               setCancellingInvitationId(invitationId);
-
-              let {
-                data: { session: currentSession },
-              } = await supabase.auth.getSession();
-
-              if (!currentSession) {
-                Alert.alert("Error", "Not authenticated");
-                return;
-              }
-
-              const token = currentSession.access_token;
-
-              const response = await fetch(
-                `${API_URL}/invitations/${invitationId}`,
-                {
-                  method: "DELETE",
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/json",
-                  },
-                }
-              );
-
-              if (!response.ok) {
-                if (response.status === 401) {
-                  await signOut();
-                  return;
-                }
-
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(
-                  errorData.error || `HTTP error! status: ${response.status}`
-                );
-              }
-
-              // Refresh invitations and reset fetch tracking
-              lastFetchedGroupId.current = null;
-              await fetchInvitations();
+              await cancelInvite.mutateAsync({
+                invitationId,
+                groupId: group.id,
+              });
             } catch (err) {
               Alert.alert(
                 "Error",
