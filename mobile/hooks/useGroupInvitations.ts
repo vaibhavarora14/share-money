@@ -8,7 +8,7 @@ export function useGroupInvitations(groupId: string | null) {
   const { session } = useAuth();
 
   return useQuery<GroupInvitation[]>({
-    queryKey: groupId ? queryKeys.invitationsByGroup(groupId) : ["group-invitations", groupId],
+    queryKey: queryKeys.invitationsByGroup(groupId || ""),
     queryFn: async () => {
       if (!session || !groupId) {
         throw new Error("Not authenticated or invalid group ID");
