@@ -1,7 +1,7 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Session } from "@supabase/supabase-js";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { StatusBar } from "expo-status-bar";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import {
   Alert,
@@ -34,204 +34,34 @@ import { AuthScreen } from "./screens/AuthScreen";
 import { GroupDetailsScreen } from "./screens/GroupDetailsScreen";
 import { GroupsListScreen } from "./screens/GroupsListScreen";
 import { TransactionFormScreen } from "./screens/TransactionFormScreen";
-import { supabase } from "./supabase";
 import { Group, GroupWithMembers, Transaction } from "./types";
 import { formatCurrency } from "./utils/currency";
+import { queryClient } from "./utils/queryClient";
+import { useTransactions } from "./hooks/useTransactions";
+import { useCreateTransaction, useUpdateTransaction, useDeleteTransaction } from "./hooks/useTransactionMutations";
+import { useCreateGroup, useAddMember, useRemoveMember } from "./hooks/useGroupMutations";
+import { useQueryClient } from "@tanstack/react-query";
+import { apiFetch } from "./utils/api";
 
 // Constants
-const TOKEN_REFRESH_BUFFER_SECONDS = 60;
-const FETCH_DELAY_MS = 500;
 const INCOME_COLOR = "#10b981";
 const EXPENSE_COLOR = "#ef4444";
-
-// API URL - must be set via EXPO_PUBLIC_API_URL environment variable
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 function TransactionsScreen({
   onNavigateToGroups,
 }: {
   onNavigateToGroups: () => void;
 }) {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState<boolean>(false);
   const [editingTransaction, setEditingTransaction] =
     useState<Transaction | null>(null);
-  const { session, signOut } = useAuth();
-  const fetchingRef = React.useRef<boolean>(false);
+  const { signOut } = useAuth();
   const theme = useTheme();
 
-  // Validate API URL on mount
-  useEffect(() => {
-    if (!API_URL) {
-      setError(
-        "Unable to connect to the server. Please check your app configuration and try again."
-      );
-      setLoading(false);
-    }
-  }, []);
-
-  const fetchTransactions = useCallback(async (): Promise<void> => {
-    if (!API_URL) {
-      setError(
-        "Unable to connect to the server. Please check your app configuration and try again."
-      );
-      setLoading(false);
-      return;
-    }
-
-    if (!session) {
-      return;
-    }
-
-    if (fetchingRef.current) {
-      return;
-    }
-
-    try {
-      fetchingRef.current = true;
-      setLoading(true);
-      setError(null);
-
-      // Always get the latest session from Supabase
-      let {
-        data: { session: currentSession },
-      } = await supabase.auth.getSession();
-
-      if (!currentSession) {
-        setLoading(false);
-        return;
-      }
-
-      // Check if token is expired (with buffer)
-      const now = Math.floor(Date.now() / 1000);
-      const expiresAt = currentSession.expires_at || 0;
-
-      if (expiresAt && expiresAt < now + TOKEN_REFRESH_BUFFER_SECONDS) {
-        // Token is expired or about to expire, try to refresh
-        const { data: refreshData, error: refreshError } =
-          await supabase.auth.refreshSession();
-
-        if (refreshError || !refreshData.session) {
-          await signOut();
-          return;
-        }
-
-        currentSession = refreshData.session;
-      }
-
-      const token = currentSession.access_token;
-
-      if (!API_URL) {
-        throw new Error(
-          "Unable to connect to the server. Please check your app configuration and try again."
-        );
-      }
-
-      const response = await fetch(`${API_URL}/transactions`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        let responseText: string = "";
-        let errorData: any = null;
-
-        try {
-          responseText = await response.text();
-          if (responseText) {
-            try {
-              errorData = JSON.parse(responseText);
-            } catch {
-              // Not JSON, use text as error message
-            }
-          }
-        } catch {
-          responseText = "";
-        }
-
-        if (response.status === 401) {
-          // Token is invalid or expired - sign out the user
-          // If it's a "session_not_found" error, clear AsyncStorage to remove old tokens
-          let errorDetails = "";
-          if (errorData) {
-            errorDetails = errorData.error || errorData.details || "";
-          }
-
-          if (
-            errorDetails.includes("session_not_found") ||
-            errorDetails.includes("Session from session_id")
-          ) {
-            // Clear AsyncStorage directly to ensure old tokens are removed
-            try {
-              const keys = await AsyncStorage.getAllKeys();
-              const authKeys = keys.filter(
-                (key: string) =>
-                  key.includes("supabase") || key.includes("auth")
-              );
-              if (authKeys.length > 0) {
-                await AsyncStorage.multiRemove(authKeys);
-              }
-            } catch (storageError) {
-              console.error("Error clearing AsyncStorage:", storageError);
-            }
-          }
-
-          await signOut();
-          return;
-        }
-
-        if (response.status === 429) {
-          setError("Too many requests. Please wait a moment and try again.");
-          return;
-        }
-
-        let errorMessage = `HTTP error! status: ${response.status}`;
-        if (errorData) {
-          errorMessage =
-            errorData.error ||
-            errorData.message ||
-            errorData.details ||
-            errorMessage;
-        } else if (responseText) {
-          errorMessage = responseText;
-        }
-
-        throw new Error(errorMessage);
-      }
-
-      const data: Transaction[] = await response.json();
-      setTransactions(data);
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Unknown error occurred";
-      if (
-        !errorMessage.includes("401") &&
-        !errorMessage.includes("Unauthorized")
-      ) {
-        setError(errorMessage);
-      }
-    } finally {
-      fetchingRef.current = false;
-      setLoading(false);
-    }
-  }, [session, signOut]);
-
-  useEffect(() => {
-    if (session) {
-      const timer = setTimeout(() => {
-        fetchTransactions();
-      }, FETCH_DELAY_MS);
-      return () => clearTimeout(timer);
-    } else {
-      setTransactions([]);
-      setLoading(false);
-      setError(null);
-    }
-  }, [session, fetchTransactions]);
+  const { data: transactions = [], isLoading: loading, error, refetch } = useTransactions();
+  const createTransactionMutation = useCreateTransaction();
+  const updateTransactionMutation = useUpdateTransaction();
+  const deleteTransactionMutation = useDeleteTransaction();
 
   // Memoize calculations to avoid recalculating on every render
   // Must be called before any early returns to maintain hook order
@@ -272,65 +102,10 @@ function TransactionsScreen({
     return `${sign}${formatCurrency(amount, currency || "USD")}`;
   };
 
-  const getAuthToken = async (): Promise<string | null> => {
-    if (!session) return null;
-
-    let {
-      data: { session: currentSession },
-    } = await supabase.auth.getSession();
-
-    if (!currentSession) return null;
-
-    // Check if token is expired (with buffer)
-    const now = Math.floor(Date.now() / 1000);
-    const expiresAt = currentSession.expires_at || 0;
-
-    if (expiresAt && expiresAt < now + TOKEN_REFRESH_BUFFER_SECONDS) {
-      const { data: refreshData, error: refreshError } =
-        await supabase.auth.refreshSession();
-
-      if (refreshError || !refreshData.session) {
-        await signOut();
-        return null;
-      }
-
-      currentSession = refreshData.session;
-    }
-
-    return currentSession.access_token;
-  };
-
   const handleCreateTransaction = async (
     transactionData: Omit<Transaction, "id" | "created_at" | "user_id">
   ): Promise<void> => {
-    if (!API_URL) {
-      throw new Error(
-        "Unable to connect to the server. Please check your app configuration and try again."
-      );
-    }
-
-    const token = await getAuthToken();
-    if (!token) {
-      throw new Error("Not authenticated");
-    }
-
-    const response = await fetch(`${API_URL}/transactions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(transactionData),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        errorData.error || `HTTP error! status: ${response.status}`
-      );
-    }
-
-    await fetchTransactions();
+    await createTransactionMutation.mutateAsync(transactionData);
     setShowForm(false);
     setEditingTransaction(null);
   };
@@ -338,35 +113,13 @@ function TransactionsScreen({
   const handleUpdateTransaction = async (
     transactionData: Omit<Transaction, "id" | "created_at" | "user_id">
   ): Promise<void> => {
-    if (!API_URL || !editingTransaction) {
+    if (!editingTransaction) {
       throw new Error("Invalid request");
     }
-
-    const token = await getAuthToken();
-    if (!token) {
-      throw new Error("Not authenticated");
-    }
-
-    const response = await fetch(`${API_URL}/transactions`, {
-      method: "PUT",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        ...transactionData,
-        id: editingTransaction.id,
-      }),
+    await updateTransactionMutation.mutateAsync({
+      ...transactionData,
+      id: editingTransaction.id,
     });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        errorData.error || `HTTP error! status: ${response.status}`
-      );
-    }
-
-    await fetchTransactions();
     setShowForm(false);
     setEditingTransaction(null);
   };
@@ -374,36 +127,10 @@ function TransactionsScreen({
   const handleDeleteTransaction = async (
     transactionId: number
   ): Promise<void> => {
-    if (!API_URL) {
-      throw new Error(
-        "Unable to connect to the server. Please check your app configuration and try again."
-      );
-    }
-
-    const token = await getAuthToken();
-    if (!token) {
-      throw new Error("Not authenticated");
-    }
-
-    const response = await fetch(
-      `${API_URL}/transactions?id=${transactionId}`,
-      {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        errorData.error || `HTTP error! status: ${response.status}`
-      );
-    }
-
-    await fetchTransactions();
+    await deleteTransactionMutation.mutateAsync({
+      transactionId,
+      groupId: null,
+    });
   };
 
   const handleEditClick = (transaction: Transaction) => {
@@ -482,9 +209,9 @@ function TransactionsScreen({
           variant="bodyMedium"
           style={{ marginBottom: 24, textAlign: "center" }}
         >
-          {error}
+          {error instanceof Error ? error.message : "Unknown error occurred"}
         </Text>
-        <Button mode="contained" onPress={fetchTransactions}>
+        <Button mode="contained" onPress={() => refetch()}>
           Retry
         </Button>
         <StatusBar style={theme.dark ? "light" : "dark"} />
@@ -769,9 +496,13 @@ function AppContent() {
     null
   );
   const [currentRoute, setCurrentRoute] = useState<string>("groups");
-  const [invitationsRefreshTrigger, setInvitationsRefreshTrigger] =
-    useState<number>(0);
   const prevSessionRef = React.useRef<Session | null>(null);
+  const queryClient = useQueryClient();
+
+  // Mutations
+  const createGroupMutation = useCreateGroup();
+  const addMemberMutation = useAddMember();
+  const removeMemberMutation = useRemoveMember();
 
   // Reset navigation state on logout and login (only when session state changes)
   useEffect(() => {
@@ -790,246 +521,66 @@ function AppContent() {
     prevSessionRef.current = session;
   }, [session]);
 
-  const getAuthToken = async (): Promise<string | null> => {
-    if (!session) return null;
-
-    let {
-      data: { session: currentSession },
-    } = await supabase.auth.getSession();
-
-    if (!currentSession) return null;
-
-    const now = Math.floor(Date.now() / 1000);
-    const expiresAt = currentSession.expires_at || 0;
-
-    if (expiresAt && expiresAt < now + TOKEN_REFRESH_BUFFER_SECONDS) {
-      const { data: refreshData, error: refreshError } =
-        await supabase.auth.refreshSession();
-
-      if (refreshError || !refreshData.session) {
-        return null;
-      }
-
-      currentSession = refreshData.session;
-    }
-
-    return currentSession.access_token;
-  };
-
   const handleCreateGroup = async (groupData: {
     name: string;
     description?: string;
   }) => {
-    if (!API_URL) {
-      throw new Error("Unable to connect to the server");
-    }
-
-    const token = await getAuthToken();
-    if (!token) {
-      throw new Error("Not authenticated");
-    }
-
-    const response = await fetch(`${API_URL}/groups`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(groupData),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        errorData.error || `HTTP error! status: ${response.status}`
-      );
-    }
-
+    await createGroupMutation.mutateAsync(groupData);
     setCurrentView("groups");
   };
 
   const handleAddMember = async (email: string) => {
-    if (!API_URL || !selectedGroup) {
+    if (!selectedGroup) {
       throw new Error("Invalid request");
     }
 
-    const token = await getAuthToken();
-    if (!token) {
-      throw new Error("Not authenticated");
-    }
-
-    const response = await fetch(`${API_URL}/group-members`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        group_id: selectedGroup.id,
-        email: email,
-      }),
+    const result = await addMemberMutation.mutateAsync({
+      groupId: selectedGroup.id,
+      email: email,
     });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        errorData.error || `HTTP error! status: ${response.status}`
-      );
-    }
-
-    const result = await response.json();
-
-    // Always trigger invitations refresh after adding a member
-    // This handles both cases:
-    // 1. Invitation was created (need to show it)
-    // 2. Member was added directly (need to remove any pending invitation for that user)
-    setInvitationsRefreshTrigger((prev) => prev + 1);
-
-    // Refresh group details with retry logic
+    // Update local group details if available
     if (groupDetails && selectedGroup) {
-      let retries = 2;
-      let success = false;
-
-      while (retries > 0 && !success) {
-        try {
-          const detailsResponse = await fetch(
-            `${API_URL}/groups/${selectedGroup.id}`,
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-              },
-            }
-          );
-
-          if (detailsResponse.ok) {
-            const updatedGroup: GroupWithMembers = await detailsResponse.json();
-            setGroupDetails(updatedGroup);
-            success = true;
-          } else if (retries === 1) {
-            // Only log error on last retry to avoid noise
-            console.warn(
-              "Failed to refresh group details after adding member:",
-              detailsResponse.status
-            );
-          }
-        } catch (error) {
-          if (retries === 1) {
-            // Only log error on last retry
-            console.warn(
-              "Error refreshing group details after adding member:",
-              error
-            );
-          }
-        }
-
-        retries--;
-        if (!success && retries > 0) {
-          // Wait 200ms before retry
-          await new Promise((resolve) => setTimeout(resolve, 200));
-        }
-      }
+      // The mutation will invalidate queries, but we can optimistically update
+      // by refetching the group details query
+      queryClient.invalidateQueries({ queryKey: ['groupDetails', selectedGroup.id] });
     }
 
     return result;
   };
 
   const handleRemoveMember = async (userId: string) => {
-    if (!API_URL || !selectedGroup) {
+    if (!selectedGroup) {
       throw new Error("Invalid request");
     }
 
-    const token = await getAuthToken();
-    if (!token) {
-      throw new Error("Not authenticated");
-    }
+    await removeMemberMutation.mutateAsync({
+      groupId: selectedGroup.id,
+      userId: userId,
+    });
 
-    const response = await fetch(
-      `${API_URL}/group-members?group_id=${selectedGroup.id}&user_id=${userId}`,
-      {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        errorData.error || `HTTP error! status: ${response.status}`
-      );
-    }
-
-    // Refresh group details with retry logic
+    // Update local group details if available
     if (groupDetails && selectedGroup) {
-      let retries = 2;
-      let success = false;
-
-      while (retries > 0 && !success) {
-        try {
-          const detailsResponse = await fetch(
-            `${API_URL}/groups/${selectedGroup.id}`,
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-              },
-            }
-          );
-
-          if (detailsResponse.ok) {
-            const updatedGroup: GroupWithMembers = await detailsResponse.json();
-            setGroupDetails(updatedGroup);
-            success = true;
-          } else if (retries === 1) {
-            // Only log error on last retry to avoid noise
-            console.warn(
-              "Failed to refresh group details after removing member:",
-              detailsResponse.status
-            );
-          }
-        } catch (error) {
-          if (retries === 1) {
-            // Only log error on last retry
-            console.warn(
-              "Error refreshing group details after removing member:",
-              error
-            );
-          }
-        }
-
-        retries--;
-        if (!success && retries > 0) {
-          // Wait 200ms before retry
-          await new Promise((resolve) => setTimeout(resolve, 200));
-        }
-      }
+      queryClient.invalidateQueries({ queryKey: ['groupDetails', selectedGroup.id] });
     }
   };
 
   const handleGroupPress = async (group: Group) => {
-    if (!API_URL) return;
-
-    const token = await getAuthToken();
-    if (!token) return;
-
+    setSelectedGroup(group);
+    // Prefetch group details using React Query
+    // This will use cached data if available, or fetch fresh data
     try {
-      const response = await fetch(`${API_URL}/groups/${group.id}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+      const groupDetailsData = await queryClient.fetchQuery({
+        queryKey: ['groupDetails', group.id],
+        queryFn: async () => {
+          const response = await apiFetch(`/groups/${group.id}`, {}, session, signOut);
+          return response.json();
         },
       });
-
-      if (response.ok) {
-        const groupWithMembers: GroupWithMembers = await response.json();
-        setGroupDetails(groupWithMembers);
-        setSelectedGroup(group);
-      }
+      setGroupDetails(groupDetailsData);
     } catch (error) {
-      console.error("Error fetching group details:", error);
+      // If fetch fails, still set the basic group info so the screen can handle the error
+      setGroupDetails(group as GroupWithMembers);
     }
   };
 
@@ -1065,7 +616,6 @@ function AppContent() {
       <>
         <GroupDetailsScreen
           group={groupDetails}
-          refreshTrigger={invitationsRefreshTrigger}
           onBack={() => {
             setGroupDetails(null);
             setSelectedGroup(null);
@@ -1185,9 +735,11 @@ export default function App() {
     >
       <SafeAreaProvider>
         <PaperProvider theme={theme}>
-          <AuthProvider>
-            <AppContent />
-          </AuthProvider>
+          <QueryClientProvider client={queryClient}>
+            <AuthProvider>
+              <AppContent />
+            </AuthProvider>
+          </QueryClientProvider>
         </PaperProvider>
       </SafeAreaProvider>
     </ErrorBoundary>
