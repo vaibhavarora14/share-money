@@ -1,3 +1,12 @@
+export interface TransactionSplit {
+  id: string;
+  transaction_id: number;
+  user_id: string;
+  amount: number; // Individual split amount (for equal splits: transaction.amount / split_count)
+  created_at?: string;
+  email?: string; // Populated from API join with users
+}
+
 export interface Transaction {
   id: number;
   amount: number;
@@ -10,7 +19,8 @@ export interface Transaction {
   group_id?: string;
   currency?: string;
   paid_by?: string; // User ID of who paid for the expense
-  split_among?: string[]; // Array of user IDs who the expense is split among
+  split_among?: string[]; // Array of user IDs (backward compatibility, prefer splits)
+  splits?: TransactionSplit[]; // New: from transaction_splits table (preferred)
 }
 
 export interface Currency {
