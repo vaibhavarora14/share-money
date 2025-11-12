@@ -31,7 +31,7 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
       {loading ? (
         <ActivityIndicator size="small" style={{ marginVertical: 16 }} />
       ) : items.length > 0 ? (
-        items.slice(0, 5).map((transaction, index) => {
+        items.map((transaction, index) => {
           const isIncome = transaction.type === "income";
           const amountColor = isIncome ? "#10b981" : "#ef4444";
           const sign = isIncome ? "+" : "-";
@@ -74,7 +74,7 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
                   </View>
                 </Card.Content>
               </Card>
-              {index < Math.min(items.length, 5) - 1 && (
+              {index < items.length - 1 && (
                 <View style={{ height: 8 }} />
               )}
             </React.Fragment>
@@ -113,18 +113,6 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
             </Text>
           </Card.Content>
         </Card>
-      )}
-      {items.length > 5 && (
-        <Text
-          variant="bodySmall"
-          style={{
-            color: theme.colors.primary,
-            textAlign: "center",
-            marginTop: 8,
-          }}
-        >
-          Showing 5 of {items.length} transactions
-        </Text>
       )}
     </View>
   );
