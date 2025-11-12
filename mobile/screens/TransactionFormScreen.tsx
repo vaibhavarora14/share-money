@@ -88,6 +88,9 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   useEffect(() => {
     if (!visible) return; // Only initialize when form becomes visible
     
+    // Calculate isGroupExpense inside effect to avoid dependency issues
+    const isGroupExpenseLocal = type === "expense" && groupId && groupMembers.length > 0;
+    
     if (transaction) {
       setDescription(transaction.description || "");
       setAmount(transaction.amount.toString());
@@ -100,7 +103,12 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       setCategory(transaction.category || "");
       setCurrency(transaction.currency || effectiveDefaultCurrency);
       setPaidBy(transaction.paid_by || "");
-      setSplitAmong(transaction.split_among || []);
+      // Ensure split_among is always an array
+      setSplitAmong(
+        Array.isArray(transaction.split_among) 
+          ? transaction.split_among 
+          : []
+      );
     } else {
       // Set default date to today
       const today = new Date();
@@ -109,13 +117,13 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       setCurrency(effectiveDefaultCurrency);
       setPaidBy("");
       // Default: split among all members only on initial load
-      if (isGroupExpense && groupMembers.length > 0) {
+      if (isGroupExpenseLocal && groupMembers.length > 0) {
         setSplitAmong(groupMembers.map((m) => m.user_id));
       } else {
         setSplitAmong([]);
       }
     }
-  }, [visible, transaction, effectiveDefaultCurrency, groupMembers, isGroupExpense]);
+  }, [visible, transaction, effectiveDefaultCurrency, groupMembers, type, groupId]);
 
   const formatDateForInput = (date: Date): string => {
     return date.toISOString().split("T")[0];
@@ -177,10 +185,12 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
 
   const handleToggleSplitMember = (userId: string) => {
     setSplitAmong((prev) => {
-      if (prev.includes(userId)) {
-        return prev.filter((id) => id !== userId);
+      // Remove duplicates first to ensure data integrity
+      const uniquePrev = [...new Set(prev)];
+      if (uniquePrev.includes(userId)) {
+        return uniquePrev.filter((id) => id !== userId);
       } else {
-        return [...prev, userId];
+        return [...uniquePrev, userId];
       }
     });
     // Clear error when user makes a selection
@@ -194,8 +204,9 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       // Deselect all
       setSplitAmong([]);
     } else {
-      // Select all
-      setSplitAmong(groupMembers.map((m) => m.user_id));
+      // Select all - ensure no duplicates
+      const allMemberIds = groupMembers.map((m) => m.user_id);
+      setSplitAmong([...new Set(allMemberIds)]);
     }
     // Clear error
     if (splitAmongError) {
@@ -225,10 +236,18 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       setAmountError("Please enter an amount");
       isValid = false;
     } else {
-      const amountValue = parseFloat(amount);
-      if (isNaN(amountValue) || amountValue <= 0) {
-        setAmountError("Please enter a valid amount greater than 0");
+      // Validate format: only digits and optional decimal point with 1-2 decimal places
+      const amountRegex = /^\d+(\.\d{1,2})?$/;
+      if (!amountRegex.test(amount.trim())) {
+        setAmountError("Please enter a valid amount (e.g., 10.50)");
         isValid = false;
+      } else {
+        const amountValue = parseFloat(amount);
+        // Check for NaN, Infinity, and negative values
+        if (isNaN(amountValue) || !isFinite(amountValue) || amountValue <= 0) {
+          setAmountError("Please enter a valid amount greater than 0");
+          isValid = false;
+        }
       }
     }
 
