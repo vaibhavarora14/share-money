@@ -21,6 +21,85 @@ interface Transaction {
   split_among?: string[]; // Array of user IDs who the expense is split among
 }
 
+interface TransactionSplit {
+  transaction_id: number;
+  user_id: string;
+  amount: number;
+}
+
+/**
+ * Calculates equal split amounts for a given total amount and user IDs.
+ * Ensures the sum of all splits equals the total amount by distributing
+ * any rounding remainder to the first split.
+ * 
+ * @param totalAmount - The total amount to split
+ * @param userIds - Array of user IDs to split among
+ * @returns Array of split objects with user_id and amount
+ */
+function calculateEqualSplits(
+  totalAmount: number,
+  userIds: string[]
+): TransactionSplit[] {
+  const uniqueUserIds = [...new Set(userIds)];
+  const splitCount = uniqueUserIds.length;
+
+  if (splitCount === 0) {
+    return [];
+  }
+
+  // Calculate base amount per person (rounded down to 2 decimals)
+  const baseAmount = Math.floor((totalAmount * 100) / splitCount) / 100;
+  
+  // Calculate what the sum would be with base amounts
+  const baseSum = baseAmount * splitCount;
+  
+  // Calculate remainder (difference between total and base sum)
+  // Round to handle floating point precision issues
+  const remainder = Math.round((totalAmount - baseSum) * 100) / 100;
+
+  // Create splits array
+  const splits: TransactionSplit[] = uniqueUserIds.map((userId, index) => {
+    // Add remainder to first split to ensure total matches
+    const amount = index === 0
+      ? Math.round((baseAmount + remainder) * 100) / 100
+      : baseAmount;
+    
+    return {
+      transaction_id: 0, // Will be set by caller
+      user_id: userId,
+      amount: amount,
+    };
+  });
+
+  return splits;
+}
+
+/**
+ * Validates that the sum of split amounts equals the transaction amount.
+ * Allows a small tolerance (0.01) for floating point precision issues.
+ * 
+ * @param splits - Array of split amounts
+ * @param transactionAmount - The total transaction amount
+ * @returns Object with valid flag and optional error message
+ */
+function validateSplitSum(
+  splits: Array<{ amount: number }>,
+  transactionAmount: number
+): { valid: boolean; error?: string } {
+  const sum = splits.reduce((acc, split) => acc + split.amount, 0);
+  const difference = Math.abs(sum - transactionAmount);
+  const tolerance = 0.01; // Allow 1 cent tolerance for rounding
+
+  if (difference > tolerance) {
+    return {
+      valid: false,
+      error: `Split amounts sum (${sum.toFixed(2)}) does not equal transaction amount (${transactionAmount.toFixed(2)}). Difference: ${difference.toFixed(2)}`,
+    };
+  }
+
+  return { valid: true };
+}
+
 export const handler: Handler = async (event, context) => {
   // Handle CORS preflight
   if (event.httpMethod === 'OPTIONS') {
@@ -351,17 +430,21 @@ export const handler: Handler = async (event, context) => {
 
       // Create transaction_splits entries if split_among is provided (dual-write)
       if (transaction && transactionData.split_among && Array.isArray(transactionData.split_among) && transactionData.split_among.length > 0) {
-        const uniqueSplitAmong = [...new Set(transactionData.split_among)];
-        const totalAmount = transaction.amount;
-        const splitCount = uniqueSplitAmong.length;
-        const splitAmount = Math.round((totalAmount / splitCount) * 100) / 100; // Round to 2 decimals
+        // Calculate equal splits with proper rounding
+        const splits = calculateEqualSplits(transaction.amount, transactionData.split_among);
+        
+        // Set transaction_id for all splits
+        splits.forEach(split => {
+          split.transaction_id = transaction.id;
+        });
 
-        // Create splits array
-        const splits = uniqueSplitAmong.map(userId => ({
-          transaction_id: transaction.id,
-          user_id: userId,
-          amount: splitAmount,
-        }));
+        // Validate that splits sum equals transaction amount
+        const validation = validateSplitSum(splits, transaction.amount);
+        if (!validation.valid) {
+          console.error('Split validation failed:', validation.error);
+          // Log error but don't fail - transaction is already created
+          // This should not happen with calculateEqualSplits, but safety check
+        }
 
         // Insert splits into transaction_splits table
         // If table doesn't exist yet, this will fail silently (transaction still created with split_among)
@@ -377,6 +460,19 @@ export const handler: Handler = async (event, context) => {
             console.error('Failed to create transaction_splits:', splitsError);
           }
           // Transaction is still created successfully with split_among for backward compatibility
+        } else {
+          // Verify splits were created correctly (optional validation)
+          const { data: createdSplits, error: verifyError } = await supabase
+            .from('transaction_splits')
+            .select('amount')
+            .eq('transaction_id', transaction.id);
+
+          if (!verifyError && createdSplits) {
+            const verifyValidation = validateSplitSum(createdSplits, transaction.amount);
+            if (!verifyValidation.valid) {
+              console.error('Split verification failed after insert:', verifyValidation.error);
+            }
+          }
         }
       }
 
@@ -600,23 +696,35 @@ export const handler: Handler = async (event, context) => {
       // Update transaction_splits if split_among was updated (dual-write)
       if (transactionData.split_among !== undefined) {
         // Delete existing splits
-        await supabase
+        const { error: deleteError } = await supabase
           .from('transaction_splits')
           .delete()
           .eq('transaction_id', transactionData.id);
 
+        if (deleteError) {
+          console.error('Failed to delete existing splits:', deleteError);
+          // Continue anyway - will try to create new splits
+        }
+
         // Create new splits if split_among is provided
         if (transactionData.split_among && Array.isArray(transactionData.split_among) && transactionData.split_among.length > 0) {
-          const uniqueSplitAmong = [...new Set(transactionData.split_among)];
+          // Use the UPDATED transaction amount (from the update result)
           const totalAmount = transaction.amount;
-          const splitCount = uniqueSplitAmong.length;
-          const splitAmount = Math.round((totalAmount / splitCount) * 100) / 100; // Round to 2 decimals
+          
+          // Calculate equal splits with proper rounding
+          const splits = calculateEqualSplits(totalAmount, transactionData.split_among);
+          
+          // Set transaction_id for all splits
+          splits.forEach(split => {
+            split.transaction_id = transaction.id;
+          });
 
-          const splits = uniqueSplitAmong.map(userId => ({
-            transaction_id: transaction.id,
-            user_id: userId,
-            amount: splitAmount,
-          }));
+          // Validate that splits sum equals transaction amount
+          const validation = validateSplitSum(splits, totalAmount);
+          if (!validation.valid) {
+            console.error('Split validation failed:', validation.error);
+            // Log error but don't fail - transaction is already updated
+          }
 
           const { error: splitsError } = await supabase
             .from('transaction_splits')
@@ -630,19 +738,67 @@ export const handler: Handler = async (event, context) => {
       } else if (transactionData.amount !== undefined) {
         // If amount changed but split_among didn't, recalculate split amounts
         // Get existing splits and update their amounts
-        const { data: existingSplits } = await supabase
+        const { data: existingSplits, error: splitsFetchError } = await supabase
           .from('transaction_splits')
           .select('user_id')
           .eq('transaction_id', transactionData.id);
 
-        if (existingSplits && existingSplits.length > 0) {
-          const splitCount = existingSplits.length;
-          const newSplitAmount = Math.round((transaction.amount / splitCount) * 100) / 100;
+        if (splitsFetchError) {
+          console.error('Failed to fetch existing splits for recalculation:', splitsFetchError);
+          // Don't fail the transaction update, but log the error
+        } else if (existingSplits && existingSplits.length > 0) {
+          // CRITICAL FIX: Use the NEW amount from transactionData, not the old transaction.amount
+          const newAmount = transactionData.amount;
+          
+          // Calculate new split amounts with proper rounding
+          const newSplits = calculateEqualSplits(newAmount, existingSplits.map(s => s.user_id));
+          
+          // Set transaction_id for all splits
+          newSplits.forEach(split => {
+            split.transaction_id = transaction.id;
+          });
 
-          await supabase
+          // Validate that splits sum equals transaction amount
+          const validation = validateSplitSum(newSplits, newAmount);
+          if (!validation.valid) {
+            console.error('Split validation failed:', validation.error);
+            // Log error but continue
+          }
+
+          // Delete existing splits and recreate with new amounts
+          // This is more efficient than individual updates and ensures consistency
+          const { error: deleteError } = await supabase
             .from('transaction_splits')
-            .update({ amount: newSplitAmount })
+            .delete()
             .eq('transaction_id', transactionData.id);
+
+          if (deleteError) {
+            console.error('Failed to delete existing splits for recalculation:', deleteError);
+            // Don't fail, but log the error
+          } else {
+            // Insert new splits with updated amounts
+            const { error: insertError } = await supabase
+              .from('transaction_splits')
+              .insert(newSplits);
+
+            if (insertError) {
+              console.error('Failed to insert recalculated splits:', insertError);
+              // Don't fail the transaction update, but log the error
+            } else {
+              // Verify the update was successful
+              const { data: updatedSplits, error: verifyError } = await supabase
+                .from('transaction_splits')
+                .select('amount')
+                .eq('transaction_id', transactionData.id);
+
+              if (!verifyError && updatedSplits) {
+                const verifyValidation = validateSplitSum(updatedSplits, newAmount);
+                if (!verifyValidation.valid) {
+                  console.error('Split verification failed after amount update:', verifyValidation.error);
+                }
+              }
+            }
+          }
         }
       }
 
