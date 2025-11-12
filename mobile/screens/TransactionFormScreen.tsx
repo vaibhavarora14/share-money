@@ -86,6 +86,8 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
 
   // Initialize form with transaction data if editing
   useEffect(() => {
+    if (!visible) return; // Only initialize when form becomes visible
+    
     if (transaction) {
       setDescription(transaction.description || "");
       setAmount(transaction.amount.toString());
@@ -106,18 +108,14 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       setDate(today.toISOString().split("T")[0]);
       setCurrency(effectiveDefaultCurrency);
       setPaidBy("");
-      // Default: split among all members
-      setSplitAmong(groupMembers.map((m) => m.user_id));
+      // Default: split among all members only on initial load
+      if (isGroupExpense && groupMembers.length > 0) {
+        setSplitAmong(groupMembers.map((m) => m.user_id));
+      } else {
+        setSplitAmong([]);
+      }
     }
-  }, [transaction, effectiveDefaultCurrency, groupMembers]);
-
-  // Update split_among when group members change or type changes
-  useEffect(() => {
-    if (!transaction && isGroupExpense && splitAmong.length === 0) {
-      // Default: split among all members
-      setSplitAmong(groupMembers.map((m) => m.user_id));
-    }
-  }, [groupMembers, type, groupId, transaction, isGroupExpense, splitAmong.length]);
+  }, [visible, transaction, effectiveDefaultCurrency, groupMembers, isGroupExpense]);
 
   const formatDateForInput = (date: Date): string => {
     return date.toISOString().split("T")[0];
