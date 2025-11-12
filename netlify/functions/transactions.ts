@@ -115,20 +115,57 @@ export const handler: Handler = async (event, context) => {
     if (httpMethod === 'GET') {
       const groupId = event.queryStringParameters?.group_id;
       
+      // Try to fetch with transaction_splits joined, fallback to basic query if table doesn't exist
       let query = supabase
         .from('transactions')
-        .select('*');
+        .select(`
+          *,
+          transaction_splits (
+            id,
+            user_id,
+            amount,
+            created_at
+          )
+        `);
 
       // Filter by group_id if provided
       if (groupId) {
         query = query.eq('group_id', groupId);
       }
 
-      const { data: transactions, error } = await query
+      let { data: transactions, error } = await query
         .order('date', { ascending: false })
         .limit(100);
 
-      if (error) {
+      // If join fails (e.g., table doesn't exist yet), fallback to basic query
+      if (error && (error.message?.includes('relation') || error.message?.includes('does not exist') || error.code === '42P01')) {
+        console.warn('transaction_splits table may not exist, falling back to basic query:', error.message);
+        
+        // Fallback: fetch without join
+        let fallbackQuery = supabase
+          .from('transactions')
+          .select('*');
+        
+        if (groupId) {
+          fallbackQuery = fallbackQuery.eq('group_id', groupId);
+        }
+        
+        const fallbackResult = await fallbackQuery
+          .order('date', { ascending: false })
+          .limit(100);
+        
+        if (fallbackResult.error) {
+          console.error('Supabase error (fallback):', fallbackResult.error);
+          return {
+            statusCode: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ error: 'Failed to fetch transactions', details: fallbackResult.error.message }),
+          };
+        }
+        
+        transactions = fallbackResult.data;
+        error = null;
+      } else if (error) {
         console.error('Supabase error:', error);
         return {
           statusCode: 500,
@@ -137,9 +174,15 @@ export const handler: Handler = async (event, context) => {
         };
       }
 
-      // Supabase automatically converts JSONB to JavaScript arrays/objects
-      // Just ensure split_among is always an array for type safety
+      // Transform transactions to match frontend expectations
       const parsedTransactions = (transactions || []).map((tx: any) => {
+        // Transform transaction_splits to splits
+        if (tx.transaction_splits) {
+          tx.splits = tx.transaction_splits;
+          delete tx.transaction_splits;
+        }
+
+        // Ensure split_among is always an array for backward compatibility
         if (tx.split_among && !Array.isArray(tx.split_among)) {
           // Fallback: if somehow not an array, convert to array
           // This shouldn't happen with proper JSONB handling, but safety first
@@ -154,6 +197,12 @@ export const handler: Handler = async (event, context) => {
         } else if (!tx.split_among) {
           tx.split_among = [];
         }
+
+        // If splits exist but split_among doesn't, derive split_among from splits for backward compatibility
+        if (tx.splits && tx.splits.length > 0 && (!tx.split_among || tx.split_among.length === 0)) {
+          tx.split_among = tx.splits.map((s: any) => s.user_id);
+        }
+
         return tx;
       });
 
@@ -300,23 +349,84 @@ export const handler: Handler = async (event, context) => {
         };
       }
 
+      // Create transaction_splits entries if split_among is provided (dual-write)
+      if (transaction && transactionData.split_among && Array.isArray(transactionData.split_among) && transactionData.split_among.length > 0) {
+        const uniqueSplitAmong = [...new Set(transactionData.split_among)];
+        const totalAmount = transaction.amount;
+        const splitCount = uniqueSplitAmong.length;
+        const splitAmount = Math.round((totalAmount / splitCount) * 100) / 100; // Round to 2 decimals
+
+        // Create splits array
+        const splits = uniqueSplitAmong.map(userId => ({
+          transaction_id: transaction.id,
+          user_id: userId,
+          amount: splitAmount,
+        }));
+
+        // Insert splits into transaction_splits table
+        // If table doesn't exist yet, this will fail silently (transaction still created with split_among)
+        const { error: splitsError } = await supabase
+          .from('transaction_splits')
+          .insert(splits);
+
+        if (splitsError) {
+          // Log but don't fail - table might not exist yet, split_among column has the data
+          if (splitsError.message?.includes('relation') || splitsError.message?.includes('does not exist') || splitsError.code === '42P01') {
+            console.warn('transaction_splits table may not exist yet, skipping split creation:', splitsError.message);
+          } else {
+            console.error('Failed to create transaction_splits:', splitsError);
+          }
+          // Transaction is still created successfully with split_among for backward compatibility
+        }
+      }
+
+      // Try to fetch transaction with splits populated, fallback to basic transaction if join fails
+      let responseTransaction = transaction;
+      try {
+        const { data: transactionWithSplits, error: fetchError } = await supabase
+          .from('transactions')
+          .select(`
+            *,
+            transaction_splits (
+              id,
+              user_id,
+              amount,
+              created_at
+            )
+          `)
+          .eq('id', transaction.id)
+          .single();
+
+        if (!fetchError && transactionWithSplits) {
+          responseTransaction = transactionWithSplits;
+          // Transform splits to match frontend expectations
+          if (responseTransaction.transaction_splits) {
+            responseTransaction.splits = responseTransaction.transaction_splits;
+            delete responseTransaction.transaction_splits;
+          }
+        }
+      } catch (e) {
+        // If join fails (table doesn't exist), just use the basic transaction
+        console.warn('Could not fetch transaction with splits, using basic transaction:', e);
+      }
+
       // Supabase automatically converts JSONB to JavaScript arrays
       // Just ensure it's an array and remove duplicates for data integrity
-      if (transaction && transaction.split_among) {
-        if (Array.isArray(transaction.split_among)) {
+      if (responseTransaction && responseTransaction.split_among) {
+        if (Array.isArray(responseTransaction.split_among)) {
           // Remove duplicates
-          transaction.split_among = [...new Set(transaction.split_among)];
+          responseTransaction.split_among = [...new Set(responseTransaction.split_among)];
         } else {
           // Fallback: if somehow not an array (shouldn't happen), convert
-          console.warn('split_among is not an array, converting:', transaction.split_among);
-          transaction.split_among = [];
+          console.warn('split_among is not an array, converting:', responseTransaction.split_among);
+          responseTransaction.split_among = [];
         }
       }
 
       return {
         statusCode: 201,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify(transaction),
+        body: JSON.stringify(responseTransaction),
       };
     }
 
@@ -487,23 +597,94 @@ export const handler: Handler = async (event, context) => {
         };
       }
 
+      // Update transaction_splits if split_among was updated (dual-write)
+      if (transactionData.split_among !== undefined) {
+        // Delete existing splits
+        await supabase
+          .from('transaction_splits')
+          .delete()
+          .eq('transaction_id', transactionData.id);
+
+        // Create new splits if split_among is provided
+        if (transactionData.split_among && Array.isArray(transactionData.split_among) && transactionData.split_among.length > 0) {
+          const uniqueSplitAmong = [...new Set(transactionData.split_among)];
+          const totalAmount = transaction.amount;
+          const splitCount = uniqueSplitAmong.length;
+          const splitAmount = Math.round((totalAmount / splitCount) * 100) / 100; // Round to 2 decimals
+
+          const splits = uniqueSplitAmong.map(userId => ({
+            transaction_id: transaction.id,
+            user_id: userId,
+            amount: splitAmount,
+          }));
+
+          const { error: splitsError } = await supabase
+            .from('transaction_splits')
+            .insert(splits);
+
+          if (splitsError) {
+            console.error('Failed to update transaction_splits:', splitsError);
+            // Don't fail the transaction update, but log the error
+          }
+        }
+      } else if (transactionData.amount !== undefined) {
+        // If amount changed but split_among didn't, recalculate split amounts
+        // Get existing splits and update their amounts
+        const { data: existingSplits } = await supabase
+          .from('transaction_splits')
+          .select('user_id')
+          .eq('transaction_id', transactionData.id);
+
+        if (existingSplits && existingSplits.length > 0) {
+          const splitCount = existingSplits.length;
+          const newSplitAmount = Math.round((transaction.amount / splitCount) * 100) / 100;
+
+          await supabase
+            .from('transaction_splits')
+            .update({ amount: newSplitAmount })
+            .eq('transaction_id', transactionData.id);
+        }
+      }
+
+      // Fetch transaction with splits populated
+      const { data: transactionWithSplits } = await supabase
+        .from('transactions')
+        .select(`
+          *,
+          transaction_splits (
+            id,
+            user_id,
+            amount,
+            created_at
+          )
+        `)
+        .eq('id', transaction.id)
+        .single();
+
+      // Transform splits to match frontend expectations
+      const responseTransaction = transactionWithSplits || transaction;
+      if (responseTransaction.transaction_splits) {
+        responseTransaction.splits = responseTransaction.transaction_splits;
+        delete responseTransaction.transaction_splits;
+      }
+
       // Supabase automatically converts JSONB to JavaScript arrays
       // Just ensure it's an array and remove duplicates for data integrity
-      if (transaction.split_among) {
-        if (Array.isArray(transaction.split_among)) {
+      if (responseTransaction.split_among) {
+        if (Array.isArray(responseTransaction.split_among)) {
           // Remove duplicates
-          transaction.split_among = [...new Set(transaction.split_among)];
+          responseTransaction.split_among = [...new Set(responseTransaction.split_among)];
         } else {
           // Fallback: if somehow not an array (shouldn't happen), convert
-          console.warn('split_among is not an array, converting:', transaction.split_among);
-          transaction.split_among = [];
+          console.warn('split_among is not an array, converting:', responseTransaction.split_among);
+          responseTransaction.split_among = [];
         }
       }
 
       return {
         statusCode: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify(transaction),
+        body: JSON.stringify(responseTransaction),
       };
     }
 
