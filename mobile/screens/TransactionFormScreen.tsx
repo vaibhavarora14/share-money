@@ -1,5 +1,5 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import {
   Alert,
   Animated,
@@ -81,49 +81,98 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   const insets = useSafeAreaInsets();
   const screenHeight = Dimensions.get("window").height;
 
-  // Determine if we should show expense splitting fields
-  const isGroupExpense = type === "expense" && groupId && groupMembers.length > 0;
+  // Memoize derived values to avoid recalculations
+  const isGroupExpense = useMemo(
+    () => type === "expense" && groupId && groupMembers.length > 0,
+    [type, groupId, groupMembers.length]
+  );
 
-  // Initialize form with transaction data if editing
+  const allMemberIds = useMemo(
+    () => groupMembers.map((m) => m.user_id),
+    [groupMembers]
+  );
+
+  // Track if form has been initialized to prevent re-initialization on prop changes
+  const isInitializedRef = useRef(false);
+  const lastTransactionIdRef = useRef<number | null>(null);
+
+  // Helper: Reset form to default state
+  const resetFormToDefaults = useCallback(() => {
+    const today = new Date();
+    setDescription("");
+    setAmount("");
+    setDate(today.toISOString().split("T")[0]);
+    setSelectedDate(today);
+    setType("expense");
+    setCategory("");
+    setCurrency(effectiveDefaultCurrency);
+    setPaidBy("");
+    setSplitAmong(isGroupExpense ? allMemberIds : []);
+    // Clear all errors
+    setDescriptionError("");
+    setAmountError("");
+    setDateError("");
+    setPaidByError("");
+    setSplitAmongError("");
+  }, [effectiveDefaultCurrency, isGroupExpense, allMemberIds]);
+
+  // Helper: Load transaction data into form
+  const loadTransactionData = useCallback((tx: Transaction) => {
+    setDescription(tx.description || "");
+    setAmount(tx.amount.toString());
+    const transactionDate = tx.date ? new Date(tx.date) : new Date();
+    setSelectedDate(transactionDate);
+    setDate(tx.date || "");
+    setType(tx.type || "expense");
+    setCategory(tx.category || "");
+    setCurrency(tx.currency || effectiveDefaultCurrency);
+    setPaidBy(tx.paid_by || "");
+    setSplitAmong(
+      Array.isArray(tx.split_among) ? tx.split_among : []
+    );
+  }, [effectiveDefaultCurrency]);
+
+  // Initialize form when modal becomes visible
   useEffect(() => {
-    if (!visible) return; // Only initialize when form becomes visible
-    
-    // Calculate isGroupExpense inside effect to avoid dependency issues
-    const isGroupExpenseLocal = type === "expense" && groupId && groupMembers.length > 0;
-    
-    if (transaction) {
-      setDescription(transaction.description || "");
-      setAmount(transaction.amount.toString());
-      const transactionDate = transaction.date
-        ? new Date(transaction.date)
-        : new Date();
-      setSelectedDate(transactionDate);
-      setDate(transaction.date || "");
-      setType(transaction.type || "expense");
-      setCategory(transaction.category || "");
-      setCurrency(transaction.currency || effectiveDefaultCurrency);
-      setPaidBy(transaction.paid_by || "");
-      // Ensure split_among is always an array
-      setSplitAmong(
-        Array.isArray(transaction.split_among) 
-          ? transaction.split_among 
-          : []
-      );
-    } else {
-      // Set default date to today
-      const today = new Date();
-      setSelectedDate(today);
-      setDate(today.toISOString().split("T")[0]);
-      setCurrency(effectiveDefaultCurrency);
-      setPaidBy("");
-      // Default: split among all members only on initial load
-      if (isGroupExpenseLocal && groupMembers.length > 0) {
-        setSplitAmong(groupMembers.map((m) => m.user_id));
-      } else {
-        setSplitAmong([]);
-      }
+    if (!visible) {
+      // Reset initialization flag when modal closes
+      isInitializedRef.current = false;
+      lastTransactionIdRef.current = null;
+      return;
     }
-  }, [visible, transaction, effectiveDefaultCurrency, groupMembers, type, groupId]);
+
+    // Skip if already initialized for this transaction
+    const currentTransactionId = transaction?.id ?? null;
+    if (isInitializedRef.current && lastTransactionIdRef.current === currentTransactionId) {
+      return;
+    }
+
+    // Initialize form based on mode
+    if (transaction) {
+      loadTransactionData(transaction);
+      lastTransactionIdRef.current = transaction.id;
+    } else {
+      resetFormToDefaults();
+      lastTransactionIdRef.current = null;
+    }
+
+    isInitializedRef.current = true;
+  }, [visible, transaction, loadTransactionData, resetFormToDefaults]);
+
+  // Update split_among when switching to expense type (only for new transactions)
+  useEffect(() => {
+    if (!visible || !isInitializedRef.current) return;
+    if (transaction) return; // Don't auto-update when editing
+
+    // Only update if type changed to expense and we have members
+    if (isGroupExpense && splitAmong.length === 0 && allMemberIds.length > 0) {
+      setSplitAmong(allMemberIds);
+    } else if (!isGroupExpense) {
+      // Clear split data when switching away from expense
+      setSplitAmong([]);
+      setPaidBy("");
+    }
+  }, [visible, isGroupExpense, transaction, splitAmong.length, allMemberIds]);
 
   const formatDateForInput = (date: Date): string => {
     return date.toISOString().split("T")[0];
@@ -165,23 +214,10 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     }
   }, [visible, slideAnim]);
 
-  const handleDismiss = () => {
-    setDescription("");
-    setAmount("");
-    setDate("");
-    setType("expense");
-    setCategory("");
-    setCurrency(effectiveDefaultCurrency);
-    setPaidBy("");
-    setSplitAmong([]);
-    // Clear all errors
-    setDescriptionError("");
-    setAmountError("");
-    setDateError("");
-    setPaidByError("");
-    setSplitAmongError("");
+  const handleDismiss = useCallback(() => {
+    resetFormToDefaults();
     onDismiss();
-  };
+  }, [resetFormToDefaults, onDismiss]);
 
   const handleToggleSplitMember = (userId: string) => {
     setSplitAmong((prev) => {
