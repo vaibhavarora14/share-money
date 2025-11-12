@@ -107,14 +107,17 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     setCategory("");
     setCurrency(effectiveDefaultCurrency);
     setPaidBy("");
-    setSplitAmong(isGroupExpense ? allMemberIds : []);
+    // Default split: all members if it's a group expense context
+    // We check groupId and groupMembers directly to avoid circular dependency
+    const shouldDefaultToAllMembers = groupId && groupMembers.length > 0;
+    setSplitAmong(shouldDefaultToAllMembers ? allMemberIds : []);
     // Clear all errors
     setDescriptionError("");
     setAmountError("");
     setDateError("");
     setPaidByError("");
     setSplitAmongError("");
-  }, [effectiveDefaultCurrency, isGroupExpense, allMemberIds]);
+  }, [effectiveDefaultCurrency, groupId, groupMembers.length, allMemberIds]);
 
   // Helper: Load transaction data into form
   const loadTransactionData = useCallback((tx: Transaction) => {
