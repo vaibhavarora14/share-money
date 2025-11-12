@@ -180,10 +180,6 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   const handleToggleSplitMember = (userId: string) => {
     setSplitAmong((prev) => {
       if (prev.includes(userId)) {
-        // Prevent deselecting if only one is selected
-        if (prev.length === 1) {
-          return prev; // Don't allow deselecting the last one
-        }
         return prev.filter((id) => id !== userId);
       } else {
         return [...prev, userId];
@@ -195,9 +191,14 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     }
   };
 
-  const handleSelectAllMembers = () => {
-    // Always select all members
-    setSplitAmong(groupMembers.map((m) => m.user_id));
+  const handleToggleAllMembers = () => {
+    if (splitAmong.length === groupMembers.length) {
+      // Deselect all
+      setSplitAmong([]);
+    } else {
+      // Select all
+      setSplitAmong(groupMembers.map((m) => m.user_id));
+    }
     // Clear error
     if (splitAmongError) {
       setSplitAmongError("");
@@ -285,22 +286,8 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     }
   };
 
-  // Check if form is valid for button disable state
-  const isFormValid = (): boolean => {
-    if (!description.trim() || !amount.trim() || !date.trim()) {
-      return false;
-    }
-    const amountValue = parseFloat(amount);
-    if (isNaN(amountValue) || amountValue <= 0) {
-      return false;
-    }
-    if (isGroupExpense) {
-      if (!paidBy || splitAmong.length === 0) {
-        return false;
-      }
-    }
-    return true;
-  };
+  // Note: We don't disable the button based on validation
+  // Instead, we show errors when the user tries to submit
 
   const handleDelete = () => {
     if (!onDelete || !transaction) return;
@@ -613,11 +600,13 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                       <Button
                         mode="text"
                         compact
-                        onPress={handleSelectAllMembers}
-                        disabled={loading || splitAmong.length === groupMembers.length}
+                        onPress={handleToggleAllMembers}
+                        disabled={loading}
                         style={styles.selectAllButton}
                       >
-                        Select All
+                        {splitAmong.length === groupMembers.length
+                          ? "Deselect All"
+                          : "Select All"}
                       </Button>
                     </View>
                     {splitAmongError ? (
@@ -642,7 +631,6 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                     >
                       {groupMembers.map((member) => {
                         const isSelected = splitAmong.includes(member.user_id);
-                        const isLastSelected = isSelected && splitAmong.length === 1;
                         return (
                           <TouchableOpacity
                             key={member.user_id}
@@ -653,12 +641,12 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                               },
                             ]}
                             onPress={() => handleToggleSplitMember(member.user_id)}
-                            disabled={loading || isLastSelected}
+                            disabled={loading}
                           >
                             <Checkbox
                               status={isSelected ? "checked" : "unchecked"}
                               onPress={() => handleToggleSplitMember(member.user_id)}
-                              disabled={loading || isLastSelected}
+                              disabled={loading}
                             />
                             <Text
                               variant="bodyLarge"
@@ -704,7 +692,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                 <Button
                   mode="contained"
                   onPress={handleSave}
-                  disabled={loading || !isFormValid()}
+                  disabled={loading}
                   loading={loading}
                   style={[
                     styles.button,
