@@ -230,13 +230,16 @@ export const handler: Handler = async (event, context) => {
         }
 
         if (transactionData.split_among && Array.isArray(transactionData.split_among)) {
+          // Remove duplicates before validation
+          const uniqueSplitAmong = [...new Set(transactionData.split_among)];
+          
           // Verify that all split_among users are members of the group
-          if (transactionData.split_among.length > 0) {
+          if (uniqueSplitAmong.length > 0) {
             const { data: splitMembers, error: splitError } = await supabase
               .from('group_members')
               .select('user_id')
               .eq('group_id', transactionData.group_id)
-              .in('user_id', transactionData.split_among);
+              .in('user_id', uniqueSplitAmong);
 
             if (splitError) {
               return {
@@ -247,7 +250,7 @@ export const handler: Handler = async (event, context) => {
             }
 
             const validUserIds = splitMembers?.map(m => m.user_id) || [];
-            const invalidUserIds = transactionData.split_among.filter(id => !validUserIds.includes(id));
+            const invalidUserIds = uniqueSplitAmong.filter(id => !validUserIds.includes(id));
             
             if (invalidUserIds.length > 0) {
               return {
@@ -273,7 +276,9 @@ export const handler: Handler = async (event, context) => {
           group_id: transactionData.group_id || null,
           currency: transactionData.currency,
           paid_by: transactionData.paid_by || null,
-          split_among: transactionData.split_among ? JSON.stringify(transactionData.split_among) : null,
+          split_among: transactionData.split_among && Array.isArray(transactionData.split_among)
+            ? JSON.stringify([...new Set(transactionData.split_among)]) // Remove duplicates
+            : null,
         })
         .select()
         .single();
@@ -290,10 +295,16 @@ export const handler: Handler = async (event, context) => {
       // Parse split_among JSONB field
       if (transaction && transaction.split_among && typeof transaction.split_among === 'string') {
         try {
-          transaction.split_among = JSON.parse(transaction.split_among);
+          const parsed = JSON.parse(transaction.split_among);
+          // Ensure it's an array and remove duplicates
+          transaction.split_among = Array.isArray(parsed) ? [...new Set(parsed)] : [];
         } catch (e) {
+          console.error('Failed to parse split_among for new transaction:', e);
           transaction.split_among = [];
         }
+      } else if (transaction && transaction.split_among && Array.isArray(transaction.split_among)) {
+        // Remove duplicates if already parsed
+        transaction.split_among = [...new Set(transaction.split_among)];
       }
 
       return {
@@ -333,6 +344,98 @@ export const handler: Handler = async (event, context) => {
         };
       }
 
+      // Get existing transaction to check group_id and verify ownership
+      const { data: existingTransaction, error: fetchError } = await supabase
+        .from('transactions')
+        .select('group_id, type, user_id')
+        .eq('id', transactionData.id)
+        .single();
+
+      if (fetchError || !existingTransaction) {
+        return {
+          statusCode: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Transaction not found' }),
+        };
+      }
+
+      // Verify user owns the transaction
+      if (existingTransaction.user_id !== user.id) {
+        return {
+          statusCode: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'You can only update your own transactions' }),
+        };
+      }
+
+      // Determine if this is/will be a group expense
+      const groupId = transactionData.group_id !== undefined 
+        ? transactionData.group_id 
+        : existingTransaction.group_id;
+      const transactionType = transactionData.type !== undefined 
+        ? transactionData.type 
+        : existingTransaction.type;
+
+      // Validate paid_by and split_among for group expenses
+      if (groupId && transactionType === 'expense') {
+        // Validate paid_by if provided
+        if (transactionData.paid_by !== undefined) {
+          if (transactionData.paid_by) {
+            // Verify that paid_by is a member of the group
+            const { data: paidByMember, error: paidByError } = await supabase
+              .from('group_members')
+              .select('id')
+              .eq('group_id', groupId)
+              .eq('user_id', transactionData.paid_by)
+              .single();
+
+            if (paidByError || !paidByMember) {
+              return {
+                statusCode: 400,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ error: 'paid_by must be a member of the group' }),
+              };
+            }
+          }
+        }
+
+        // Validate split_among if provided
+        if (transactionData.split_among !== undefined) {
+          if (transactionData.split_among && Array.isArray(transactionData.split_among)) {
+            // Remove duplicates
+            const uniqueSplitAmong = [...new Set(transactionData.split_among)];
+            
+            if (uniqueSplitAmong.length > 0) {
+              // Verify that all split_among users are members of the group
+              const { data: splitMembers, error: splitError } = await supabase
+                .from('group_members')
+                .select('user_id')
+                .eq('group_id', groupId)
+                .in('user_id', uniqueSplitAmong);
+
+              if (splitError) {
+                return {
+                  statusCode: 500,
+                  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ error: 'Failed to validate split_among members', details: splitError.message }),
+                };
+              }
+
+              const validUserIds = splitMembers?.map(m => m.user_id) || [];
+              const invalidUserIds = uniqueSplitAmong.filter(id => !validUserIds.includes(id));
+              
+              if (invalidUserIds.length > 0) {
+                return {
+                  statusCode: 400,
+                  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ error: 'All split_among users must be members of the group' }),
+                };
+              }
+            }
+          }
+        }
+      }
+
       // Build update object (exclude id and user_id)
       const updateData: any = {};
       if (transactionData.amount !== undefined) updateData.amount = transactionData.amount;
@@ -343,7 +446,11 @@ export const handler: Handler = async (event, context) => {
       if (transactionData.currency !== undefined) updateData.currency = transactionData.currency;
       if (transactionData.paid_by !== undefined) updateData.paid_by = transactionData.paid_by || null;
       if (transactionData.split_among !== undefined) {
-        updateData.split_among = transactionData.split_among ? JSON.stringify(transactionData.split_among) : null;
+        // Remove duplicates before storing
+        const uniqueSplitAmong = transactionData.split_among && Array.isArray(transactionData.split_among)
+          ? [...new Set(transactionData.split_among)]
+          : transactionData.split_among;
+        updateData.split_among = uniqueSplitAmong ? JSON.stringify(uniqueSplitAmong) : null;
       }
 
       const { data: transaction, error } = await supabase
@@ -373,10 +480,16 @@ export const handler: Handler = async (event, context) => {
       // Parse split_among JSONB field
       if (transaction.split_among && typeof transaction.split_among === 'string') {
         try {
-          transaction.split_among = JSON.parse(transaction.split_among);
+          const parsed = JSON.parse(transaction.split_among);
+          // Ensure it's an array and remove duplicates
+          transaction.split_among = Array.isArray(parsed) ? [...new Set(parsed)] : [];
         } catch (e) {
+          console.error('Failed to parse split_among for transaction:', transactionData.id, e);
           transaction.split_among = [];
         }
+      } else if (transaction.split_among && Array.isArray(transaction.split_among)) {
+        // Remove duplicates if already parsed
+        transaction.split_among = [...new Set(transaction.split_among)];
       }
 
       return {
