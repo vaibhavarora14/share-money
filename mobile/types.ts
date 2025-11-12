@@ -9,6 +9,8 @@ export interface Transaction {
   user_id?: string;
   group_id?: string;
   currency?: string;
+  paid_by?: string; // User ID of who paid for the expense
+  split_among?: string[]; // Array of user IDs who the expense is split among
 }
 
 export interface Currency {

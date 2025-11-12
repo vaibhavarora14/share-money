@@ -532,6 +532,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             : undefined
         }
         defaultCurrency={getDefaultCurrency()}
+        groupMembers={group.members || []}
+        groupId={group.id}
       />
     </SafeAreaView>
   );

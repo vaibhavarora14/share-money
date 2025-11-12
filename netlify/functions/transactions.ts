@@ -17,6 +17,8 @@ interface Transaction {
   user_id?: string;
   group_id?: string;
   currency?: string;
+  paid_by?: string; // User ID of who paid for the expense
+  split_among?: string[]; // Array of user IDs who the expense is split among
 }
 
 export const handler: Handler = async (event, context) => {
@@ -135,10 +137,26 @@ export const handler: Handler = async (event, context) => {
         };
       }
 
+      // Parse split_among JSONB field to ensure it's an array
+      const parsedTransactions = (transactions || []).map((tx: any) => {
+        if (tx.split_among) {
+          // If it's a string, parse it; if it's already an array/object, use it as is
+          if (typeof tx.split_among === 'string') {
+            try {
+              tx.split_among = JSON.parse(tx.split_among);
+            } catch (e) {
+              // If parsing fails, set to empty array
+              tx.split_among = [];
+            }
+          }
+        }
+        return tx;
+      });
+
       return {
         statusCode: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify(transactions || []),
+        body: JSON.stringify(parsedTransactions),
       };
     }
 
@@ -191,6 +209,57 @@ export const handler: Handler = async (event, context) => {
         }
       }
 
+      // Validate paid_by and split_among for group expenses
+      if (transactionData.group_id && transactionData.type === 'expense') {
+        if (transactionData.paid_by) {
+          // Verify that paid_by is a member of the group
+          const { data: paidByMember, error: paidByError } = await supabase
+            .from('group_members')
+            .select('id')
+            .eq('group_id', transactionData.group_id)
+            .eq('user_id', transactionData.paid_by)
+            .single();
+
+          if (paidByError || !paidByMember) {
+            return {
+              statusCode: 400,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ error: 'paid_by must be a member of the group' }),
+            };
+          }
+        }
+
+        if (transactionData.split_among && Array.isArray(transactionData.split_among)) {
+          // Verify that all split_among users are members of the group
+          if (transactionData.split_among.length > 0) {
+            const { data: splitMembers, error: splitError } = await supabase
+              .from('group_members')
+              .select('user_id')
+              .eq('group_id', transactionData.group_id)
+              .in('user_id', transactionData.split_among);
+
+            if (splitError) {
+              return {
+                statusCode: 500,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ error: 'Failed to validate split_among members', details: splitError.message }),
+              };
+            }
+
+            const validUserIds = splitMembers?.map(m => m.user_id) || [];
+            const invalidUserIds = transactionData.split_among.filter(id => !validUserIds.includes(id));
+            
+            if (invalidUserIds.length > 0) {
+              return {
+                statusCode: 400,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ error: 'All split_among users must be members of the group' }),
+              };
+            }
+          }
+        }
+      }
+
       // Set user_id from authenticated user (RLS will also enforce this)
       const { data: transaction, error } = await supabase
         .from('transactions')
@@ -203,6 +272,8 @@ export const handler: Handler = async (event, context) => {
           category: transactionData.category || null,
           group_id: transactionData.group_id || null,
           currency: transactionData.currency,
+          paid_by: transactionData.paid_by || null,
+          split_among: transactionData.split_among ? JSON.stringify(transactionData.split_among) : null,
         })
         .select()
         .single();
@@ -214,6 +285,15 @@ export const handler: Handler = async (event, context) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           body: JSON.stringify({ error: 'Failed to create transaction', details: error.message }),
         };
+      }
+
+      // Parse split_among JSONB field
+      if (transaction && transaction.split_among && typeof transaction.split_among === 'string') {
+        try {
+          transaction.split_among = JSON.parse(transaction.split_among);
+        } catch (e) {
+          transaction.split_among = [];
+        }
       }
 
       return {
@@ -261,6 +341,10 @@ export const handler: Handler = async (event, context) => {
       if (transactionData.type !== undefined) updateData.type = transactionData.type;
       if (transactionData.category !== undefined) updateData.category = transactionData.category || null;
       if (transactionData.currency !== undefined) updateData.currency = transactionData.currency;
+      if (transactionData.paid_by !== undefined) updateData.paid_by = transactionData.paid_by || null;
+      if (transactionData.split_among !== undefined) {
+        updateData.split_among = transactionData.split_among ? JSON.stringify(transactionData.split_among) : null;
+      }
 
       const { data: transaction, error } = await supabase
         .from('transactions')
@@ -284,6 +368,15 @@ export const handler: Handler = async (event, context) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           body: JSON.stringify({ error: 'Transaction not found' }),
         };
+      }
+
+      // Parse split_among JSONB field
+      if (transaction.split_among && typeof transaction.split_among === 'string') {
+        try {
+          transaction.split_among = JSON.parse(transaction.split_among);
+        } catch (e) {
+          transaction.split_among = [];
+        }
       }
 
       return {
