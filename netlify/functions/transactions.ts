@@ -137,18 +137,22 @@ export const handler: Handler = async (event, context) => {
         };
       }
 
-      // Parse split_among JSONB field to ensure it's an array
+      // Supabase automatically converts JSONB to JavaScript arrays/objects
+      // Just ensure split_among is always an array for type safety
       const parsedTransactions = (transactions || []).map((tx: any) => {
-        if (tx.split_among) {
-          // If it's a string, parse it; if it's already an array/object, use it as is
-          if (typeof tx.split_among === 'string') {
-            try {
-              tx.split_among = JSON.parse(tx.split_among);
-            } catch (e) {
-              // If parsing fails, set to empty array
-              tx.split_among = [];
-            }
+        if (tx.split_among && !Array.isArray(tx.split_among)) {
+          // Fallback: if somehow not an array, convert to array
+          // This shouldn't happen with proper JSONB handling, but safety first
+          try {
+            const parsed = typeof tx.split_among === 'string' 
+              ? JSON.parse(tx.split_among)
+              : tx.split_among;
+            tx.split_among = Array.isArray(parsed) ? parsed : [];
+          } catch (e) {
+            tx.split_among = [];
           }
+        } else if (!tx.split_among) {
+          tx.split_among = [];
         }
         return tx;
       });
@@ -279,8 +283,9 @@ export const handler: Handler = async (event, context) => {
           group_id: transactionData.group_id || null,
           currency: transactionData.currency,
           paid_by: transactionData.paid_by || null,
+          // Supabase automatically handles JSONB conversion - no need to stringify
           split_among: transactionData.split_among && Array.isArray(transactionData.split_among)
-            ? JSON.stringify([...new Set(transactionData.split_among)]) // Remove duplicates
+            ? [...new Set(transactionData.split_among)] // Remove duplicates, pass array directly
             : null,
         })
         .select()
@@ -295,19 +300,17 @@ export const handler: Handler = async (event, context) => {
         };
       }
 
-      // Parse split_among JSONB field
-      if (transaction && transaction.split_among && typeof transaction.split_among === 'string') {
-        try {
-          const parsed = JSON.parse(transaction.split_among);
-          // Ensure it's an array and remove duplicates
-          transaction.split_among = Array.isArray(parsed) ? [...new Set(parsed)] : [];
-        } catch (e) {
-          console.error('Failed to parse split_among for new transaction:', e);
+      // Supabase automatically converts JSONB to JavaScript arrays
+      // Just ensure it's an array and remove duplicates for data integrity
+      if (transaction && transaction.split_among) {
+        if (Array.isArray(transaction.split_among)) {
+          // Remove duplicates
+          transaction.split_among = [...new Set(transaction.split_among)];
+        } else {
+          // Fallback: if somehow not an array (shouldn't happen), convert
+          console.warn('split_among is not an array, converting:', transaction.split_among);
           transaction.split_among = [];
         }
-      } else if (transaction && transaction.split_among && Array.isArray(transaction.split_among)) {
-        // Remove duplicates if already parsed
-        transaction.split_among = [...new Set(transaction.split_among)];
       }
 
       return {
@@ -453,10 +456,11 @@ export const handler: Handler = async (event, context) => {
       if (transactionData.paid_by !== undefined) updateData.paid_by = transactionData.paid_by || null;
       if (transactionData.split_among !== undefined) {
         // Remove duplicates before storing
+        // Supabase automatically handles JSONB conversion - no need to stringify
         const uniqueSplitAmong = transactionData.split_among && Array.isArray(transactionData.split_among)
           ? [...new Set(transactionData.split_among)]
           : transactionData.split_among;
-        updateData.split_among = uniqueSplitAmong ? JSON.stringify(uniqueSplitAmong) : null;
+        updateData.split_among = uniqueSplitAmong || null;
       }
 
       const { data: transaction, error } = await supabase
@@ -483,19 +487,17 @@ export const handler: Handler = async (event, context) => {
         };
       }
 
-      // Parse split_among JSONB field
-      if (transaction.split_among && typeof transaction.split_among === 'string') {
-        try {
-          const parsed = JSON.parse(transaction.split_among);
-          // Ensure it's an array and remove duplicates
-          transaction.split_among = Array.isArray(parsed) ? [...new Set(parsed)] : [];
-        } catch (e) {
-          console.error('Failed to parse split_among for transaction:', transactionData.id, e);
+      // Supabase automatically converts JSONB to JavaScript arrays
+      // Just ensure it's an array and remove duplicates for data integrity
+      if (transaction.split_among) {
+        if (Array.isArray(transaction.split_among)) {
+          // Remove duplicates
+          transaction.split_among = [...new Set(transaction.split_among)];
+        } else {
+          // Fallback: if somehow not an array (shouldn't happen), convert
+          console.warn('split_among is not an array, converting:', transaction.split_among);
           transaction.split_among = [];
         }
-      } else if (transaction.split_among && Array.isArray(transaction.split_among)) {
-        // Remove duplicates if already parsed
-        transaction.split_among = [...new Set(transaction.split_among)];
       }
 
       return {
