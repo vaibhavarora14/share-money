@@ -71,6 +71,12 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   const [paidBy, setPaidBy] = useState<string>("");
   const [splitAmong, setSplitAmong] = useState<string[]>([]);
   const [showPaidByPicker, setShowPaidByPicker] = useState(false);
+  // Error states for inline validation
+  const [descriptionError, setDescriptionError] = useState<string>("");
+  const [amountError, setAmountError] = useState<string>("");
+  const [dateError, setDateError] = useState<string>("");
+  const [paidByError, setPaidByError] = useState<string>("");
+  const [splitAmongError, setSplitAmongError] = useState<string>("");
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const screenHeight = Dimensions.get("window").height;
@@ -162,62 +168,99 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     setCurrency(effectiveDefaultCurrency);
     setPaidBy("");
     setSplitAmong([]);
+    // Clear all errors
+    setDescriptionError("");
+    setAmountError("");
+    setDateError("");
+    setPaidByError("");
+    setSplitAmongError("");
     onDismiss();
   };
 
   const handleToggleSplitMember = (userId: string) => {
     setSplitAmong((prev) => {
       if (prev.includes(userId)) {
+        // Prevent deselecting if only one is selected
+        if (prev.length === 1) {
+          return prev; // Don't allow deselecting the last one
+        }
         return prev.filter((id) => id !== userId);
       } else {
         return [...prev, userId];
       }
     });
+    // Clear error when user makes a selection
+    if (splitAmongError) {
+      setSplitAmongError("");
+    }
   };
 
   const handleSelectAllMembers = () => {
-    if (splitAmong.length === groupMembers.length) {
-      setSplitAmong([]);
-    } else {
-      setSplitAmong(groupMembers.map((m) => m.user_id));
+    // Always select all members
+    setSplitAmong(groupMembers.map((m) => m.user_id));
+    // Clear error
+    if (splitAmongError) {
+      setSplitAmongError("");
     }
   };
 
-  const handleSave = async () => {
-    // Validation
+  // Validation function that returns true if form is valid
+  const validateForm = (): boolean => {
+    let isValid = true;
+
+    // Clear previous errors
+    setDescriptionError("");
+    setAmountError("");
+    setDateError("");
+    setPaidByError("");
+    setSplitAmongError("");
+
+    // Validate description
     if (!description.trim()) {
-      Alert.alert("Error", "Please enter a description");
-      return;
+      setDescriptionError("Please enter a description");
+      isValid = false;
     }
 
+    // Validate amount
     if (!amount.trim()) {
-      Alert.alert("Error", "Please enter an amount");
-      return;
+      setAmountError("Please enter an amount");
+      isValid = false;
+    } else {
+      const amountValue = parseFloat(amount);
+      if (isNaN(amountValue) || amountValue <= 0) {
+        setAmountError("Please enter a valid amount greater than 0");
+        isValid = false;
+      }
     }
 
-    const amountValue = parseFloat(amount);
-    if (isNaN(amountValue) || amountValue <= 0) {
-      Alert.alert("Error", "Please enter a valid amount greater than 0");
-      return;
-    }
-
+    // Validate date
     if (!date.trim()) {
-      Alert.alert("Error", "Please enter a date");
-      return;
+      setDateError("Please enter a date");
+      isValid = false;
     }
 
     // Validate expense splitting fields for group expenses
     if (isGroupExpense) {
       if (!paidBy) {
-        Alert.alert("Error", "Please select who paid for this expense");
-        return;
+        setPaidByError("Please select who paid for this expense");
+        isValid = false;
       }
       if (splitAmong.length === 0) {
-        Alert.alert("Error", "Please select at least one person to split the expense among");
-        return;
+        setSplitAmongError("Please select at least one person to split the expense among");
+        isValid = false;
       }
     }
 
+    return isValid;
+  };
+
+  const handleSave = async () => {
+    // Validate form
+    if (!validateForm()) {
+      return;
+    }
+
+    const amountValue = parseFloat(amount);
     setLoading(true);
     try {
       await onSave({
@@ -232,6 +275,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       });
       handleDismiss();
     } catch (error) {
+      // Show error in an alert for API errors (not validation errors)
       Alert.alert(
         "Error",
         getUserFriendlyErrorMessage(error)
@@ -239,6 +283,23 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     } finally {
       setLoading(false);
     }
+  };
+
+  // Check if form is valid for button disable state
+  const isFormValid = (): boolean => {
+    if (!description.trim() || !amount.trim() || !date.trim()) {
+      return false;
+    }
+    const amountValue = parseFloat(amount);
+    if (isNaN(amountValue) || amountValue <= 0) {
+      return false;
+    }
+    if (isGroupExpense) {
+      if (!paidBy || splitAmong.length === 0) {
+        return false;
+      }
+    }
+    return true;
   };
 
   const handleDelete = () => {
@@ -332,22 +393,35 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
               <TextInput
                 label="Description"
                 value={description}
-                onChangeText={setDescription}
+                onChangeText={(text) => {
+                  setDescription(text);
+                  if (descriptionError) {
+                    setDescriptionError("");
+                  }
+                }}
                 mode="outlined"
                 disabled={loading}
+                error={!!descriptionError}
                 style={styles.input}
                 left={<TextInput.Icon icon="text" />}
                 placeholder="e.g., Grocery shopping"
+                helperText={descriptionError}
               />
 
               <View style={styles.amountRow}>
                 <TextInput
                   label="Amount"
                   value={amount}
-                  onChangeText={setAmount}
+                  onChangeText={(text) => {
+                    setAmount(text);
+                    if (amountError) {
+                      setAmountError("");
+                    }
+                  }}
                   mode="outlined"
                   keyboardType="decimal-pad"
                   disabled={loading}
+                  error={!!amountError}
                   style={styles.amountInput}
                   left={
                     <TextInput.Affix
@@ -356,6 +430,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                     />
                   }
                   placeholder="0.00"
+                  helperText={amountError}
                 />
                 <Button
                   mode="outlined"
@@ -374,6 +449,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                 editable={!loading}
                 showSoftInputOnFocus={false}
                 onFocus={() => setShowDatePicker(true)}
+                error={!!dateError}
                 style={styles.input}
                 left={<TextInput.Icon icon="calendar" />}
                 right={
@@ -384,6 +460,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                 }
                 placeholder="YYYY-MM-DD"
                 onPressIn={() => !loading && setShowDatePicker(true)}
+                helperText={dateError}
               />
               {showDatePicker && (
                 <>
@@ -409,8 +486,13 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                         <Text variant="titleMedium">Select Date</Text>
                         <Button
                           onPress={() => {
-                            setDate(formatDateForInput(selectedDate));
+                            const formattedDate = formatDateForInput(selectedDate);
+                            setDate(formattedDate);
                             setShowDatePicker(false);
+                            // Clear error when date is selected
+                            if (dateError) {
+                              setDateError("");
+                            }
                           }}
                         >
                           Done
@@ -503,6 +585,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                     mode="outlined"
                     editable={false}
                     disabled={loading}
+                    error={!!paidByError}
                     style={styles.input}
                     left={<TextInput.Icon icon="account" />}
                     right={
@@ -513,6 +596,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                     }
                     onPressIn={() => !loading && setShowPaidByPicker(true)}
                     placeholder="Select who paid"
+                    helperText={paidByError}
                   />
 
                   <View style={styles.splitAmongContainer}>
@@ -530,17 +614,35 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                         mode="text"
                         compact
                         onPress={handleSelectAllMembers}
-                        disabled={loading}
+                        disabled={loading || splitAmong.length === groupMembers.length}
                         style={styles.selectAllButton}
                       >
-                        {splitAmong.length === groupMembers.length
-                          ? "Deselect All"
-                          : "Select All"}
+                        Select All
                       </Button>
                     </View>
-                    <View style={styles.splitAmongList}>
+                    {splitAmongError ? (
+                      <Text
+                        variant="bodySmall"
+                        style={[
+                          styles.errorText,
+                          { color: theme.colors.error },
+                        ]}
+                      >
+                        {splitAmongError}
+                      </Text>
+                    ) : null}
+                    <View
+                      style={[
+                        styles.splitAmongList,
+                        splitAmongError && {
+                          borderColor: theme.colors.error,
+                          borderWidth: 1,
+                        },
+                      ]}
+                    >
                       {groupMembers.map((member) => {
                         const isSelected = splitAmong.includes(member.user_id);
+                        const isLastSelected = isSelected && splitAmong.length === 1;
                         return (
                           <TouchableOpacity
                             key={member.user_id}
@@ -551,12 +653,12 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                               },
                             ]}
                             onPress={() => handleToggleSplitMember(member.user_id)}
-                            disabled={loading}
+                            disabled={loading || isLastSelected}
                           >
                             <Checkbox
                               status={isSelected ? "checked" : "unchecked"}
                               onPress={() => handleToggleSplitMember(member.user_id)}
-                              disabled={loading}
+                              disabled={loading || isLastSelected}
                             />
                             <Text
                               variant="bodyLarge"
@@ -602,7 +704,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                 <Button
                   mode="contained"
                   onPress={handleSave}
-                  disabled={loading}
+                  disabled={loading || !isFormValid()}
                   loading={loading}
                   style={[
                     styles.button,
@@ -663,6 +765,10 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                   onPress={() => {
                     setPaidBy(item.user_id);
                     setShowPaidByPicker(false);
+                    // Clear error when user makes a selection
+                    if (paidByError) {
+                      setPaidByError("");
+                    }
                   }}
                 >
                   <View style={styles.currencyItemContent}>
@@ -945,5 +1051,9 @@ const styles = StyleSheet.create({
   splitAmount: {
     marginLeft: 8,
     fontWeight: "600",
+  },
+  errorText: {
+    marginTop: 4,
+    marginBottom: 8,
   },
 });
