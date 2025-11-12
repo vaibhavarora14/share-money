@@ -210,9 +210,11 @@ export const handler: Handler = async (event, context) => {
       }
 
       // Validate paid_by and split_among for group expenses
+      // Note: Only actual group members (from group_members table) can be included.
+      // Pending invitations are excluded because they haven't accepted yet.
       if (transactionData.group_id && transactionData.type === 'expense') {
         if (transactionData.paid_by) {
-          // Verify that paid_by is a member of the group
+          // Verify that paid_by is a member of the group (not just invited)
           const { data: paidByMember, error: paidByError } = await supabase
             .from('group_members')
             .select('id')
@@ -233,7 +235,8 @@ export const handler: Handler = async (event, context) => {
           // Remove duplicates before validation
           const uniqueSplitAmong = [...new Set(transactionData.split_among)];
           
-          // Verify that all split_among users are members of the group
+          // Verify that all split_among users are actual members of the group
+          // (not just pending invitations - they must have accepted and joined)
           if (uniqueSplitAmong.length > 0) {
             const { data: splitMembers, error: splitError } = await supabase
               .from('group_members')
@@ -377,11 +380,13 @@ export const handler: Handler = async (event, context) => {
         : existingTransaction.type;
 
       // Validate paid_by and split_among for group expenses
+      // Note: Only actual group members (from group_members table) can be included.
+      // Pending invitations are excluded because they haven't accepted yet.
       if (groupId && transactionType === 'expense') {
         // Validate paid_by if provided
         if (transactionData.paid_by !== undefined) {
           if (transactionData.paid_by) {
-            // Verify that paid_by is a member of the group
+            // Verify that paid_by is a member of the group (not just invited)
             const { data: paidByMember, error: paidByError } = await supabase
               .from('group_members')
               .select('id')
@@ -406,7 +411,8 @@ export const handler: Handler = async (event, context) => {
             const uniqueSplitAmong = [...new Set(transactionData.split_among)];
             
             if (uniqueSplitAmong.length > 0) {
-              // Verify that all split_among users are members of the group
+              // Verify that all split_among users are actual members of the group
+              // (not just pending invitations - they must have accepted and joined)
               const { data: splitMembers, error: splitError } = await supabase
                 .from('group_members')
                 .select('user_id')
