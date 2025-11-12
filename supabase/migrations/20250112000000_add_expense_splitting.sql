@@ -32,13 +32,9 @@ COMMENT ON COLUMN transactions.split_among IS 'JSONB array of user IDs who this 
 -- ADD CONSTRAINT FOR split_among
 -- ============================================================================
 
--- First, clean up any invalid data (shouldn't exist, but safety first)
-UPDATE transactions
-SET split_among = '[]'::jsonb
-WHERE split_among IS NOT NULL 
-  AND jsonb_typeof(split_among) != 'array';
-
 -- Add constraint to ensure split_among is always an array or null
+-- This prevents invalid data types (objects, strings, etc.) from being inserted
+-- Note: Cleanup UPDATE not needed since this is a new column with DEFAULT '[]'::jsonb
 ALTER TABLE transactions
 ADD CONSTRAINT check_split_among_is_array 
 CHECK (
