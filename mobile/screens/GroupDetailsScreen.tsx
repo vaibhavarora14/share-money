@@ -532,6 +532,11 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             : undefined
         }
         defaultCurrency={getDefaultCurrency()}
+        // Note: Only actual group members are included in expense splitting.
+        // Pending invitations are excluded because they haven't accepted yet
+        // and don't have a user_id until they join the group.
+        groupMembers={group.members || []}
+        groupId={group.id}
       />
     </SafeAreaView>
   );
