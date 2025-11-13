@@ -17,7 +17,7 @@ import {
   ActivityIndicator,
 } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Balance, GroupMember } from "../types";
+import { Balance, GroupMember, Settlement } from "../types";
 import { getCurrencySymbol, getDefaultCurrency } from "../utils/currency";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 import { formatCurrency } from "../utils/currency";
@@ -25,6 +25,7 @@ import { formatCurrency } from "../utils/currency";
 interface SettlementFormScreenProps {
   visible: boolean;
   balance: Balance | null; // The balance to settle (null = manual entry)
+  settlement?: Settlement | null; // The settlement to edit (null = create new)
   groupMembers: GroupMember[];
   currentUserId: string;
   groupId: string;
@@ -37,19 +38,28 @@ interface SettlementFormScreenProps {
     currency: string;
     notes?: string;
   }) => Promise<void>;
+  onUpdate?: (data: {
+    id: string;
+    amount?: number;
+    currency?: string;
+    notes?: string;
+  }) => Promise<void>;
   onDismiss: () => void;
 }
 
 export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   visible,
   balance,
+  settlement,
   groupMembers,
   currentUserId,
   groupId,
   defaultCurrency,
   onSave,
+  onUpdate,
   onDismiss,
 }) => {
+  const isEditing = !!settlement;
   const effectiveDefaultCurrency = defaultCurrency || getDefaultCurrency();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -95,8 +105,18 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
       return;
     }
 
+    // If editing, pre-fill from settlement
+    if (settlement) {
+      setAmount(settlement.amount.toString());
+      setNotes(settlement.notes || "");
+      // Determine which user is the "other" user
+      const otherUserId = settlement.from_user_id === currentUserId 
+        ? settlement.to_user_id 
+        : settlement.from_user_id;
+      setSelectedToUserId(otherUserId);
+    }
     // Pre-fill based on balance if provided
-    if (balance) {
+    else if (balance) {
       setSelectedToUserId(balance.user_id);
       // Pre-fill with absolute balance amount as suggestion
       setAmount(Math.abs(balance.amount).toFixed(2));
@@ -104,7 +124,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
       // Default to first available user
       setSelectedToUserId(availableUsers[0].user_id);
     }
-  }, [visible, balance, availableUsers]);
+  }, [visible, balance, settlement, availableUsers, currentUserId]);
 
   const validateForm = (): boolean => {
     let isValid = true;
@@ -131,36 +151,46 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
       return;
     }
 
-    // Determine the other user ID
-    let otherUserId: string;
-    if (balance) {
-      otherUserId = balance.user_id;
-    } else if (selectedToUserId) {
-      otherUserId = selectedToUserId;
-    } else {
-      Alert.alert("Error", "Please select a user to settle with");
-      return;
-    }
-
     const amountNum = parseFloat(amount);
 
     try {
       setLoading(true);
 
-      // Determine from_user_id and to_user_id
-      // If paying (isPaying = true): from_user_id = currentUserId, to_user_id = otherUserId
-      // If receiving (isPaying = false): from_user_id = otherUserId, to_user_id = currentUserId
-      const fromUserId = isPaying ? currentUserId : otherUserId;
-      const toUserId = isPaying ? otherUserId : currentUserId;
+      // If editing, call onUpdate
+      if (isEditing && settlement && onUpdate) {
+        await onUpdate({
+          id: settlement.id,
+          amount: amountNum,
+          currency: effectiveDefaultCurrency,
+          notes: notes.trim() || undefined,
+        });
+      } else {
+        // Determine the other user ID
+        let otherUserId: string;
+        if (balance) {
+          otherUserId = balance.user_id;
+        } else if (selectedToUserId) {
+          otherUserId = selectedToUserId;
+        } else {
+          Alert.alert("Error", "Please select a user to settle with");
+          return;
+        }
 
-      await onSave({
-        group_id: groupId,
-        from_user_id: fromUserId,
-        to_user_id: toUserId,
-        amount: amountNum,
-        currency: effectiveDefaultCurrency,
-        notes: notes.trim() || undefined,
-      });
+        // Determine from_user_id and to_user_id
+        // If paying (isPaying = true): from_user_id = currentUserId, to_user_id = otherUserId
+        // If receiving (isPaying = false): from_user_id = otherUserId, to_user_id = currentUserId
+        const fromUserId = isPaying ? currentUserId : otherUserId;
+        const toUserId = isPaying ? otherUserId : currentUserId;
+
+        await onSave({
+          group_id: groupId,
+          from_user_id: fromUserId,
+          to_user_id: toUserId,
+          amount: amountNum,
+          currency: effectiveDefaultCurrency,
+          notes: notes.trim() || undefined,
+        });
+      }
 
       // Reset form
       setAmount("");
@@ -203,7 +233,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
       >
         <Appbar.Header>
           <Appbar.Action icon="close" onPress={onDismiss} />
-          <Appbar.Content title="Settle Up" />
+          <Appbar.Content title={isEditing ? "Edit Settlement" : "Settle Up"} />
         </Appbar.Header>
 
         <ScrollView
@@ -211,7 +241,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          {balance && (
+          {!isEditing && balance && (
             <View style={styles.balanceInfo}>
               <Text variant="titleMedium" style={styles.balanceText}>
                 {getUserDisplayName(balance.user_id)}
@@ -222,7 +252,20 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
             </View>
           )}
 
-          {!balance && (
+          {isEditing && settlement && (
+            <View style={styles.balanceInfo}>
+              <Text variant="titleMedium" style={styles.balanceText}>
+                {settlement.from_user_id === currentUserId
+                  ? `You paid ${getUserDisplayName(settlement.to_user_id)}`
+                  : `${getUserDisplayName(settlement.from_user_id)} paid you`}
+              </Text>
+              <Text variant="bodyMedium" style={styles.balanceAmount}>
+                {formatCurrency(settlement.amount, settlement.currency || effectiveDefaultCurrency)}
+              </Text>
+            </View>
+          )}
+
+          {!isEditing && !balance && (
             <View style={styles.section}>
               <Text variant="labelLarge" style={styles.label}>
                 Settle with
@@ -243,6 +286,22 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                   </Button>
                 ))}
               </ScrollView>
+            </View>
+          )}
+
+          {isEditing && settlement && (
+            <View style={styles.section}>
+              <Text variant="labelLarge" style={styles.label}>
+                Settlement with
+              </Text>
+              <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                {settlement.from_user_id === currentUserId
+                  ? getUserDisplayName(settlement.to_user_id)
+                  : getUserDisplayName(settlement.from_user_id)}
+              </Text>
+              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 4 }}>
+                (Cannot change settlement parties)
+              </Text>
             </View>
           )}
 
@@ -289,10 +348,10 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
               mode="contained"
               onPress={handleSave}
               loading={loading}
-              disabled={loading || !amount || !selectedToUserId}
+              disabled={loading || !amount || (!isEditing && !selectedToUserId)}
               style={styles.saveButton}
             >
-              {isPaying ? "Mark as Paid" : "Mark as Received"}
+              {isEditing ? "Update Settlement" : isPaying ? "Mark as Paid" : "Mark as Received"}
             </Button>
             <Button mode="outlined" onPress={onDismiss} disabled={loading} style={styles.cancelButton}>
               Cancel

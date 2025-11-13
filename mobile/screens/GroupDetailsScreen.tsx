@@ -13,7 +13,7 @@ import {
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
-import { GroupInvitation, GroupWithMembers, Transaction, Balance } from "../types";
+import { GroupInvitation, GroupWithMembers, Transaction, Balance, Settlement } from "../types";
 import { getDefaultCurrency, formatCurrency } from "../utils/currency";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 import { MembersList } from "../components/MembersList";
@@ -33,7 +33,7 @@ import {
   useUpdateTransaction,
   useDeleteTransaction,
 } from "../hooks/useTransactionMutations";
-import { useCreateSettlement } from "../hooks/useSettlementMutations";
+import { useCreateSettlement, useUpdateSettlement, useDeleteSettlement } from "../hooks/useSettlementMutations";
 import { SettlementFormScreen } from "./SettlementFormScreen";
 
 interface GroupDetailsScreenProps {
@@ -66,6 +66,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     useState<Transaction | null>(null);
   const [showSettlementForm, setShowSettlementForm] = useState<boolean>(false);
   const [settlingBalance, setSettlingBalance] = useState<Balance | null>(null);
+  const [editingSettlement, setEditingSettlement] = useState<Settlement | null>(null);
   // React Query data - use directly, no local state needed
   const { data: groupData, isLoading: groupLoading, error: groupError, refetch: refetchGroup } = useGroupDetails(initialGroup.id);
   const { data: txData = [] as Transaction[], isLoading: txLoading, refetch: refetchTx } = useTransactions(initialGroup.id);
@@ -87,6 +88,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const removeMemberMutation = useRemoveMember();
   const cancelInvite = useCancelInvitation();
   const createSettlement = useCreateSettlement();
+  const updateSettlement = useUpdateSettlement();
+  const deleteSettlement = useDeleteSettlement();
 
   // Use groupData directly, fallback to initialGroup while loading
   const group = groupData || initialGroup;
@@ -301,6 +304,46 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     await createSettlement.mutateAsync(settlementData);
     setShowSettlementForm(false);
     setSettlingBalance(null);
+  };
+
+  const handleSettlementUpdate = async (updateData: {
+    id: string;
+    amount?: number;
+    currency?: string;
+    notes?: string;
+  }) => {
+    await updateSettlement.mutateAsync(updateData);
+    setShowSettlementForm(false);
+    setEditingSettlement(null);
+  };
+
+  const handleEditSettlement = (settlement: Settlement) => {
+    setEditingSettlement(settlement);
+    setShowSettlementForm(true);
+  };
+
+  const handleDeleteSettlement = async (settlement: Settlement) => {
+    Alert.alert(
+      "Delete Settlement",
+      `Are you sure you want to delete this settlement of ${formatCurrency(settlement.amount, settlement.currency || getDefaultCurrency())}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteSettlement.mutateAsync({
+                id: settlement.id,
+                groupId: settlement.group_id,
+              });
+            } catch (err) {
+              Alert.alert("Error", getUserFriendlyErrorMessage(err));
+            }
+          },
+        },
+      ]
+    );
   };
 
   const currentUserId = session?.user?.id;
@@ -611,6 +654,26 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                               </View>
                             </View>
                           </Card.Content>
+                          {/* Only show edit/delete if current user created the settlement */}
+                          {settlement.created_by === session?.user?.id && (
+                            <Card.Actions>
+                              <Button
+                                mode="text"
+                                onPress={() => handleEditSettlement(settlement)}
+                                compact
+                              >
+                                Edit
+                              </Button>
+                              <Button
+                                mode="text"
+                                onPress={() => handleDeleteSettlement(settlement)}
+                                textColor={theme.colors.error}
+                                compact
+                              >
+                                Delete
+                              </Button>
+                            </Card.Actions>
+                          )}
                         </Card>
                         {index < settlementsData.settlements.length - 1 && (
                           <View style={{ height: 8 }} />
@@ -685,14 +748,17 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       <SettlementFormScreen
         visible={showSettlementForm}
         balance={settlingBalance}
+        settlement={editingSettlement}
         groupMembers={group.members || []}
         currentUserId={session?.user?.id || ""}
         groupId={group.id}
         defaultCurrency={getDefaultCurrency()}
         onSave={handleSettlementSave}
+        onUpdate={handleSettlementUpdate}
         onDismiss={() => {
           setShowSettlementForm(false);
           setSettlingBalance(null);
+          setEditingSettlement(null);
         }}
       />
     </SafeAreaView>

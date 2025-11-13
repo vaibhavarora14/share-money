@@ -11,7 +11,7 @@ function getCorsHeaders(): Record<string, string> {
   return {
     'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
   };
 }
 
@@ -421,6 +421,199 @@ export const handler: Handler = async (event, context) => {
         statusCode: 201,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         body: JSON.stringify({ settlement: enrichedSettlement }),
+      };
+    }
+
+    // Handle PUT request - update settlement
+    if (event.httpMethod === 'PUT') {
+      if (!event.body) {
+        return {
+          statusCode: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Request body is required' }),
+        };
+      }
+
+      let updateData: { id: string; amount?: number; currency?: string; notes?: string };
+      try {
+        updateData = JSON.parse(event.body);
+      } catch (err) {
+        return {
+          statusCode: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Invalid JSON in request body' }),
+        };
+      }
+
+      if (!updateData.id) {
+        return {
+          statusCode: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Settlement id is required' }),
+        };
+      }
+
+      // Validate UUID format
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(updateData.id)) {
+        return {
+          statusCode: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Invalid settlement id format. Expected UUID.' }),
+        };
+      }
+
+      // Validate amount if provided
+      if (updateData.amount !== undefined && updateData.amount <= 0) {
+        return {
+          statusCode: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Amount must be greater than 0' }),
+        };
+      }
+
+      // Fetch the settlement to verify ownership
+      const { data: existingSettlement, error: fetchError } = await supabase
+        .from('settlements')
+        .select('id, created_by')
+        .eq('id', updateData.id)
+        .single();
+
+      if (fetchError || !existingSettlement) {
+        return {
+          statusCode: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Settlement not found' }),
+        };
+      }
+
+      // Only the creator can update the settlement
+      if (existingSettlement.created_by !== currentUserId) {
+        return {
+          statusCode: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Forbidden: You can only update settlements you created' }),
+        };
+      }
+
+      // Build update object (only include fields that are provided)
+      const updateFields: {
+        amount?: number;
+        currency?: string;
+        notes?: string | null;
+      } = {};
+
+      if (updateData.amount !== undefined) {
+        updateFields.amount = updateData.amount;
+      }
+      if (updateData.currency !== undefined) {
+        updateFields.currency = updateData.currency;
+      }
+      if (updateData.notes !== undefined) {
+        updateFields.notes = updateData.notes || null;
+      }
+
+      // Update settlement
+      const { data: updatedSettlement, error: updateError } = await supabase
+        .from('settlements')
+        .update(updateFields)
+        .eq('id', updateData.id)
+        .select()
+        .single();
+
+      if (updateError) {
+        console.error('Error updating settlement:', updateError);
+        return {
+          statusCode: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Failed to update settlement', details: updateError.message }),
+        };
+      }
+
+      // Enrich with emails
+      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      const enrichedSettlement = updatedSettlement as Settlement;
+      await enrichSettlementsWithEmails(
+        supabase,
+        supabaseUrl,
+        serviceRoleKey,
+        [enrichedSettlement],
+        currentUserId,
+        currentUserEmail
+      );
+
+      return {
+        statusCode: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settlement: enrichedSettlement }),
+      };
+    }
+
+    // Handle DELETE request - delete settlement
+    if (event.httpMethod === 'DELETE') {
+      const settlementId = event.queryStringParameters?.id;
+
+      if (!settlementId) {
+        return {
+          statusCode: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Settlement id is required' }),
+        };
+      }
+
+      // Validate UUID format
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(settlementId)) {
+        return {
+          statusCode: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Invalid settlement id format. Expected UUID.' }),
+        };
+      }
+
+      // Fetch the settlement to verify ownership
+      const { data: existingSettlement, error: fetchError } = await supabase
+        .from('settlements')
+        .select('id, created_by')
+        .eq('id', settlementId)
+        .single();
+
+      if (fetchError || !existingSettlement) {
+        return {
+          statusCode: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Settlement not found' }),
+        };
+      }
+
+      // Only the creator can delete the settlement
+      if (existingSettlement.created_by !== currentUserId) {
+        return {
+          statusCode: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Forbidden: You can only delete settlements you created' }),
+        };
+      }
+
+      // Delete settlement
+      const { error: deleteError } = await supabase
+        .from('settlements')
+        .delete()
+        .eq('id', settlementId);
+
+      if (deleteError) {
+        console.error('Error deleting settlement:', deleteError);
+        return {
+          statusCode: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ error: 'Failed to delete settlement', details: deleteError.message }),
+        };
+      }
+
+      return {
+        statusCode: 204,
+        headers: corsHeaders,
+        body: '',
       };
     }
 
