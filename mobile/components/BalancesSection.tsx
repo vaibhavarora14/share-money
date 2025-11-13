@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import {
   ActivityIndicator,
@@ -28,13 +28,17 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
   const theme = useTheme();
   const [expanded, setExpanded] = useState<boolean>(false);
 
-  // Separate balances into "you owe" and "you are owed"
-  const youOwe = overallBalances.filter((b) => b.amount < 0);
-  const youAreOwed = overallBalances.filter((b) => b.amount > 0);
-
-  // Sort by absolute amount (largest first)
-  youOwe.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
-  youAreOwed.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+  // Separate balances into "you owe" and "you are owed" (memoized for performance)
+  const { youOwe, youAreOwed } = useMemo(() => {
+    const owe = overallBalances.filter((b) => b.amount < 0);
+    const owed = overallBalances.filter((b) => b.amount > 0);
+    
+    // Sort by absolute amount (largest first)
+    owe.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+    owed.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+    
+    return { youOwe: owe, youAreOwed: owed };
+  }, [overallBalances]);
 
   const getUserDisplayName = (balance: Balance): string => {
     return balance.email || `User ${balance.user_id.substring(0, 8)}...`;

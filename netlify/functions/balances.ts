@@ -315,17 +315,14 @@ export const handler: Handler = async (event, context) => {
     if (serviceRoleKey && allUserIds.size > 0) {
       const userIdsArray = Array.from(allUserIds);
       
-      // Fetch emails in batches
-      const emailMap = new Map<string, string>();
-      
-      for (const userId of userIdsArray) {
-        try {
-          // If this is the current user, use their email directly
-          if (userId === currentUserId && currentUserEmail) {
-            emailMap.set(userId, currentUserEmail);
-            continue;
-          }
+      // Fetch emails in parallel for better performance
+      const emailPromises = userIdsArray.map(async (userId) => {
+        // If this is the current user, use their email directly
+        if (userId === currentUserId && currentUserEmail) {
+          return { userId, email: currentUserEmail };
+        }
 
+        try {
           const userResponse = await fetch(
             `${supabaseUrl}/auth/v1/admin/users/${userId}`,
             {
@@ -339,12 +336,21 @@ export const handler: Handler = async (event, context) => {
           if (userResponse.ok) {
             const userData = await userResponse.json();
             const email = userData.user?.email || userData.email || null;
-            if (email) {
-              emailMap.set(userId, email);
-            }
+            return { userId, email };
           }
         } catch (err) {
           console.error(`Error fetching email for user ${userId}:`, err);
+        }
+        return { userId, email: null };
+      });
+
+      // Wait for all email fetches to complete (in parallel)
+      const emailResults = await Promise.allSettled(emailPromises);
+      const emailMap = new Map<string, string>();
+      
+      for (const result of emailResults) {
+        if (result.status === 'fulfilled' && result.value.email) {
+          emailMap.set(result.value.userId, result.value.email);
         }
       }
 

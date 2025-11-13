@@ -496,6 +496,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
         <BalancesSection
           groupBalances={balancesData?.group_balances || []}
+          overallBalances={balancesData?.overall_balances || []}
           loading={balancesLoading}
           defaultCurrency={getDefaultCurrency()}
           showOverallBalances={false}
