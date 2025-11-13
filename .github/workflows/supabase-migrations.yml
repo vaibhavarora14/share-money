@@ -19,6 +19,7 @@ jobs:
   apply-migrations:
     name: Apply Database Migrations
     runs-on: ubuntu-latest
+    environment: Production
     
     steps:
       - name: Checkout code
