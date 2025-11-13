@@ -47,6 +47,14 @@ jobs:
           if [ -z "${{ secrets.SUPABASE_DATABASE_URL }}" ]; then
             echo "::error::SUPABASE_DATABASE_URL secret is not set"
             echo "Please set SUPABASE_DATABASE_URL in format: postgresql://postgres:[PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres"
+            echo "⚠️  IMPORTANT: If your password contains special characters (#, @, :, etc.), they must be URL-encoded:"
+            echo "   - # becomes %23"
+            echo "   - @ becomes %40"
+            echo "   - : becomes %3A"
+            echo "   - / becomes %2F"
+            echo "   - ? becomes %3F"
+            echo "   - & becomes %26"
+            echo "   - = becomes %3D"
             exit 1
           fi
           echo "✅ Database URL secret is configured"
