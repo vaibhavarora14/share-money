@@ -6,11 +6,13 @@ on:
       - main
     paths:
       - 'supabase/migrations/**'
+      - '.github/workflows/supabase-migrations.yml'
   pull_request:
     branches:
       - main
     paths:
       - 'supabase/migrations/**'
+      - '.github/workflows/supabase-migrations.yml'
   workflow_dispatch: # Allow manual triggering
 
 jobs:
@@ -48,12 +50,10 @@ jobs:
             echo "migrations_exist=true" >> $GITHUB_OUTPUT
           fi
 
-      - name: Install Supabase CLI
+      - name: Verify Supabase CLI
         run: |
-          # Install Supabase CLI using the official installation script
-          curl -fsSL https://github.com/supabase/cli/releases/latest/download/supabase_linux_amd64.tar.gz | tar -xz
-          sudo mv supabase /usr/local/bin/supabase
-          supabase --version
+          # Supabase CLI is installed as dev dependency, verify it's available
+          npx supabase --version
 
       - name: Validate required secrets
         run: |
@@ -79,7 +79,7 @@ jobs:
         run: |
           echo "Linking to Supabase project: $SUPABASE_PROJECT_REF"
           # Link using access token and project ref
-          echo "$SUPABASE_DB_PASSWORD" | supabase link --project-ref "$SUPABASE_PROJECT_REF" --password-stdin
+          echo "$SUPABASE_DB_PASSWORD" | npx supabase link --project-ref "$SUPABASE_PROJECT_REF" --password-stdin
 
       - name: Apply migrations to production
         id: apply-migrations
@@ -94,10 +94,10 @@ jobs:
             echo "Project Reference: $SUPABASE_PROJECT_REF"
             
             # Link to project for validation
-            echo "${{ secrets.SUPABASE_DB_PASSWORD }}" | supabase link --project-ref "$SUPABASE_PROJECT_REF" --password-stdin
+            echo "${{ secrets.SUPABASE_DB_PASSWORD }}" | npx supabase link --project-ref "$SUPABASE_PROJECT_REF" --password-stdin
             
             # Validate migrations without applying
-            if supabase db diff --schema public --use-migra > /dev/null 2>&1 || supabase migration list > /dev/null 2>&1; then
+            if npx supabase db diff --schema public --use-migra > /dev/null 2>&1 || npx supabase migration list > /dev/null 2>&1; then
               echo "✅ Migration validation passed (no changes applied)"
               echo "status=validated" >> $GITHUB_OUTPUT
             else
@@ -110,7 +110,7 @@ jobs:
             echo "Project Reference: $SUPABASE_PROJECT_REF"
             
             # Apply migrations using db push
-            if supabase db push; then
+            if npx supabase db push; then
               echo "✅ Migrations applied successfully"
               echo "status=success" >> $GITHUB_OUTPUT
             else
