@@ -80,7 +80,7 @@ jobs:
         run: |
           echo "Linking to Supabase project: $SUPABASE_PROJECT_REF"
           # Link using access token and project ref
-          echo "$SUPABASE_DB_PASSWORD" | npx supabase link --project-ref "$SUPABASE_PROJECT_REF" --password-stdin
+          npx supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
 
       - name: Apply migrations to production
         id: apply-migrations
@@ -95,7 +95,7 @@ jobs:
             echo "Project Reference: $SUPABASE_PROJECT_REF"
             
             # Link to project for validation
-            echo "${{ secrets.SUPABASE_DB_PASSWORD }}" | npx supabase link --project-ref "$SUPABASE_PROJECT_REF" --password-stdin
+            npx supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "${{ secrets.SUPABASE_DB_PASSWORD }}"
             
             # Validate migrations without applying
             if npx supabase db diff --schema public --use-migra > /dev/null 2>&1 || npx supabase migration list > /dev/null 2>&1; then
