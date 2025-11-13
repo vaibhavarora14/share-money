@@ -55,7 +55,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
             style={styles.expandButton}
           />
           <Text variant="titleMedium" style={styles.sectionTitle}>
-            Balances
+            Your Balances
           </Text>
         </Pressable>
       </View>
@@ -176,15 +176,6 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                 },
               ]}
             >
-              <Text
-                variant="labelLarge"
-                style={[
-                  styles.balanceGroupTitle,
-                  { color: theme.colors.onSurfaceVariant },
-                ]}
-              >
-                Per Group
-              </Text>
               {groupBalances.map((groupBalance, groupIndex) => {
                 const groupYouOwe = groupBalance.balances.filter(
                   (b) => b.amount < 0

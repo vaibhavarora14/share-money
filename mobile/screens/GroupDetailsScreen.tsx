@@ -278,12 +278,14 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   };
 
   const currentUserId = session?.user?.id;
-  const isOwner =
-    group.created_by === currentUserId ||
-    group.members?.some(
-      (m) => m.user_id === currentUserId && m.role === "owner"
-    );
-  const isMember = group.members?.some((m) => m.user_id === currentUserId);
+  const isOwner = Boolean(
+    currentUserId &&
+    (group.created_by === currentUserId ||
+      group.members?.some(
+        (m) => m.user_id === currentUserId && m.role === "owner"
+      ))
+  );
+  const isMember = group.members?.some((m) => m.user_id === currentUserId) ?? false;
 
   // Memoize isOwner to prevent unnecessary re-renders
   const memoizedIsOwner = React.useMemo(
