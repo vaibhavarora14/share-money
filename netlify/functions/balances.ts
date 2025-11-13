@@ -1,11 +1,19 @@
 import { Handler } from '@netlify/functions';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
-};
+/**
+ * Get CORS headers with configurable origin.
+ * In production, set ALLOWED_ORIGIN environment variable to restrict access.
+ * Falls back to '*' for development if not set.
+ */
+function getCorsHeaders(): Record<string, string> {
+  const allowedOrigin = process.env.ALLOWED_ORIGIN || '*';
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  };
+}
 
 interface Balance {
   user_id: string;
@@ -24,6 +32,43 @@ interface BalancesResponse {
   overall_balances: Balance[];
 }
 
+// Database type interfaces
+interface GroupMember {
+  user_id: string;
+}
+
+interface Group {
+  id: string;
+  name: string;
+}
+
+interface TransactionSplit {
+  user_id: string;
+  amount: number | string; // Can be string from DB, parsed to number
+}
+
+interface TransactionWithSplits {
+  id: number;
+  amount: number | string; // Can be string from DB, parsed to number
+  paid_by: string | null;
+  currency?: string;
+  split_among?: string[] | null;
+  transaction_splits?: TransactionSplit[];
+}
+
+interface UserResponse {
+  id: string;
+  email?: string;
+  user?: {
+    email?: string;
+  };
+}
+
+interface EmailFetchResult {
+  userId: string;
+  email: string | null;
+}
+
 /**
  * Calculates balances for a user in a specific group.
  * Returns an array of balances where:
@@ -31,7 +76,7 @@ interface BalancesResponse {
  * - Negative amount = current user owes that user
  */
 async function calculateGroupBalances(
-  supabase: any,
+  supabase: SupabaseClient,
   groupId: string,
   currentUserId: string
 ): Promise<Balance[]> {
@@ -63,24 +108,24 @@ async function calculateGroupBalances(
     .select('user_id')
     .eq('group_id', groupId);
 
-  const memberIds = new Set((members || []).map((m: any) => m.user_id));
+  const memberIds = new Set((members || []).map((m: GroupMember) => m.user_id));
 
   // Initialize balance map: user_id -> balance amount
   const balanceMap = new Map<string, number>();
 
   // Process each transaction
-  for (const tx of transactions || []) {
+  for (const tx of (transactions || []) as TransactionWithSplits[]) {
     const paidBy = tx.paid_by;
-    const totalAmount = parseFloat(tx.amount);
+    const totalAmount = typeof tx.amount === 'string' ? parseFloat(tx.amount) : tx.amount;
 
     // Determine who owes what
     let splits: Array<{ user_id: string; amount: number }> = [];
 
     // Prefer transaction_splits (normalized data)
     if (tx.transaction_splits && Array.isArray(tx.transaction_splits) && tx.transaction_splits.length > 0) {
-      splits = tx.transaction_splits.map((s: any) => ({
+      splits = tx.transaction_splits.map((s: TransactionSplit) => ({
         user_id: s.user_id,
-        amount: parseFloat(s.amount),
+        amount: typeof s.amount === 'string' ? parseFloat(s.amount) : s.amount,
       }));
     } else if (tx.split_among && Array.isArray(tx.split_among) && tx.split_among.length > 0) {
       // Fallback to split_among for backward compatibility
@@ -140,6 +185,8 @@ async function calculateGroupBalances(
 }
 
 export const handler: Handler = async (event, context) => {
+  const corsHeaders = getCorsHeaders();
+  
   // Handle CORS preflight
   if (event.httpMethod === 'OPTIONS') {
     return {
@@ -199,7 +246,7 @@ export const handler: Handler = async (event, context) => {
       };
     }
 
-    const user = await userResponse.json();
+    const user = await userResponse.json() as UserResponse;
     
     if (!user || !user.id) {
       return {
@@ -237,7 +284,10 @@ export const handler: Handler = async (event, context) => {
       .select('group_id')
       .eq('user_id', currentUserId);
 
-    const groupIds = memberships?.map((m: any) => m.group_id) || [];
+    interface Membership {
+      group_id: string;
+    }
+    const groupIds = (memberships || []).map((m: Membership) => m.group_id);
 
     // If group_id is provided, filter to that group
     const targetGroupIds = groupId 
@@ -261,7 +311,7 @@ export const handler: Handler = async (event, context) => {
       .select('id, name')
       .in('id', targetGroupIds);
 
-    const groupMap = new Map((groups || []).map((g: any) => [g.id, g.name]));
+    const groupMap = new Map((groups || []).map((g: Group) => [g.id, g.name]));
 
     // Calculate balances for each group
     const groupBalances: GroupBalance[] = [];
@@ -316,7 +366,7 @@ export const handler: Handler = async (event, context) => {
       const userIdsArray = Array.from(allUserIds);
       
       // Fetch emails in parallel for better performance
-      const emailPromises = userIdsArray.map(async (userId) => {
+      const emailPromises: Promise<EmailFetchResult>[] = userIdsArray.map(async (userId): Promise<EmailFetchResult> => {
         // If this is the current user, use their email directly
         if (userId === currentUserId && currentUserEmail) {
           return { userId, email: currentUserEmail };
@@ -334,7 +384,7 @@ export const handler: Handler = async (event, context) => {
           );
           
           if (userResponse.ok) {
-            const userData = await userResponse.json();
+            const userData = await userResponse.json() as UserResponse;
             const email = userData.user?.email || userData.email || null;
             return { userId, email };
           }
@@ -389,12 +439,13 @@ export const handler: Handler = async (event, context) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       body: JSON.stringify(response),
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return {
       statusCode: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Internal server error', details: error.message }),
+      headers: { ...getCorsHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'Internal server error', details: errorMessage }),
     };
   }
 };
