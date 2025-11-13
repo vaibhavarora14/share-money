@@ -242,17 +242,73 @@ eas build --platform android
 
 ### GitHub Actions (CI/CD)
 
-Automatic Supabase migrations are configured via GitHub Actions.
+Automatic Supabase migrations are configured via GitHub Actions. When code is merged to the `main` branch, any new migration files in `supabase/migrations/` are automatically applied to the production database.
 
-**Setup:**
-1. Get Supabase Access Token: https://supabase.com/dashboard/account/tokens
-2. Add GitHub Secrets:
-   - `SUPABASE_ACCESS_TOKEN`
-   - `SUPABASE_PROJECT_REF`
-   - `SUPABASE_DB_PASSWORD`
-3. Push to `main` branch - migrations apply automatically!
+#### Setup Instructions
 
-**Workflow:** `.github/workflows/supabase-migrations.yml`
+1. **Get Database Connection String:**
+   - Go to your Supabase project dashboard
+   - Navigate to Settings > Database
+   - Under "Connection string" section, select "URI" format
+   - Copy the connection string (it will look like: `postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres`)
+   - **Important**: For migrations, use the **Direct connection** (port 5432) instead of pooler (port 6543)
+   - Replace `[PASSWORD]` with your actual database password
+   - **CRITICAL**: If your password contains special characters, you must URL-encode them:
+     - `#` → `%23`
+     - `@` → `%40`
+     - `:` → `%3A`
+     - `/` → `%2F`
+     - `?` → `%3F`
+     - `&` → `%26`
+     - `=` → `%3D`
+   - Format: `postgresql://postgres:[URL-ENCODED-PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres`
+   - Example: If password is `my#pass@word`, use `my%23pass%40word`
+
+2. **Configure GitHub Secrets:**
+   - Go to your GitHub repository
+   - Navigate to Settings > Environments > Production (or create a new environment)
+   - Click "Add secret"
+   - Add the following secret:
+     - `SUPABASE_DATABASE_URL` - Your database connection string (direct connection, port 5432)
+
+3. **Test the workflow:**
+   - Push a new migration file to `supabase/migrations/`
+   - Create a PR or merge to `main` branch
+   - Check the Actions tab to see the migration workflow run
+
+#### How It Works
+
+The workflow (`.github/workflows/supabase-migrations.yml`) automatically:
+
+1. **Triggers** on push to `main` branch or PRs when migration files change
+2. **Validates** that the `SUPABASE_DATABASE_URL` secret is configured
+3. **Installs** PostgreSQL client (`psql`)
+4. **On PRs**: Validates migration files (dry-run, no changes applied)
+5. **On main branch**: Applies all migration files in order using `psql`
+6. **Reports** success or failure status
+
+#### Manual Triggering
+
+You can also manually trigger the workflow:
+- Go to Actions tab in GitHub
+- Select "Apply Supabase Migrations" workflow
+- Click "Run workflow"
+
+#### Failure Handling
+
+- If migrations fail, the workflow will:
+  - Exit with an error code
+  - Display error messages in the Actions log
+  - Prevent further deployment steps (if configured)
+- Always check the workflow logs if a migration fails
+- Fix any issues in the migration SQL and push again
+
+#### Security Notes
+
+- Never commit secrets to the repository
+- Rotate access tokens periodically
+- Use least-privilege access tokens when possible
+- Review migration files before merging to `main`
 
 ## Architecture
 
