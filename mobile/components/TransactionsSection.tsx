@@ -1,14 +1,10 @@
 import React from "react";
-import { StyleSheet, View } from "react-native";
-import {
-  ActivityIndicator,
-  Card,
-  Text,
-  useTheme,
-} from "react-native-paper";
+import { View } from "react-native";
+import { ActivityIndicator, Card, Text, useTheme } from "react-native-paper";
+import { useAuth } from "../contexts/AuthContext";
 import { Transaction } from "../types";
-import { formatCurrency } from "../utils/currency";
-import { formatDate } from "../utils/date";
+import { formatCurrency, getDefaultCurrency } from "../utils/currency";
+import { styles } from "./TransactionsSection.styles";
 
 interface TransactionsSectionProps {
   items: Transaction[];
@@ -16,12 +12,62 @@ interface TransactionsSectionProps {
   onEdit: (t: Transaction) => void;
 }
 
+// Calculate user's split amount and split count
+const getUserSplitInfo = (
+  transaction: Transaction,
+  currentUserId: string | undefined
+): {
+  amount: number;
+  count: number;
+} | null => {
+  if (!currentUserId) return null;
+
+  // Check if transaction has splits (preferred method)
+  if (
+    transaction.splits &&
+    Array.isArray(transaction.splits) &&
+    transaction.splits.length > 0
+  ) {
+    const userSplit = transaction.splits.find(
+      (split) => split.user_id === currentUserId
+    );
+    if (userSplit) {
+      return {
+        amount: userSplit.amount,
+        count: transaction.splits.length,
+      };
+    }
+  }
+
+  // Fallback to split_among (backward compatibility)
+  if (
+    transaction.split_among &&
+    Array.isArray(transaction.split_among) &&
+    transaction.split_among.length > 0
+  ) {
+    const isUserInSplit =
+      transaction.split_among.includes(currentUserId);
+    if (isUserInSplit) {
+      // Calculate equal split
+      const splitCount = transaction.split_among.length;
+      return {
+        amount: transaction.amount / splitCount,
+        count: splitCount,
+      };
+    }
+  }
+
+  return null;
+};
+
 export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
   items,
   loading,
   onEdit,
 }) => {
   const theme = useTheme();
+  const { session } = useAuth();
+  const currentUserId = session?.user?.id;
 
   return (
     <View style={[styles.section, { marginTop: 24 }]}>
@@ -32,51 +78,82 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
         <ActivityIndicator size="small" style={{ marginVertical: 16 }} />
       ) : items.length > 0 ? (
         items.map((transaction, index) => {
-          const isIncome = transaction.type === "income";
-          const amountColor = isIncome ? "#10b981" : "#ef4444";
-          const sign = isIncome ? "+" : "-";
+          const userSplitInfo = getUserSplitInfo(transaction, currentUserId);
+          const currency = transaction.currency || getDefaultCurrency();
+
           return (
             <React.Fragment key={transaction.id}>
               <Card
-                style={styles.transactionCard}
-                mode="outlined"
+                style={[
+                  styles.transactionCard,
+                  { backgroundColor: theme.colors.surfaceVariant },
+                ]}
+                mode="contained"
                 onPress={() => onEdit(transaction)}
               >
                 <Card.Content style={styles.transactionContent}>
-                  <View style={styles.transactionLeft}>
-                    <Text
-                      variant="titleSmall"
-                      style={styles.transactionDescription}
-                    >
-                      {transaction.description || "No description"}
-                    </Text>
-                    <View style={styles.transactionMeta}>
+                  <Text
+                    variant="titleSmall"
+                    style={[
+                      styles.transactionDescription,
+                      { color: theme.colors.onSurface },
+                    ]}
+                  >
+                    {transaction.description || "No description"}
+                  </Text>
+                  <View style={styles.amountsRow}>
+                    <View style={styles.transactionLeft}>
+                      {userSplitInfo !== null ? (
+                        <View style={styles.splitAmountContainer}>
+                          <Text
+                            variant="bodySmall"
+                            style={[
+                              styles.transactionMeta,
+                              { color: theme.colors.onSurface },
+                            ]}
+                          >
+                            {formatCurrency(userSplitInfo.amount, currency)}
+                          </Text>
+                          <Text
+                            variant="bodySmall"
+                            style={[
+                              styles.splitCount,
+                              { color: theme.colors.onSurfaceVariant },
+                            ]}
+                          >
+                            {userSplitInfo.count}x
+                          </Text>
+                        </View>
+                      ) : (
+                        <Text
+                          variant="bodySmall"
+                          style={[
+                            styles.transactionMeta,
+                            { color: theme.colors.onSurfaceVariant },
+                          ]}
+                        >
+                          {transaction.category || "No category"}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={styles.transactionRight}>
                       <Text
-                        variant="bodySmall"
-                        style={{ color: theme.colors.onSurfaceVariant }}
+                        variant="titleMedium"
+                        style={[
+                          styles.transactionAmount,
+                          { color: theme.colors.onSurface },
+                        ]}
                       >
-                        {formatDate(transaction.date)}
-                        {transaction.category && ` • ${transaction.category}`}
+                        {formatCurrency(
+                          transaction.amount,
+                          transaction.currency
+                        )}
                       </Text>
                     </View>
                   </View>
-                  <View style={styles.transactionRight}>
-                    <Text
-                      variant="titleMedium"
-                      style={[styles.transactionAmount, { color: amountColor }]}
-                    >
-                      {sign}
-                      {formatCurrency(
-                        transaction.amount,
-                        transaction.currency
-                      )}
-                    </Text>
-                  </View>
                 </Card.Content>
               </Card>
-              {index < items.length - 1 && (
-                <View style={{ height: 8 }} />
-              )}
+              {index < items.length - 1 && <View style={styles.cardSpacing} />}
             </React.Fragment>
           );
         })
@@ -117,62 +194,3 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  section: {
-    marginTop: 8,
-  },
-  sectionTitle: {
-    fontWeight: "600",
-  },
-  transactionCard: {
-    marginBottom: 0,
-  },
-  transactionContent: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 4,
-  },
-  transactionLeft: {
-    flex: 1,
-    marginRight: 16,
-  },
-  transactionDescription: {
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  transactionMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 4,
-  },
-  transactionAmount: {
-    fontWeight: "bold",
-    marginBottom: 8,
-  },
-  transactionRight: {
-    alignItems: "flex-end",
-  },
-  emptyStateCard: {
-    marginTop: 8,
-  },
-  emptyStateContent: {
-    alignItems: "center",
-    paddingVertical: 32,
-    paddingHorizontal: 16,
-  },
-  emptyStateIcon: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
-  emptyStateTitle: {
-    fontWeight: "600",
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  emptyStateMessage: {
-    textAlign: "center",
-    lineHeight: 20,
-  },
-});
