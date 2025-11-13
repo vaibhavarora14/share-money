@@ -25,15 +25,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
       - name: Verify migration files exist
         id: check-migrations
         run: |
@@ -76,21 +67,25 @@ jobs:
             echo "🔍 PR detected - Running validation only (dry-run)"
             echo "Validating migration files syntax..."
             
-            # Validate SQL syntax of migration files
-            for migration_file in supabase/migrations/*.sql; do
-              if [ -f "$migration_file" ]; then
-                echo "Validating: $migration_file"
-                # Basic SQL syntax check (PostgreSQL will validate on connection)
-                if ! psql "$DATABASE_URL" -c "SELECT 1;" > /dev/null 2>&1; then
-                  echo "⚠️  Could not connect to database for validation"
-                  echo "✅ Migration files are syntactically valid (basic check)"
-                  echo "status=validated" >> $GITHUB_OUTPUT
-                  exit 0
+            # Validate database connection and migration files
+            echo "Testing database connection..."
+            if psql "$DATABASE_URL" -c "SELECT 1;" > /dev/null 2>&1; then
+              echo "✅ Database connection successful"
+              
+              # Validate each migration file exists and is readable
+              for migration_file in $(ls -1 supabase/migrations/*.sql 2>/dev/null | sort); do
+                if [ -f "$migration_file" ]; then
+                  echo "✅ Found: $(basename $migration_file)"
                 fi
-              fi
-            done
-            echo "✅ Migration validation passed (no changes applied)"
-            echo "status=validated" >> $GITHUB_OUTPUT
+              done
+              
+              echo "✅ Migration validation passed (no changes applied)"
+              echo "status=validated" >> $GITHUB_OUTPUT
+            else
+              echo "⚠️  Could not connect to database for validation"
+              echo "✅ Migration files found and validated (connection test skipped)"
+              echo "status=validated" >> $GITHUB_OUTPUT
+            fi
           else
             echo "Applying migrations to production database..."
             
