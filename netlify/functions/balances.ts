@@ -117,20 +117,39 @@ async function calculateGroupBalances(
   for (const tx of (transactions || []) as TransactionWithSplits[]) {
     const paidBy = tx.paid_by;
     const totalAmount = typeof tx.amount === 'string' ? parseFloat(tx.amount) : tx.amount;
+    
+    // Validate amount is a valid positive number
+    if (isNaN(totalAmount) || totalAmount <= 0) {
+      console.warn(`Invalid transaction amount: ${tx.amount} for transaction ${tx.id}`);
+      continue; // Skip invalid transaction
+    }
 
     // Determine who owes what
     let splits: Array<{ user_id: string; amount: number }> = [];
 
     // Prefer transaction_splits (normalized data)
     if (tx.transaction_splits && Array.isArray(tx.transaction_splits) && tx.transaction_splits.length > 0) {
-      splits = tx.transaction_splits.map((s: TransactionSplit) => ({
-        user_id: s.user_id,
-        amount: typeof s.amount === 'string' ? parseFloat(s.amount) : s.amount,
-      }));
+      splits = tx.transaction_splits
+        .map((s: TransactionSplit) => {
+          const amount = typeof s.amount === 'string' ? parseFloat(s.amount) : s.amount;
+          // Validate split amount
+          if (isNaN(amount) || amount <= 0) {
+            console.warn(`Invalid split amount: ${s.amount} for user ${s.user_id} in transaction ${tx.id}`);
+            return null;
+          }
+          return {
+            user_id: s.user_id,
+            amount,
+          };
+        })
+        .filter((s): s is { user_id: string; amount: number } => s !== null);
     } else if (tx.split_among && Array.isArray(tx.split_among) && tx.split_among.length > 0) {
       // Fallback to split_among for backward compatibility
       // Calculate equal splits
       const splitCount = tx.split_among.length;
+      if (splitCount === 0) {
+        continue; // Skip invalid transaction with no splits
+      }
       const splitAmount = totalAmount / splitCount;
       splits = tx.split_among.map((userId: string) => ({
         user_id: userId,
@@ -277,6 +296,15 @@ export const handler: Handler = async (event, context) => {
 
     // Get group_id from query params (optional - if not provided, return all groups)
     const groupId = event.queryStringParameters?.group_id;
+    
+    // Validate group_id format if provided (UUID format)
+    if (groupId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(groupId)) {
+      return {
+        statusCode: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'Invalid group_id format. Expected UUID.' }),
+      };
+    }
 
     // Get all groups the user belongs to
     const { data: memberships } = await supabase
