@@ -81,7 +81,8 @@ jobs:
           echo "Linking to Supabase project: $SUPABASE_PROJECT_REF"
           # Link using access token and project ref
           # Use --skip-pooler to bypass connection pooler IP restrictions
-          npx supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD" --skip-pooler
+          # Force IPv4 by using native DNS resolver (avoids IPv6 connectivity issues)
+          npx supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD" --skip-pooler --dns-resolver native
 
       - name: Apply migrations to production
         id: apply-migrations
@@ -97,7 +98,8 @@ jobs:
             
             # Link to project for validation
             # Use --skip-pooler to bypass connection pooler IP restrictions
-            npx supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "${{ secrets.SUPABASE_DB_PASSWORD }}" --skip-pooler
+            # Force IPv4 by using native DNS resolver (avoids IPv6 connectivity issues)
+            npx supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "${{ secrets.SUPABASE_DB_PASSWORD }}" --skip-pooler --dns-resolver native
             
             # Validate migrations without applying
             if npx supabase db diff --schema public --use-migra > /dev/null 2>&1 || npx supabase migration list > /dev/null 2>&1; then
