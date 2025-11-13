@@ -19,12 +19,14 @@ import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 import { MembersList } from "../components/MembersList";
 import { InvitationsList } from "../components/InvitationsList";
 import { TransactionsSection } from "../components/TransactionsSection";
+import { BalancesSection } from "../components/BalancesSection";
 import { TransactionFormScreen } from "./TransactionFormScreen";
 import { useDeleteGroup, useRemoveMember } from "../hooks/useGroupMutations";
 import { useCancelInvitation } from "../hooks/useInvitationMutations";
 import { useGroupDetails } from "../hooks/useGroupDetails";
 import { useTransactions } from "../hooks/useTransactions";
 import { useGroupInvitations } from "../hooks/useGroupInvitations";
+import { useBalances } from "../hooks/useBalances";
 import {
   useCreateTransaction,
   useUpdateTransaction,
@@ -63,6 +65,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const { data: groupData, isLoading: groupLoading, error: groupError, refetch: refetchGroup } = useGroupDetails(initialGroup.id);
   const { data: txData = [] as Transaction[], isLoading: txLoading, refetch: refetchTx } = useTransactions(initialGroup.id);
   const { data: invitations = [] as GroupInvitation[], isLoading: invitationsLoading, refetch: refetchInvites } = useGroupInvitations(initialGroup.id);
+  const { data: balancesData, isLoading: balancesLoading } = useBalances(initialGroup.id);
   const [cancellingInvitationId, setCancellingInvitationId] = useState<
     string | null
   >(null);
@@ -488,6 +491,13 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             </>
           )}
         </View>
+
+        <BalancesSection
+          groupBalances={balancesData?.group_balances || []}
+          overallBalances={balancesData?.overall_balances || []}
+          loading={balancesLoading}
+          defaultCurrency={getDefaultCurrency()}
+        />
 
         <TransactionsSection
           items={transactions}

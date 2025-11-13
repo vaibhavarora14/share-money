@@ -69,3 +69,20 @@ export interface GroupWithMembers extends Group {
   invitations?: GroupInvitation[];
 }
 
+export interface Balance {
+  user_id: string;
+  email?: string;
+  amount: number; // Positive = they owe you, Negative = you owe them
+}
+
+export interface GroupBalance {
+  group_id: string;
+  group_name: string;
+  balances: Balance[];
+}
+
+export interface BalancesResponse {
+  group_balances: GroupBalance[];
+  overall_balances: Balance[];
+}
+

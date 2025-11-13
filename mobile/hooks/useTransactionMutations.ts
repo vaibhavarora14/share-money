@@ -23,7 +23,13 @@ export function useCreateTransaction() {
         queryClient.invalidateQueries({
           queryKey: queryKeys.transactionsByGroup(variables.group_id),
         });
+        // Invalidate balances when transactions change
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.balances(variables.group_id),
+        });
       }
+      // Also invalidate overall balances
+      queryClient.invalidateQueries({ queryKey: queryKeys.balances() });
     },
   });
 }
@@ -52,7 +58,13 @@ export function useUpdateTransaction() {
         queryClient.invalidateQueries({
           queryKey: queryKeys.transactionsByGroup(variables.group_id),
         });
+        // Invalidate balances when transactions change
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.balances(variables.group_id),
+        });
       }
+      // Also invalidate overall balances
+      queryClient.invalidateQueries({ queryKey: queryKeys.balances() });
     },
   });
 }
@@ -121,7 +133,13 @@ export function useDeleteTransaction() {
         queryClient.invalidateQueries({
           queryKey: queryKeys.transactionsByGroup(variables.group_id),
         });
+        // Invalidate balances when transactions change
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.balances(variables.group_id),
+        });
       }
+      // Also invalidate overall balances
+      queryClient.invalidateQueries({ queryKey: queryKeys.balances() });
     },
   });
 }
