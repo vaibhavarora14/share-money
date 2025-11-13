@@ -448,7 +448,6 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                 style={styles.input}
                 left={<TextInput.Icon icon="text" />}
                 placeholder="e.g., Grocery shopping"
-                helperText={descriptionError}
               />
 
               <View style={styles.amountRow}>
@@ -473,7 +472,6 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                     />
                   }
                   placeholder="0.00"
-                  helperText={amountError}
                 />
                 <Button
                   mode="outlined"
@@ -503,7 +501,6 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                 }
                 placeholder="YYYY-MM-DD"
                 onPressIn={() => !loading && setShowDatePicker(true)}
-                helperText={dateError}
               />
               {showDatePicker && (
                 <>
@@ -639,7 +636,6 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                     }
                     onPressIn={() => !loading && setShowPaidByPicker(true)}
                     placeholder="Select who paid"
-                    helperText={paidByError}
                   />
 
                   <View style={styles.splitAmongContainer}>

@@ -21,3 +21,8 @@
   to = "/.netlify/functions/invitations/:splat"
   status = 200
 
+[[redirects]]
+  from = "/api/balances"
+  to = "/.netlify/functions/balances"
+  status = 200
+
