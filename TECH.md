@@ -253,7 +253,16 @@ Automatic Supabase migrations are configured via GitHub Actions. When code is me
    - Copy the connection string (it will look like: `postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres`)
    - **Important**: For migrations, use the **Direct connection** (port 5432) instead of pooler (port 6543)
    - Replace `[PASSWORD]` with your actual database password
-   - Format: `postgresql://postgres:[PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres`
+   - **CRITICAL**: If your password contains special characters, you must URL-encode them:
+     - `#` → `%23`
+     - `@` → `%40`
+     - `:` → `%3A`
+     - `/` → `%2F`
+     - `?` → `%3F`
+     - `&` → `%26`
+     - `=` → `%3D`
+   - Format: `postgresql://postgres:[URL-ENCODED-PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres`
+   - Example: If password is `my#pass@word`, use `my%23pass%40word`
 
 2. **Configure GitHub Secrets:**
    - Go to your GitHub repository
