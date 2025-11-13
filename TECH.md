@@ -242,17 +242,71 @@ eas build --platform android
 
 ### GitHub Actions (CI/CD)
 
-Automatic Supabase migrations are configured via GitHub Actions.
+Automatic Supabase migrations are configured via GitHub Actions. When code is merged to the `main` branch, any new migration files in `supabase/migrations/` are automatically applied to the production database.
 
-**Setup:**
-1. Get Supabase Access Token: https://supabase.com/dashboard/account/tokens
-2. Add GitHub Secrets:
-   - `SUPABASE_ACCESS_TOKEN`
-   - `SUPABASE_PROJECT_REF`
-   - `SUPABASE_DB_PASSWORD`
-3. Push to `main` branch - migrations apply automatically!
+#### Setup Instructions
 
-**Workflow:** `.github/workflows/supabase-migrations.yml`
+1. **Get Supabase Access Token:**
+   - Go to https://supabase.com/dashboard/account/tokens
+   - Generate a new access token (or use an existing one)
+   - Copy the token value
+
+2. **Get Supabase Project Reference:**
+   - Go to your Supabase project dashboard
+   - Navigate to Settings > General
+   - Copy the "Reference ID" (e.g., `abcdefghijklmnop`)
+
+3. **Get Database Password:**
+   - Go to your Supabase project dashboard
+   - Navigate to Settings > Database
+   - Copy the database password (or reset it if needed)
+
+4. **Configure GitHub Secrets:**
+   - Go to your GitHub repository
+   - Navigate to Settings > Secrets and variables > Actions
+   - Add the following secrets:
+     - `SUPABASE_ACCESS_TOKEN` - Your Supabase access token
+     - `SUPABASE_PROJECT_REF` - Your project reference ID
+     - `SUPABASE_DB_PASSWORD` - Your database password
+
+5. **Test the workflow:**
+   - Push a new migration file to `supabase/migrations/`
+   - Merge to `main` branch
+   - Check the Actions tab to see the migration workflow run
+
+#### How It Works
+
+The workflow (`.github/workflows/supabase-migrations.yml`) automatically:
+
+1. **Triggers** on push to `main` branch when migration files change
+2. **Validates** that all required secrets are configured
+3. **Installs** Supabase CLI
+4. **Links** to your production Supabase project
+5. **Applies** all pending migrations using `supabase db push`
+6. **Reports** success or failure status
+
+#### Manual Triggering
+
+You can also manually trigger the workflow:
+- Go to Actions tab in GitHub
+- Select "Apply Supabase Migrations" workflow
+- Click "Run workflow"
+
+#### Failure Handling
+
+- If migrations fail, the workflow will:
+  - Exit with an error code
+  - Display error messages in the Actions log
+  - Prevent further deployment steps (if configured)
+- Always check the workflow logs if a migration fails
+- Fix any issues in the migration SQL and push again
+
+#### Security Notes
+
+- Never commit secrets to the repository
+- Rotate access tokens periodically
+- Use least-privilege access tokens when possible
+- Review migration files before merging to `main`
 
 ## Architecture
 

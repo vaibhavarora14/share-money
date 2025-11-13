@@ -1,0 +1,110 @@
+name: Apply Supabase Migrations
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'supabase/migrations/**'
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  apply-migrations:
+    name: Apply Database Migrations
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify migration files exist
+        id: check-migrations
+        run: |
+          if [ ! -d "supabase/migrations" ]; then
+            echo "::error::Migration directory not found"
+            exit 1
+          fi
+          MIGRATION_COUNT=$(find supabase/migrations -name "*.sql" -type f | wc -l)
+          if [ "$MIGRATION_COUNT" -eq 0 ]; then
+            echo "::warning::No migration files found in supabase/migrations/"
+            echo "This may be expected if migrations were already applied"
+          else
+            echo "Found $MIGRATION_COUNT migration file(s):"
+            ls -la supabase/migrations/*.sql
+            echo "migrations_exist=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install Supabase CLI
+        run: |
+          npm install -g supabase@latest
+          supabase --version
+
+      - name: Validate required secrets
+        run: |
+          if [ -z "${{ secrets.SUPABASE_ACCESS_TOKEN }}" ]; then
+            echo "::error::SUPABASE_ACCESS_TOKEN secret is not set"
+            exit 1
+          fi
+          if [ -z "${{ secrets.SUPABASE_PROJECT_REF }}" ]; then
+            echo "::error::SUPABASE_PROJECT_REF secret is not set"
+            exit 1
+          fi
+          if [ -z "${{ secrets.SUPABASE_DB_PASSWORD }}" ]; then
+            echo "::error::SUPABASE_DB_PASSWORD secret is not set"
+            exit 1
+          fi
+          echo "✅ All required secrets are configured"
+
+      - name: Link to Supabase project
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          echo "Linking to Supabase project: $SUPABASE_PROJECT_REF"
+          # Link using access token and project ref
+          echo "$SUPABASE_DB_PASSWORD" | supabase link --project-ref "$SUPABASE_PROJECT_REF" --password-stdin
+
+      - name: Apply migrations to production
+        id: apply-migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          echo "Applying migrations to production database..."
+          echo "Project Reference: $SUPABASE_PROJECT_REF"
+          
+          # Apply migrations using db push
+          if supabase db push; then
+            echo "✅ Migrations applied successfully"
+            echo "status=success" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Migration failed"
+            echo "status=failure" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Report migration status
+        if: always()
+        run: |
+          if [ "${{ steps.apply-migrations.outcome }}" == "success" ]; then
+            echo "✅ Database migrations completed successfully"
+          else
+            echo "❌ Database migrations failed"
+            echo "Please check the logs above for details"
+          fi
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::Database migration failed. Please review the logs and fix any issues."
+          exit 1
