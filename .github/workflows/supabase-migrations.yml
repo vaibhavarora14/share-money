@@ -77,7 +77,8 @@ jobs:
             
             # Validate database connection and migration files
             echo "Testing database connection..."
-            if psql "$DATABASE_URL" -c "SELECT 1;" > /dev/null 2>&1; then
+            # Force IPv4 connection (-4 flag) to avoid IPv6 connectivity issues
+            if psql -4 "$DATABASE_URL" -c "SELECT 1;" > /dev/null 2>&1; then
               echo "✅ Database connection successful"
               
               # Validate each migration file exists and is readable
@@ -101,7 +102,8 @@ jobs:
             for migration_file in $(ls -1 supabase/migrations/*.sql | sort); do
               if [ -f "$migration_file" ]; then
                 echo "Applying: $(basename $migration_file)"
-                if psql "$DATABASE_URL" -f "$migration_file"; then
+                # Force IPv4 connection (-4 flag) to avoid IPv6 connectivity issues
+                if psql -4 "$DATABASE_URL" -f "$migration_file"; then
                   echo "✅ Applied: $(basename $migration_file)"
                 else
                   echo "❌ Failed to apply: $(basename $migration_file)"
