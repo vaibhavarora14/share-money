@@ -1,7 +1,6 @@
 -- Add expense splitting functionality
 -- Created: 2025-01-12
 -- Updated: 2025-01-14 (combined with transaction_splits table creation)
--- Test: Trigger workflow validation in PR
 --
 -- This migration implements the complete expense splitting feature:
 -- 1. Adds paid_by and split_among columns to transactions table
