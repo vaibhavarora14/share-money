@@ -12,19 +12,21 @@ import { formatCurrency } from "../utils/currency";
 
 interface BalancesSectionProps {
   groupBalances: GroupBalance[];
-  overallBalances: Balance[];
+  overallBalances?: Balance[]; // Optional - if not provided, only show group balances
   loading: boolean;
   defaultCurrency?: string;
+  showOverallBalances?: boolean; // If false, hide overall balances section
 }
 
 export const BalancesSection: React.FC<BalancesSectionProps> = ({
   groupBalances,
-  overallBalances,
+  overallBalances = [],
   loading,
   defaultCurrency = "USD",
+  showOverallBalances = true,
 }) => {
   const theme = useTheme();
-  const [expanded, setExpanded] = useState<boolean>(true);
+  const [expanded, setExpanded] = useState<boolean>(false);
 
   // Separate balances into "you owe" and "you are owed"
   const youOwe = overallBalances.filter((b) => b.amount < 0);
@@ -62,8 +64,8 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
         <ActivityIndicator size="small" style={{ marginVertical: 16 }} />
       ) : expanded ? (
         <>
-          {/* Overall Summary */}
-          {overallBalances.length > 0 ? (
+          {/* Overall Summary - only show if showOverallBalances is true */}
+          {showOverallBalances && overallBalances.length > 0 && (
             <>
               {/* You Are Owed */}
               {youAreOwed.length > 0 && (
@@ -160,45 +162,53 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                   ))}
                 </View>
               )}
+            </>
+          )}
 
-              {/* Per-Group Breakdown (if multiple groups or single group detail) */}
-              {groupBalances.length > 0 && (
-                <View style={[styles.balanceGroup, { marginTop: 24 }]}>
-                  <Text
-                    variant="labelLarge"
-                    style={[
-                      styles.balanceGroupTitle,
-                      { color: theme.colors.onSurfaceVariant },
-                    ]}
-                  >
-                    Per Group
-                  </Text>
-                  {groupBalances.map((groupBalance, groupIndex) => {
-                    if (groupBalance.balances.length === 0) {
-                      return null;
-                    }
+          {/* Per-Group Breakdown - always show if we have group data */}
+          {groupBalances.length > 0 && (
+            <View
+              style={[
+                styles.balanceGroup,
+                {
+                  marginTop:
+                    showOverallBalances && overallBalances.length > 0 ? 24 : 0,
+                },
+              ]}
+            >
+              <Text
+                variant="labelLarge"
+                style={[
+                  styles.balanceGroupTitle,
+                  { color: theme.colors.onSurfaceVariant },
+                ]}
+              >
+                Per Group
+              </Text>
+              {groupBalances.map((groupBalance, groupIndex) => {
+                const groupYouOwe = groupBalance.balances.filter(
+                  (b) => b.amount < 0
+                );
+                const groupYouAreOwed = groupBalance.balances.filter(
+                  (b) => b.amount > 0
+                );
 
-                    const groupYouOwe = groupBalance.balances.filter(
-                      (b) => b.amount < 0
-                    );
-                    const groupYouAreOwed = groupBalance.balances.filter(
-                      (b) => b.amount > 0
-                    );
+                const hasBalances =
+                  groupYouOwe.length > 0 || groupYouAreOwed.length > 0;
 
-                    return (
-                      <React.Fragment key={groupBalance.group_id}>
-                        <Card
-                          style={styles.groupBalanceCard}
-                          mode="outlined"
+                return (
+                  <React.Fragment key={groupBalance.group_id}>
+                    <Card style={styles.groupBalanceCard} mode="outlined">
+                      <Card.Content>
+                        <Text
+                          variant="titleSmall"
+                          style={styles.groupBalanceTitle}
                         >
-                          <Card.Content>
-                            <Text
-                              variant="titleSmall"
-                              style={styles.groupBalanceTitle}
-                            >
-                              {groupBalance.group_name}
-                            </Text>
+                          {groupBalance.group_name}
+                        </Text>
 
+                        {hasBalances ? (
+                          <>
                             {/* Group: You Are Owed */}
                             {groupYouAreOwed.length > 0 && (
                               <View style={{ marginTop: 12 }}>
@@ -260,18 +270,36 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                                 ))}
                               </View>
                             )}
-                          </Card.Content>
-                        </Card>
-                        {groupIndex < groupBalances.length - 1 && (
-                          <View style={{ height: 8 }} />
+                          </>
+                        ) : (
+                          <View style={{ marginTop: 12 }}>
+                            <Text
+                              variant="bodyMedium"
+                              style={[
+                                styles.groupBalanceName,
+                                { color: theme.colors.onSurfaceVariant },
+                              ]}
+                            >
+                              No balances in this group yet
+                            </Text>
+                          </View>
                         )}
-                      </React.Fragment>
-                    );
-                  })}
-                </View>
-              )}
-            </>
-          ) : (
+                      </Card.Content>
+                    </Card>
+                    {groupIndex < groupBalances.length - 1 && (
+                      <View style={{ height: 8 }} />
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Empty State - show if no data at all */}
+          {(showOverallBalances &&
+            overallBalances.length === 0 &&
+            groupBalances.length === 0) ||
+          (!showOverallBalances && groupBalances.length === 0) ? (
             <Card style={styles.emptyStateCard} mode="outlined">
               <Card.Content style={styles.emptyStateContent}>
                 <Text
@@ -303,7 +331,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                 </Text>
               </Card.Content>
             </Card>
-          )}
+          ) : null}
         </>
       ) : null}
     </View>
