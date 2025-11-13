@@ -13,8 +13,8 @@ import {
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
-import { GroupInvitation, GroupWithMembers, Transaction } from "../types";
-import { getDefaultCurrency } from "../utils/currency";
+import { GroupInvitation, GroupWithMembers, Transaction, Balance } from "../types";
+import { getDefaultCurrency, formatCurrency } from "../utils/currency";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 import { MembersList } from "../components/MembersList";
 import { InvitationsList } from "../components/InvitationsList";
@@ -27,11 +27,14 @@ import { useGroupDetails } from "../hooks/useGroupDetails";
 import { useTransactions } from "../hooks/useTransactions";
 import { useGroupInvitations } from "../hooks/useGroupInvitations";
 import { useBalances } from "../hooks/useBalances";
+import { useSettlements } from "../hooks/useSettlements";
 import {
   useCreateTransaction,
   useUpdateTransaction,
   useDeleteTransaction,
 } from "../hooks/useTransactionMutations";
+import { useCreateSettlement } from "../hooks/useSettlementMutations";
+import { SettlementFormScreen } from "./SettlementFormScreen";
 
 interface GroupDetailsScreenProps {
   group: GroupWithMembers;
@@ -61,15 +64,19 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     useState<boolean>(false);
   const [editingTransaction, setEditingTransaction] =
     useState<Transaction | null>(null);
+  const [showSettlementForm, setShowSettlementForm] = useState<boolean>(false);
+  const [settlingBalance, setSettlingBalance] = useState<Balance | null>(null);
   // React Query data - use directly, no local state needed
   const { data: groupData, isLoading: groupLoading, error: groupError, refetch: refetchGroup } = useGroupDetails(initialGroup.id);
   const { data: txData = [] as Transaction[], isLoading: txLoading, refetch: refetchTx } = useTransactions(initialGroup.id);
   const { data: invitations = [] as GroupInvitation[], isLoading: invitationsLoading, refetch: refetchInvites } = useGroupInvitations(initialGroup.id);
   const { data: balancesData, isLoading: balancesLoading } = useBalances(initialGroup.id);
+  const { data: settlementsData, isLoading: settlementsLoading } = useSettlements(initialGroup.id);
   const [cancellingInvitationId, setCancellingInvitationId] = useState<
     string | null
   >(null);
   const [membersExpanded, setMembersExpanded] = useState<boolean>(false);
+  const [settlementsExpanded, setSettlementsExpanded] = useState<boolean>(false);
   const { session, signOut } = useAuth();
   const theme = useTheme();
   // Mutations
@@ -79,6 +86,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const deleteGroupMutation = useDeleteGroup();
   const removeMemberMutation = useRemoveMember();
   const cancelInvite = useCancelInvitation();
+  const createSettlement = useCreateSettlement();
 
   // Use groupData directly, fallback to initialGroup while loading
   const group = groupData || initialGroup;
@@ -275,6 +283,24 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     } else {
       await handleCreateTransaction(transactionData);
     }
+  };
+
+  const handleSettleUp = (balance: Balance) => {
+    setSettlingBalance(balance);
+    setShowSettlementForm(true);
+  };
+
+  const handleSettlementSave = async (settlementData: {
+    group_id: string;
+    from_user_id: string;
+    to_user_id: string;
+    amount: number;
+    currency: string;
+    notes?: string;
+  }) => {
+    await createSettlement.mutateAsync(settlementData);
+    setShowSettlementForm(false);
+    setSettlingBalance(null);
   };
 
   const currentUserId = session?.user?.id;
@@ -500,6 +526,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           loading={balancesLoading}
           defaultCurrency={getDefaultCurrency()}
           showOverallBalances={false}
+          onSettleUp={handleSettleUp}
+          currentUserId={session?.user?.id}
+          groupMembers={group.members || []}
         />
 
         <TransactionsSection
@@ -507,6 +536,107 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           loading={txLoading}
           onEdit={handleEditTransaction}
         />
+
+        {/* Settlement History Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Pressable
+              style={styles.sectionTitleRow}
+              onPress={() => setSettlementsExpanded(!settlementsExpanded)}
+            >
+              <IconButton
+                icon={settlementsExpanded ? "chevron-down" : "chevron-right"}
+                size={20}
+                iconColor={theme.colors.onSurface}
+                onPress={() => setSettlementsExpanded(!settlementsExpanded)}
+                style={styles.expandButton}
+              />
+              <Text variant="titleMedium" style={styles.sectionTitle}>
+                Settlement History
+                {settlementsData?.settlements && (
+                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                    {" "}({settlementsData.settlements.length})
+                  </Text>
+                )}
+              </Text>
+            </Pressable>
+          </View>
+
+          {settlementsExpanded && (
+            <>
+              {settlementsLoading ? (
+                <ActivityIndicator size="small" style={{ marginVertical: 16 }} />
+              ) : settlementsData?.settlements && settlementsData.settlements.length > 0 ? (
+                <>
+                  {settlementsData.settlements.map((settlement, index) => {
+                    const isCurrentUserPayer = settlement.from_user_id === session?.user?.id;
+                    const isCurrentUserReceiver = settlement.to_user_id === session?.user?.id;
+                    const otherUserEmail = isCurrentUserPayer
+                      ? settlement.to_user_email
+                      : settlement.from_user_email;
+                    const otherUserDisplayName = otherUserEmail || `User ${(isCurrentUserPayer ? settlement.to_user_id : settlement.from_user_id).substring(0, 8)}...`;
+
+                    return (
+                      <React.Fragment key={settlement.id}>
+                        <Card style={styles.settlementCard} mode="outlined">
+                          <Card.Content>
+                            <View style={styles.settlementContent}>
+                              <View style={styles.settlementLeft}>
+                                <Text variant="titleSmall" style={styles.settlementDescription}>
+                                  {isCurrentUserPayer
+                                    ? `You paid ${otherUserDisplayName}`
+                                    : isCurrentUserReceiver
+                                    ? `${otherUserDisplayName} paid you`
+                                    : `${settlement.from_user_email || "User"} paid ${settlement.to_user_email || "User"}`}
+                                </Text>
+                                {settlement.notes && (
+                                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 4 }}>
+                                    {settlement.notes}
+                                  </Text>
+                                )}
+                                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 4 }}>
+                                  {new Date(settlement.created_at).toLocaleDateString()}
+                                </Text>
+                              </View>
+                              <View style={styles.settlementRight}>
+                                <Text
+                                  variant="titleMedium"
+                                  style={[
+                                    styles.settlementAmount,
+                                    { color: isCurrentUserPayer ? "#ef4444" : "#10b981" },
+                                  ]}
+                                >
+                                  {formatCurrency(settlement.amount, settlement.currency || getDefaultCurrency())}
+                                </Text>
+                              </View>
+                            </View>
+                          </Card.Content>
+                        </Card>
+                        {index < settlementsData.settlements.length - 1 && (
+                          <View style={{ height: 8 }} />
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </>
+              ) : (
+                <Card style={styles.emptyStateCard} mode="outlined">
+                  <Card.Content style={styles.emptyStateContent}>
+                    <Text
+                      variant="bodyMedium"
+                      style={[
+                        styles.emptyStateMessage,
+                        { color: theme.colors.onSurfaceVariant },
+                      ]}
+                    >
+                      No settlements yet
+                    </Text>
+                  </Card.Content>
+                </Card>
+              )}
+            </>
+          )}
+        </View>
       </ScrollView>
 
       {isMember && (
@@ -550,6 +680,20 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         // and don't have a user_id until they join the group.
         groupMembers={group.members || []}
         groupId={group.id}
+      />
+
+      <SettlementFormScreen
+        visible={showSettlementForm}
+        balance={settlingBalance}
+        groupMembers={group.members || []}
+        currentUserId={session?.user?.id || ""}
+        groupId={group.id}
+        defaultCurrency={getDefaultCurrency()}
+        onSave={handleSettlementSave}
+        onDismiss={() => {
+          setShowSettlementForm(false);
+          setSettlingBalance(null);
+        }}
       />
     </SafeAreaView>
   );
@@ -682,5 +826,27 @@ const styles = StyleSheet.create({
   emptyStateMessage: {
     textAlign: "center",
     lineHeight: 20,
+  },
+  settlementCard: {
+    marginBottom: 0,
+  },
+  settlementContent: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 4,
+  },
+  settlementLeft: {
+    flex: 1,
+    marginRight: 16,
+  },
+  settlementDescription: {
+    fontWeight: "600",
+  },
+  settlementRight: {
+    alignItems: "flex-end",
+  },
+  settlementAmount: {
+    fontWeight: "bold",
   },
 });
