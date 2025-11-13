@@ -5,17 +5,20 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 interface BottomNavBarProps {
   onGroupsPress: () => void;
+  onBalancesPress: () => void;
   onLogoutPress: () => void;
   currentRoute: string;
 }
 
 export const BottomNavBar: React.FC<BottomNavBarProps> = ({
   onGroupsPress,
+  onBalancesPress,
   onLogoutPress,
   currentRoute,
 }) => {
   const theme = useTheme();
   const isGroupsActive = currentRoute === "groups";
+  const isBalancesActive = currentRoute === "balances";
 
   return (
     <SafeAreaView
@@ -52,6 +55,28 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
               ]}
             >
               Groups
+            </Text>
+          </View>
+
+          <View style={styles.navItem}>
+            <IconButton
+              icon={isBalancesActive ? "wallet" : "wallet-outline"}
+              size={24}
+              iconColor={isBalancesActive ? theme.colors.primary : theme.colors.onSurfaceVariant}
+              onPress={onBalancesPress}
+            />
+            <Text
+              variant="labelSmall"
+              style={[
+                styles.navLabel,
+                {
+                  color: isBalancesActive
+                    ? theme.colors.primary
+                    : theme.colors.onSurfaceVariant,
+                },
+              ]}
+            >
+              Balances
             </Text>
           </View>
 

@@ -43,6 +43,7 @@ import {
 import { useTransactions } from "./hooks/useTransactions";
 import { AddMemberScreen } from "./screens/AddMemberScreen";
 import { AuthScreen } from "./screens/AuthScreen";
+import { BalancesScreen } from "./screens/BalancesScreen";
 import { GroupDetailsScreen } from "./screens/GroupDetailsScreen";
 import { GroupsListScreen } from "./screens/GroupsListScreen";
 import { TransactionFormScreen } from "./screens/TransactionFormScreen";
@@ -615,6 +616,30 @@ function AppContent() {
     );
   }
 
+  // Show balances screen (with bottom nav)
+  if (currentRoute === "balances") {
+    return (
+      <>
+        <BalancesScreen
+          onBack={() => {
+            setCurrentRoute("groups");
+          }}
+        />
+        <BottomNavBar
+          currentRoute={currentRoute}
+          onGroupsPress={() => {
+            setCurrentRoute("groups");
+          }}
+          onBalancesPress={() => {
+            setCurrentRoute("balances");
+          }}
+          onLogoutPress={signOut}
+        />
+        <StatusBar style={theme.dark ? "light" : "dark"} />
+      </>
+    );
+  }
+
   // Show group details screen (with bottom nav)
   if (groupDetails && selectedGroup) {
     return (
@@ -651,6 +676,11 @@ function AppContent() {
             setSelectedGroup(null);
             setCurrentRoute("groups");
           }}
+          onBalancesPress={() => {
+            setGroupDetails(null);
+            setSelectedGroup(null);
+            setCurrentRoute("balances");
+          }}
           onLogoutPress={signOut}
         />
         {showAddMember && selectedGroup && (
@@ -682,6 +712,7 @@ function AppContent() {
       <BottomNavBar
         currentRoute={currentRoute}
         onGroupsPress={() => setCurrentRoute("groups")}
+        onBalancesPress={() => setCurrentRoute("balances")}
         onLogoutPress={signOut}
       />
       <StatusBar style={theme.dark ? "light" : "dark"} />
