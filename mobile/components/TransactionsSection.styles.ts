@@ -13,7 +13,6 @@ export const styles = StyleSheet.create({
     borderRadius: 12,
     elevation: 0,
     borderWidth: 0,
-    backgroundColor: '#f2eded',
   },
   transactionContent: {
     paddingVertical: 12,
@@ -40,7 +39,7 @@ export const styles = StyleSheet.create({
   transactionMeta: {
     fontSize: 12,
     fontWeight: "400",
-    marginRight: 8
+    marginRight: 4,
   },
   splitCount: {
     fontSize: 12,
@@ -73,6 +72,9 @@ export const styles = StyleSheet.create({
   emptyStateMessage: {
     textAlign: "center",
     lineHeight: 20,
+  },
+  cardSpacing: {
+    height: 8,
   },
 });
 

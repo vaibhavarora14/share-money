@@ -12,6 +12,54 @@ interface TransactionsSectionProps {
   onEdit: (t: Transaction) => void;
 }
 
+// Calculate user's split amount and split count
+const getUserSplitInfo = (
+  transaction: Transaction,
+  currentUserId: string | undefined
+): {
+  amount: number;
+  count: number;
+} | null => {
+  if (!currentUserId) return null;
+
+  // Check if transaction has splits (preferred method)
+  if (
+    transaction.splits &&
+    Array.isArray(transaction.splits) &&
+    transaction.splits.length > 0
+  ) {
+    const userSplit = transaction.splits.find(
+      (split) => split.user_id === currentUserId
+    );
+    if (userSplit) {
+      return {
+        amount: userSplit.amount,
+        count: transaction.splits.length,
+      };
+    }
+  }
+
+  // Fallback to split_among (backward compatibility)
+  if (
+    transaction.split_among &&
+    Array.isArray(transaction.split_among) &&
+    transaction.split_among.length > 0
+  ) {
+    const isUserInSplit =
+      transaction.split_among.includes(currentUserId);
+    if (isUserInSplit) {
+      // Calculate equal split
+      const splitCount = transaction.split_among.length;
+      return {
+        amount: transaction.amount / splitCount,
+        count: splitCount,
+      };
+    }
+  }
+
+  return null;
+};
+
 export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
   items,
   loading,
@@ -30,60 +78,16 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
         <ActivityIndicator size="small" style={{ marginVertical: 16 }} />
       ) : items.length > 0 ? (
         items.map((transaction, index) => {
-          const isIncome = transaction.type === "income";
-
-          // Calculate user's split amount and split count
-          const getUserSplitInfo = (): {
-            amount: number;
-            count: number;
-          } | null => {
-            if (!currentUserId) return null;
-
-            // Check if transaction has splits (preferred method)
-            if (
-              transaction.splits &&
-              Array.isArray(transaction.splits) &&
-              transaction.splits.length > 0
-            ) {
-              const userSplit = transaction.splits.find(
-                (split) => split.user_id === currentUserId
-              );
-              if (userSplit) {
-                return {
-                  amount: userSplit.amount,
-                  count: transaction.splits.length,
-                };
-              }
-            }
-
-            // Fallback to split_among (backward compatibility)
-            if (
-              transaction.split_among &&
-              Array.isArray(transaction.split_among) &&
-              transaction.split_among.length > 0
-            ) {
-              const isUserInSplit =
-                transaction.split_among.includes(currentUserId);
-              if (isUserInSplit) {
-                // Calculate equal split
-                const splitCount = transaction.split_among.length;
-                return {
-                  amount: transaction.amount / splitCount,
-                  count: splitCount,
-                };
-              }
-            }
-
-            return null;
-          };
-
-          const userSplitInfo = getUserSplitInfo();
+          const userSplitInfo = getUserSplitInfo(transaction, currentUserId);
           const currency = transaction.currency || getDefaultCurrency();
 
           return (
             <React.Fragment key={transaction.id}>
               <Card
-                style={styles.transactionCard}
+                style={[
+                  styles.transactionCard,
+                  { backgroundColor: theme.colors.surfaceVariant },
+                ]}
                 mode="contained"
                 onPress={() => onEdit(transaction)}
               >
@@ -117,7 +121,6 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
                               { color: theme.colors.onSurfaceVariant },
                             ]}
                           >
-                            {" "}
                             {userSplitInfo.count}x
                           </Text>
                         </View>
@@ -150,7 +153,7 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
                   </View>
                 </Card.Content>
               </Card>
-              {index < items.length - 1 && <View style={{ height: 8 }} />}
+              {index < items.length - 1 && <View style={styles.cardSpacing} />}
             </React.Fragment>
           );
         })
