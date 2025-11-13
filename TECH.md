@@ -246,12 +246,14 @@ Automatic Supabase migrations are configured via GitHub Actions. When code is me
 
 #### Setup Instructions
 
-1. **Get Database Connection String:**
+1. **Get Database Connection Pooler String:**
    - Go to your Supabase project dashboard
    - Navigate to Settings > Database
-   - Under "Connection string" section, select "URI" format
-   - Copy the connection string (it will look like: `postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres`)
-   - **Important**: For migrations, use the **Direct connection** (port 5432) instead of pooler (port 6543)
+   - Under "Connection string" section:
+     - Select **"Session mode"** or **"Transaction mode"** (NOT "Direct connection")
+     - Copy the **Connection pooling** string (port 6543)
+   - **IMPORTANT**: You MUST use the pooler URL (port 6543), NOT the direct database URL (port 5432)
+   - The pooler URL format: `postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres`
    - Replace `[PASSWORD]` with your actual database password
    - **CRITICAL**: If your password contains special characters, you must URL-encode them:
      - `#` → `%23`
@@ -261,7 +263,6 @@ Automatic Supabase migrations are configured via GitHub Actions. When code is me
      - `?` → `%3F`
      - `&` → `%26`
      - `=` → `%3D`
-   - Format: `postgresql://postgres:[URL-ENCODED-PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres`
    - Example: If password is `my#pass@word`, use `my%23pass%40word`
 
 2. **Configure GitHub Secrets:**
@@ -269,7 +270,7 @@ Automatic Supabase migrations are configured via GitHub Actions. When code is me
    - Navigate to Settings > Environments > Production (or create a new environment)
    - Click "Add secret"
    - Add the following secret:
-     - `SUPABASE_DATABASE_URL` - Your database connection string (direct connection, port 5432)
+     - `SUPABASE_DATABASE_URL` - Your connection **pooler** string (port 6543, NOT 5432)
 
 3. **Test the workflow:**
    - Push a new migration file to `supabase/migrations/`
@@ -281,11 +282,12 @@ Automatic Supabase migrations are configured via GitHub Actions. When code is me
 The workflow (`.github/workflows/supabase-migrations.yml`) automatically:
 
 1. **Triggers** on push to `main` branch or PRs when migration files change
-2. **Validates** that the `SUPABASE_DATABASE_URL` secret is configured
-3. **Installs** PostgreSQL client (`psql`)
-4. **On PRs**: Validates migration files (dry-run, no changes applied)
-5. **On main branch**: Applies all migration files in order using `psql`
-6. **Reports** success or failure status
+2. **Validates** that the `SUPABASE_DATABASE_URL` secret is configured and uses the pooler (not direct connection)
+3. **Installs** Supabase CLI (via official GitHub Action)
+4. **Ensures** SSL is enabled for secure connections
+5. **On PRs**: Validates migration files and tests connectivity
+6. **On main branch**: Applies all migration files in order using `supabase migration up`
+7. **Reports** success or failure status
 
 #### Manual Triggering
 
@@ -300,6 +302,10 @@ You can also manually trigger the workflow:
   - Exit with an error code
   - Display error messages in the Actions log
   - Prevent further deployment steps (if configured)
+- Common issues:
+  - **"Direct database connection detected"**: You need to use the pooler URL (port 6543), not direct connection (port 5432)
+  - **"network is unreachable"**: Ensure you're using the pooler URL and SSL is enabled
+  - **"password authentication failed"**: Check that special characters in your password are URL-encoded
 - Always check the workflow logs if a migration fails
 - Fix any issues in the migration SQL and push again
 
