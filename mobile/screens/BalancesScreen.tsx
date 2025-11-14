@@ -13,13 +13,13 @@ import { Balance } from "../types";
 import { getDefaultCurrency } from "../utils/currency";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 import { formatCurrency } from "../utils/currency";
-import { useBalances } from "../hooks/useBalances";
+import { useBalancesSimple } from "../hooks/useBalancesSimple";
 
 export const BalancesScreen: React.FC<{
   onBack: () => void;
 }> = ({ onBack }) => {
   const theme = useTheme();
-  const { data: balancesData, isLoading: balancesLoading, error: balancesError } = useBalances(null); // null = overall balances
+  const { data: balancesData, isLoading: balancesLoading, error: balancesError } = useBalancesSimple(null); // null = overall balances
 
   const overallBalances = balancesData?.overall_balances || [];
   const defaultCurrency = getDefaultCurrency();

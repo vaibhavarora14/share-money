@@ -4,8 +4,8 @@ import { AppState, AppStateStatus, Platform } from "react-native";
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5, // 5 minutes
-      gcTime: 1000 * 60 * 10, // 10 minutes (formerly cacheTime)
+      staleTime: 0, // Always consider data stale - fetch fresh data every time
+      gcTime: 0, // Don't cache - remove data immediately when unused
       retry: 1,
       refetchOnWindowFocus: false,
       refetchOnReconnect: true, // Refetch when network reconnects

@@ -21,19 +21,17 @@ import { InvitationsList } from "../components/InvitationsList";
 import { TransactionsSection } from "../components/TransactionsSection";
 import { BalancesSection } from "../components/BalancesSection";
 import { TransactionFormScreen } from "./TransactionFormScreen";
-import { useDeleteGroup, useRemoveMember } from "../hooks/useGroupMutations";
-import { useCancelInvitation } from "../hooks/useInvitationMutations";
-import { useGroupDetails } from "../hooks/useGroupDetails";
-import { useTransactions } from "../hooks/useTransactions";
-import { useGroupInvitations } from "../hooks/useGroupInvitations";
-import { useBalances } from "../hooks/useBalances";
-import { useSettlements } from "../hooks/useSettlements";
-import {
-  useCreateTransaction,
-  useUpdateTransaction,
-  useDeleteTransaction,
-} from "../hooks/useTransactionMutations";
-import { useCreateSettlement, useUpdateSettlement, useDeleteSettlement } from "../hooks/useSettlementMutations";
+import { useDeleteGroupSimple, useRemoveMemberSimple } from "../hooks/useGroupMutationsSimple";
+import { useCancelInvitationSimple, useGroupInvitationsSimple } from "../hooks/useInvitationsSimple";
+import { useGroupDetailsSimple } from "../hooks/useGroupsSimple";
+import { 
+  useTransactionsSimple,
+  useCreateTransactionSimple,
+  useUpdateTransactionSimple,
+  useDeleteTransactionSimple
+} from "../hooks/useTransactionsSimple";
+import { useBalancesSimple } from "../hooks/useBalancesSimple";
+import { useSettlementsSimple, useCreateSettlementSimple, useUpdateSettlementSimple, useDeleteSettlementSimple } from "../hooks/useSettlementsSimple";
 import { SettlementFormScreen } from "./SettlementFormScreen";
 
 interface GroupDetailsScreenProps {
@@ -67,12 +65,12 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [showSettlementForm, setShowSettlementForm] = useState<boolean>(false);
   const [settlingBalance, setSettlingBalance] = useState<Balance | null>(null);
   const [editingSettlement, setEditingSettlement] = useState<Settlement | null>(null);
-  // React Query data - use directly, no local state needed
-  const { data: groupData, isLoading: groupLoading, error: groupError, refetch: refetchGroup } = useGroupDetails(initialGroup.id);
-  const { data: txData = [] as Transaction[], isLoading: txLoading, refetch: refetchTx } = useTransactions(initialGroup.id);
-  const { data: invitations = [] as GroupInvitation[], isLoading: invitationsLoading, refetch: refetchInvites } = useGroupInvitations(initialGroup.id);
-  const { data: balancesData, isLoading: balancesLoading } = useBalances(initialGroup.id);
-  const { data: settlementsData, isLoading: settlementsLoading } = useSettlements(initialGroup.id);
+  // Fetch data with simple hooks
+  const { data: groupData, isLoading: groupLoading, error: groupError, refetch: refetchGroup } = useGroupDetailsSimple(initialGroup.id);
+  const { data: txData, isLoading: txLoading, refetch: refetchTx } = useTransactionsSimple(initialGroup.id);
+  const { data: invitations = [] as GroupInvitation[], isLoading: invitationsLoading, refetch: refetchInvites } = useGroupInvitationsSimple(initialGroup.id);
+  const { data: balancesData, isLoading: balancesLoading, refetch: refetchBalances } = useBalancesSimple(initialGroup.id);
+  const { data: settlementsData, isLoading: settlementsLoading, refetch: refetchSettlements } = useSettlementsSimple(initialGroup.id);
   const [cancellingInvitationId, setCancellingInvitationId] = useState<
     string | null
   >(null);
@@ -80,16 +78,28 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [settlementsExpanded, setSettlementsExpanded] = useState<boolean>(false);
   const { session, signOut } = useAuth();
   const theme = useTheme();
+  
+  // Refetch all data function
+  const refetchAll = () => {
+    console.log('[GroupDetailsScreen] refetchAll called');
+    refetchTx();
+    refetchBalances();
+    refetchSettlements();
+  };
+  
   // Mutations
-  const createTx = useCreateTransaction();
-  const updateTx = useUpdateTransaction();
-  const deleteTx = useDeleteTransaction();
-  const deleteGroupMutation = useDeleteGroup();
-  const removeMemberMutation = useRemoveMember();
-  const cancelInvite = useCancelInvitation();
-  const createSettlement = useCreateSettlement();
-  const updateSettlement = useUpdateSettlement();
-  const deleteSettlement = useDeleteSettlement();
+  const createTx = useCreateTransactionSimple(refetchAll);
+  const updateTx = useUpdateTransactionSimple(() => refetchAll());
+  const deleteTx = useDeleteTransactionSimple(refetchAll);
+  const deleteGroupMutation = useDeleteGroupSimple(refetchGroup);
+  const removeMemberMutation = useRemoveMemberSimple(() => {
+    refetchGroup();
+    refetchInvites();
+  });
+  const cancelInvite = useCancelInvitationSimple(refetchInvites);
+  const createSettlement = useCreateSettlementSimple(refetchAll);
+  const updateSettlement = useUpdateSettlementSimple(refetchAll);
+  const deleteSettlement = useDeleteSettlementSimple(refetchAll);
 
   // Use groupData directly, fallback to initialGroup while loading
   const group = groupData || initialGroup;
@@ -116,7 +126,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           onPress: async () => {
             try {
               setLeaving(true);
-              await deleteGroupMutation.mutateAsync(group.id);
+              await deleteGroupMutation.mutate(group.id);
               if (onDeleteGroup) {
                 onDeleteGroup();
               } else {
@@ -155,7 +165,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
             try {
               setLeaving(true);
-              await removeMemberMutation.mutateAsync({
+              await removeMemberMutation.mutate({
                 groupId: group.id,
                 userId: currentUserId,
               });
@@ -193,7 +203,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const handleCreateTransaction = async (
     transactionData: Omit<Transaction, "id" | "created_at" | "user_id">
   ): Promise<void> => {
-    await createTx.mutateAsync({
+    await createTx.mutate({
       ...transactionData,
       group_id: group.id,
       currency: transactionData.currency || getDefaultCurrency(),
@@ -204,7 +214,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     transactionData: Omit<Transaction, "id" | "created_at" | "user_id">
   ): Promise<void> => {
     if (!editingTransaction) throw new Error("Invalid request");
-    await updateTx.mutateAsync({
+    await updateTx.mutate({
       ...transactionData,
       id: editingTransaction.id,
       currency: transactionData.currency || getDefaultCurrency(),
@@ -212,7 +222,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   };
 
   const handleDeleteTransaction = async (transactionId: number): Promise<void> => {
-    await deleteTx.mutateAsync({ id: transactionId, group_id: group.id });
+    await deleteTx.mutate({ id: transactionId, group_id: group.id });
   };
 
   const handleRemoveMember = async (
@@ -301,7 +311,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     currency: string;
     notes?: string;
   }) => {
-    await createSettlement.mutateAsync(settlementData);
+    await createSettlement.mutate(settlementData);
     setShowSettlementForm(false);
     setSettlingBalance(null);
   };
@@ -312,7 +322,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     currency?: string;
     notes?: string;
   }) => {
-    await updateSettlement.mutateAsync(updateData);
+    await updateSettlement.mutate(updateData);
     setShowSettlementForm(false);
     setEditingSettlement(null);
   };
@@ -333,7 +343,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           style: "destructive",
           onPress: async () => {
             try {
-              await deleteSettlement.mutateAsync({
+              await deleteSettlement.mutate({
                 id: settlement.id,
                 groupId: settlement.group_id,
               });
@@ -381,7 +391,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           onPress: async () => {
             try {
               setCancellingInvitationId(invitationId);
-              await cancelInvite.mutateAsync({
+              await cancelInvite.mutate({
                 invitationId,
                 groupId: group.id,
               });

@@ -1,4 +1,4 @@
-import { useQuery, keepPreviousData as keepPreviousValue } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
 import { Transaction } from "../types";
 import { fetchWithAuth } from "../utils/api";
@@ -24,6 +24,7 @@ export function useTransactions(groupId?: string | null) {
       return data;
     },
     enabled: !!session,
-    placeholderData: keepPreviousValue,
+    // Removed placeholderData: keepPreviousValue to avoid conflicts with optimistic updates
+    // When we optimistically update the cache, we don't want placeholderData to show old data during refetch
   });
 }

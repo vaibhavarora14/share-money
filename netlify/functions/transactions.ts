@@ -1,10 +1,9 @@
 import { Handler } from '@netlify/functions';
 import { createClient } from '@supabase/supabase-js';
-import { getCorsHeaders } from '../utils/cors';
-import { verifyAuth, AuthResult } from '../utils/auth';
-import { handleError, createErrorResponse } from '../utils/error-handler';
-import { validateTransactionData, validateBodySize, isValidUUID } from '../utils/validation';
-import { createSuccessResponse, createEmptyResponse } from '../utils/response';
+import { AuthResult, verifyAuth } from '../utils/auth';
+import { createErrorResponse, handleError } from '../utils/error-handler';
+import { createEmptyResponse, createSuccessResponse } from '../utils/response';
+import { isValidUUID, validateBodySize, validateTransactionData } from '../utils/validation';
 
 interface Transaction {
   id: number;
@@ -229,7 +228,7 @@ export const handler: Handler = async (event, context) => {
         return tx;
       });
 
-      return createSuccessResponse(parsedTransactions, 200, 60); // Cache for 60 seconds
+      return createSuccessResponse(parsedTransactions, 200, 0); // No caching - real-time data
     }
 
     // Handle POST - Create new transaction
@@ -448,7 +447,7 @@ export const handler: Handler = async (event, context) => {
         return createErrorResponse(400, validation.error || 'Invalid transaction data', 'VALIDATION_ERROR');
       }
 
-      // Get existing transaction to check group_id and verify ownership
+      // Get existing transaction to check group_id and verify permissions
       const { data: existingTransaction, error: fetchError } = await supabase
         .from('transactions')
         .select('group_id, type, user_id')
@@ -459,9 +458,23 @@ export const handler: Handler = async (event, context) => {
         return createErrorResponse(404, 'Transaction not found', 'NOT_FOUND');
       }
 
-      // Verify user owns the transaction
-      if (existingTransaction.user_id !== user.id) {
-        return createErrorResponse(403, 'You can only update your own transactions', 'PERMISSION_DENIED');
+      // Verify user can update: either owns it OR is a group member
+      let canUpdate = existingTransaction.user_id === user.id;
+      
+      if (!canUpdate && existingTransaction.group_id) {
+        // Check if user is a group member
+        const { data: groupMember, error: memberError } = await supabase
+          .from('group_members')
+          .select('user_id')
+          .eq('group_id', existingTransaction.group_id)
+          .eq('user_id', user.id)
+          .single();
+        
+        canUpdate = !memberError && !!groupMember;
+      }
+
+      if (!canUpdate) {
+        return createErrorResponse(403, 'You can only update transactions you own or transactions in groups you belong to', 'PERMISSION_DENIED');
       }
 
       // Determine if this is/will be a group expense
@@ -529,9 +542,9 @@ export const handler: Handler = async (event, context) => {
       if (transactionData.description !== undefined) updateData.description = transactionData.description;
       if (transactionData.date !== undefined) updateData.date = transactionData.date;
       if (transactionData.type !== undefined) updateData.type = transactionData.type;
-      if (transactionData.category !== undefined) updateData.category = transactionData.category || null;
+      if (transactionData.category !== undefined) updateData.category = transactionData.category || undefined;
       if (transactionData.currency !== undefined) updateData.currency = transactionData.currency;
-      if (transactionData.paid_by !== undefined) updateData.paid_by = transactionData.paid_by || null;
+      if (transactionData.paid_by !== undefined) updateData.paid_by = transactionData.paid_by || undefined;
       if (transactionData.split_among !== undefined) {
         // Remove duplicates before storing
         // Supabase automatically handles JSONB conversion - no need to stringify
@@ -716,13 +729,50 @@ export const handler: Handler = async (event, context) => {
         return createErrorResponse(400, 'Invalid transaction id', 'VALIDATION_ERROR');
       }
 
-      const { error } = await supabase
+      // First, verify the transaction exists
+      const { data: transaction, error: fetchError } = await supabase
+        .from('transactions')
+        .select('id, user_id, group_id')
+        .eq('id', id)
+        .single();
+
+      if (fetchError || !transaction) {
+        return createErrorResponse(404, 'Transaction not found', 'NOT_FOUND');
+      }
+
+      // Verify user can delete: either owns it OR is a group member
+      let canDelete = transaction.user_id === user.id;
+      
+      if (!canDelete && transaction.group_id) {
+        // Check if user is a group member
+        const { data: groupMember, error: memberError } = await supabase
+          .from('group_members')
+          .select('user_id')
+          .eq('group_id', transaction.group_id)
+          .eq('user_id', user.id)
+          .single();
+        
+        canDelete = !memberError && !!groupMember;
+      }
+
+      if (!canDelete) {
+        return createErrorResponse(403, 'Forbidden: You can only delete transactions you own or transactions in groups you belong to', 'PERMISSION_DENIED');
+      }
+
+      // Now delete the transaction (RLS will enforce permissions)
+      const { data: deletedData, error: deleteError } = await supabase
         .from('transactions')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .select();
 
-      if (error) {
-        return handleError(error, 'deleting transaction');
+      if (deleteError) {
+        return handleError(deleteError, 'deleting transaction');
+      }
+
+      // Verify deletion actually happened (Supabase delete can succeed with 0 rows due to RLS)
+      if (!deletedData || deletedData.length === 0) {
+        return createErrorResponse(403, 'Transaction could not be deleted. You may not have permission.', 'PERMISSION_DENIED');
       }
 
       return createSuccessResponse({ success: true, message: 'Transaction deleted successfully' }, 200);

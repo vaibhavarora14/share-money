@@ -1,5 +1,4 @@
 import { Session } from "@supabase/supabase-js";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useMemo, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
@@ -29,18 +28,18 @@ import {
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { BottomNavBar } from "./components/BottomNavBar";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { useGroupDetails } from "./hooks/useGroupDetails";
+import { useGroupDetailsSimple } from "./hooks/useGroupsSimple";
 import {
-  useAddMember as useAddMemberMutation,
-  useCreateGroup as useCreateGroupMutation,
-  useRemoveMember as useRemoveMemberMutation,
-} from "./hooks/useGroupMutations";
-import {
-  useCreateTransaction,
-  useDeleteTransaction,
-  useUpdateTransaction,
-} from "./hooks/useTransactionMutations";
-import { useTransactions } from "./hooks/useTransactions";
+  useAddMemberSimple,
+  useCreateGroupSimple,
+  useRemoveMemberSimple,
+} from "./hooks/useGroupMutationsSimple";
+import { 
+  useTransactionsSimple,
+  useCreateTransactionSimple,
+  useUpdateTransactionSimple,
+  useDeleteTransactionSimple
+} from "./hooks/useTransactionsSimple";
 import { AddMemberScreen } from "./screens/AddMemberScreen";
 import { AuthScreen } from "./screens/AuthScreen";
 import { BalancesScreen } from "./screens/BalancesScreen";
@@ -51,7 +50,6 @@ import { Group, GroupWithMembers, Transaction } from "./types";
 import { formatCurrency, getDefaultCurrency } from "./utils/currency";
 import { formatDate } from "./utils/date";
 import { getUserFriendlyErrorMessage } from "./utils/errorMessages";
-import { queryClient } from "./utils/queryClient";
 // Devtools disabled
 
 // Constants
@@ -72,14 +70,14 @@ function TransactionsScreen({
   const theme = useTheme();
 
   const {
-    data: transactions = [] as Transaction[],
+    data: transactions,
     isLoading: loading,
     error,
     refetch,
-  } = useTransactions();
-  const createTransaction = useCreateTransaction();
-  const updateTransaction = useUpdateTransaction();
-  const deleteTransaction = useDeleteTransaction();
+  } = useTransactionsSimple();
+  const createTransaction = useCreateTransactionSimple(refetch);
+  const updateTransaction = useUpdateTransactionSimple(refetch);
+  const deleteTransaction = useDeleteTransactionSimple(refetch);
 
   // Memoize calculations to avoid recalculating on every render
   // Must be called before any early returns to maintain hook order
@@ -106,7 +104,6 @@ function TransactionsScreen({
     };
   }, [transactions]);
 
-
   const formatAmount = (
     amount: number,
     type: "income" | "expense",
@@ -119,7 +116,7 @@ function TransactionsScreen({
   const handleCreateTransaction = async (
     transactionData: Omit<Transaction, "id" | "created_at" | "user_id">
   ): Promise<void> => {
-    await createTransaction.mutateAsync(transactionData);
+    await createTransaction.mutate(transactionData);
     setShowForm(false);
     setEditingTransaction(null);
   };
@@ -131,7 +128,7 @@ function TransactionsScreen({
       throw new Error("Invalid request");
     }
 
-    await updateTransaction.mutateAsync({
+    await updateTransaction.mutate({
       ...transactionData,
       id: editingTransaction.id,
     });
@@ -140,7 +137,7 @@ function TransactionsScreen({
   };
 
   const handleDeleteTransaction = async (tx: Transaction): Promise<void> => {
-    await deleteTransaction.mutateAsync({ id: tx.id, group_id: tx.group_id });
+    await deleteTransaction.mutate({ id: tx.id, group_id: tx.group_id });
   };
 
   const handleEditClick = (transaction: Transaction) => {
@@ -161,10 +158,7 @@ function TransactionsScreen({
             try {
               await handleDeleteTransaction(transaction);
             } catch (error) {
-              Alert.alert(
-                "Error",
-                getUserFriendlyErrorMessage(error)
-              );
+              Alert.alert("Error", getUserFriendlyErrorMessage(error));
             }
           },
         },
@@ -514,14 +508,15 @@ function AppContent() {
     useState<number>(0);
   const prevSessionRef = React.useRef<Session | null>(null);
 
-  // Mutations (declare in the scope where used)
-  const createGroupMutation = useCreateGroupMutation();
-  const addMemberMutation = useAddMemberMutation();
-  const removeMemberMutation = useRemoveMemberMutation();
   // Fetch selected group details via query when selectedGroup changes
-  const { data: selectedGroupDetails } = useGroupDetails(
+  const { data: selectedGroupDetails, refetch: refetchSelectedGroup } = useGroupDetailsSimple(
     selectedGroup?.id ?? null
   );
+  
+  // Mutations (declare in the scope where used)
+  const createGroupMutation = useCreateGroupSimple(refetchSelectedGroup);
+  const addMemberMutation = useAddMemberSimple(refetchSelectedGroup);
+  const removeMemberMutation = useRemoveMemberSimple(refetchSelectedGroup);
 
   // Reset navigation state on logout and login (only when session state changes)
   useEffect(() => {
@@ -546,7 +541,7 @@ function AppContent() {
     name: string;
     description?: string;
   }) => {
-    await createGroupMutation.mutateAsync(groupData);
+    await createGroupMutation.mutate(groupData);
     setCurrentView("groups");
   };
 
@@ -555,7 +550,7 @@ function AppContent() {
       throw new Error("Invalid request");
     }
 
-    const result = await addMemberMutation.mutateAsync({
+    const result = await addMemberMutation.mutate({
       groupId: selectedGroup.id,
       email,
     });
@@ -572,7 +567,7 @@ function AppContent() {
     if (!selectedGroup) {
       throw new Error("Invalid request");
     }
-    await removeMemberMutation.mutateAsync({
+    await removeMemberMutation.mutate({
       groupId: selectedGroup.id,
       userId,
     });
@@ -760,26 +755,24 @@ export default function App() {
   const theme = colorScheme === "dark" ? MD3DarkTheme : MD3LightTheme;
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <ErrorBoundary
-        FallbackComponent={ErrorFallback}
-        onError={(error, errorInfo) => {
-          console.error("ErrorBoundary caught error:", error);
-          console.error("Error info:", errorInfo);
-        }}
-        onReset={() => {
-          // Error boundary reset
-        }}
-      >
-        <SafeAreaProvider>
-          <PaperProvider theme={theme}>
-            <AuthProvider>
-              <AppContent />
-            </AuthProvider>
-          </PaperProvider>
-        </SafeAreaProvider>
-      </ErrorBoundary>
-    </QueryClientProvider>
+    <ErrorBoundary
+      FallbackComponent={ErrorFallback}
+      onError={(error, errorInfo) => {
+        console.error("ErrorBoundary caught error:", error);
+        console.error("Error info:", errorInfo);
+      }}
+      onReset={() => {
+        // Error boundary reset
+      }}
+    >
+      <SafeAreaProvider>
+        <PaperProvider theme={theme}>
+          <AuthProvider>
+            <AppContent />
+          </AuthProvider>
+        </PaperProvider>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }
 

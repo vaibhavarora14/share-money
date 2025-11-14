@@ -1,6 +1,12 @@
 import { Handler } from '@netlify/functions';
 import { getCorsHeaders } from './cors';
 
+type NetlifyResponse = {
+  statusCode: number;
+  headers: Record<string, string>;
+  body: string;
+};
+
 /**
  * Sanitizes error messages to remove sensitive information before logging
  */
@@ -97,7 +103,7 @@ export function createErrorResponse(
   error: string,
   code?: string,
   details?: string
-): Handler['response'] {
+): NetlifyResponse {
   const errorResponse: ErrorResponse = {
     error,
     timestamp: new Date().toISOString(),
@@ -122,7 +128,7 @@ export function createErrorResponse(
  * Handles errors and returns standardized error response
  * Logs sanitized error information
  */
-export function handleError(error: unknown, context?: string): Handler['response'] {
+export function handleError(error: unknown, context?: string): NetlifyResponse {
   // Sanitize error for logging
   const sanitizedError = sanitizeForLogging(error);
   const logMessage = context 

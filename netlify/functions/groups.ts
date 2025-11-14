@@ -82,7 +82,7 @@ export const handler: Handler = async (event, context) => {
         return handleError(error, 'fetching groups');
       }
 
-      return createSuccessResponse(groups || [], 200, 60); // Cache for 60 seconds
+      return createSuccessResponse(groups || [], 200, 0); // No caching - real-time data
     }
 
     // Handle GET /groups/:id - Get group details with members
@@ -181,7 +181,7 @@ export const handler: Handler = async (event, context) => {
         members: membersWithEmails,
       };
 
-      return createSuccessResponse(groupWithMembers, 200, 30); // Cache for 30 seconds
+      return createSuccessResponse(groupWithMembers, 200, 0); // No caching - real-time data
     }
 
     // Handle POST /groups - Create new group

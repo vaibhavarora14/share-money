@@ -11,7 +11,7 @@ import {
   useTheme,
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useGroups } from "../hooks/useGroups";
+import { useGroupsSimple } from "../hooks/useGroupsSimple";
 import { Group } from "../types";
 import { formatDate } from "../utils/date";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
@@ -32,7 +32,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
 }) => {
   const [showCreateGroup, setShowCreateGroup] = useState<boolean>(false);
   const theme = useTheme();
-  const { data: groups = [] as Group[], isLoading: loading, error, refetch } = useGroups();
+  const { data: groups, isLoading: loading, error, refetch } = useGroupsSimple();
 
 
   if (loading) {

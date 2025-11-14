@@ -196,7 +196,7 @@ export const handler: Handler = async (event, context) => {
         currentUserEmail
       );
 
-      return createSuccessResponse({ settlements: enrichedSettlements }, 200, 60); // Cache for 60 seconds
+      return createSuccessResponse({ settlements: enrichedSettlements }, 200, 0); // No caching - real-time data
     }
 
     // Handle POST request - create settlement
