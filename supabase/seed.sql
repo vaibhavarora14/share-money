@@ -36,6 +36,8 @@ BEGIN
     email,
     encrypted_password,
     email_confirmed_at,
+    confirmation_token,
+    recovery_token,
     created_at,
     updated_at,
     raw_app_meta_data,
@@ -50,6 +52,8 @@ BEGIN
       'alice@test.com',
       crypt(test_password, gen_salt('bf')),
       NOW(),
+      '',
+      '',
       NOW(),
       NOW(),
       '{"provider": "email", "providers": ["email"]}',
@@ -64,6 +68,8 @@ BEGIN
       'bob@test.com',
       crypt(test_password, gen_salt('bf')),
       NOW(),
+      '',
+      '',
       NOW(),
       NOW(),
       '{"provider": "email", "providers": ["email"]}',
@@ -78,6 +84,8 @@ BEGIN
       'charlie@test.com',
       crypt(test_password, gen_salt('bf')),
       NOW(),
+      '',
+      '',
       NOW(),
       NOW(),
       '{"provider": "email", "providers": ["email"]}',
@@ -92,6 +100,8 @@ BEGIN
       'diana@test.com',
       crypt(test_password, gen_salt('bf')),
       NOW(),
+      '',
+      '',
       NOW(),
       NOW(),
       '{"provider": "email", "providers": ["email"]}',
@@ -99,7 +109,10 @@ BEGIN
       FALSE,
       'authenticated'
     )
-  ON CONFLICT (id) DO NOTHING;
+  ON CONFLICT (id) DO UPDATE SET
+    aud = EXCLUDED.aud,
+    confirmation_token = EXCLUDED.confirmation_token,
+    recovery_token = EXCLUDED.recovery_token;
 
   -- Create identities for the users (required for Supabase Auth)
   INSERT INTO auth.identities (
