@@ -1,9 +1,5 @@
 # ShareMoney
 
-React Native Expo mobile app with Netlify Functions backend and Supabase database.
-
-## About
-
 ShareMoney (also known as Split Money) is an app to track balances for money used for shared purposes like Splitwise. It helps you split bills, track shared expenses, and manage balances between friends, roommates, or any group sharing costs.
 
 ## Quick Start
