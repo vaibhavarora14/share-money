@@ -1,26 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { fetchWithAuth } from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
-
-interface Settlement {
-  id: string;
-  group_id: string;
-  from_user_id: string;
-  to_user_id: string;
-  amount: number;
-  currency: string;
-  description?: string;
-  settled_at: string;
-  created_at: string;
-  from_user_name?: string;
-  to_user_name?: string;
-  from_user_email?: string;
-  to_user_email?: string;
-}
-
-interface SettlementsResponse {
-  settlements: Settlement[];
-}
+import { Settlement, SettlementsResponse } from '../types';
 
 export function useSettlementsSimple(groupId?: string | null) {
   const { session } = useAuth();
@@ -40,6 +21,9 @@ export function useSettlementsSimple(groupId?: string | null) {
       setError(null);
       
       const response = await fetchWithAuth(`/settlements?group_id=${groupId}`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch settlements: ${response.status}`);
+      }
       const result: SettlementsResponse = await response.json();
       
       setData(result.settlements || []);

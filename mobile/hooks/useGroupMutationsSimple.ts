@@ -80,9 +80,12 @@ export function useAddMemberSimple(onSuccess?: () => void) {
       setIsLoading(true);
       setError(null);
       
-      const response = await fetchWithAuth(`/groups/${variables.groupId}/members`, {
+      const response = await fetchWithAuth("/group-members", {
         method: "POST",
-        body: JSON.stringify({ email: variables.email }),
+        body: JSON.stringify({
+          group_id: variables.groupId,
+          email: variables.email,
+        }),
       });
       
       if (!response.ok) {
@@ -90,7 +93,7 @@ export function useAddMemberSimple(onSuccess?: () => void) {
         throw new Error(errorData.error || 'Failed to add member');
       }
       
-      const result = await response.json();
+      const result = response.status === 204 ? null : await response.json();
       
       if (onSuccess) onSuccess();
       
@@ -117,11 +120,11 @@ export function useRemoveMemberSimple(onSuccess?: () => void) {
       setError(null);
       
       const response = await fetchWithAuth(
-        `/groups/${variables.groupId}/members/${variables.userId}`,
+        `/group-members?group_id=${variables.groupId}&user_id=${variables.userId}`,
         { method: "DELETE" }
       );
       
-      if (!response.ok) {
+      if (!response.ok && response.status !== 204) {
         throw new Error('Failed to remove member');
       }
       
