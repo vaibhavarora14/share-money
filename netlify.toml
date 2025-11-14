@@ -26,3 +26,8 @@
   to = "/.netlify/functions/balances"
   status = 200
 
+[[redirects]]
+  from = "/api/settlements"
+  to = "/.netlify/functions/settlements"
+  status = 200
+

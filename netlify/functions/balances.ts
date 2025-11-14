@@ -191,6 +191,40 @@ async function calculateGroupBalances(
     }
   }
 
+  // Fetch settlements for this group to adjust balances
+  const { data: settlements } = await supabase
+    .from('settlements')
+    .select('from_user_id, to_user_id, amount')
+    .eq('group_id', groupId);
+
+  // Apply settlements to balance map
+  // Settlement: from_user_id pays to_user_id
+  // This reduces the debt from_user_id owes to_user_id
+  for (const settlement of (settlements || [])) {
+    const fromUserId = settlement.from_user_id;
+    const toUserId = settlement.to_user_id;
+    const settlementAmount = typeof settlement.amount === 'string' 
+      ? parseFloat(settlement.amount) 
+      : settlement.amount;
+
+    if (isNaN(settlementAmount) || settlementAmount <= 0) {
+      continue; // Skip invalid settlement
+    }
+
+    // If current user is the payer (from_user_id), they paid someone (to_user_id)
+    // This reduces what they owe to_user_id (increases balance, making it less negative)
+    if (fromUserId === currentUserId && memberIds.has(toUserId)) {
+      const current = balanceMap.get(toUserId) || 0;
+      balanceMap.set(toUserId, current + settlementAmount);
+    }
+    // If current user is the receiver (to_user_id), someone paid them (from_user_id)
+    // This reduces what from_user_id owes them (decreases balance, making it less positive)
+    else if (toUserId === currentUserId && memberIds.has(fromUserId)) {
+      const current = balanceMap.get(fromUserId) || 0;
+      balanceMap.set(fromUserId, current - settlementAmount);
+    }
+  }
+
   // Convert map to array
   const balances: Balance[] = Array.from(balanceMap.entries())
     .filter(([userId]) => userId !== currentUserId) // Exclude self
