@@ -32,6 +32,7 @@ BEGIN
   INSERT INTO auth.users (
     id,
     instance_id,
+    aud,
     email,
     encrypted_password,
     email_confirmed_at,
@@ -45,6 +46,7 @@ BEGIN
     (
       alice_id,
       '00000000-0000-0000-0000-000000000000',
+      'authenticated',
       'alice@test.com',
       crypt(test_password, gen_salt('bf')),
       NOW(),
@@ -58,6 +60,7 @@ BEGIN
     (
       bob_id,
       '00000000-0000-0000-0000-000000000000',
+      'authenticated',
       'bob@test.com',
       crypt(test_password, gen_salt('bf')),
       NOW(),
@@ -71,6 +74,7 @@ BEGIN
     (
       charlie_id,
       '00000000-0000-0000-0000-000000000000',
+      'authenticated',
       'charlie@test.com',
       crypt(test_password, gen_salt('bf')),
       NOW(),
@@ -84,6 +88,7 @@ BEGIN
     (
       diana_id,
       '00000000-0000-0000-0000-000000000000',
+      'authenticated',
       'diana@test.com',
       crypt(test_password, gen_salt('bf')),
       NOW(),
