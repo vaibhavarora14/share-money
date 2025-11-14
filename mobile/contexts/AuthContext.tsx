@@ -4,7 +4,6 @@ import Constants from "expo-constants";
 import * as WebBrowser from "expo-web-browser";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "../supabase";
-import { queryClient } from "../utils/queryClient";
 
 // API URL - must be set via EXPO_PUBLIC_API_URL environment variable
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -361,9 +360,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
     // Clear the session from Supabase storage
     await supabase.auth.signOut();
-
-    // Clear React Query cache to prevent data leakage between users
-    queryClient.clear();
   };
 
   return (

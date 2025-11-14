@@ -28,18 +28,18 @@ import {
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { BottomNavBar } from "./components/BottomNavBar";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { useGroupDetailsSimple } from "./hooks/useGroupsSimple";
+import { useGroupDetails } from "./hooks/useGroups";
 import {
-  useAddMemberSimple,
-  useCreateGroupSimple,
-  useRemoveMemberSimple,
-} from "./hooks/useGroupMutationsSimple";
+  useAddMember,
+  useCreateGroup,
+  useRemoveMember,
+} from "./hooks/useGroupMutations";
 import { 
-  useTransactionsSimple,
-  useCreateTransactionSimple,
-  useUpdateTransactionSimple,
-  useDeleteTransactionSimple
-} from "./hooks/useTransactionsSimple";
+  useTransactions,
+  useCreateTransaction,
+  useUpdateTransaction,
+  useDeleteTransaction
+} from "./hooks/useTransactions";
 import { AddMemberScreen } from "./screens/AddMemberScreen";
 import { AuthScreen } from "./screens/AuthScreen";
 import { BalancesScreen } from "./screens/BalancesScreen";
@@ -74,10 +74,10 @@ function TransactionsScreen({
     isLoading: loading,
     error,
     refetch,
-  } = useTransactionsSimple();
-  const createTransaction = useCreateTransactionSimple(refetch);
-  const updateTransaction = useUpdateTransactionSimple(refetch);
-  const deleteTransaction = useDeleteTransactionSimple(refetch);
+  } = useTransactions();
+  const createTransaction = useCreateTransaction(refetch);
+  const updateTransaction = useUpdateTransaction(refetch);
+  const deleteTransaction = useDeleteTransaction(refetch);
 
   // Memoize calculations to avoid recalculating on every render
   // Must be called before any early returns to maintain hook order
@@ -509,14 +509,14 @@ function AppContent() {
   const prevSessionRef = React.useRef<Session | null>(null);
 
   // Fetch selected group details via query when selectedGroup changes
-  const { data: selectedGroupDetails, refetch: refetchSelectedGroup } = useGroupDetailsSimple(
+  const { data: selectedGroupDetails, refetch: refetchSelectedGroup } = useGroupDetails(
     selectedGroup?.id ?? null
   );
   
   // Mutations (declare in the scope where used)
-  const createGroupMutation = useCreateGroupSimple(refetchSelectedGroup);
-  const addMemberMutation = useAddMemberSimple(refetchSelectedGroup);
-  const removeMemberMutation = useRemoveMemberSimple(refetchSelectedGroup);
+  const createGroupMutation = useCreateGroup(refetchSelectedGroup);
+  const addMemberMutation = useAddMember(refetchSelectedGroup);
+  const removeMemberMutation = useRemoveMember(refetchSelectedGroup);
 
   // Reset navigation state on logout and login (only when session state changes)
   useEffect(() => {

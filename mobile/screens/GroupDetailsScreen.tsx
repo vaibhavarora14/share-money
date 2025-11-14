@@ -21,17 +21,17 @@ import { InvitationsList } from "../components/InvitationsList";
 import { TransactionsSection } from "../components/TransactionsSection";
 import { BalancesSection } from "../components/BalancesSection";
 import { TransactionFormScreen } from "./TransactionFormScreen";
-import { useDeleteGroupSimple, useRemoveMemberSimple } from "../hooks/useGroupMutationsSimple";
-import { useCancelInvitationSimple, useGroupInvitationsSimple } from "../hooks/useInvitationsSimple";
-import { useGroupDetailsSimple } from "../hooks/useGroupsSimple";
+import { useDeleteGroup, useRemoveMember } from "../hooks/useGroupMutations";
+import { useCancelInvitation, useGroupInvitations } from "../hooks/useGroupInvitations";
+import { useGroupDetails } from "../hooks/useGroups";
 import { 
-  useTransactionsSimple,
-  useCreateTransactionSimple,
-  useUpdateTransactionSimple,
-  useDeleteTransactionSimple
-} from "../hooks/useTransactionsSimple";
-import { useBalancesSimple } from "../hooks/useBalancesSimple";
-import { useSettlementsSimple, useCreateSettlementSimple, useUpdateSettlementSimple, useDeleteSettlementSimple } from "../hooks/useSettlementsSimple";
+  useTransactions,
+  useCreateTransaction,
+  useUpdateTransaction,
+  useDeleteTransaction
+} from "../hooks/useTransactions";
+import { useBalances } from "../hooks/useBalances";
+import { useSettlements, useCreateSettlement, useUpdateSettlement, useDeleteSettlement } from "../hooks/useSettlements";
 import { SettlementFormScreen } from "./SettlementFormScreen";
 
 interface GroupDetailsScreenProps {
@@ -65,12 +65,12 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [showSettlementForm, setShowSettlementForm] = useState<boolean>(false);
   const [settlingBalance, setSettlingBalance] = useState<Balance | null>(null);
   const [editingSettlement, setEditingSettlement] = useState<Settlement | null>(null);
-  // Fetch data with simple hooks
-  const { data: groupData, isLoading: groupLoading, error: groupError, refetch: refetchGroup } = useGroupDetailsSimple(initialGroup.id);
-  const { data: txData, isLoading: txLoading, refetch: refetchTx } = useTransactionsSimple(initialGroup.id);
-  const { data: invitations = [] as GroupInvitation[], isLoading: invitationsLoading, refetch: refetchInvites } = useGroupInvitationsSimple(initialGroup.id);
-  const { data: balancesData, isLoading: balancesLoading, refetch: refetchBalances } = useBalancesSimple(initialGroup.id);
-  const { data: settlementsData, isLoading: settlementsLoading, refetch: refetchSettlements } = useSettlementsSimple(initialGroup.id);
+  // Fetch data with hooks
+  const { data: groupData, isLoading: groupLoading, error: groupError, refetch: refetchGroup } = useGroupDetails(initialGroup.id);
+  const { data: txData, isLoading: txLoading, refetch: refetchTx } = useTransactions(initialGroup.id);
+  const { data: invitations = [] as GroupInvitation[], isLoading: invitationsLoading, refetch: refetchInvites } = useGroupInvitations(initialGroup.id);
+  const { data: balancesData, isLoading: balancesLoading, refetch: refetchBalances } = useBalances(initialGroup.id);
+  const { data: settlementsData, isLoading: settlementsLoading, refetch: refetchSettlements } = useSettlements(initialGroup.id);
   const [cancellingInvitationId, setCancellingInvitationId] = useState<
     string | null
   >(null);
@@ -88,18 +88,18 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   };
   
   // Mutations
-  const createTx = useCreateTransactionSimple(refetchAll);
-  const updateTx = useUpdateTransactionSimple(() => refetchAll());
-  const deleteTx = useDeleteTransactionSimple(refetchAll);
-  const deleteGroupMutation = useDeleteGroupSimple(refetchGroup);
-  const removeMemberMutation = useRemoveMemberSimple(() => {
+  const createTx = useCreateTransaction(refetchAll);
+  const updateTx = useUpdateTransaction(() => refetchAll());
+  const deleteTx = useDeleteTransaction(refetchAll);
+  const deleteGroupMutation = useDeleteGroup(refetchGroup);
+  const removeMemberMutation = useRemoveMember(() => {
     refetchGroup();
     refetchInvites();
   });
-  const cancelInvite = useCancelInvitationSimple(refetchInvites);
-  const createSettlement = useCreateSettlementSimple(refetchAll);
-  const updateSettlement = useUpdateSettlementSimple(refetchAll);
-  const deleteSettlement = useDeleteSettlementSimple(refetchAll);
+  const cancelInvite = useCancelInvitation(refetchInvites);
+  const createSettlement = useCreateSettlement(refetchAll);
+  const updateSettlement = useUpdateSettlement(refetchAll);
+  const deleteSettlement = useDeleteSettlement(refetchAll);
 
   // Use groupData directly, fallback to initialGroup while loading
   const group = groupData || initialGroup;
