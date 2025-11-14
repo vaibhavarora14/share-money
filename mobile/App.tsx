@@ -1,5 +1,4 @@
 import { Session } from "@supabase/supabase-js";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useMemo, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
@@ -29,18 +28,18 @@ import {
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { BottomNavBar } from "./components/BottomNavBar";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { useGroupDetails } from "./hooks/useGroupDetails";
+import { useGroupDetails } from "./hooks/useGroups";
 import {
-  useAddMember as useAddMemberMutation,
-  useCreateGroup as useCreateGroupMutation,
-  useRemoveMember as useRemoveMemberMutation,
+  useAddMember,
+  useCreateGroup,
+  useRemoveMember,
 } from "./hooks/useGroupMutations";
-import {
+import { 
+  useTransactions,
   useCreateTransaction,
-  useDeleteTransaction,
   useUpdateTransaction,
-} from "./hooks/useTransactionMutations";
-import { useTransactions } from "./hooks/useTransactions";
+  useDeleteTransaction
+} from "./hooks/useTransactions";
 import { AddMemberScreen } from "./screens/AddMemberScreen";
 import { AuthScreen } from "./screens/AuthScreen";
 import { BalancesScreen } from "./screens/BalancesScreen";
@@ -51,7 +50,6 @@ import { Group, GroupWithMembers, Transaction } from "./types";
 import { formatCurrency, getDefaultCurrency } from "./utils/currency";
 import { formatDate } from "./utils/date";
 import { getUserFriendlyErrorMessage } from "./utils/errorMessages";
-import { queryClient } from "./utils/queryClient";
 // Devtools disabled
 
 // Constants
@@ -72,14 +70,14 @@ function TransactionsScreen({
   const theme = useTheme();
 
   const {
-    data: transactions = [] as Transaction[],
+    data: transactions,
     isLoading: loading,
     error,
     refetch,
   } = useTransactions();
-  const createTransaction = useCreateTransaction();
-  const updateTransaction = useUpdateTransaction();
-  const deleteTransaction = useDeleteTransaction();
+  const createTransaction = useCreateTransaction(refetch);
+  const updateTransaction = useUpdateTransaction(refetch);
+  const deleteTransaction = useDeleteTransaction(refetch);
 
   // Memoize calculations to avoid recalculating on every render
   // Must be called before any early returns to maintain hook order
@@ -106,7 +104,6 @@ function TransactionsScreen({
     };
   }, [transactions]);
 
-
   const formatAmount = (
     amount: number,
     type: "income" | "expense",
@@ -119,7 +116,7 @@ function TransactionsScreen({
   const handleCreateTransaction = async (
     transactionData: Omit<Transaction, "id" | "created_at" | "user_id">
   ): Promise<void> => {
-    await createTransaction.mutateAsync(transactionData);
+    await createTransaction.mutate(transactionData);
     setShowForm(false);
     setEditingTransaction(null);
   };
@@ -131,7 +128,7 @@ function TransactionsScreen({
       throw new Error("Invalid request");
     }
 
-    await updateTransaction.mutateAsync({
+    await updateTransaction.mutate({
       ...transactionData,
       id: editingTransaction.id,
     });
@@ -140,7 +137,7 @@ function TransactionsScreen({
   };
 
   const handleDeleteTransaction = async (tx: Transaction): Promise<void> => {
-    await deleteTransaction.mutateAsync({ id: tx.id, group_id: tx.group_id });
+    await deleteTransaction.mutate({ id: tx.id, group_id: tx.group_id });
   };
 
   const handleEditClick = (transaction: Transaction) => {
@@ -161,10 +158,7 @@ function TransactionsScreen({
             try {
               await handleDeleteTransaction(transaction);
             } catch (error) {
-              Alert.alert(
-                "Error",
-                getUserFriendlyErrorMessage(error)
-              );
+              Alert.alert("Error", getUserFriendlyErrorMessage(error));
             }
           },
         },
@@ -512,16 +506,19 @@ function AppContent() {
   const [currentRoute, setCurrentRoute] = useState<string>("groups");
   const [invitationsRefreshTrigger, setInvitationsRefreshTrigger] =
     useState<number>(0);
+  const [groupRefreshTrigger, setGroupRefreshTrigger] = useState<number>(0);
   const prevSessionRef = React.useRef<Session | null>(null);
+  const groupsListRefetchRef = React.useRef<(() => void) | null>(null);
 
-  // Mutations (declare in the scope where used)
-  const createGroupMutation = useCreateGroupMutation();
-  const addMemberMutation = useAddMemberMutation();
-  const removeMemberMutation = useRemoveMemberMutation();
   // Fetch selected group details via query when selectedGroup changes
-  const { data: selectedGroupDetails } = useGroupDetails(
+  const { data: selectedGroupDetails, refetch: refetchSelectedGroup } = useGroupDetails(
     selectedGroup?.id ?? null
   );
+  
+  // Mutations (declare in the scope where used)
+  const createGroupMutation = useCreateGroup(refetchSelectedGroup);
+  const addMemberMutation = useAddMember(refetchSelectedGroup);
+  const removeMemberMutation = useRemoveMember(refetchSelectedGroup);
 
   // Reset navigation state on logout and login (only when session state changes)
   useEffect(() => {
@@ -546,8 +543,12 @@ function AppContent() {
     name: string;
     description?: string;
   }) => {
-    await createGroupMutation.mutateAsync(groupData);
+    await createGroupMutation.mutate(groupData);
     setCurrentView("groups");
+    // Refetch groups list to show the newly created group
+    if (groupsListRefetchRef.current) {
+      groupsListRefetchRef.current();
+    }
   };
 
   const handleAddMember = async (email: string) => {
@@ -555,7 +556,7 @@ function AppContent() {
       throw new Error("Invalid request");
     }
 
-    const result = await addMemberMutation.mutateAsync({
+    const result = await addMemberMutation.mutate({
       groupId: selectedGroup.id,
       email,
     });
@@ -565,6 +566,8 @@ function AppContent() {
     // 1. Invitation was created (need to show it)
     // 2. Member was added directly (need to remove any pending invitation for that user)
     setInvitationsRefreshTrigger((prev) => prev + 1);
+    // Trigger group refresh to update members list
+    setGroupRefreshTrigger((prev) => prev + 1);
     return result;
   };
 
@@ -572,7 +575,7 @@ function AppContent() {
     if (!selectedGroup) {
       throw new Error("Invalid request");
     }
-    await removeMemberMutation.mutateAsync({
+    await removeMemberMutation.mutate({
       groupId: selectedGroup.id,
       userId,
     });
@@ -647,6 +650,7 @@ function AppContent() {
         <GroupDetailsScreen
           group={groupDetails}
           refreshTrigger={invitationsRefreshTrigger}
+          groupRefreshTrigger={groupRefreshTrigger}
           onBack={() => {
             setGroupDetails(null);
             setSelectedGroup(null);
@@ -708,6 +712,9 @@ function AppContent() {
       <GroupsListScreen
         onGroupPress={handleGroupPress}
         onCreateGroup={handleCreateGroup}
+        onRefetchReady={(refetch) => {
+          groupsListRefetchRef.current = refetch;
+        }}
       />
       <BottomNavBar
         currentRoute={currentRoute}
@@ -760,26 +767,24 @@ export default function App() {
   const theme = colorScheme === "dark" ? MD3DarkTheme : MD3LightTheme;
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <ErrorBoundary
-        FallbackComponent={ErrorFallback}
-        onError={(error, errorInfo) => {
-          console.error("ErrorBoundary caught error:", error);
-          console.error("Error info:", errorInfo);
-        }}
-        onReset={() => {
-          // Error boundary reset
-        }}
-      >
-        <SafeAreaProvider>
-          <PaperProvider theme={theme}>
-            <AuthProvider>
-              <AppContent />
-            </AuthProvider>
-          </PaperProvider>
-        </SafeAreaProvider>
-      </ErrorBoundary>
-    </QueryClientProvider>
+    <ErrorBoundary
+      FallbackComponent={ErrorFallback}
+      onError={(error, errorInfo) => {
+        console.error("ErrorBoundary caught error:", error);
+        console.error("Error info:", errorInfo);
+      }}
+      onReset={() => {
+        // Error boundary reset
+      }}
+    >
+      <SafeAreaProvider>
+        <PaperProvider theme={theme}>
+          <AuthProvider>
+            <AppContent />
+          </AuthProvider>
+        </PaperProvider>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }
 

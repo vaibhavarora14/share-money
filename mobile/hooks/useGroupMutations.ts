@@ -1,155 +1,144 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "../contexts/AuthContext";
-import { Group, GroupInvitation, GroupWithMembers } from "../types";
-import { fetchWithAuth } from "../utils/api";
-import { queryKeys } from "../utils/queryKeys";
+import { useState } from 'react';
+import { fetchWithAuth } from '../utils/api';
 
-export function useCreateGroup() {
-  const queryClient = useQueryClient();
-  const { session } = useAuth();
+export function useCreateGroup(onSuccess?: () => void) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
 
-  return useMutation({
-    mutationFn: async (groupData: { name: string; description?: string }) => {
-      if (!session) {
-        throw new Error("Not authenticated");
-      }
-
+  const mutate = async (groupData: {
+    name: string;
+    description?: string;
+  }) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
       const response = await fetchWithAuth("/groups", {
         method: "POST",
         body: JSON.stringify(groupData),
       });
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.groups });
-    },
-  });
+      
+      if (!response.ok) {
+        throw new Error('Failed to create group');
+      }
+      
+      const result = await response.json();
+      
+      if (onSuccess) onSuccess();
+      
+      return result;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Failed to create group');
+      setError(error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return { mutate, isLoading, error };
 }
 
-export function useAddMember() {
-  const queryClient = useQueryClient();
+export function useDeleteGroup(onSuccess?: () => void) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
 
-  return useMutation({
-    mutationFn: async ({
-      groupId,
-      email,
-    }: {
-      groupId: string;
-      email: string;
-    }) => {
-      const response = await fetchWithAuth("/group-members", {
-        method: "POST",
-        body: JSON.stringify({
-          group_id: groupId,
-          email: email,
-        }),
-      });
-      if (response.status === 204) return null;
-      return response.json();
-    },
-    onMutate: async (variables) => {
-      await Promise.all([
-        queryClient.cancelQueries({ queryKey: queryKeys.group(variables.groupId) }),
-        queryClient.cancelQueries({
-          queryKey: queryKeys.invitationsByGroup(variables.groupId),
-        }),
-      ]);
-      const previousGroup = queryClient.getQueryData<GroupWithMembers>(
-        queryKeys.group(variables.groupId)
-      );
-      const previousInvitations = queryClient.getQueryData<GroupInvitation[]>(
-        queryKeys.invitationsByGroup(variables.groupId)
-      );
-      // Optimistically add a pending invitation entry
-      if (previousInvitations) {
-        queryClient.setQueryData(
-          queryKeys.invitationsByGroup(variables.groupId),
-          [...previousInvitations, { id: `tmp-${Date.now()}`, group_id: variables.groupId, email: variables.email, status: "pending" }]
-        );
-      }
-      return { previousGroup, previousInvitations };
-    },
-    onError: (_err, variables, context) => {
-      if (context?.previousGroup) {
-        queryClient.setQueryData(queryKeys.group(variables.groupId), context.previousGroup);
-      }
-      if (context?.previousInvitations) {
-        queryClient.setQueryData(
-          queryKeys.invitationsByGroup(variables.groupId),
-          context.previousInvitations
-        );
-      }
-    },
-    onSettled: (_data, _error, variables) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.group(variables.groupId) });
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.invitationsByGroup(variables.groupId),
-      });
-    },
-  });
-}
-
-export function useRemoveMember() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({
-      groupId,
-      userId,
-    }: {
-      groupId: string;
-      userId: string;
-    }) => {
-      const response = await fetchWithAuth(
-        `/group-members?group_id=${groupId}&user_id=${userId}`,
-        {
-          method: "DELETE",
-        }
-      );
-      if (response.status === 204) return null;
-      return response.json();
-    },
-    onMutate: async (variables) => {
-      await Promise.all([
-        queryClient.cancelQueries({ queryKey: queryKeys.group(variables.groupId) }),
-        queryClient.cancelQueries({ queryKey: queryKeys.groups }),
-      ]);
-      const previousGroup = queryClient.getQueryData<GroupWithMembers>(
-        queryKeys.group(variables.groupId)
-      );
-      if (previousGroup?.members) {
-        queryClient.setQueryData(queryKeys.group(variables.groupId), {
-          ...previousGroup,
-          members: previousGroup.members.filter((m) => m.user_id !== variables.userId),
-        });
-      }
-      return { previousGroup };
-    },
-    onError: (_err, variables, context) => {
-      if (context?.previousGroup) {
-        queryClient.setQueryData(queryKeys.group(variables.groupId), context.previousGroup);
-      }
-    },
-    onSettled: (_data, _error, variables) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.group(variables.groupId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.groups });
-    },
-  });
-}
-
-export function useDeleteGroup() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (groupId: string) => {
+  const mutate = async (groupId: string) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
       const response = await fetchWithAuth(`/groups/${groupId}`, {
         method: "DELETE",
       });
-      if (response.status === 204) return null;
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.groups });
-    },
-  });
+      
+      if (!response.ok) {
+        throw new Error('Failed to delete group');
+      }
+      
+      if (onSuccess) onSuccess();
+      
+      return { groupId };
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Failed to delete group');
+      setError(error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return { mutate, isLoading, error };
+}
+
+export function useAddMember(onSuccess?: () => void) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  const mutate = async (variables: { groupId: string; email: string }) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      const response = await fetchWithAuth("/group-members", {
+        method: "POST",
+        body: JSON.stringify({
+          group_id: variables.groupId,
+          email: variables.email,
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to add member');
+      }
+      
+      const result = response.status === 204 ? null : await response.json();
+      
+      if (onSuccess) onSuccess();
+      
+      return result;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Failed to add member');
+      setError(error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return { mutate, isLoading, error };
+}
+
+export function useRemoveMember(onSuccess?: () => void) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  const mutate = async (variables: { groupId: string; userId: string }) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      const response = await fetchWithAuth(
+        `/group-members?group_id=${variables.groupId}&user_id=${variables.userId}`,
+        { method: "DELETE" }
+      );
+      
+      if (!response.ok && response.status !== 204) {
+        throw new Error('Failed to remove member');
+      }
+      
+      if (onSuccess) onSuccess();
+      
+      return variables;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Failed to remove member');
+      setError(error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return { mutate, isLoading, error };
 }

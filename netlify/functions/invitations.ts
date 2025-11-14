@@ -238,7 +238,7 @@ export const handler: Handler = async (event, context) => {
         return handleError(error, 'fetching invitations');
       }
 
-      return createSuccessResponse(invitations || [], 200, 60); // Cache for 60 seconds
+      return createSuccessResponse(invitations || [], 200, 0); // No caching - real-time data
     }
 
     // Handle POST /invitations/:id/accept - Accept invitation
