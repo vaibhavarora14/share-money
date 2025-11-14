@@ -7,7 +7,6 @@ import {
   Text,
   useTheme,
 } from "react-native-paper";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
 import { Balance } from "../types";
 import { getDefaultCurrency } from "../utils/currency";
@@ -19,7 +18,11 @@ export const BalancesScreen: React.FC<{
   onBack: () => void;
 }> = ({ onBack }) => {
   const theme = useTheme();
-  const { data: balancesData, isLoading: balancesLoading, error: balancesError } = useBalances(null); // null = overall balances
+  const {
+    data: balancesData,
+    isLoading: balancesLoading,
+    error: balancesError,
+  } = useBalances(null); // null = overall balances
 
   const overallBalances = balancesData?.overall_balances || [];
   const defaultCurrency = getDefaultCurrency();
@@ -38,9 +41,8 @@ export const BalancesScreen: React.FC<{
 
   if (balancesError) {
     return (
-      <SafeAreaView
+      <View
         style={[styles.container, { backgroundColor: theme.colors.background }]}
-        edges={["top", "bottom"]}
       >
         <Appbar.Header>
           <Appbar.BackAction onPress={onBack} />
@@ -60,14 +62,13 @@ export const BalancesScreen: React.FC<{
             {getUserFriendlyErrorMessage(balancesError)}
           </Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView
+    <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
-      edges={["top", "bottom"]}
     >
       <Appbar.Header>
         <Appbar.BackAction onPress={onBack} />
@@ -104,20 +105,14 @@ export const BalancesScreen: React.FC<{
                     <Card style={styles.balanceCard} mode="outlined">
                       <Card.Content style={styles.balanceContent}>
                         <View style={styles.balanceLeft}>
-                          <Text
-                            variant="titleSmall"
-                            style={styles.balanceName}
-                          >
+                          <Text variant="titleSmall" style={styles.balanceName}>
                             {getUserDisplayName(balance)}
                           </Text>
                         </View>
                         <View style={styles.balanceRight}>
                           <Text
                             variant="titleMedium"
-                            style={[
-                              styles.balanceAmount,
-                              { color: "#10b981" },
-                            ]}
+                            style={[styles.balanceAmount, { color: "#10b981" }]}
                           >
                             {formatCurrency(
                               Math.abs(balance.amount),
@@ -152,20 +147,14 @@ export const BalancesScreen: React.FC<{
                     <Card style={styles.balanceCard} mode="outlined">
                       <Card.Content style={styles.balanceContent}>
                         <View style={styles.balanceLeft}>
-                          <Text
-                            variant="titleSmall"
-                            style={styles.balanceName}
-                          >
+                          <Text variant="titleSmall" style={styles.balanceName}>
                             {getUserDisplayName(balance)}
                           </Text>
                         </View>
                         <View style={styles.balanceRight}>
                           <Text
                             variant="titleMedium"
-                            style={[
-                              styles.balanceAmount,
-                              { color: "#ef4444" },
-                            ]}
+                            style={[styles.balanceAmount, { color: "#ef4444" }]}
                           >
                             {formatCurrency(
                               Math.abs(balance.amount),
@@ -217,7 +206,7 @@ export const BalancesScreen: React.FC<{
           </Card>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -291,4 +280,3 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 });
-

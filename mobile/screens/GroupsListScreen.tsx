@@ -10,7 +10,6 @@ import {
   Text,
   useTheme,
 } from "react-native-paper";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useGroups } from "../hooks/useGroups";
 import { Group } from "../types";
 import { formatDate } from "../utils/date";
@@ -32,8 +31,16 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
 }) => {
   const [showCreateGroup, setShowCreateGroup] = useState<boolean>(false);
   const theme = useTheme();
-  const { data: groups = [] as Group[], isLoading: loading, error, refetch } = useGroups();
+  const {
+    data: groups = [] as Group[],
+    isLoading: loading,
+    error,
+    refetch,
+  } = useGroups();
 
+  // Bottom nav bar height is approximately 70px (icon + label + padding)
+  const BOTTOM_NAV_HEIGHT = 70;
+  const fabBottom = 16 + BOTTOM_NAV_HEIGHT;
 
   if (loading) {
     return (
@@ -79,9 +86,8 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   }
 
   return (
-    <SafeAreaView
+    <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
-      edges={["top", "bottom"]}
     >
       <Appbar.Header>
         <Appbar.Content title="Groups" subtitle={`${groups.length} total`} />
@@ -150,7 +156,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
 
       <FAB
         icon="plus"
-        style={styles.fab}
+        style={[styles.fab, { bottom: fabBottom }]}
         onPress={() => setShowCreateGroup(true)}
         label="Create"
       />
@@ -163,7 +169,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
         }}
         onDismiss={() => setShowCreateGroup(false)}
       />
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -210,6 +216,5 @@ const styles = StyleSheet.create({
     position: "absolute",
     margin: 16,
     right: 0,
-    bottom: 10, // Space for bottom navigation bar
   },
 });

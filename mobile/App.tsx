@@ -106,7 +106,6 @@ function TransactionsScreen({
     };
   }, [transactions]);
 
-
   const formatAmount = (
     amount: number,
     type: "income" | "expense",
@@ -161,10 +160,7 @@ function TransactionsScreen({
             try {
               await handleDeleteTransaction(transaction);
             } catch (error) {
-              Alert.alert(
-                "Error",
-                getUserFriendlyErrorMessage(error)
-              );
+              Alert.alert("Error", getUserFriendlyErrorMessage(error));
             }
           },
         },
@@ -619,12 +615,14 @@ function AppContent() {
   // Show balances screen (with bottom nav)
   if (currentRoute === "balances") {
     return (
-      <>
-        <BalancesScreen
-          onBack={() => {
-            setCurrentRoute("groups");
-          }}
-        />
+      <SafeAreaView style={styles.appContainer} edges={[]}>
+        <View style={styles.screenContainer}>
+          <BalancesScreen
+            onBack={() => {
+              setCurrentRoute("groups");
+            }}
+          />
+        </View>
         <BottomNavBar
           currentRoute={currentRoute}
           onGroupsPress={() => {
@@ -636,39 +634,41 @@ function AppContent() {
           onLogoutPress={signOut}
         />
         <StatusBar style={theme.dark ? "light" : "dark"} />
-      </>
+      </SafeAreaView>
     );
   }
 
   // Show group details screen (with bottom nav)
   if (groupDetails && selectedGroup) {
     return (
-      <>
-        <GroupDetailsScreen
-          group={groupDetails}
-          refreshTrigger={invitationsRefreshTrigger}
-          onBack={() => {
-            setGroupDetails(null);
-            setSelectedGroup(null);
-            setCurrentRoute("groups");
-          }}
-          onAddMember={() => setShowAddMember(true)}
-          onRemoveMember={async (userId: string) => {
-            await handleRemoveMember(userId);
-          }}
-          onLeaveGroup={() => {
-            setGroupDetails(null);
-            setSelectedGroup(null);
-            setCurrentView("groups");
-            setCurrentRoute("groups");
-          }}
-          onDeleteGroup={() => {
-            setGroupDetails(null);
-            setSelectedGroup(null);
-            setCurrentView("groups");
-            setCurrentRoute("groups");
-          }}
-        />
+      <SafeAreaView style={styles.appContainer} edges={[]}>
+        <View style={styles.screenContainer}>
+          <GroupDetailsScreen
+            group={groupDetails}
+            refreshTrigger={invitationsRefreshTrigger}
+            onBack={() => {
+              setGroupDetails(null);
+              setSelectedGroup(null);
+              setCurrentRoute("groups");
+            }}
+            onAddMember={() => setShowAddMember(true)}
+            onRemoveMember={async (userId: string) => {
+              await handleRemoveMember(userId);
+            }}
+            onLeaveGroup={() => {
+              setGroupDetails(null);
+              setSelectedGroup(null);
+              setCurrentView("groups");
+              setCurrentRoute("groups");
+            }}
+            onDeleteGroup={() => {
+              setGroupDetails(null);
+              setSelectedGroup(null);
+              setCurrentView("groups");
+              setCurrentRoute("groups");
+            }}
+          />
+        </View>
         <BottomNavBar
           currentRoute={currentRoute}
           onGroupsPress={() => {
@@ -698,17 +698,19 @@ function AppContent() {
           />
         )}
         <StatusBar style={theme.dark ? "light" : "dark"} />
-      </>
+      </SafeAreaView>
     );
   }
 
   // Show groups list (with bottom nav)
   return (
-    <>
-      <GroupsListScreen
-        onGroupPress={handleGroupPress}
-        onCreateGroup={handleCreateGroup}
-      />
+    <SafeAreaView style={styles.appContainer} edges={[]}>
+      <View style={styles.screenContainer}>
+        <GroupsListScreen
+          onGroupPress={handleGroupPress}
+          onCreateGroup={handleCreateGroup}
+        />
+      </View>
       <BottomNavBar
         currentRoute={currentRoute}
         onGroupsPress={() => setCurrentRoute("groups")}
@@ -716,7 +718,7 @@ function AppContent() {
         onLogoutPress={signOut}
       />
       <StatusBar style={theme.dark ? "light" : "dark"} />
-    </>
+    </SafeAreaView>
   );
 }
 
@@ -784,6 +786,13 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  appContainer: {
+    flex: 1,
+    backgroundColor: "transparent",
+  },
+  screenContainer: {
+    flex: 1,
+  },
   container: {
     flex: 1,
   },
