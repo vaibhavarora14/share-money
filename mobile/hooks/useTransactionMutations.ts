@@ -17,22 +17,76 @@ export function useCreateTransaction() {
       if (response.status === 204) return null;
       return response.json();
     },
-    onSuccess: (data, variables) => {
-      // Optimistically update transactions cache if we have the data
-      if (data && typeof data === 'object' && 'id' in data) {
+    onMutate: async (variables) => {
+      // Cancel outgoing queries
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: queryKeys.transactions() }),
+        variables.group_id
+          ? queryClient.cancelQueries({
+              queryKey: queryKeys.transactionsByGroup(variables.group_id),
+            })
+          : Promise.resolve(),
+      ]);
+
+      // Snapshot previous values
+      const previousAll = queryClient.getQueryData<Transaction[]>(
+        queryKeys.transactions()
+      );
+      const previousGroup = variables.group_id
+        ? queryClient.getQueryData<Transaction[]>(
+            queryKeys.transactionsByGroup(variables.group_id)
+          )
+        : undefined;
+
+      // Create temporary transaction for optimistic update
+      const tempId = `tmp-${Date.now()}`;
+      const tempTransaction: Transaction = {
+        ...variables,
+        id: tempId as any, // Temporary ID
+        created_at: new Date().toISOString(),
+        user_id: '', // Will be populated from server
+      } as Transaction;
+
+      // Optimistically update cache
+      if (previousAll) {
+        queryClient.setQueryData(queryKeys.transactions(), [tempTransaction, ...previousAll]);
+      }
+      if (previousGroup && variables.group_id) {
+        queryClient.setQueryData(
+          queryKeys.transactionsByGroup(variables.group_id),
+          [tempTransaction, ...previousGroup]
+        );
+      }
+
+      return { previousAll, previousGroup, tempId };
+    },
+    onError: (_err, variables, context) => {
+      // Rollback optimistic updates
+      if (context?.previousAll) {
+        queryClient.setQueryData(queryKeys.transactions(), context.previousAll);
+      }
+      if (context?.previousGroup && variables.group_id) {
+        queryClient.setQueryData(
+          queryKeys.transactionsByGroup(variables.group_id),
+          context.previousGroup
+        );
+      }
+    },
+    onSuccess: (data, variables, context) => {
+      // Replace temporary transaction with real one from server
+      if (data && typeof data === 'object' && 'id' in data && context?.tempId) {
         try {
           const transaction = data as Transaction;
           
-          // Update all transactions cache
+          // Update all transactions cache - replace temp with real
           const previousAll = queryClient.getQueryData<Transaction[]>(
             queryKeys.transactions()
           );
           if (previousAll) {
-            // Check if transaction already exists to avoid duplicates
-            const exists = previousAll.some(t => t.id === transaction.id);
-            if (!exists) {
-              queryClient.setQueryData(queryKeys.transactions(), [transaction, ...previousAll]);
-            }
+            const updated = previousAll.map(t => 
+              (t.id as any) === context.tempId ? transaction : t
+            );
+            queryClient.setQueryData(queryKeys.transactions(), updated);
           }
           
           // Update group-specific transactions cache
@@ -41,18 +95,17 @@ export function useCreateTransaction() {
               queryKeys.transactionsByGroup(variables.group_id)
             );
             if (previousGroup) {
-              const exists = previousGroup.some(t => t.id === transaction.id);
-              if (!exists) {
-                queryClient.setQueryData(
-                  queryKeys.transactionsByGroup(variables.group_id),
-                  [transaction, ...previousGroup]
-                );
-              }
+              const updated = previousGroup.map(t => 
+                (t.id as any) === context.tempId ? transaction : t
+              );
+              queryClient.setQueryData(
+                queryKeys.transactionsByGroup(variables.group_id),
+                updated
+              );
             }
           }
         } catch (error) {
-          console.error('Failed to update transaction cache:', error);
-          // Fallback to invalidation
+          console.error('Failed to replace temp transaction:', error);
         }
       }
       
@@ -91,8 +144,64 @@ export function useUpdateTransaction() {
       if (response.status === 204) return null;
       return response.json();
     },
+    onMutate: async (variables) => {
+      // Cancel outgoing queries
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: queryKeys.transactions() }),
+        variables.group_id
+          ? queryClient.cancelQueries({
+              queryKey: queryKeys.transactionsByGroup(variables.group_id),
+            })
+          : Promise.resolve(),
+      ]);
+
+      // Snapshot previous values
+      const previousAll = queryClient.getQueryData<Transaction[]>(
+        queryKeys.transactions()
+      );
+      const previousGroup = variables.group_id
+        ? queryClient.getQueryData<Transaction[]>(
+            queryKeys.transactionsByGroup(variables.group_id)
+          )
+        : undefined;
+
+      // Optimistically update with new data
+      if (previousAll) {
+        const index = previousAll.findIndex(t => t.id === variables.id);
+        if (index >= 0) {
+          const updated = [...previousAll];
+          updated[index] = { ...updated[index], ...variables } as Transaction;
+          queryClient.setQueryData(queryKeys.transactions(), updated);
+        }
+      }
+      if (previousGroup && variables.group_id) {
+        const index = previousGroup.findIndex(t => t.id === variables.id);
+        if (index >= 0) {
+          const updated = [...previousGroup];
+          updated[index] = { ...updated[index], ...variables } as Transaction;
+          queryClient.setQueryData(
+            queryKeys.transactionsByGroup(variables.group_id),
+            updated
+          );
+        }
+      }
+
+      return { previousAll, previousGroup };
+    },
+    onError: (_err, variables, context) => {
+      // Rollback optimistic updates
+      if (context?.previousAll) {
+        queryClient.setQueryData(queryKeys.transactions(), context.previousAll);
+      }
+      if (context?.previousGroup && variables.group_id) {
+        queryClient.setQueryData(
+          queryKeys.transactionsByGroup(variables.group_id),
+          context.previousGroup
+        );
+      }
+    },
     onSuccess: (data, variables) => {
-      // Optimistically update transactions cache if we have the data
+      // Replace optimistic update with server response
       if (data && typeof data === 'object' && 'id' in data) {
         try {
           const updatedTransaction = data as Transaction;
@@ -129,7 +238,6 @@ export function useUpdateTransaction() {
           }
         } catch (error) {
           console.error('Failed to update transaction cache:', error);
-          // Fallback to invalidation
         }
       }
       

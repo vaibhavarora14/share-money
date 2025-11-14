@@ -90,8 +90,9 @@ export function useAddMember() {
         );
       }
     },
-    onSuccess: (data, variables) => {
-      // If member was actually added (not just invitation), update cache optimistically
+    onSuccess: (data, variables, context) => {
+      // If member was actually added (not just invitation), update cache
+      // Also clean up temporary invitation if it exists
       if (data && typeof data === 'object' && 'user_id' in data) {
         try {
           const previousGroup = queryClient.getQueryData<GroupWithMembers>(
@@ -119,10 +120,32 @@ export function useAddMember() {
               });
             }
           }
+
+          // Clean up temporary invitation if member was added directly
+          // (invitation was accepted automatically)
+          const previousInvites = queryClient.getQueryData<GroupInvitation[]>(
+            queryKeys.invitationsByGroup(variables.groupId)
+          );
+          if (previousInvites) {
+            // Remove any temporary invitations for this email
+            const updatedInvites = previousInvites.filter(inv => {
+              // Keep real invitations and temp invitations for different emails
+              return !inv.id.startsWith('tmp-') || inv.email !== variables.email;
+            });
+            if (updatedInvites.length !== previousInvites.length) {
+              queryClient.setQueryData(
+                queryKeys.invitationsByGroup(variables.groupId),
+                updatedInvites
+              );
+            }
+          }
         } catch (error) {
           console.error('Failed to update member cache:', error);
           // Fallback to invalidation
         }
+      } else if (context?.previousInvitations) {
+        // If only invitation was created, temp invitation is already in cache from onMutate
+        // It will be replaced with real one on next refetch
       }
     },
     onSettled: (_data, _error, variables) => {

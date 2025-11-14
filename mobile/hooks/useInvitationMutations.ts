@@ -26,28 +26,69 @@ export function useCreateInvitation() {
       if (response.status === 204) return null;
       return response.json();
     },
-    onSuccess: (data, variables) => {
-      // Optimistically add invitation to cache if we have the data
+    onMutate: async (variables) => {
+      // Cancel outgoing queries
+      await queryClient.cancelQueries({
+        queryKey: queryKeys.invitationsByGroup(variables.groupId),
+      });
+
+      // Snapshot previous value
+      const previousInvites = queryClient.getQueryData<GroupInvitation[]>(
+        queryKeys.invitationsByGroup(variables.groupId)
+      );
+
+      // Create temporary invitation for optimistic update
+      const tempId = `tmp-${Date.now()}`;
+      const tempInvitation: GroupInvitation = {
+        id: tempId,
+        group_id: variables.groupId,
+        email: variables.email,
+        invited_by: session?.user?.id || '',
+        status: 'pending',
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days default
+        created_at: new Date().toISOString(),
+      };
+
+      // Optimistically update cache
+      if (previousInvites) {
+        queryClient.setQueryData(
+          queryKeys.invitationsByGroup(variables.groupId),
+          [...previousInvites, tempInvitation]
+        );
+      }
+
+      return { previousInvites, tempId };
+    },
+    onError: (_err, variables, context) => {
+      // Rollback optimistic updates
+      if (context?.previousInvites) {
+        queryClient.setQueryData(
+          queryKeys.invitationsByGroup(variables.groupId),
+          context.previousInvites
+        );
+      }
+    },
+    onSuccess: (data, variables, context) => {
+      // Replace temporary invitation with real one from server
       // API returns the full invitation object (see invitations.ts:190)
-      if (data && typeof data === 'object' && 'id' in data) {
+      if (data && typeof data === 'object' && 'id' in data && context?.tempId) {
         try {
           const invitation = data as GroupInvitation;
           const previousInvites = queryClient.getQueryData<GroupInvitation[]>(
             queryKeys.invitationsByGroup(variables.groupId)
           );
           if (previousInvites) {
-            // Check if invitation already exists to avoid duplicates
-            const exists = previousInvites.some(inv => inv.id === invitation.id);
-            if (!exists) {
-              queryClient.setQueryData(
-                queryKeys.invitationsByGroup(variables.groupId),
-                [...previousInvites, invitation]
-              );
-            }
+            // Replace temp invitation with real one
+            const updated = previousInvites.map(inv =>
+              inv.id === context.tempId ? invitation : inv
+            );
+            queryClient.setQueryData(
+              queryKeys.invitationsByGroup(variables.groupId),
+              updated
+            );
           }
         } catch (error) {
-          console.error('Failed to update invitation cache:', error);
-          // Fallback to invalidation
+          console.error('Failed to replace temp invitation:', error);
         }
       }
       
