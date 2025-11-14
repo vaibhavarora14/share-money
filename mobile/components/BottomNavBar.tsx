@@ -1,7 +1,8 @@
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
 import { IconButton, Surface, Text, useTheme } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { styles } from "./BottomNavBar.styles";
 
 interface BottomNavBarProps {
   onGroupsPress: () => void;
@@ -99,24 +100,3 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
     </SafeAreaView>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {},
-  bar: {
-    borderTopWidth: 1,
-  },
-  navContent: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    alignItems: "center",
-    paddingVertical: 4,
-  },
-  navItem: {
-    alignItems: "center",
-    flex: 1,
-  },
-  navLabel: {
-    marginTop: -8,
-    marginBottom: 4,
-  },
-});
