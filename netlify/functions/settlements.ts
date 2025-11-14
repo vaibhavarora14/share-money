@@ -1,10 +1,9 @@
 import { Handler } from '@netlify/functions';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { getCorsHeaders } from '../utils/cors';
-import { verifyAuth, AuthResult } from '../utils/auth';
-import { handleError, createErrorResponse } from '../utils/error-handler';
-import { validateSettlementData, validateBodySize, isValidUUID } from '../utils/validation';
-import { createSuccessResponse, createEmptyResponse } from '../utils/response';
+import { AuthResult, verifyAuth } from '../utils/auth';
+import { createErrorResponse, handleError } from '../utils/error-handler';
+import { createEmptyResponse, createSuccessResponse } from '../utils/response';
+import { isValidUUID, validateBodySize, validateSettlementData } from '../utils/validation';
 
 interface Settlement {
   id: string;
@@ -223,9 +222,9 @@ export const handler: Handler = async (event, context) => {
         return createErrorResponse(400, validation.error || 'Invalid settlement data', 'VALIDATION_ERROR');
       }
 
-      // Validate from_user_id matches current user (users can only settle on their own behalf)
-      if (settlementData.from_user_id !== currentUserId) {
-        return createErrorResponse(403, 'Forbidden: You can only create settlements where you are the payer', 'PERMISSION_DENIED');
+      // Validate that current user is either the payer (from_user_id) or receiver (to_user_id)
+      if (settlementData.from_user_id !== currentUserId && settlementData.to_user_id !== currentUserId) {
+        return createErrorResponse(403, 'Forbidden: You can only create settlements where you are either the payer or receiver', 'PERMISSION_DENIED');
       }
 
       // Validate users are different

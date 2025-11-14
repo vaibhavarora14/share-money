@@ -16,7 +16,6 @@ ShareMoney/
 ├── supabase/             # Supabase migrations
 │   └── migrations/       # Database migrations
 ├── scripts/              # Utility scripts
-│   ├── seed-db*          # Database seeding
 └── mobile/               # React Native Expo app
 ```
 
