@@ -24,9 +24,36 @@ export function useCreateInvitation() {
       if (response.status === 204) return null;
       return response.json();
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
+      // Optimistically add invitation to cache if we have the data
+      if (data && typeof data === 'object' && 'invitation_id' in data) {
+        const previousInvites = queryClient.getQueryData<GroupInvitation[]>(
+          queryKeys.invitationsByGroup(variables.groupId)
+        );
+        if (previousInvites) {
+          const newInvitation: GroupInvitation = {
+            id: (data as any).invitation_id || `tmp-${Date.now()}`,
+            group_id: variables.groupId,
+            email: variables.email,
+            invited_by: '', // Will be populated on refetch
+            status: 'pending',
+            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days
+            created_at: new Date().toISOString(),
+          };
+          queryClient.setQueryData(
+            queryKeys.invitationsByGroup(variables.groupId),
+            [...previousInvites, newInvitation]
+          );
+        }
+      }
+      
+      // Invalidate queries to ensure consistency
       queryClient.invalidateQueries({
         queryKey: queryKeys.invitationsByGroup(variables.groupId),
+      });
+      // Also invalidate group query in case it includes invitation info
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.group(variables.groupId),
       });
     },
   });
@@ -75,6 +102,10 @@ export function useCancelInvitation() {
     onSettled: (_data, _error, { groupId }) => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.invitationsByGroup(groupId),
+      });
+      // Also invalidate group query in case it includes invitation info
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.group(groupId),
       });
     },
   });

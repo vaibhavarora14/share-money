@@ -34,7 +34,22 @@ export function useCreateSettlement() {
       }
       return response.json() as Promise<{ settlement: Settlement }>;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
+      // Optimistically update settlements cache if we have the data
+      if (data?.settlement) {
+        const previousResponse = queryClient.getQueryData<{ settlements: Settlement[] }>(
+          queryKeys.settlements(variables.group_id)
+        );
+        if (previousResponse) {
+          queryClient.setQueryData(
+            queryKeys.settlements(variables.group_id),
+            {
+              settlements: [data.settlement, ...previousResponse.settlements]
+            }
+          );
+        }
+      }
+      
       // Invalidate settlements queries
       queryClient.invalidateQueries({ queryKey: queryKeys.settlements() });
       queryClient.invalidateQueries({ queryKey: queryKeys.settlements(variables.group_id) });
@@ -62,6 +77,23 @@ export function useUpdateSettlement() {
       return response.json() as Promise<{ settlement: Settlement }>;
     },
     onSuccess: (data) => {
+      // Optimistically update settlements cache if we have the data
+      if (data?.settlement) {
+        const previousResponse = queryClient.getQueryData<{ settlements: Settlement[] }>(
+          queryKeys.settlements(data.settlement.group_id)
+        );
+        if (previousResponse) {
+          queryClient.setQueryData(
+            queryKeys.settlements(data.settlement.group_id),
+            {
+              settlements: previousResponse.settlements.map((s) =>
+                s.id === data.settlement.id ? data.settlement : s
+              )
+            }
+          );
+        }
+      }
+      
       // Invalidate settlements queries
       queryClient.invalidateQueries({ queryKey: queryKeys.settlements() });
       queryClient.invalidateQueries({ queryKey: queryKeys.settlements(data.settlement.group_id) });
@@ -88,6 +120,21 @@ export function useDeleteSettlement() {
       return { id: variables.id, groupId: variables.groupId };
     },
     onSuccess: (_, variables) => {
+      // Optimistically remove settlement from cache
+      if (variables.groupId) {
+        const previousResponse = queryClient.getQueryData<{ settlements: Settlement[] }>(
+          queryKeys.settlements(variables.groupId)
+        );
+        if (previousResponse) {
+          queryClient.setQueryData(
+            queryKeys.settlements(variables.groupId),
+            {
+              settlements: previousResponse.settlements.filter((s) => s.id !== variables.id)
+            }
+          );
+        }
+      }
+      
       // Invalidate settlements queries
       queryClient.invalidateQueries({ queryKey: queryKeys.settlements() });
       if (variables.groupId) {

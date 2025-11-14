@@ -17,7 +17,34 @@ export function useCreateTransaction() {
       if (response.status === 204) return null;
       return response.json();
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
+      // Optimistically update transactions cache if we have the data
+      if (data && typeof data === 'object' && 'id' in data) {
+        const transaction = data as Transaction;
+        
+        // Update all transactions cache
+        const previousAll = queryClient.getQueryData<Transaction[]>(
+          queryKeys.transactions()
+        );
+        if (previousAll) {
+          queryClient.setQueryData(queryKeys.transactions(), [transaction, ...previousAll]);
+        }
+        
+        // Update group-specific transactions cache
+        if (variables.group_id) {
+          const previousGroup = queryClient.getQueryData<Transaction[]>(
+            queryKeys.transactionsByGroup(variables.group_id)
+          );
+          if (previousGroup) {
+            queryClient.setQueryData(
+              queryKeys.transactionsByGroup(variables.group_id),
+              [transaction, ...previousGroup]
+            );
+          }
+        }
+      }
+      
+      // Invalidate queries to ensure consistency
       queryClient.invalidateQueries({ queryKey: queryKeys.transactions() });
       if (variables.group_id) {
         queryClient.invalidateQueries({
@@ -52,7 +79,37 @@ export function useUpdateTransaction() {
       if (response.status === 204) return null;
       return response.json();
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
+      // Optimistically update transactions cache if we have the data
+      if (data && typeof data === 'object' && 'id' in data) {
+        const updatedTransaction = data as Transaction;
+        
+        // Update all transactions cache
+        const previousAll = queryClient.getQueryData<Transaction[]>(
+          queryKeys.transactions()
+        );
+        if (previousAll) {
+          queryClient.setQueryData(
+            queryKeys.transactions(),
+            previousAll.map((t) => (t.id === updatedTransaction.id ? updatedTransaction : t))
+          );
+        }
+        
+        // Update group-specific transactions cache
+        if (variables.group_id) {
+          const previousGroup = queryClient.getQueryData<Transaction[]>(
+            queryKeys.transactionsByGroup(variables.group_id)
+          );
+          if (previousGroup) {
+            queryClient.setQueryData(
+              queryKeys.transactionsByGroup(variables.group_id),
+              previousGroup.map((t) => (t.id === updatedTransaction.id ? updatedTransaction : t))
+            );
+          }
+        }
+      }
+      
+      // Invalidate queries to ensure consistency
       queryClient.invalidateQueries({ queryKey: queryKeys.transactions() });
       if (variables.group_id) {
         queryClient.invalidateQueries({

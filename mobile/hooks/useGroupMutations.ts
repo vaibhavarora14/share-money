@@ -53,6 +53,7 @@ export function useAddMember() {
         queryClient.cancelQueries({
           queryKey: queryKeys.invitationsByGroup(variables.groupId),
         }),
+        queryClient.cancelQueries({ queryKey: queryKeys.groups }),
       ]);
       const previousGroup = queryClient.getQueryData<GroupWithMembers>(
         queryKeys.group(variables.groupId)
@@ -80,11 +81,42 @@ export function useAddMember() {
         );
       }
     },
+    onSuccess: (data, variables) => {
+      // If member was actually added (not just invitation), update cache optimistically
+      if (data && typeof data === 'object' && 'user_id' in data) {
+        const previousGroup = queryClient.getQueryData<GroupWithMembers>(
+          queryKeys.group(variables.groupId)
+        );
+        if (previousGroup) {
+          // Check if member already exists in cache
+          const memberExists = previousGroup.members?.some(
+            (m) => m.user_id === data.user_id
+          );
+          if (!memberExists) {
+            queryClient.setQueryData(queryKeys.group(variables.groupId), {
+              ...previousGroup,
+              members: [
+                ...(previousGroup.members || []),
+                {
+                  id: data.id || `tmp-${Date.now()}`,
+                  group_id: variables.groupId,
+                  user_id: data.user_id,
+                  role: data.role || 'member',
+                  email: variables.email,
+                },
+              ],
+            });
+          }
+        }
+      }
+    },
     onSettled: (_data, _error, variables) => {
+      // Invalidate all related queries to ensure fresh data
       queryClient.invalidateQueries({ queryKey: queryKeys.group(variables.groupId) });
       queryClient.invalidateQueries({
         queryKey: queryKeys.invitationsByGroup(variables.groupId),
       });
+      queryClient.invalidateQueries({ queryKey: queryKeys.groups });
     },
   });
 }
