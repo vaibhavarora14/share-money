@@ -1,19 +1,10 @@
 import { Handler } from '@netlify/functions';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-
-/**
- * Get CORS headers with configurable origin.
- * In production, set ALLOWED_ORIGIN environment variable to restrict access.
- * Falls back to '*' for development if not set.
- */
-function getCorsHeaders(): Record<string, string> {
-  const allowedOrigin = process.env.ALLOWED_ORIGIN || '*';
-  return {
-    'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  };
-}
+import { getCorsHeaders } from '../utils/cors';
+import { verifyAuth, AuthResult } from '../utils/auth';
+import { handleError, createErrorResponse } from '../utils/error-handler';
+import { validateSettlementData, validateBodySize, isValidUUID } from '../utils/validation';
+import { createSuccessResponse, createEmptyResponse } from '../utils/response';
 
 interface Settlement {
   id: string;
@@ -43,37 +34,6 @@ interface UserResponse {
   email?: string;
   user?: {
     email?: string;
-  };
-}
-
-/**
- * Verifies the user's authentication token and returns user info
- */
-async function verifyUser(
-  supabaseUrl: string,
-  supabaseKey: string,
-  authHeader: string
-): Promise<{ id: string; email: string | null }> {
-  const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
-    headers: {
-      'Authorization': authHeader,
-      'apikey': supabaseKey,
-    },
-  });
-
-  if (!userResponse.ok) {
-    throw new Error('Unauthorized: Invalid or expired token');
-  }
-
-  const user = await userResponse.json() as UserResponse;
-  
-  if (!user || !user.id) {
-    throw new Error('Unauthorized: Invalid user data');
-  }
-
-  return {
-    id: user.id,
-    email: user.email || user.user?.email || null,
   };
 }
 
@@ -123,7 +83,7 @@ async function enrichSettlementsWithEmails(
         return { userId, email };
       }
     } catch (err) {
-      console.error(`Error fetching email for user ${userId}:`, err);
+      // Log error but continue - email enrichment is optional
     }
     return { userId, email: null };
   });
@@ -145,51 +105,27 @@ async function enrichSettlementsWithEmails(
 }
 
 export const handler: Handler = async (event, context) => {
-  const corsHeaders = getCorsHeaders();
-  
   // Handle CORS preflight
   if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: corsHeaders,
-      body: '',
-    };
+    return createEmptyResponse(200);
   }
 
   try {
-    // Get Supabase credentials
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_ANON_KEY;
-
-    if (!supabaseUrl || !supabaseKey) {
-      return {
-        statusCode: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: 'Missing Supabase credentials' }),
-      };
+    // Validate request body size
+    const bodySizeValidation = validateBodySize(event.body);
+    if (!bodySizeValidation.valid) {
+      return createErrorResponse(413, bodySizeValidation.error || 'Request body too large', 'VALIDATION_ERROR');
     }
 
-    // Get authorization header
-    const authHeader = 
-      event.headers.authorization || 
-      event.headers.Authorization ||
-      event.headers['authorization'] ||
-      event.headers['Authorization'] ||
-      (event.multiValueHeaders && (
-        event.multiValueHeaders.authorization?.[0] ||
-        event.multiValueHeaders.Authorization?.[0]
-      ));
-    
-    if (!authHeader) {
-      return {
-        statusCode: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: 'Unauthorized: Missing authorization header' }),
-      };
+    // Verify authentication
+    let authResult: AuthResult;
+    try {
+      authResult = await verifyAuth(event);
+    } catch (authError) {
+      return handleError(authError, 'authentication');
     }
 
-    // Verify the user
-    const user = await verifyUser(supabaseUrl, supabaseKey, authHeader);
+    const { user, supabaseUrl, supabaseKey, authHeader } = authResult;
     const currentUserId = user.id;
     const currentUserEmail = user.email;
 
@@ -212,12 +148,8 @@ export const handler: Handler = async (event, context) => {
       const groupId = event.queryStringParameters?.group_id;
       
       // Validate group_id format if provided (UUID format)
-      if (groupId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(groupId)) {
-        return {
-          statusCode: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Invalid group_id format. Expected UUID.' }),
-        };
+      if (groupId && !isValidUUID(groupId)) {
+        return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR');
       }
 
       // Build query
@@ -237,11 +169,7 @@ export const handler: Handler = async (event, context) => {
           .single();
 
         if (!membership) {
-          return {
-            statusCode: 403,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ error: 'Forbidden: Not a member of this group' }),
-          };
+          return createErrorResponse(403, 'Forbidden: Not a member of this group', 'PERMISSION_DENIED');
         }
 
         query = query.eq('group_id', groupId);
@@ -253,12 +181,7 @@ export const handler: Handler = async (event, context) => {
       const { data: settlements, error } = await query;
 
       if (error) {
-        console.error('Error fetching settlements:', error);
-        return {
-          statusCode: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Failed to fetch settlements', details: error.message }),
-        };
+        return handleError(error, 'fetching settlements');
       }
 
       // Enrich with emails
@@ -273,80 +196,41 @@ export const handler: Handler = async (event, context) => {
         currentUserEmail
       );
 
-      return {
-        statusCode: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settlements: enrichedSettlements }),
-      };
+      return createSuccessResponse({ settlements: enrichedSettlements }, 200, 60); // Cache for 60 seconds
     }
 
     // Handle POST request - create settlement
     if (event.httpMethod === 'POST') {
       if (!event.body) {
-        return {
-          statusCode: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Request body is required' }),
-        };
+        return createErrorResponse(400, 'Request body is required', 'VALIDATION_ERROR');
       }
 
       let settlementData: CreateSettlementRequest;
       try {
         settlementData = JSON.parse(event.body);
-      } catch (err) {
-        return {
-          statusCode: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Invalid JSON in request body' }),
-        };
+      } catch {
+        return createErrorResponse(400, 'Invalid JSON in request body', 'VALIDATION_ERROR');
       }
 
       // Validate required fields
       if (!settlementData.group_id || !settlementData.from_user_id || !settlementData.to_user_id || !settlementData.amount) {
-        return {
-          statusCode: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Missing required fields: group_id, from_user_id, to_user_id, amount' }),
-        };
+        return createErrorResponse(400, 'Missing required fields: group_id, from_user_id, to_user_id, amount', 'VALIDATION_ERROR');
       }
 
-      // Validate amount is positive
-      if (settlementData.amount <= 0) {
-        return {
-          statusCode: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Amount must be greater than 0' }),
-        };
+      // Validate settlement data
+      const validation = validateSettlementData(settlementData);
+      if (!validation.valid) {
+        return createErrorResponse(400, validation.error || 'Invalid settlement data', 'VALIDATION_ERROR');
       }
 
       // Validate from_user_id matches current user (users can only settle on their own behalf)
       if (settlementData.from_user_id !== currentUserId) {
-        return {
-          statusCode: 403,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Forbidden: You can only create settlements where you are the payer' }),
-        };
+        return createErrorResponse(403, 'Forbidden: You can only create settlements where you are the payer', 'PERMISSION_DENIED');
       }
 
       // Validate users are different
       if (settlementData.from_user_id === settlementData.to_user_id) {
-        return {
-          statusCode: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'from_user_id and to_user_id must be different' }),
-        };
-      }
-
-      // Validate UUID formats
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      if (!uuidRegex.test(settlementData.group_id) || 
-          !uuidRegex.test(settlementData.from_user_id) || 
-          !uuidRegex.test(settlementData.to_user_id)) {
-        return {
-          statusCode: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Invalid UUID format for group_id, from_user_id, or to_user_id' }),
-        };
+        return createErrorResponse(400, 'from_user_id and to_user_id must be different', 'VALIDATION_ERROR');
       }
 
       // Verify user is a member of the group
@@ -358,11 +242,7 @@ export const handler: Handler = async (event, context) => {
         .single();
 
       if (!membership) {
-        return {
-          statusCode: 403,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Forbidden: Not a member of this group' }),
-        };
+        return createErrorResponse(403, 'Forbidden: Not a member of this group', 'PERMISSION_DENIED');
       }
 
       // Verify to_user_id is also a member of the group
@@ -374,11 +254,7 @@ export const handler: Handler = async (event, context) => {
         .single();
 
       if (!toUserMembership) {
-        return {
-          statusCode: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'to_user_id is not a member of this group' }),
-        };
+        return createErrorResponse(400, 'to_user_id is not a member of this group', 'VALIDATION_ERROR');
       }
 
       // Create settlement
@@ -397,12 +273,7 @@ export const handler: Handler = async (event, context) => {
         .single();
 
       if (error) {
-        console.error('Error creating settlement:', error);
-        return {
-          statusCode: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Failed to create settlement', details: error.message }),
-        };
+        return handleError(error, 'creating settlement');
       }
 
       // Enrich with emails
@@ -417,59 +288,34 @@ export const handler: Handler = async (event, context) => {
         currentUserEmail
       );
 
-      return {
-        statusCode: 201,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settlement: enrichedSettlement }),
-      };
+      return createSuccessResponse({ settlement: enrichedSettlement }, 201);
     }
 
     // Handle PUT request - update settlement
     if (event.httpMethod === 'PUT') {
       if (!event.body) {
-        return {
-          statusCode: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Request body is required' }),
-        };
+        return createErrorResponse(400, 'Request body is required', 'VALIDATION_ERROR');
       }
 
       let updateData: { id: string; amount?: number; currency?: string; notes?: string };
       try {
         updateData = JSON.parse(event.body);
-      } catch (err) {
-        return {
-          statusCode: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Invalid JSON in request body' }),
-        };
+      } catch {
+        return createErrorResponse(400, 'Invalid JSON in request body', 'VALIDATION_ERROR');
       }
 
       if (!updateData.id) {
-        return {
-          statusCode: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Settlement id is required' }),
-        };
+        return createErrorResponse(400, 'Settlement id is required', 'VALIDATION_ERROR');
       }
 
       // Validate UUID format
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      if (!uuidRegex.test(updateData.id)) {
-        return {
-          statusCode: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Invalid settlement id format. Expected UUID.' }),
-        };
+      if (!isValidUUID(updateData.id)) {
+        return createErrorResponse(400, 'Invalid settlement id format. Expected UUID.', 'VALIDATION_ERROR');
       }
 
       // Validate amount if provided
       if (updateData.amount !== undefined && updateData.amount <= 0) {
-        return {
-          statusCode: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Amount must be greater than 0' }),
-        };
+        return createErrorResponse(400, 'Amount must be greater than 0', 'VALIDATION_ERROR');
       }
 
       // Fetch the settlement to verify ownership
@@ -480,20 +326,12 @@ export const handler: Handler = async (event, context) => {
         .single();
 
       if (fetchError || !existingSettlement) {
-        return {
-          statusCode: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Settlement not found' }),
-        };
+        return createErrorResponse(404, 'Settlement not found', 'NOT_FOUND');
       }
 
       // Only the creator can update the settlement
       if (existingSettlement.created_by !== currentUserId) {
-        return {
-          statusCode: 403,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Forbidden: You can only update settlements you created' }),
-        };
+        return createErrorResponse(403, 'Forbidden: You can only update settlements you created', 'PERMISSION_DENIED');
       }
 
       // Build update object (only include fields that are provided)
@@ -522,12 +360,7 @@ export const handler: Handler = async (event, context) => {
         .single();
 
       if (updateError) {
-        console.error('Error updating settlement:', updateError);
-        return {
-          statusCode: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Failed to update settlement', details: updateError.message }),
-        };
+        return handleError(updateError, 'updating settlement');
       }
 
       // Enrich with emails
@@ -542,11 +375,7 @@ export const handler: Handler = async (event, context) => {
         currentUserEmail
       );
 
-      return {
-        statusCode: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settlement: enrichedSettlement }),
-      };
+      return createSuccessResponse({ settlement: enrichedSettlement }, 200);
     }
 
     // Handle DELETE request - delete settlement
@@ -554,21 +383,12 @@ export const handler: Handler = async (event, context) => {
       const settlementId = event.queryStringParameters?.id;
 
       if (!settlementId) {
-        return {
-          statusCode: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Settlement id is required' }),
-        };
+        return createErrorResponse(400, 'Settlement id is required', 'VALIDATION_ERROR');
       }
 
       // Validate UUID format
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      if (!uuidRegex.test(settlementId)) {
-        return {
-          statusCode: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Invalid settlement id format. Expected UUID.' }),
-        };
+      if (!isValidUUID(settlementId)) {
+        return createErrorResponse(400, 'Invalid settlement id format. Expected UUID.', 'VALIDATION_ERROR');
       }
 
       // Fetch the settlement to verify ownership
@@ -579,20 +399,12 @@ export const handler: Handler = async (event, context) => {
         .single();
 
       if (fetchError || !existingSettlement) {
-        return {
-          statusCode: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Settlement not found' }),
-        };
+        return createErrorResponse(404, 'Settlement not found', 'NOT_FOUND');
       }
 
       // Only the creator can delete the settlement
       if (existingSettlement.created_by !== currentUserId) {
-        return {
-          statusCode: 403,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Forbidden: You can only delete settlements you created' }),
-        };
+        return createErrorResponse(403, 'Forbidden: You can only delete settlements you created', 'PERMISSION_DENIED');
       }
 
       // Delete settlement
@@ -602,34 +414,15 @@ export const handler: Handler = async (event, context) => {
         .eq('id', settlementId);
 
       if (deleteError) {
-        console.error('Error deleting settlement:', deleteError);
-        return {
-          statusCode: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Failed to delete settlement', details: deleteError.message }),
-        };
+        return handleError(deleteError, 'deleting settlement');
       }
 
-      return {
-        statusCode: 204,
-        headers: corsHeaders,
-        body: '',
-      };
+      return createEmptyResponse(204);
     }
 
     // Method not allowed
-    return {
-      statusCode: 405,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Method not allowed' }),
-    };
+    return createErrorResponse(405, 'Method not allowed', 'METHOD_NOT_ALLOWED');
   } catch (error: unknown) {
-    console.error('Error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return {
-      statusCode: 500,
-      headers: { ...getCorsHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Internal server error', details: errorMessage }),
-    };
+    return handleError(error, 'settlements handler');
   }
 };

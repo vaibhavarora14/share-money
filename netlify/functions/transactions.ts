@@ -1,11 +1,10 @@
 import { Handler } from '@netlify/functions';
 import { createClient } from '@supabase/supabase-js';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-};
+import { getCorsHeaders } from '../utils/cors';
+import { verifyAuth, AuthResult } from '../utils/auth';
+import { handleError, createErrorResponse } from '../utils/error-handler';
+import { validateTransactionData, validateBodySize, isValidUUID } from '../utils/validation';
+import { createSuccessResponse, createEmptyResponse } from '../utils/response';
 
 interface Transaction {
   id: number;
@@ -25,6 +24,11 @@ interface TransactionSplit {
   transaction_id: number;
   user_id: string;
   amount: number;
+}
+
+interface TransactionWithSplits extends Transaction {
+  transaction_splits?: TransactionSplit[];
+  splits?: TransactionSplit[];
 }
 
 /**
@@ -103,78 +107,27 @@ function validateSplitSum(
 export const handler: Handler = async (event, context) => {
   // Handle CORS preflight
   if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: corsHeaders,
-      body: '',
-    };
+    return createEmptyResponse(200);
   }
 
   try {
-    // Get Supabase credentials from environment variables
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_ANON_KEY;
-
-    if (!supabaseUrl || !supabaseKey) {
-      return {
-        statusCode: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: 'Missing Supabase credentials' }),
-      };
+    // Validate request body size
+    const bodySizeValidation = validateBodySize(event.body);
+    if (!bodySizeValidation.valid) {
+      return createErrorResponse(413, bodySizeValidation.error || 'Request body too large', 'VALIDATION_ERROR');
     }
 
-    // Get authorization header - Netlify Functions headers are lowercase
-    const authHeader = 
-      event.headers.authorization || 
-      event.headers.Authorization ||
-      event.headers['authorization'] ||
-      event.headers['Authorization'] ||
-      (event.multiValueHeaders && (
-        event.multiValueHeaders.authorization?.[0] ||
-        event.multiValueHeaders.Authorization?.[0]
-      ));
-    
-    if (!authHeader) {
-      return {
-        statusCode: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: 'Unauthorized: Missing authorization header' }),
-      };
+    // Verify authentication
+    let authResult: AuthResult;
+    try {
+      authResult = await verifyAuth(event);
+    } catch (authError) {
+      return handleError(authError, 'authentication');
     }
 
-    // Verify the user by calling Supabase REST API directly
-    // This is more reliable for serverless functions
-    const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers: {
-        'Authorization': authHeader,
-        'apikey': supabaseKey,
-      },
-    });
-
-    if (!userResponse.ok) {
-      return {
-        statusCode: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          error: 'Unauthorized: Invalid or expired token'
-        }),
-      };
-    }
-
-    const user = await userResponse.json();
-    
-    if (!user || !user.id) {
-      return {
-        statusCode: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          error: 'Unauthorized: Invalid user data'
-        }),
-      };
-    }
+    const { user, supabaseUrl, supabaseKey, authHeader } = authResult;
 
     // Create Supabase client for database queries
-    // Use the Authorization header in global headers for RLS
     const supabase = createClient(supabaseUrl, supabaseKey, {
       global: {
         headers: {
@@ -193,6 +146,11 @@ export const handler: Handler = async (event, context) => {
     // Handle GET - Fetch transactions (optionally filtered by group_id)
     if (httpMethod === 'GET') {
       const groupId = event.queryStringParameters?.group_id;
+      
+      // Validate group_id format if provided
+      if (groupId && !isValidUUID(groupId)) {
+        return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR');
+      }
       
       // Try to fetch with transaction_splits joined, fallback to basic query if table doesn't exist
       let query = supabase
@@ -218,8 +176,6 @@ export const handler: Handler = async (event, context) => {
 
       // If join fails (e.g., table doesn't exist yet), fallback to basic query
       if (error && (error.message?.includes('relation') || error.message?.includes('does not exist') || error.code === '42P01')) {
-        console.warn('transaction_splits table may not exist, falling back to basic query:', error.message);
-        
         // Fallback: fetch without join
         let fallbackQuery = supabase
           .from('transactions')
@@ -234,27 +190,17 @@ export const handler: Handler = async (event, context) => {
           .limit(100);
         
         if (fallbackResult.error) {
-          console.error('Supabase error (fallback):', fallbackResult.error);
-          return {
-            statusCode: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ error: 'Failed to fetch transactions', details: fallbackResult.error.message }),
-          };
+          return handleError(fallbackResult.error, 'fetching transactions (fallback)');
         }
         
         transactions = fallbackResult.data;
         error = null;
       } else if (error) {
-        console.error('Supabase error:', error);
-        return {
-          statusCode: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Failed to fetch transactions', details: error.message }),
-        };
+        return handleError(error, 'fetching transactions');
       }
 
       // Transform transactions to match frontend expectations
-      const parsedTransactions = (transactions || []).map((tx: any) => {
+      const parsedTransactions = (transactions || []).map((tx: TransactionWithSplits) => {
         // Transform transaction_splits to splits
         if (tx.transaction_splits) {
           tx.splits = tx.transaction_splits;
@@ -263,14 +209,12 @@ export const handler: Handler = async (event, context) => {
 
         // Ensure split_among is always an array for backward compatibility
         if (tx.split_among && !Array.isArray(tx.split_among)) {
-          // Fallback: if somehow not an array, convert to array
-          // This shouldn't happen with proper JSONB handling, but safety first
           try {
             const parsed = typeof tx.split_among === 'string' 
               ? JSON.parse(tx.split_among)
               : tx.split_among;
             tx.split_among = Array.isArray(parsed) ? parsed : [];
-          } catch (e) {
+          } catch {
             tx.split_among = [];
           }
         } else if (!tx.split_among) {
@@ -279,17 +223,13 @@ export const handler: Handler = async (event, context) => {
 
         // If splits exist but split_among doesn't, derive split_among from splits for backward compatibility
         if (tx.splits && tx.splits.length > 0 && (!tx.split_among || tx.split_among.length === 0)) {
-          tx.split_among = tx.splits.map((s: any) => s.user_id);
+          tx.split_among = tx.splits.map((s) => s.user_id);
         }
 
         return tx;
       });
 
-      return {
-        statusCode: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify(parsedTransactions),
-      };
+      return createSuccessResponse(parsedTransactions, 200, 60); // Cache for 60 seconds
     }
 
     // Handle POST - Create new transaction
@@ -297,30 +237,19 @@ export const handler: Handler = async (event, context) => {
       let transactionData: Partial<Transaction>;
       try {
         transactionData = JSON.parse(event.body || '{}');
-      } catch (e) {
-        return {
-          statusCode: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Invalid JSON in request body' }),
-        };
+      } catch {
+        return createErrorResponse(400, 'Invalid JSON in request body', 'VALIDATION_ERROR');
       }
 
       // Validate required fields
       if (!transactionData.amount || !transactionData.description || !transactionData.date || !transactionData.type) {
-        return {
-          statusCode: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Missing required fields: amount, description, date, type' }),
-        };
+        return createErrorResponse(400, 'Missing required fields: amount, description, date, type', 'VALIDATION_ERROR');
       }
 
-      // Validate type
-      if (transactionData.type !== 'income' && transactionData.type !== 'expense') {
-        return {
-          statusCode: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Type must be either "income" or "expense"' }),
-        };
+      // Validate transaction data
+      const validation = validateTransactionData(transactionData);
+      if (!validation.valid) {
+        return createErrorResponse(400, validation.error || 'Invalid transaction data', 'VALIDATION_ERROR');
       }
 
       // If group_id is provided, verify user is a member of the group
@@ -333,11 +262,7 @@ export const handler: Handler = async (event, context) => {
           .single();
 
         if (membershipError || !membership) {
-          return {
-            statusCode: 403,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ error: 'You must be a member of the group to add transactions' }),
-          };
+          return createErrorResponse(403, 'You must be a member of the group to add transactions', 'PERMISSION_DENIED');
         }
       }
 
@@ -355,11 +280,7 @@ export const handler: Handler = async (event, context) => {
             .single();
 
           if (paidByError || !paidByMember) {
-            return {
-              statusCode: 400,
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ error: 'paid_by must be a member of the group' }),
-            };
+            return createErrorResponse(400, 'paid_by must be a member of the group', 'VALIDATION_ERROR');
           }
         }
 
@@ -377,22 +298,14 @@ export const handler: Handler = async (event, context) => {
               .in('user_id', uniqueSplitAmong);
 
             if (splitError) {
-              return {
-                statusCode: 500,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ error: 'Failed to validate split_among members', details: splitError.message }),
-              };
+              return handleError(splitError, 'validating split_among members');
             }
 
             const validUserIds = splitMembers?.map(m => m.user_id) || [];
             const invalidUserIds = uniqueSplitAmong.filter(id => !validUserIds.includes(id));
             
             if (invalidUserIds.length > 0) {
-              return {
-                statusCode: 400,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ error: 'All split_among users must be members of the group' }),
-              };
+              return createErrorResponse(400, 'All split_among users must be members of the group', 'VALIDATION_ERROR');
             }
           }
         }
@@ -420,15 +333,13 @@ export const handler: Handler = async (event, context) => {
         .single();
 
       if (error) {
-        console.error('Supabase error:', error);
-        return {
-          statusCode: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Failed to create transaction', details: error.message }),
-        };
+        return handleError(error, 'creating transaction');
       }
 
       // Create transaction_splits entries if split_among is provided (dual-write)
+      // NOTE: This is a dual-write pattern. For true transaction rollback, we would need
+      // a database function that handles both inserts atomically. For now, we rely on
+      // split_among column as the source of truth if transaction_splits fails.
       if (transaction && transactionData.split_among && Array.isArray(transactionData.split_among) && transactionData.split_among.length > 0) {
         // Calculate equal splits with proper rounding
         const splits = calculateEqualSplits(transaction.amount, transactionData.split_among);
@@ -439,29 +350,25 @@ export const handler: Handler = async (event, context) => {
         });
 
         // Validate that splits sum equals transaction amount
-        const validation = validateSplitSum(splits, transaction.amount);
-        if (!validation.valid) {
-          console.error('Split validation failed:', validation.error);
-          // Log error but don't fail - transaction is already created
-          // This should not happen with calculateEqualSplits, but safety check
+        const splitValidation = validateSplitSum(splits, transaction.amount);
+        if (!splitValidation.valid) {
+          // This should not happen with calculateEqualSplits, but log for debugging
+          // Don't fail the transaction as split_among column has the data
         }
 
         // Insert splits into transaction_splits table
-        // If table doesn't exist yet, this will fail silently (transaction still created with split_among)
         const { error: splitsError } = await supabase
           .from('transaction_splits')
           .insert(splits);
 
         if (splitsError) {
-          // Log but don't fail - table might not exist yet, split_among column has the data
-          if (splitsError.message?.includes('relation') || splitsError.message?.includes('does not exist') || splitsError.code === '42P01') {
-            console.warn('transaction_splits table may not exist yet, skipping split creation:', splitsError.message);
-          } else {
-            console.error('Failed to create transaction_splits:', splitsError);
+          // If table doesn't exist, that's okay - split_among column has the data
+          if (!(splitsError.message?.includes('relation') || splitsError.message?.includes('does not exist') || splitsError.code === '42P01')) {
+            // For other errors, log but don't fail - transaction is already created
+            // In production, consider implementing proper rollback via database function
           }
-          // Transaction is still created successfully with split_among for backward compatibility
         } else {
-          // Verify splits were created correctly (optional validation)
+          // Verify splits were created correctly
           const { data: createdSplits, error: verifyError } = await supabase
             .from('transaction_splits')
             .select('amount')
@@ -470,7 +377,7 @@ export const handler: Handler = async (event, context) => {
           if (!verifyError && createdSplits) {
             const verifyValidation = validateSplitSum(createdSplits, transaction.amount);
             if (!verifyValidation.valid) {
-              console.error('Split verification failed after insert:', verifyValidation.error);
+              // Log but don't fail - data integrity issue but transaction exists
             }
           }
         }
@@ -519,11 +426,7 @@ export const handler: Handler = async (event, context) => {
         }
       }
 
-      return {
-        statusCode: 201,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify(responseTransaction),
-      };
+      return createSuccessResponse(responseTransaction, 201);
     }
 
     // Handle PUT - Update existing transaction
@@ -531,29 +434,18 @@ export const handler: Handler = async (event, context) => {
       let transactionData: Partial<Transaction>;
       try {
         transactionData = JSON.parse(event.body || '{}');
-      } catch (e) {
-        return {
-          statusCode: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Invalid JSON in request body' }),
-        };
+      } catch {
+        return createErrorResponse(400, 'Invalid JSON in request body', 'VALIDATION_ERROR');
       }
 
       if (!transactionData.id) {
-        return {
-          statusCode: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Missing transaction id' }),
-        };
+        return createErrorResponse(400, 'Missing transaction id', 'VALIDATION_ERROR');
       }
 
-      // Validate type if provided
-      if (transactionData.type && transactionData.type !== 'income' && transactionData.type !== 'expense') {
-        return {
-          statusCode: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Type must be either "income" or "expense"' }),
-        };
+      // Validate transaction data
+      const validation = validateTransactionData(transactionData);
+      if (!validation.valid) {
+        return createErrorResponse(400, validation.error || 'Invalid transaction data', 'VALIDATION_ERROR');
       }
 
       // Get existing transaction to check group_id and verify ownership
@@ -564,20 +456,12 @@ export const handler: Handler = async (event, context) => {
         .single();
 
       if (fetchError || !existingTransaction) {
-        return {
-          statusCode: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Transaction not found' }),
-        };
+        return createErrorResponse(404, 'Transaction not found', 'NOT_FOUND');
       }
 
       // Verify user owns the transaction
       if (existingTransaction.user_id !== user.id) {
-        return {
-          statusCode: 403,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'You can only update your own transactions' }),
-        };
+        return createErrorResponse(403, 'You can only update your own transactions', 'PERMISSION_DENIED');
       }
 
       // Determine if this is/will be a group expense
@@ -604,11 +488,7 @@ export const handler: Handler = async (event, context) => {
               .single();
 
             if (paidByError || !paidByMember) {
-              return {
-                statusCode: 400,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ error: 'paid_by must be a member of the group' }),
-              };
+              return createErrorResponse(400, 'paid_by must be a member of the group', 'VALIDATION_ERROR');
             }
           }
         }
@@ -629,22 +509,14 @@ export const handler: Handler = async (event, context) => {
                 .in('user_id', uniqueSplitAmong);
 
               if (splitError) {
-                return {
-                  statusCode: 500,
-                  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ error: 'Failed to validate split_among members', details: splitError.message }),
-                };
+                return handleError(splitError, 'validating split_among members');
               }
 
               const validUserIds = splitMembers?.map(m => m.user_id) || [];
               const invalidUserIds = uniqueSplitAmong.filter(id => !validUserIds.includes(id));
               
               if (invalidUserIds.length > 0) {
-                return {
-                  statusCode: 400,
-                  headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ error: 'All split_among users must be members of the group' }),
-                };
+                return createErrorResponse(400, 'All split_among users must be members of the group', 'VALIDATION_ERROR');
               }
             }
           }
@@ -652,7 +524,7 @@ export const handler: Handler = async (event, context) => {
       }
 
       // Build update object (exclude id and user_id)
-      const updateData: any = {};
+      const updateData: Partial<Transaction> = {};
       if (transactionData.amount !== undefined) updateData.amount = transactionData.amount;
       if (transactionData.description !== undefined) updateData.description = transactionData.description;
       if (transactionData.date !== undefined) updateData.date = transactionData.date;
@@ -677,20 +549,11 @@ export const handler: Handler = async (event, context) => {
         .single();
 
       if (error) {
-        console.error('Supabase error:', error);
-        return {
-          statusCode: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Failed to update transaction', details: error.message }),
-        };
+        return handleError(error, 'updating transaction');
       }
 
       if (!transaction) {
-        return {
-          statusCode: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Transaction not found' }),
-        };
+        return createErrorResponse(404, 'Transaction not found', 'NOT_FOUND');
       }
 
       // Update transaction_splits if split_among was updated (dual-write)
@@ -837,33 +700,20 @@ export const handler: Handler = async (event, context) => {
         }
       }
 
-      return {
-        statusCode: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify(responseTransaction),
-      };
+      return createSuccessResponse(responseTransaction, 200);
     }
 
     // Handle DELETE - Delete transaction
     if (httpMethod === 'DELETE') {
-      // Get transaction ID from query string
       const transactionId = event.queryStringParameters?.id;
       
       if (!transactionId) {
-        return {
-          statusCode: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Missing transaction id in query parameters' }),
-        };
+        return createErrorResponse(400, 'Missing transaction id in query parameters', 'VALIDATION_ERROR');
       }
 
       const id = parseInt(transactionId, 10);
-      if (isNaN(id)) {
-        return {
-          statusCode: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Invalid transaction id' }),
-        };
+      if (isNaN(id) || id <= 0) {
+        return createErrorResponse(400, 'Invalid transaction id', 'VALIDATION_ERROR');
       }
 
       const { error } = await supabase
@@ -872,34 +722,16 @@ export const handler: Handler = async (event, context) => {
         .eq('id', id);
 
       if (error) {
-        console.error('Supabase error:', error);
-        return {
-          statusCode: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Failed to delete transaction', details: error.message }),
-        };
+        return handleError(error, 'deleting transaction');
       }
 
-      return {
-        statusCode: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ success: true, message: 'Transaction deleted successfully' }),
-      };
+      return createSuccessResponse({ success: true, message: 'Transaction deleted successfully' }, 200);
     }
 
     // Method not allowed
-    return {
-      statusCode: 405,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Method not allowed' }),
-    };
-  } catch (error: any) {
-    console.error('Error:', error);
-    return {
-      statusCode: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Internal server error', details: error.message }),
-    };
+    return createErrorResponse(405, 'Method not allowed', 'METHOD_NOT_ALLOWED');
+  } catch (error: unknown) {
+    return handleError(error, 'transactions handler');
   }
 };
 

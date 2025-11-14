@@ -1,19 +1,10 @@
 import { Handler } from '@netlify/functions';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-
-/**
- * Get CORS headers with configurable origin.
- * In production, set ALLOWED_ORIGIN environment variable to restrict access.
- * Falls back to '*' for development if not set.
- */
-function getCorsHeaders(): Record<string, string> {
-  const allowedOrigin = process.env.ALLOWED_ORIGIN || '*';
-  return {
-    'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-  };
-}
+import { getCorsHeaders } from '../utils/cors';
+import { verifyAuth, AuthResult } from '../utils/auth';
+import { handleError, createErrorResponse } from '../utils/error-handler';
+import { isValidUUID } from '../utils/validation';
+import { createSuccessResponse, createEmptyResponse } from '../utils/response';
 
 interface Balance {
   user_id: string;
@@ -238,81 +229,23 @@ async function calculateGroupBalances(
 }
 
 export const handler: Handler = async (event, context) => {
-  const corsHeaders = getCorsHeaders();
-  
   // Handle CORS preflight
   if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: corsHeaders,
-      body: '',
-    };
+    return createEmptyResponse(200);
   }
 
   try {
-    // Get Supabase credentials
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_ANON_KEY;
-
-    if (!supabaseUrl || !supabaseKey) {
-      return {
-        statusCode: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: 'Missing Supabase credentials' }),
-      };
+    // Verify authentication
+    let authResult: AuthResult;
+    try {
+      authResult = await verifyAuth(event);
+    } catch (authError) {
+      return handleError(authError, 'authentication');
     }
 
-    // Get authorization header
-    const authHeader = 
-      event.headers.authorization || 
-      event.headers.Authorization ||
-      event.headers['authorization'] ||
-      event.headers['Authorization'] ||
-      (event.multiValueHeaders && (
-        event.multiValueHeaders.authorization?.[0] ||
-        event.multiValueHeaders.Authorization?.[0]
-      ));
-    
-    if (!authHeader) {
-      return {
-        statusCode: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: 'Unauthorized: Missing authorization header' }),
-      };
-    }
-
-    // Verify the user
-    const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers: {
-        'Authorization': authHeader,
-        'apikey': supabaseKey,
-      },
-    });
-
-    if (!userResponse.ok) {
-      return {
-        statusCode: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          error: 'Unauthorized: Invalid or expired token'
-        }),
-      };
-    }
-
-    const user = await userResponse.json() as UserResponse;
-    
-    if (!user || !user.id) {
-      return {
-        statusCode: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          error: 'Unauthorized: Invalid user data'
-        }),
-      };
-    }
-
+    const { user, supabaseUrl, supabaseKey, authHeader } = authResult;
     const currentUserId = user.id;
-    const currentUserEmail = user.email || user.user?.email || null;
+    const currentUserEmail = user.email;
 
     // Create Supabase client
     const supabase = createClient(supabaseUrl, supabaseKey, {
@@ -332,12 +265,8 @@ export const handler: Handler = async (event, context) => {
     const groupId = event.queryStringParameters?.group_id;
     
     // Validate group_id format if provided (UUID format)
-    if (groupId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(groupId)) {
-      return {
-        statusCode: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: 'Invalid group_id format. Expected UUID.' }),
-      };
+    if (groupId && !isValidUUID(groupId)) {
+      return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR');
     }
 
     // Get all groups the user belongs to
@@ -357,14 +286,10 @@ export const handler: Handler = async (event, context) => {
       : groupIds;
 
     if (targetGroupIds.length === 0) {
-      return {
-        statusCode: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          group_balances: [],
-          overall_balances: [],
-        }),
-      };
+      return createSuccessResponse({
+        group_balances: [],
+        overall_balances: [],
+      }, 200, 60);
     }
 
     // Get group details
@@ -375,30 +300,43 @@ export const handler: Handler = async (event, context) => {
 
     const groupMap = new Map((groups || []).map((g: Group) => [g.id, g.name]));
 
-    // Calculate balances for each group
-    const groupBalances: GroupBalance[] = [];
-    const overallBalanceMap = new Map<string, number>();
-
-    for (const gId of targetGroupIds) {
+    // Calculate balances for each group in parallel for better performance
+    const balancePromises = targetGroupIds.map(async (gId) => {
       try {
         const balances = await calculateGroupBalances(supabase, gId, currentUserId);
         const groupName = groupMap.get(gId) || 'Unknown Group';
-
-        groupBalances.push({
+        return {
           group_id: gId,
           group_name: groupName,
           balances,
-        });
+        };
+      } catch (error) {
+        // Log error but return empty result to continue with other groups
+        return {
+          group_id: gId,
+          group_name: groupMap.get(gId) || 'Unknown Group',
+          balances: [],
+        };
+      }
+    });
+
+    const balanceResults = await Promise.allSettled(balancePromises);
+    const groupBalances: GroupBalance[] = [];
+    const overallBalanceMap = new Map<string, number>();
+
+    // Process results
+    for (const result of balanceResults) {
+      if (result.status === 'fulfilled') {
+        const groupBalance = result.value;
+        groupBalances.push(groupBalance);
 
         // Aggregate into overall balances
-        for (const balance of balances) {
+        for (const balance of groupBalance.balances) {
           const current = overallBalanceMap.get(balance.user_id) || 0;
           overallBalanceMap.set(balance.user_id, current + balance.amount);
         }
-      } catch (error) {
-        console.error(`Error calculating balances for group ${gId}:`, error);
-        // Continue with other groups
       }
+      // If rejected, the promise already handled the error and returned empty balances
     }
 
     // Convert overall balance map to array
@@ -496,18 +434,8 @@ export const handler: Handler = async (event, context) => {
       overall_balances: overallBalances,
     };
 
-    return {
-      statusCode: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify(response),
-    };
+    return createSuccessResponse(response, 200, 60); // Cache for 60 seconds
   } catch (error: unknown) {
-    console.error('Error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return {
-      statusCode: 500,
-      headers: { ...getCorsHeaders(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Internal server error', details: errorMessage }),
-    };
+    return handleError(error, 'balances handler');
   }
 };
