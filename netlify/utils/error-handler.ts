@@ -1,11 +1,6 @@
 import { Handler } from '@netlify/functions';
 import { getCorsHeaders } from './cors';
-
-type NetlifyResponse = {
-  statusCode: number;
-  headers: Record<string, string>;
-  body: string;
-};
+import { NetlifyResponse } from './response';
 
 /**
  * Sanitizes error messages to remove sensitive information before logging
@@ -119,7 +114,13 @@ export function createErrorResponse(
 
   return {
     statusCode,
-    headers: { ...getCorsHeaders(), 'Content-Type': 'application/json' },
+    headers: { 
+      ...getCorsHeaders(), 
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+    },
     body: JSON.stringify(errorResponse),
   };
 }

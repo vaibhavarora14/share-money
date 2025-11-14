@@ -289,7 +289,7 @@ export const handler: Handler = async (event, context) => {
       return createSuccessResponse({
         group_balances: [],
         overall_balances: [],
-      }, 200, 60);
+      }, 200, 0); // No caching - real-time data
     }
 
     // Get group details

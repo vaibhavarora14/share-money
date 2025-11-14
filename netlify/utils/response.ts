@@ -1,6 +1,6 @@
 import { getCorsHeaders } from './cors';
 
-type NetlifyResponse = {
+export type NetlifyResponse = {
   statusCode: number;
   headers: Record<string, string>;
   body: string;
@@ -41,7 +41,12 @@ export function createSuccessResponse(
 export function createEmptyResponse(statusCode: number = 204): NetlifyResponse {
   return {
     statusCode,
-    headers: getCorsHeaders(),
+    headers: {
+      ...getCorsHeaders(),
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+    },
     body: '',
   };
 }
