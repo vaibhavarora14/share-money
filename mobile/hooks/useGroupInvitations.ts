@@ -1,24 +1,80 @@
-import { useQuery } from "@tanstack/react-query";
-import { useAuth } from "../contexts/AuthContext";
-import { GroupInvitation } from "../types";
-import { fetchWithAuth } from "../utils/api";
-import { queryKeys } from "../utils/queryKeys";
+import { useState, useEffect, useCallback } from 'react';
+import { fetchWithAuth } from '../utils/api';
+import { useAuth } from '../contexts/AuthContext';
+import { GroupInvitation } from '../types';
 
 export function useGroupInvitations(groupId: string | null) {
   const { session } = useAuth();
+  const [data, setData] = useState<GroupInvitation[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
-  return useQuery<GroupInvitation[]>({
-    queryKey: queryKeys.invitationsByGroup(groupId || ""),
-    queryFn: async () => {
-      if (!session || !groupId) {
-        throw new Error("Not authenticated or invalid group ID");
-      }
+  const fetchData = useCallback(async () => {
+    if (!session || !groupId) {
+      setData([]);
+      setIsLoading(false);
+      return;
+    }
 
+    try {
+      setIsLoading(true);
+      setError(null);
+      
       const response = await fetchWithAuth(`/invitations?group_id=${groupId}`);
-      const data: GroupInvitation[] = await response.json();
-      // Filter to only show pending invitations
-      return data.filter((inv) => inv.status === "pending");
-    },
-    enabled: !!session && !!groupId,
-  });
+      if (!response.ok) {
+        throw new Error(`Failed to fetch invitations: ${response.status}`);
+      }
+      const invitations: GroupInvitation[] = await response.json();
+      
+      setData(invitations);
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error('Failed to fetch invitations'));
+      setData([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [session, groupId]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  return {
+    data,
+    isLoading,
+    error,
+    refetch: fetchData
+  };
+}
+
+export function useCancelInvitation(onSuccess?: () => void) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  const mutate = async (variables: { invitationId: string; groupId: string }) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      const response = await fetchWithAuth(`/invitations/${variables.invitationId}`, {
+        method: "DELETE",
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to cancel invitation');
+      }
+      
+      if (onSuccess) onSuccess();
+      
+      return variables;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Failed to cancel invitation');
+      setError(error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return { mutate, isLoading, error };
 }

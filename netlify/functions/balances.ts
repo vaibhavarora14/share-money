@@ -289,7 +289,7 @@ export const handler: Handler = async (event, context) => {
       return createSuccessResponse({
         group_balances: [],
         overall_balances: [],
-      }, 200, 60);
+      }, 200, 0); // No caching - real-time data
     }
 
     // Get group details
@@ -434,7 +434,7 @@ export const handler: Handler = async (event, context) => {
       overall_balances: overallBalances,
     };
 
-    return createSuccessResponse(response, 200, 60); // Cache for 60 seconds
+    return createSuccessResponse(response, 200, 0); // No caching - real-time data
   } catch (error: unknown) {
     return handleError(error, 'balances handler');
   }

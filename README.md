@@ -28,6 +28,25 @@ ShareMoney (also known as Split Money) is an app to track balances for money use
    npm run dev:mobile
    ```
 
+## Test Database Seed
+
+The `supabase/seed.sql` file automatically runs when you reset your database:
+
+```bash
+npx supabase db reset --local
+```
+
+This creates:
+- **4 test users** (alice@test.com, bob@test.com, charlie@test.com, diana@test.com)
+  - Password for all: `testpassword123`
+- **2 test groups** with members
+- **5 transactions** with expense splits
+- **2 settlements** between users
+
+**Note:** You may see a 502 error at the end - this is harmless. The seed data is inserted successfully. The error is a timing issue with container health checks during restart.
+
+The seed can be run repeatedly - it uses `ON CONFLICT DO NOTHING` to safely re-run without duplicates.
+
 ## Documentation
 
 - **[TECH.md](./TECH.md)** - Complete technical documentation, setup, deployment, and troubleshooting
