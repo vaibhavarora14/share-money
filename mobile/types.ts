@@ -86,3 +86,21 @@ export interface BalancesResponse {
   overall_balances: Balance[];
 }
 
+export interface Settlement {
+  id: string;
+  group_id: string;
+  from_user_id: string;
+  to_user_id: string;
+  amount: number;
+  currency: string;
+  notes?: string;
+  created_by: string;
+  created_at: string;
+  from_user_email?: string;
+  to_user_email?: string;
+}
+
+export interface SettlementsResponse {
+  settlements: Settlement[];
+}
+
