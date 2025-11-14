@@ -24,6 +24,15 @@ interface CreateInvitationRequest {
   email: string;
 }
 
+interface SupabaseUser {
+  id: string;
+  email?: string;
+}
+
+interface UsersResponse {
+  users: SupabaseUser[];
+}
+
 export const handler: Handler = async (event, context) => {
   // Handle CORS preflight
   if (event.httpMethod === 'OPTIONS') {
@@ -31,66 +40,21 @@ export const handler: Handler = async (event, context) => {
   }
 
   try {
-    // Get Supabase credentials from environment variables
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_ANON_KEY;
-
-    if (!supabaseUrl || !supabaseKey) {
-      return {
-        statusCode: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: 'Missing Supabase credentials' }),
-      };
+    // Validate request body size
+    const bodySizeValidation = validateBodySize(event.body);
+    if (!bodySizeValidation.valid) {
+      return createErrorResponse(413, bodySizeValidation.error || 'Request body too large', 'VALIDATION_ERROR');
     }
 
-    // Get authorization header
-    const authHeader = 
-      event.headers.authorization || 
-      event.headers.Authorization ||
-      event.headers['authorization'] ||
-      event.headers['Authorization'] ||
-      (event.multiValueHeaders && (
-        event.multiValueHeaders.authorization?.[0] ||
-        event.multiValueHeaders.Authorization?.[0]
-      ));
-    
-    if (!authHeader) {
-      return {
-        statusCode: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: 'Unauthorized: Missing authorization header' }),
-      };
+    // Verify authentication
+    let authResult: AuthResult;
+    try {
+      authResult = await verifyAuth(event);
+    } catch (authError) {
+      return handleError(authError, 'authentication');
     }
 
-    // Verify the user
-    const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers: {
-        'Authorization': authHeader,
-        'apikey': supabaseKey,
-      },
-    });
-
-    if (!userResponse.ok) {
-      return {
-        statusCode: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          error: 'Unauthorized: Invalid or expired token'
-        }),
-      };
-    }
-
-    const currentUser = await userResponse.json();
-    
-    if (!currentUser || !currentUser.id) {
-      return {
-        statusCode: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          error: 'Unauthorized: Invalid user data'
-        }),
-      };
-    }
+    const { user: currentUser, supabaseUrl, supabaseKey, authHeader } = authResult;
 
     // Create Supabase client
     const supabase = createClient(supabaseUrl, supabaseKey, {
@@ -122,33 +86,25 @@ export const handler: Handler = async (event, context) => {
       let requestData: CreateInvitationRequest;
       try {
         requestData = JSON.parse(event.body || '{}');
-      } catch (e) {
-        return {
-          statusCode: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Invalid JSON in request body' }),
-        };
+      } catch {
+        return createErrorResponse(400, 'Invalid JSON in request body', 'VALIDATION_ERROR');
       }
 
       // Validate required fields
       if (!requestData.group_id || !requestData.email) {
-        return {
-          statusCode: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Missing required fields: group_id, email' }),
-        };
+        return createErrorResponse(400, 'Missing required fields: group_id, email', 'VALIDATION_ERROR');
+      }
+
+      // Validate group_id format
+      if (!isValidUUID(requestData.group_id)) {
+        return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR');
       }
 
       // Validate and normalize email
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       const normalizedEmail = requestData.email.toLowerCase().trim();
       
-      if (!emailRegex.test(normalizedEmail)) {
-        return {
-          statusCode: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Invalid email address format' }),
-        };
+      if (!isValidEmail(normalizedEmail)) {
+        return createErrorResponse(400, 'Invalid email address format', 'VALIDATION_ERROR');
       }
 
       // Verify user is owner of the group
@@ -160,11 +116,7 @@ export const handler: Handler = async (event, context) => {
         .single();
 
       if (membershipError || !membership || membership.role !== 'owner') {
-        return {
-          statusCode: 403,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Only group owners can create invitations' }),
-        };
+        return createErrorResponse(403, 'Only group owners can create invitations', 'PERMISSION_DENIED');
       }
 
       // Check if user is already a member
@@ -181,9 +133,9 @@ export const handler: Handler = async (event, context) => {
         );
 
         if (findUserResponse.ok) {
-          const usersData = await findUserResponse.json();
+          const usersData = await findUserResponse.json() as UsersResponse;
           const targetUser = Array.isArray(usersData.users) 
-            ? usersData.users.find((u: any) => u.email?.toLowerCase() === normalizedEmail)
+            ? usersData.users.find((u: SupabaseUser) => u.email?.toLowerCase() === normalizedEmail)
             : usersData.users?.[0];
 
           if (targetUser && targetUser.id) {
@@ -196,11 +148,7 @@ export const handler: Handler = async (event, context) => {
               .single();
 
             if (existingMember) {
-              return {
-                statusCode: 400,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ error: 'User is already a member of this group' }),
-              };
+              return createErrorResponse(400, 'User is already a member of this group', 'VALIDATION_ERROR');
             }
           }
         }
@@ -216,11 +164,7 @@ export const handler: Handler = async (event, context) => {
         .single();
 
       if (existingInvitation) {
-        return {
-          statusCode: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'A pending invitation already exists for this email' }),
-        };
+        return createErrorResponse(400, 'A pending invitation already exists for this email', 'VALIDATION_ERROR');
       }
 
       // Generate a unique token for the invitation
@@ -240,19 +184,10 @@ export const handler: Handler = async (event, context) => {
         .single();
 
       if (createError) {
-        console.error('Supabase error:', createError);
-        return {
-          statusCode: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Failed to create invitation', details: createError.message }),
-        };
+        return handleError(createError, 'creating invitation');
       }
 
-      return {
-        statusCode: 201,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify(invitation),
-      };
+      return createSuccessResponse(invitation, 201);
     }
 
     // Handle GET /invitations - List invitations
@@ -283,23 +218,15 @@ export const handler: Handler = async (event, context) => {
         const isMember = membership || (group && group.created_by === currentUser.id);
 
         if (!isMember) {
-          return {
-            statusCode: 403,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ error: 'You must be a member of the group to view invitations' }),
-          };
+          return createErrorResponse(403, 'You must be a member of the group to view invitations', 'PERMISSION_DENIED');
         }
 
         query = query.eq('group_id', groupId);
       } else if (email) {
         // Users can view invitations sent to their email
-        const userEmail = currentUser.email || currentUser.user?.email;
+        const userEmail = currentUser.email;
         if (!userEmail || userEmail.toLowerCase() !== email.toLowerCase()) {
-          return {
-            statusCode: 403,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ error: 'You can only view invitations sent to your email' }),
-          };
+          return createErrorResponse(403, 'You can only view invitations sent to your email', 'PERMISSION_DENIED');
         }
         query = query.eq('email', email.toLowerCase());
       }
@@ -308,19 +235,10 @@ export const handler: Handler = async (event, context) => {
       const { data: invitations, error } = await query;
 
       if (error) {
-        console.error('Supabase error:', error);
-        return {
-          statusCode: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Failed to fetch invitations', details: error.message }),
-        };
+        return handleError(error, 'fetching invitations');
       }
 
-      return {
-        statusCode: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify(invitations || []),
-      };
+      return createSuccessResponse(invitations || [], 200, 60); // Cache for 60 seconds
     }
 
     // Handle POST /invitations/:id/accept - Accept invitation
@@ -331,19 +249,10 @@ export const handler: Handler = async (event, context) => {
       });
 
       if (rpcError) {
-        console.error('Supabase RPC error:', rpcError);
-        return {
-          statusCode: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: rpcError.message || 'Failed to accept invitation' }),
-        };
+        return handleError(rpcError, 'accepting invitation');
       }
 
-      return {
-        statusCode: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ success: true, message: 'Invitation accepted successfully' }),
-      };
+      return createSuccessResponse({ success: true, message: 'Invitation accepted successfully' }, 200);
     }
 
     // Handle DELETE /invitations/:id - Cancel invitation
@@ -356,11 +265,7 @@ export const handler: Handler = async (event, context) => {
         .single();
 
       if (fetchError || !invitation) {
-        return {
-          statusCode: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Invitation not found' }),
-        };
+        return createErrorResponse(404, 'Invitation not found', 'NOT_FOUND');
       }
 
       // Verify user is owner of the group
@@ -380,11 +285,7 @@ export const handler: Handler = async (event, context) => {
       const isOwner = (membership && membership.role === 'owner') || (group && group.created_by === currentUser.id);
 
       if (!isOwner) {
-        return {
-          statusCode: 403,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Only group owners can cancel invitations' }),
-        };
+        return createErrorResponse(403, 'Only group owners can cancel invitations', 'PERMISSION_DENIED');
       }
 
       // Update status to cancelled instead of deleting (for audit trail)
@@ -394,34 +295,16 @@ export const handler: Handler = async (event, context) => {
         .eq('id', invitationId);
 
       if (updateError) {
-        console.error('Supabase error:', updateError);
-        return {
-          statusCode: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'Failed to cancel invitation', details: updateError.message }),
-        };
+        return handleError(updateError, 'cancelling invitation');
       }
 
-      return {
-        statusCode: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ success: true, message: 'Invitation cancelled successfully' }),
-      };
+      return createSuccessResponse({ success: true, message: 'Invitation cancelled successfully' }, 200);
     }
 
     // Method not allowed
-    return {
-      statusCode: 405,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Method not allowed' }),
-    };
-  } catch (error: any) {
-    console.error('Error:', error);
-    return {
-      statusCode: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Internal server error', details: error.message }),
-    };
+    return createErrorResponse(405, 'Method not allowed', 'METHOD_NOT_ALLOWED');
+  } catch (error: unknown) {
+    return handleError(error, 'invitations handler');
   }
 };
 
