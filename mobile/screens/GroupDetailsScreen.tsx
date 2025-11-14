@@ -21,7 +21,7 @@ import { InvitationsList } from "../components/InvitationsList";
 import { TransactionsSection } from "../components/TransactionsSection";
 import { BalancesSection } from "../components/BalancesSection";
 import { TransactionFormScreen } from "./TransactionFormScreen";
-import { useDeleteGroup, useRemoveMember } from "../hooks/useGroupMutations";
+import { useDeleteGroup, useRemoveMember, useAddMember } from "../hooks/useGroupMutations";
 import { useCancelInvitation, useGroupInvitations } from "../hooks/useGroupInvitations";
 import { useGroupDetails } from "../hooks/useGroups";
 import { 
@@ -43,6 +43,7 @@ interface GroupDetailsScreenProps {
   onDeleteGroup?: () => void;
   onTransactionAdded?: () => void;
   refreshTrigger?: number; // When this changes, refresh invitations
+  groupRefreshTrigger?: number; // When this changes, refresh group data
 }
 
 export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
@@ -54,6 +55,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   onDeleteGroup,
   onTransactionAdded,
   refreshTrigger,
+  groupRefreshTrigger,
 }) => {
   const [leaving, setLeaving] = useState<boolean>(false);
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
@@ -92,6 +94,10 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const updateTx = useUpdateTransaction(() => refetchAll());
   const deleteTx = useDeleteTransaction(refetchAll);
   const deleteGroupMutation = useDeleteGroup(refetchGroup);
+  const addMemberMutation = useAddMember(() => {
+    refetchGroup();
+    refetchInvites();
+  });
   const removeMemberMutation = useRemoveMember(() => {
     refetchGroup();
     refetchInvites();
@@ -113,6 +119,13 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       refetchInvites();
     }
   }, [refreshTrigger, refetchInvites]);
+
+  // Refresh group data when groupRefreshTrigger changes (e.g., after adding/removing a member)
+  useEffect(() => {
+    if (groupRefreshTrigger !== undefined && groupRefreshTrigger > 0) {
+      refetchGroup();
+    }
+  }, [groupRefreshTrigger, refetchGroup]);
 
   const handleDeleteGroup = async () => {
     Alert.alert(
@@ -229,10 +242,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     memberUserId: string,
     memberEmail?: string
   ) => {
-    if (!onRemoveMember) {
-      return;
-    }
-
     const memberName = memberEmail || `User ${memberUserId.substring(0, 8)}...`;
     const isRemovingSelf = memberUserId === session?.user?.id;
     const ownerCount =
@@ -264,7 +273,11 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           onPress: async () => {
             try {
               setRemovingMemberId(memberUserId);
-              await onRemoveMember(memberUserId);
+              // Use the local mutation which will refetch group data
+              await removeMemberMutation.mutate({
+                groupId: group.id,
+                userId: memberUserId,
+              });
               // If removing self, navigate back
               if (isRemovingSelf && onLeaveGroup) {
                 onLeaveGroup();

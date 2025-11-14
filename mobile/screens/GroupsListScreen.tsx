@@ -24,15 +24,24 @@ interface GroupsListScreenProps {
     description?: string;
   }) => Promise<void>;
   onLogout?: () => void;
+  onRefetchReady?: (refetch: () => void) => void;
 }
 
 export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   onGroupPress,
   onCreateGroup,
+  onRefetchReady,
 }) => {
   const [showCreateGroup, setShowCreateGroup] = useState<boolean>(false);
   const theme = useTheme();
   const { data: groups, isLoading: loading, error, refetch } = useGroups();
+
+  // Expose refetch function to parent component
+  React.useEffect(() => {
+    if (onRefetchReady) {
+      onRefetchReady(refetch);
+    }
+  }, [onRefetchReady, refetch]);
 
 
   if (loading) {

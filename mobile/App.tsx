@@ -506,7 +506,9 @@ function AppContent() {
   const [currentRoute, setCurrentRoute] = useState<string>("groups");
   const [invitationsRefreshTrigger, setInvitationsRefreshTrigger] =
     useState<number>(0);
+  const [groupRefreshTrigger, setGroupRefreshTrigger] = useState<number>(0);
   const prevSessionRef = React.useRef<Session | null>(null);
+  const groupsListRefetchRef = React.useRef<(() => void) | null>(null);
 
   // Fetch selected group details via query when selectedGroup changes
   const { data: selectedGroupDetails, refetch: refetchSelectedGroup } = useGroupDetails(
@@ -543,6 +545,10 @@ function AppContent() {
   }) => {
     await createGroupMutation.mutate(groupData);
     setCurrentView("groups");
+    // Refetch groups list to show the newly created group
+    if (groupsListRefetchRef.current) {
+      groupsListRefetchRef.current();
+    }
   };
 
   const handleAddMember = async (email: string) => {
@@ -560,6 +566,8 @@ function AppContent() {
     // 1. Invitation was created (need to show it)
     // 2. Member was added directly (need to remove any pending invitation for that user)
     setInvitationsRefreshTrigger((prev) => prev + 1);
+    // Trigger group refresh to update members list
+    setGroupRefreshTrigger((prev) => prev + 1);
     return result;
   };
 
@@ -642,6 +650,7 @@ function AppContent() {
         <GroupDetailsScreen
           group={groupDetails}
           refreshTrigger={invitationsRefreshTrigger}
+          groupRefreshTrigger={groupRefreshTrigger}
           onBack={() => {
             setGroupDetails(null);
             setSelectedGroup(null);
@@ -703,6 +712,9 @@ function AppContent() {
       <GroupsListScreen
         onGroupPress={handleGroupPress}
         onCreateGroup={handleCreateGroup}
+        onRefetchReady={(refetch) => {
+          groupsListRefetchRef.current = refetch;
+        }}
       />
       <BottomNavBar
         currentRoute={currentRoute}
