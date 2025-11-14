@@ -20,27 +20,39 @@ export function useCreateTransaction() {
     onSuccess: (data, variables) => {
       // Optimistically update transactions cache if we have the data
       if (data && typeof data === 'object' && 'id' in data) {
-        const transaction = data as Transaction;
-        
-        // Update all transactions cache
-        const previousAll = queryClient.getQueryData<Transaction[]>(
-          queryKeys.transactions()
-        );
-        if (previousAll) {
-          queryClient.setQueryData(queryKeys.transactions(), [transaction, ...previousAll]);
-        }
-        
-        // Update group-specific transactions cache
-        if (variables.group_id) {
-          const previousGroup = queryClient.getQueryData<Transaction[]>(
-            queryKeys.transactionsByGroup(variables.group_id)
+        try {
+          const transaction = data as Transaction;
+          
+          // Update all transactions cache
+          const previousAll = queryClient.getQueryData<Transaction[]>(
+            queryKeys.transactions()
           );
-          if (previousGroup) {
-            queryClient.setQueryData(
-              queryKeys.transactionsByGroup(variables.group_id),
-              [transaction, ...previousGroup]
-            );
+          if (previousAll) {
+            // Check if transaction already exists to avoid duplicates
+            const exists = previousAll.some(t => t.id === transaction.id);
+            if (!exists) {
+              queryClient.setQueryData(queryKeys.transactions(), [transaction, ...previousAll]);
+            }
           }
+          
+          // Update group-specific transactions cache
+          if (variables.group_id) {
+            const previousGroup = queryClient.getQueryData<Transaction[]>(
+              queryKeys.transactionsByGroup(variables.group_id)
+            );
+            if (previousGroup) {
+              const exists = previousGroup.some(t => t.id === transaction.id);
+              if (!exists) {
+                queryClient.setQueryData(
+                  queryKeys.transactionsByGroup(variables.group_id),
+                  [transaction, ...previousGroup]
+                );
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Failed to update transaction cache:', error);
+          // Fallback to invalidation
         }
       }
       
@@ -82,30 +94,42 @@ export function useUpdateTransaction() {
     onSuccess: (data, variables) => {
       // Optimistically update transactions cache if we have the data
       if (data && typeof data === 'object' && 'id' in data) {
-        const updatedTransaction = data as Transaction;
-        
-        // Update all transactions cache
-        const previousAll = queryClient.getQueryData<Transaction[]>(
-          queryKeys.transactions()
-        );
-        if (previousAll) {
-          queryClient.setQueryData(
-            queryKeys.transactions(),
-            previousAll.map((t) => (t.id === updatedTransaction.id ? updatedTransaction : t))
+        try {
+          const updatedTransaction = data as Transaction;
+          
+          // Update all transactions cache
+          const previousAll = queryClient.getQueryData<Transaction[]>(
+            queryKeys.transactions()
           );
-        }
-        
-        // Update group-specific transactions cache
-        if (variables.group_id) {
-          const previousGroup = queryClient.getQueryData<Transaction[]>(
-            queryKeys.transactionsByGroup(variables.group_id)
-          );
-          if (previousGroup) {
-            queryClient.setQueryData(
-              queryKeys.transactionsByGroup(variables.group_id),
-              previousGroup.map((t) => (t.id === updatedTransaction.id ? updatedTransaction : t))
-            );
+          if (previousAll) {
+            const index = previousAll.findIndex(t => t.id === updatedTransaction.id);
+            if (index >= 0) {
+              const updated = [...previousAll];
+              updated[index] = updatedTransaction;
+              queryClient.setQueryData(queryKeys.transactions(), updated);
+            }
           }
+          
+          // Update group-specific transactions cache
+          if (variables.group_id) {
+            const previousGroup = queryClient.getQueryData<Transaction[]>(
+              queryKeys.transactionsByGroup(variables.group_id)
+            );
+            if (previousGroup) {
+              const index = previousGroup.findIndex(t => t.id === updatedTransaction.id);
+              if (index >= 0) {
+                const updated = [...previousGroup];
+                updated[index] = updatedTransaction;
+                queryClient.setQueryData(
+                  queryKeys.transactionsByGroup(variables.group_id),
+                  updated
+                );
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Failed to update transaction cache:', error);
+          // Fallback to invalidation
         }
       }
       

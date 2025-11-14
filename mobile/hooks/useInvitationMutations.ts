@@ -1,10 +1,12 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "../contexts/AuthContext";
 import { GroupInvitation } from "../types";
 import { fetchWithAuth } from "../utils/api";
 import { queryKeys } from "../utils/queryKeys";
 
 export function useCreateInvitation() {
   const queryClient = useQueryClient();
+  const { session } = useAuth();
 
   return useMutation({
     mutationFn: async ({
@@ -26,24 +28,26 @@ export function useCreateInvitation() {
     },
     onSuccess: (data, variables) => {
       // Optimistically add invitation to cache if we have the data
-      if (data && typeof data === 'object' && 'invitation_id' in data) {
-        const previousInvites = queryClient.getQueryData<GroupInvitation[]>(
-          queryKeys.invitationsByGroup(variables.groupId)
-        );
-        if (previousInvites) {
-          const newInvitation: GroupInvitation = {
-            id: (data as any).invitation_id || `tmp-${Date.now()}`,
-            group_id: variables.groupId,
-            email: variables.email,
-            invited_by: '', // Will be populated on refetch
-            status: 'pending',
-            expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days
-            created_at: new Date().toISOString(),
-          };
-          queryClient.setQueryData(
-            queryKeys.invitationsByGroup(variables.groupId),
-            [...previousInvites, newInvitation]
+      // API returns the full invitation object (see invitations.ts:190)
+      if (data && typeof data === 'object' && 'id' in data) {
+        try {
+          const invitation = data as GroupInvitation;
+          const previousInvites = queryClient.getQueryData<GroupInvitation[]>(
+            queryKeys.invitationsByGroup(variables.groupId)
           );
+          if (previousInvites) {
+            // Check if invitation already exists to avoid duplicates
+            const exists = previousInvites.some(inv => inv.id === invitation.id);
+            if (!exists) {
+              queryClient.setQueryData(
+                queryKeys.invitationsByGroup(variables.groupId),
+                [...previousInvites, invitation]
+              );
+            }
+          }
+        } catch (error) {
+          console.error('Failed to update invitation cache:', error);
+          // Fallback to invalidation
         }
       }
       

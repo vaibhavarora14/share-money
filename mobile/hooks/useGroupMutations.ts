@@ -63,9 +63,18 @@ export function useAddMember() {
       );
       // Optimistically add a pending invitation entry
       if (previousInvitations) {
+        const tempInvitation: GroupInvitation = {
+          id: `tmp-${Date.now()}`,
+          group_id: variables.groupId,
+          email: variables.email,
+          invited_by: '', // Will be populated on refetch
+          status: 'pending',
+          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days default
+          created_at: new Date().toISOString(),
+        };
         queryClient.setQueryData(
           queryKeys.invitationsByGroup(variables.groupId),
-          [...previousInvitations, { id: `tmp-${Date.now()}`, group_id: variables.groupId, email: variables.email, status: "pending" }]
+          [...previousInvitations, tempInvitation]
         );
       }
       return { previousGroup, previousInvitations };
@@ -84,29 +93,35 @@ export function useAddMember() {
     onSuccess: (data, variables) => {
       // If member was actually added (not just invitation), update cache optimistically
       if (data && typeof data === 'object' && 'user_id' in data) {
-        const previousGroup = queryClient.getQueryData<GroupWithMembers>(
-          queryKeys.group(variables.groupId)
-        );
-        if (previousGroup) {
-          // Check if member already exists in cache
-          const memberExists = previousGroup.members?.some(
-            (m) => m.user_id === data.user_id
+        try {
+          const previousGroup = queryClient.getQueryData<GroupWithMembers>(
+            queryKeys.group(variables.groupId)
           );
-          if (!memberExists) {
-            queryClient.setQueryData(queryKeys.group(variables.groupId), {
-              ...previousGroup,
-              members: [
-                ...(previousGroup.members || []),
-                {
-                  id: data.id || `tmp-${Date.now()}`,
-                  group_id: variables.groupId,
-                  user_id: data.user_id,
-                  role: data.role || 'member',
-                  email: variables.email,
-                },
-              ],
-            });
+          if (previousGroup) {
+            // Check if member already exists in cache
+            const memberExists = previousGroup.members?.some(
+              (m) => m.user_id === (data as any).user_id
+            );
+            if (!memberExists) {
+              queryClient.setQueryData(queryKeys.group(variables.groupId), {
+                ...previousGroup,
+                members: [
+                  ...(previousGroup.members || []),
+                  {
+                    id: (data as any).id || `tmp-${Date.now()}`,
+                    group_id: variables.groupId,
+                    user_id: (data as any).user_id,
+                    role: (data as any).role || 'member',
+                    joined_at: new Date().toISOString(),
+                    email: variables.email,
+                  },
+                ],
+              });
+            }
           }
+        } catch (error) {
+          console.error('Failed to update member cache:', error);
+          // Fallback to invalidation
         }
       }
     },

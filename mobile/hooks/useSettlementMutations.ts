@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Settlement } from "../types";
+import { Settlement, SettlementsResponse } from "../types";
 import { fetchWithAuth } from "../utils/api";
 import { queryKeys } from "../utils/queryKeys";
 
@@ -37,16 +37,25 @@ export function useCreateSettlement() {
     onSuccess: (data, variables) => {
       // Optimistically update settlements cache if we have the data
       if (data?.settlement) {
-        const previousResponse = queryClient.getQueryData<{ settlements: Settlement[] }>(
-          queryKeys.settlements(variables.group_id)
-        );
-        if (previousResponse) {
-          queryClient.setQueryData(
-            queryKeys.settlements(variables.group_id),
-            {
-              settlements: [data.settlement, ...previousResponse.settlements]
-            }
+        try {
+          const previousResponse = queryClient.getQueryData<SettlementsResponse>(
+            queryKeys.settlements(variables.group_id)
           );
+          if (previousResponse?.settlements) {
+            // Check if settlement already exists to avoid duplicates
+            const exists = previousResponse.settlements.some(s => s.id === data.settlement.id);
+            if (!exists) {
+              queryClient.setQueryData(
+                queryKeys.settlements(variables.group_id),
+                {
+                  settlements: [data.settlement, ...previousResponse.settlements]
+                }
+              );
+            }
+          }
+        } catch (error) {
+          console.error('Failed to update settlement cache:', error);
+          // Fallback to invalidation
         }
       }
       
@@ -79,18 +88,24 @@ export function useUpdateSettlement() {
     onSuccess: (data) => {
       // Optimistically update settlements cache if we have the data
       if (data?.settlement) {
-        const previousResponse = queryClient.getQueryData<{ settlements: Settlement[] }>(
-          queryKeys.settlements(data.settlement.group_id)
-        );
-        if (previousResponse) {
-          queryClient.setQueryData(
-            queryKeys.settlements(data.settlement.group_id),
-            {
-              settlements: previousResponse.settlements.map((s) =>
-                s.id === data.settlement.id ? data.settlement : s
-              )
-            }
+        try {
+          const previousResponse = queryClient.getQueryData<SettlementsResponse>(
+            queryKeys.settlements(data.settlement.group_id)
           );
+          if (previousResponse?.settlements) {
+            const index = previousResponse.settlements.findIndex(s => s.id === data.settlement.id);
+            if (index >= 0) {
+              const updated = [...previousResponse.settlements];
+              updated[index] = data.settlement;
+              queryClient.setQueryData(
+                queryKeys.settlements(data.settlement.group_id),
+                { settlements: updated }
+              );
+            }
+          }
+        } catch (error) {
+          console.error('Failed to update settlement cache:', error);
+          // Fallback to invalidation
         }
       }
       
@@ -122,16 +137,21 @@ export function useDeleteSettlement() {
     onSuccess: (_, variables) => {
       // Optimistically remove settlement from cache
       if (variables.groupId) {
-        const previousResponse = queryClient.getQueryData<{ settlements: Settlement[] }>(
-          queryKeys.settlements(variables.groupId)
-        );
-        if (previousResponse) {
-          queryClient.setQueryData(
-            queryKeys.settlements(variables.groupId),
-            {
-              settlements: previousResponse.settlements.filter((s) => s.id !== variables.id)
-            }
+        try {
+          const previousResponse = queryClient.getQueryData<SettlementsResponse>(
+            queryKeys.settlements(variables.groupId)
           );
+          if (previousResponse?.settlements) {
+            queryClient.setQueryData(
+              queryKeys.settlements(variables.groupId),
+              {
+                settlements: previousResponse.settlements.filter((s) => s.id !== variables.id)
+              }
+            );
+          }
+        } catch (error) {
+          console.error('Failed to update settlement cache:', error);
+          // Fallback to invalidation
         }
       }
       
