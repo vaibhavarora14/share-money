@@ -22,7 +22,7 @@ module.exports = ({ config }) => {
       version: "1.0.0",
       orientation: "portrait",
       icon: "./assets/icon.png",
-      userInterfaceStyle: "light",
+      userInterfaceStyle: "automatic", // Respects system dark/light mode preference
       // Enable new architecture - supported in both Expo Go and development builds
       newArchEnabled: true,
       splash: {
