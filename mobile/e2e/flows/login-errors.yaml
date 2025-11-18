@@ -1,0 +1,42 @@
+# Test file for Development Builds
+# Use this when running a built app (not Expo Go)
+appId: com.sharemoney.app
+---
+# Test: Empty email field
+- launchApp
+- waitForAnimationToEnd
+# Log out if already logged in (check for Groups screen)
+- runFlow:
+    when:
+      visible: "Groups"
+    commands:
+      - tapOn:
+          id: "logout-button"
+      - waitForAnimationToEnd
+- assertVisible: "Welcome Back"
+- tapOn:
+    id: "sign-in-button"
+- assertVisible: "Error"
+- assertVisible: "Please fill in all fields"
+- tapOn: "OK"
+
+# Test: Empty password field
+- tapOn:
+    id: "email-input"
+- inputText: "alice@test.com"
+- tapOn:
+    id: "sign-in-button"
+- assertVisible: "Error"
+- assertVisible: "Please fill in all fields"
+- tapOn: "OK"
+
+# Test: Invalid credentials
+- tapOn:
+    id: "password-input"
+- inputText: "wrongpassword"
+- tapOn:
+    id: "sign-in-button"
+- assertVisible: "Sign In Failed"
+- assertVisible: "Invalid email or password. Please check your credentials and try again."
+- tapOn: "OK"
+# Note: We're still on the login screen (not logged in), so no logout needed

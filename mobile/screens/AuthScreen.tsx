@@ -137,6 +137,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 disabled={loading || googleLoading}
                 style={styles.input}
                 left={<TextInput.Icon icon="email" />}
+                testID="email-input"
               />
 
               <TextInput
@@ -156,6 +157,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     onPress={() => setShowPassword(!showPassword)}
                   />
                 }
+                testID="password-input"
               />
 
               <Button
@@ -165,6 +167,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 loading={loading}
                 style={styles.button}
                 contentStyle={styles.buttonContent}
+                testID="sign-in-button"
               >
                 {isSignUp ? "Sign Up" : "Sign In"}
               </Button>
@@ -200,6 +203,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 onPress={onToggleMode}
                 disabled={loading || googleLoading}
                 style={styles.toggleButton}
+                testID="toggle-sign-up-button"
               >
                 {isSignUp
                   ? "Already have an account? Sign In"

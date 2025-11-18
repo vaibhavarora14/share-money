@@ -375,3 +375,125 @@ adb logcat | grep -E "ReactNativeJS|ERROR|FATAL|Exception"
 # Clear app data
 adb shell pm clear com.sharemoney.app
 ```
+
+## E2E Testing
+
+The mobile app uses [Maestro](https://maestro.mobile.dev/) for end-to-end testing on Android.
+
+### Prerequisites
+
+1. **Install Maestro CLI:**
+   ```bash
+   # macOS/Linux
+   curl -Ls "https://get.maestro.mobile.dev" | bash
+   
+   # Or using Homebrew (macOS)
+   brew tap mobile-dev-inc/tap
+   brew install maestro
+   
+   # Verify installation
+   maestro --version
+   ```
+
+2. **Android Emulator or Device:**
+   - Start an Android emulator, or
+   - Connect a physical Android device via USB with USB debugging enabled
+
+3. **App Running:**
+   - **For Development Builds:** The app must be built and installed (`npm run build:dev`)
+   - **For Expo Go:** 
+     - Install Expo Go from Google Play Store on your emulator/device
+     - Verify it's installed: `adb shell pm list packages | grep expo`
+     - Start Expo dev server: `npm start`
+     - Manually open Expo Go and load your project
+     - Then run the tests (Maestro will interact with the already-running app)
+
+### Running Tests
+
+From the `mobile/` directory:
+
+```bash
+# Run all E2E tests (uses default appId from test files)
+npm run test:e2e
+```
+
+Or using Maestro directly:
+
+```bash
+# Run all tests in e2e/flows directory
+maestro test e2e/flows
+
+# Run specific test file
+maestro test e2e/flows/[test_file_name].yaml
+```
+
+### Test Structure
+
+Tests are located in `mobile/e2e/flows/`:
+
+**Development Build Tests** (appId: `com.sharemoney.app`):
+- **login-success.yaml** - Tests successful email/password login flow
+- **login-errors.yaml** - Tests error cases (empty fields, invalid credentials)
+
+**Expo Go Tests** (appId: `host.exp.Exponent`):
+- **login-success-expo-go.yaml** - Tests successful login flow for Expo Go
+- **login-errors-expo-go.yaml** - Tests error cases for Expo Go
+
+**Note:** Expo Go uses a different app package name (`host.exp.Exponent`), so separate test files are provided. 
+
+**Important for Expo Go:**
+1. Expo Go must be installed on your emulator/device
+2. Start your Expo dev server: `npm start`
+3. Manually open Expo Go and load your project
+4. Then run the tests - Maestro will interact with the already-running app
+
+### Test User Credentials
+
+The tests use the seeded test user from the database:
+
+- **Email:** `alice@test.com`
+- **Password:** `testpassword123`
+
+Make sure your local Supabase instance is running and seeded:
+
+```bash
+npx supabase db reset --local
+```
+
+### Writing New Tests
+
+Maestro tests are written in YAML format. Key commands:
+
+- `launchApp` - Launches the app
+- `tapOn: { id: "test-id" }` - Taps an element by testID
+- `inputText: "text"` - Types text into an input field
+- `assertVisible: "text"` - Asserts that text is visible on screen
+
+For more Maestro documentation, see: https://maestro.mobile.dev/
+
+### Troubleshooting
+
+**Test fails to find elements:**
+- Ensure testID props are added to components
+- Verify the app is running and visible on the emulator/device
+- Check that the app package name matches `com.sharemoney.app`
+
+**App not launching (Expo Go):**
+- **Expo Go must be installed:** Check with `adb shell pm list packages | grep expo`
+- If not installed, install from Google Play Store on your emulator/device
+- **Expo Go must be running:** Manually open Expo Go and load your project before running tests
+- Start Expo dev server first: `npm start`
+- Then open Expo Go app, scan QR code or enter URL to load your project
+- Finally run: `npm run test:e2e:expo-go`
+- Verify Android emulator is running: `adb devices`
+
+**App not launching (Development Build):**
+- Ensure the app is built and installed: `npm run build:dev`
+- Use `npm run test:e2e:login` or the regular test files
+- Verify Android emulator is running: `adb devices`
+- Check that the appId in the test file matches: `com.sharemoney.app`
+
+**Tests timing out:**
+- Increase wait times in test files if needed
+- Ensure network connectivity for API calls
+- Check that Supabase backend is running locally

@@ -87,6 +87,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
               size={24}
               iconColor={theme.colors.error}
               onPress={onLogoutPress}
+              testID="logout-button"
             />
             <Text
               variant="labelSmall"

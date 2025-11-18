@@ -1,0 +1,28 @@
+# Test file for Development Builds
+# Use this when running a built app (not Expo Go)
+appId: com.sharemoney.app
+---
+- launchApp
+- waitForAnimationToEnd
+# Ensure we start from the login screen
+- runFlow:
+    when:
+      visible: "Groups"
+    commands:
+      - tapOn:
+          id: "logout-button"
+      - waitForAnimationToEnd
+- assertVisible: "Welcome Back"
+- tapOn:
+    id: "email-input"
+- inputText: "alice@test.com"
+- tapOn:
+    id: "password-input"
+- inputText: "testpassword123"
+- tapOn: "Sign In"
+- waitForAnimationToEnd
+- assertVisible: "Groups"
+- tapOn:
+    id: "logout-button"
+- waitForAnimationToEnd
+- assertVisible: "Welcome Back"
