@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
-import { fetchWithAuth } from '../utils/api';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Group, GroupWithMembers } from '../types';
+import { fetchWithAuth } from '../utils/api';
 
 export function useGroups() {
   const { session } = useAuth();
@@ -28,7 +28,8 @@ export function useGroups() {
       
       setData(groups);
     } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to fetch groups'));
+      const error = err instanceof Error ? err : new Error('Failed to fetch groups');
+      setError(error);
       setData([]);
     } finally {
       setIsLoading(false);

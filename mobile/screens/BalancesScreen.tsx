@@ -1,5 +1,5 @@
-import React from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import React, { useEffect } from "react";
+import { BackHandler, ScrollView, StyleSheet, View } from "react-native";
 import {
   ActivityIndicator,
   Appbar,
@@ -20,6 +20,20 @@ export const BalancesScreen: React.FC<{
 }> = ({ onBack }) => {
   const theme = useTheme();
   const { data: balancesData, isLoading: balancesLoading, error: balancesError } = useBalances(null); // null = overall balances
+
+  // Handle Android hardware back button
+  useEffect(() => {
+    const handleHardwareBack = () => {
+      onBack();
+      return true;
+    };
+
+    const subscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      handleHardwareBack
+    );
+    return () => subscription.remove();
+  }, [onBack]);
 
   const overallBalances = balancesData?.overall_balances || [];
   const defaultCurrency = getDefaultCurrency();

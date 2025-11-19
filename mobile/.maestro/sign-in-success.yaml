@@ -1,0 +1,30 @@
+appId: com.sharemoney.app
+---
+# Test: Sign In Success
+# This test verifies that a user can successfully sign in to the app
+
+- launchApp
+- waitForAnimationToEnd
+
+- assertVisible: "Welcome Back"
+- assertVisible: "Sign in to continue"
+
+# Enter email
+- tapOn: 
+    text: "Email"
+- inputText: "alice@test.com"
+
+# Enter password
+- tapOn:
+    text: "Password"
+- inputText: "testpassword123"
+
+# Tap Sign In button
+- tapOn:
+    text: "Sign In"
+
+# Wait for navigation to groups screen
+- waitForAnimationToEnd
+- assertVisible: "Groups"
+- assertNotVisible: "Welcome Back"
+
