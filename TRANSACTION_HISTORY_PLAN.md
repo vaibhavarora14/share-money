@@ -39,7 +39,7 @@ CREATE TABLE transaction_history (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   transaction_id INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
   group_id UUID REFERENCES groups(id) ON DELETE SET NULL, -- Denormalized for faster queries
-  action VARCHAR(20) NOT NULL CHECK (action IN ('created', 'updated', 'deleted')),
+  action VARCHAR(20) NOT NULL CHECK (action IN ('created', 'updated', 'deleted', 'splits_updated')),
   changed_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE SET NULL,
   changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
   
@@ -47,6 +47,7 @@ CREATE TABLE transaction_history (
   -- For 'created': stores initial values
   -- For 'updated': stores {field: {old: value, new: value}} diff
   -- For 'deleted': stores final values before deletion
+  -- For 'splits_updated': stores split changes (old/new splits arrays)
   changes JSONB NOT NULL,
   
   -- Optional: Store full snapshot of transaction at time of change
@@ -68,6 +69,16 @@ CREATE INDEX idx_transaction_history_group_changed_at ON transaction_history(gro
 
 -- GIN index for JSONB queries
 CREATE INDEX idx_transaction_history_changes_gin ON transaction_history USING GIN (changes);
+
+-- Archive table (same schema, for records older than 1 year)
+CREATE TABLE transaction_history_archive (
+  LIKE transaction_history INCLUDING ALL
+);
+
+-- Indexes for archive table
+CREATE INDEX idx_transaction_history_archive_transaction_id ON transaction_history_archive(transaction_id);
+CREATE INDEX idx_transaction_history_archive_group_id ON transaction_history_archive(group_id);
+CREATE INDEX idx_transaction_history_archive_changed_at ON transaction_history_archive(changed_at DESC);
 ```
 
 ### 2. Update Transactions Table
@@ -92,7 +103,9 @@ CREATE TRIGGER transaction_updated_at_trigger
   EXECUTE FUNCTION update_transaction_updated_at();
 ```
 
-### 3. History Tracking Trigger Function
+### 3. History Tracking Trigger Functions
+
+#### 3a. Transaction Changes Trigger
 
 ```sql
 -- Function to capture transaction changes
@@ -206,11 +219,206 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Create trigger
+-- Create trigger for transactions table
 CREATE TRIGGER transaction_history_trigger
   AFTER INSERT OR UPDATE OR DELETE ON transactions
   FOR EACH ROW
   EXECUTE FUNCTION track_transaction_changes();
+```
+
+#### 3b. Transaction Splits Changes Trigger
+
+```sql
+-- Function to capture transaction_splits changes
+CREATE OR REPLACE FUNCTION track_transaction_splits_changes()
+RETURNS TRIGGER AS $$
+DECLARE
+  transaction_record RECORD;
+  old_splits JSONB;
+  new_splits JSONB;
+  change_data JSONB;
+BEGIN
+  -- Get the parent transaction
+  SELECT * INTO transaction_record
+  FROM transactions
+  WHERE id = COALESCE(NEW.transaction_id, OLD.transaction_id);
+  
+  IF NOT FOUND THEN
+    RETURN COALESCE(NEW, OLD);
+  END IF;
+  
+  -- Only track for group transactions
+  IF transaction_record.group_id IS NULL THEN
+    RETURN COALESCE(NEW, OLD);
+  END IF;
+  
+  IF TG_OP = 'INSERT' OR TG_OP = 'UPDATE' THEN
+    -- Get current splits for this transaction
+    SELECT COALESCE(jsonb_agg(
+      jsonb_build_object(
+        'user_id', user_id,
+        'amount', amount
+      ) ORDER BY user_id
+    ), '[]'::jsonb) INTO new_splits
+    FROM transaction_splits
+    WHERE transaction_id = NEW.transaction_id;
+    
+    -- For updates, get old splits (before this change)
+    IF TG_OP = 'UPDATE' THEN
+      SELECT COALESCE(jsonb_agg(
+        jsonb_build_object(
+          'user_id', user_id,
+          'amount', amount
+        ) ORDER BY user_id
+      ), '[]'::jsonb) INTO old_splits
+      FROM transaction_splits
+      WHERE transaction_id = OLD.transaction_id
+      AND id != NEW.id; -- Exclude the one being updated
+      
+      -- Add the old version of this split
+      old_splits := old_splits || jsonb_build_object(
+        'user_id', OLD.user_id,
+        'amount', OLD.amount
+      );
+      
+      -- Sort for comparison
+      SELECT jsonb_agg(value ORDER BY value->>'user_id')
+      INTO old_splits
+      FROM jsonb_array_elements(old_splits);
+    ELSE
+      -- For insert, get splits before this insert
+      SELECT COALESCE(jsonb_agg(
+        jsonb_build_object(
+          'user_id', user_id,
+          'amount', amount
+        ) ORDER BY user_id
+      ), '[]'::jsonb) INTO old_splits
+      FROM transaction_splits
+      WHERE transaction_id = NEW.transaction_id
+      AND id != NEW.id;
+    END IF;
+    
+    -- Only record if splits actually changed
+    IF old_splits IS DISTINCT FROM new_splits THEN
+      change_data := jsonb_build_object(
+        'action', 'splits_updated',
+        'transaction_id', NEW.transaction_id,
+        'old_splits', old_splits,
+        'new_splits', new_splits
+      );
+      
+      INSERT INTO transaction_history (
+        transaction_id,
+        group_id,
+        action,
+        changed_by,
+        changes,
+        snapshot
+      ) VALUES (
+        NEW.transaction_id,
+        transaction_record.group_id,
+        'splits_updated',
+        COALESCE(auth.uid(), transaction_record.user_id),
+        change_data,
+        jsonb_build_object(
+          'transaction', to_jsonb(transaction_record),
+          'splits', new_splits
+        )
+      );
+    END IF;
+    
+    RETURN NEW;
+    
+  ELSIF TG_OP = 'DELETE' THEN
+    -- Get splits before deletion
+    SELECT COALESCE(jsonb_agg(
+      jsonb_build_object(
+        'user_id', user_id,
+        'amount', amount
+      ) ORDER BY user_id
+    ), '[]'::jsonb) INTO old_splits
+    FROM transaction_splits
+    WHERE transaction_id = OLD.transaction_id;
+    
+    -- Get splits after deletion
+    SELECT COALESCE(jsonb_agg(
+      jsonb_build_object(
+        'user_id', user_id,
+        'amount', amount
+      ) ORDER BY user_id
+    ), '[]'::jsonb) INTO new_splits
+    FROM transaction_splits
+    WHERE transaction_id = OLD.transaction_id
+    AND id != OLD.id;
+    
+    -- Only record if splits changed
+    IF old_splits IS DISTINCT FROM new_splits THEN
+      change_data := jsonb_build_object(
+        'action', 'splits_updated',
+        'transaction_id', OLD.transaction_id,
+        'old_splits', old_splits,
+        'new_splits', new_splits
+      );
+      
+      INSERT INTO transaction_history (
+        transaction_id,
+        group_id,
+        action,
+        changed_by,
+        changes,
+        snapshot
+      ) VALUES (
+        OLD.transaction_id,
+        transaction_record.group_id,
+        'splits_updated',
+        COALESCE(auth.uid(), transaction_record.user_id),
+        change_data,
+        jsonb_build_object(
+          'transaction', to_jsonb(transaction_record),
+          'splits', new_splits
+        )
+      );
+    END IF;
+    
+    RETURN OLD;
+  END IF;
+  
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Create trigger for transaction_splits table
+CREATE TRIGGER transaction_splits_history_trigger
+  AFTER INSERT OR UPDATE OR DELETE ON transaction_splits
+  FOR EACH ROW
+  EXECUTE FUNCTION track_transaction_splits_changes();
+```
+
+#### 3c. Archive Function (for 1-year retention)
+
+```sql
+-- Function to archive old history records (>1 year)
+CREATE OR REPLACE FUNCTION archive_old_transaction_history()
+RETURNS INTEGER AS $$
+DECLARE
+  archived_count INTEGER;
+BEGIN
+  -- Move records older than 1 year to archive table
+  WITH moved AS (
+    DELETE FROM transaction_history
+    WHERE changed_at < NOW() - INTERVAL '1 year'
+    RETURNING *
+  )
+  INSERT INTO transaction_history_archive
+  SELECT * FROM moved;
+  
+  GET DIAGNOSTICS archived_count = ROW_COUNT;
+  RETURN archived_count;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Can be called manually or via cron job
+-- Example: SELECT archive_old_transaction_history();
 ```
 
 ### 4. Row Level Security for History
@@ -247,7 +455,7 @@ Returns chronological activity feed for a group.
 ```typescript
 interface ActivityItem {
   id: string;
-  type: 'transaction_created' | 'transaction_updated' | 'transaction_deleted';
+  type: 'transaction_created' | 'transaction_updated' | 'transaction_deleted' | 'transaction_splits_updated';
   transaction_id?: number;
   group_id: string;
   changed_by: {
@@ -261,13 +469,16 @@ interface ActivityItem {
   
   // Detailed change info
   details: {
-    action: 'created' | 'updated' | 'deleted';
+    action: 'created' | 'updated' | 'deleted' | 'splits_updated';
     changes?: {
       [field: string]: {
         old: any;
         new: any;
       };
     };
+    // For splits_updated:
+    old_splits?: Array<{ user_id: string; amount: number }>;
+    new_splits?: Array<{ user_id: string; amount: number }>;
     transaction?: Transaction; // Snapshot
   };
 }
@@ -356,49 +567,52 @@ interface TransactionHistoryResponse {
 **Location**: `mobile/components/ActivityFeed.tsx`
 
 **Features:**
+- Collapsible section (like Settlement History)
 - Chronological list of activities
 - Grouped by date (Today, Yesterday, This Week, etc.)
-- Color-coded by action type (green for created, yellow for updated, red for deleted)
+- Color-coded by action type:
+  - Green for created
+  - Yellow/Orange for updated/splits_updated
+  - Red for deleted
 - Expandable details showing what changed
-- User avatars/initials
-- Transaction links (navigate to transaction detail)
+- User email/name display
+- Shows activity count in header
 
-**UI Design:**
+**UI Design (matching Settlement History pattern):**
 ```
 ┌─────────────────────────────────────┐
-│ Activity Feed                      │
+│ ▼ Activity Feed (15)               │ ← Collapsible header
 ├─────────────────────────────────────┤
 │ Today                              │
 │ ┌─────────────────────────────────┐ │
-│ │ 👤 John                         │ │
+│ │ 👤 john@example.com             │ │
 │ │ Added expense: $50.00 for Pizza │ │
 │ │ 2 hours ago                     │ │
 │ └─────────────────────────────────┘ │
 │                                     │
 │ ┌─────────────────────────────────┐ │
-│ │ 👤 Jane                         │ │
-│ │ Updated expense: Changed amount │ │
-│ │ from $50.00 to $55.00          │ │
+│ │ 👤 jane@example.com             │ │
+│ │ Updated splits: Added Bob       │ │
 │ │ 1 hour ago                      │ │
 │ └─────────────────────────────────┘ │
 │                                     │
 │ Yesterday                           │
 │ ┌─────────────────────────────────┐ │
-│ │ 👤 Bob                          │ │
+│ │ 👤 bob@example.com              │ │
 │ │ Deleted expense: $30.00        │ │
-│ │ Yesterday at 3:45 PM           │ │
+│ │ Yesterday at 3:45 PM          │ │
 │ └─────────────────────────────────┘ │
 └─────────────────────────────────────┘
 ```
 
 ### 2. Integration into GroupDetailsScreen
 
-Add new section/tab for Activity Feed:
-- Option 1: New tab alongside "Transactions", "Balances", "Members"
-- Option 2: Collapsible section at top of screen
-- Option 3: Separate screen accessible via navigation
-
-**Recommended**: Add as a new section in GroupDetailsScreen, similar to Settlement History.
+**Placement**: Add as a new collapsible section in `GroupDetailsScreen.tsx`
+- Position: Below Transactions section, above Settlement History section
+- Pattern: Match Settlement History implementation exactly
+- State: Use `activityExpanded` state (similar to `settlementsExpanded`)
+- Hook: Use `useActivity(groupId)` hook to fetch data
+- Refresh: Fetch on component mount, refresh when group data refreshes
 
 ### 3. Activity Description Generation
 
@@ -429,6 +643,20 @@ function generateActivityDescription(
         return `${userName} updated ${field}: Changed from ${formatValue(field, old)} to ${formatValue(field, newVal)}`;
       } else {
         return `${userName} updated expense: ${changes.length} fields changed`;
+      }
+    
+    case 'splits_updated':
+      const oldSplits = activity.details.old_splits || [];
+      const newSplits = activity.details.new_splits || [];
+      const oldCount = oldSplits.length;
+      const newCount = newSplits.length;
+      
+      if (newCount > oldCount) {
+        return `${userName} updated splits: Added ${newCount - oldCount} person(s)`;
+      } else if (newCount < oldCount) {
+        return `${userName} updated splits: Removed ${oldCount - newCount} person(s)`;
+      } else {
+        return `${userName} updated splits: Changed split amounts`;
       }
     
     case 'deleted':
@@ -577,24 +805,30 @@ function generateActivityDescription(
 
 ---
 
-## Open Questions
+## Decisions Made ✅
 
-1. **Backfill Strategy**: Should we backfill history for existing transactions?
-   - Option A: Skip (only track new changes)
-   - Option B: Create "system" entries for existing transactions
-   - Option C: Mark existing transactions with creation date but no history
+1. **Backfill Strategy**: ✅ **Option C** - Mark existing transactions with creation date but no history
+   - Existing transactions will have `created_at` but no history entries
+   - Only new changes going forward will be tracked
 
-2. **History Retention**: How long should we keep history?
-   - Option A: Forever
-   - Option B: 1 year, then archive
-   - Option C: Configurable per group
+2. **History Retention**: ✅ **Option B** - 1 year, then archive
+   - **Archive Definition**: Move old history records (>1 year) to `transaction_history_archive` table
+   - Archive table has same schema but separate from active history
+   - Activity feed only queries active history table
+   - Archived data remains accessible via separate query if needed
+   - Can implement automated cleanup job to move records monthly
 
-3. **Transaction Splits**: Should changes to `transaction_splits` table be tracked separately or included in transaction history?
-   - Recommendation: Include in transaction history as part of the diff
+3. **Transaction Splits**: ✅ **Yes** - Include in transaction history
+   - Changes to `transaction_splits` will be tracked as part of transaction history
+   - When splits change, it will appear as an "updated" action with diff showing split changes
+   - Implementation: Trigger on `transaction_splits` table will create history entry referencing parent transaction
 
-4. **UI Placement**: Where should activity feed appear?
-   - Recommendation: New section in GroupDetailsScreen, similar to Settlement History
+4. **UI Placement**: ✅ **New section in GroupDetailsScreen** - Similar to Settlement History
+   - Collapsible section with expand/collapse functionality
+   - Shows activity count in header
+   - Renders below Transactions section, above Settlement History
 
-5. **Real-time Updates**: Should activity feed update in real-time?
-   - Phase 1: Polling/refresh
-   - Phase 2: WebSocket/SSE for real-time
+5. **Real-time Updates**: ✅ **Not needed** - Refresh on component mount only
+   - Activity feed will fetch data when component first renders
+   - No polling or WebSocket needed
+   - Users can manually refresh if needed (via pull-to-refresh or refresh button)
