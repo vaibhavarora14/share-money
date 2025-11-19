@@ -19,6 +19,7 @@ import {
   useTheme,
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { ActivityFeed } from "../components/ActivityFeed";
 import { BalancesSection } from "../components/BalancesSection";
 import { InvitationsList } from "../components/InvitationsList";
 import { MembersList } from "../components/MembersList";
@@ -34,6 +35,7 @@ import {
   useDeleteGroup,
   useRemoveMember,
 } from "../hooks/useGroupMutations";
+import { useActivity } from "../hooks/useActivity";
 import { useGroupDetails } from "../hooks/useGroups";
 import {
   useCreateSettlement,
@@ -121,10 +123,16 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     isLoading: settlementsLoading,
     refetch: refetchSettlements,
   } = useSettlements(initialGroup.id);
+  const {
+    data: activityData,
+    isLoading: activityLoading,
+    refetch: refetchActivity,
+  } = useActivity(initialGroup.id);
   const [cancellingInvitationId, setCancellingInvitationId] = useState<
     string | null
   >(null);
   const [membersExpanded, setMembersExpanded] = useState<boolean>(false);
+  const [activityExpanded, setActivityExpanded] = useState<boolean>(false);
   const [settlementsExpanded, setSettlementsExpanded] =
     useState<boolean>(false);
   const { session, signOut } = useAuth();
@@ -148,6 +156,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const refetchAll = () => {
     console.log("[GroupDetailsScreen] refetchAll called");
     refetchTx();
+    refetchActivity();
     refetchBalances();
     refetchSettlements();
   };
@@ -674,6 +683,43 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           loading={txLoading}
           onEdit={handleEditTransaction}
         />
+
+        {/* Activity Feed Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Pressable
+              style={styles.sectionTitleRow}
+              onPress={() => setActivityExpanded(!activityExpanded)}
+            >
+              <IconButton
+                icon={activityExpanded ? "chevron-down" : "chevron-right"}
+                size={20}
+                iconColor={theme.colors.onSurface}
+                onPress={() => setActivityExpanded(!activityExpanded)}
+                style={styles.expandButton}
+              />
+              <Text variant="titleMedium" style={styles.sectionTitle}>
+                Activity Feed
+                {activityData?.activities && (
+                  <Text
+                    variant="bodySmall"
+                    style={{ color: theme.colors.onSurfaceVariant }}
+                  >
+                    {" "}
+                    ({activityData.activities.length})
+                  </Text>
+                )}
+              </Text>
+            </Pressable>
+          </View>
+
+          {activityExpanded && (
+            <ActivityFeed
+              items={activityData?.activities || []}
+              loading={activityLoading}
+            />
+          )}
+        </View>
 
         {/* Settlement History Section */}
         <View style={styles.section}>
