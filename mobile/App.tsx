@@ -28,17 +28,17 @@ import {
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { BottomNavBar } from "./components/BottomNavBar";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { useGroupDetails } from "./hooks/useGroups";
 import {
   useAddMember,
   useCreateGroup,
   useRemoveMember,
 } from "./hooks/useGroupMutations";
-import { 
-  useTransactions,
+import { useGroupDetails } from "./hooks/useGroups";
+import {
   useCreateTransaction,
+  useDeleteTransaction,
+  useTransactions,
   useUpdateTransaction,
-  useDeleteTransaction
 } from "./hooks/useTransactions";
 import { AddMemberScreen } from "./screens/AddMemberScreen";
 import { AuthScreen } from "./screens/AuthScreen";
@@ -511,10 +511,9 @@ function AppContent() {
   const groupsListRefetchRef = React.useRef<(() => void) | null>(null);
 
   // Fetch selected group details via query when selectedGroup changes
-  const { data: selectedGroupDetails, refetch: refetchSelectedGroup } = useGroupDetails(
-    selectedGroup?.id ?? null
-  );
-  
+  const { data: selectedGroupDetails, refetch: refetchSelectedGroup } =
+    useGroupDetails(selectedGroup?.id ?? null);
+
   // Mutations (declare in the scope where used)
   const createGroupMutation = useCreateGroup(refetchSelectedGroup);
   const addMemberMutation = useAddMember(refetchSelectedGroup);

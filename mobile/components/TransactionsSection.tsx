@@ -71,7 +71,11 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
 
   return (
     <View style={[styles.section, { marginTop: 24 }]}>
-      <Text variant="titleMedium" style={styles.sectionTitle}>
+      <Text
+        variant="titleMedium"
+        style={styles.sectionTitle}
+        testID="transactions-section-title"
+      >
         Transactions ({items.length})
       </Text>
       {loading ? (

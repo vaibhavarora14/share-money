@@ -66,7 +66,11 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
             onPress={() => setExpanded(!expanded)}
             style={styles.expandButton}
           />
-          <Text variant="titleMedium" style={styles.sectionTitle}>
+          <Text
+            variant="titleMedium"
+            style={styles.sectionTitle}
+            testID="balances-section-title"
+          >
             Your Balances
           </Text>
         </Pressable>

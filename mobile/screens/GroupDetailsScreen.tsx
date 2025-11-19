@@ -1,5 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import {
+  Alert,
+  BackHandler,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 import {
   ActivityIndicator,
   Appbar,
@@ -12,27 +19,45 @@ import {
   useTheme,
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useAuth } from "../contexts/AuthContext";
-import { GroupInvitation, GroupWithMembers, Transaction, Balance, Settlement } from "../types";
-import { getDefaultCurrency, formatCurrency } from "../utils/currency";
-import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
-import { MembersList } from "../components/MembersList";
-import { InvitationsList } from "../components/InvitationsList";
-import { TransactionsSection } from "../components/TransactionsSection";
 import { BalancesSection } from "../components/BalancesSection";
-import { TransactionFormScreen } from "./TransactionFormScreen";
-import { useDeleteGroup, useRemoveMember, useAddMember } from "../hooks/useGroupMutations";
-import { useCancelInvitation, useGroupInvitations } from "../hooks/useGroupInvitations";
-import { useGroupDetails } from "../hooks/useGroups";
-import { 
-  useTransactions,
-  useCreateTransaction,
-  useUpdateTransaction,
-  useDeleteTransaction
-} from "../hooks/useTransactions";
+import { InvitationsList } from "../components/InvitationsList";
+import { MembersList } from "../components/MembersList";
+import { TransactionsSection } from "../components/TransactionsSection";
+import { useAuth } from "../contexts/AuthContext";
 import { useBalances } from "../hooks/useBalances";
-import { useSettlements, useCreateSettlement, useUpdateSettlement, useDeleteSettlement } from "../hooks/useSettlements";
+import {
+  useCancelInvitation,
+  useGroupInvitations,
+} from "../hooks/useGroupInvitations";
+import {
+  useAddMember,
+  useDeleteGroup,
+  useRemoveMember,
+} from "../hooks/useGroupMutations";
+import { useGroupDetails } from "../hooks/useGroups";
+import {
+  useCreateSettlement,
+  useDeleteSettlement,
+  useSettlements,
+  useUpdateSettlement,
+} from "../hooks/useSettlements";
+import {
+  useCreateTransaction,
+  useDeleteTransaction,
+  useTransactions,
+  useUpdateTransaction,
+} from "../hooks/useTransactions";
+import {
+  Balance,
+  GroupInvitation,
+  GroupWithMembers,
+  Settlement,
+  Transaction,
+} from "../types";
+import { formatCurrency, getDefaultCurrency } from "../utils/currency";
+import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 import { SettlementFormScreen } from "./SettlementFormScreen";
+import { TransactionFormScreen } from "./TransactionFormScreen";
 
 interface GroupDetailsScreenProps {
   group: GroupWithMembers;
@@ -66,29 +91,67 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     useState<Transaction | null>(null);
   const [showSettlementForm, setShowSettlementForm] = useState<boolean>(false);
   const [settlingBalance, setSettlingBalance] = useState<Balance | null>(null);
-  const [editingSettlement, setEditingSettlement] = useState<Settlement | null>(null);
+  const [editingSettlement, setEditingSettlement] = useState<Settlement | null>(
+    null
+  );
   // Fetch data with hooks
-  const { data: groupData, isLoading: groupLoading, error: groupError, refetch: refetchGroup } = useGroupDetails(initialGroup.id);
-  const { data: txData, isLoading: txLoading, refetch: refetchTx } = useTransactions(initialGroup.id);
-  const { data: invitations = [] as GroupInvitation[], isLoading: invitationsLoading, refetch: refetchInvites } = useGroupInvitations(initialGroup.id);
-  const { data: balancesData, isLoading: balancesLoading, refetch: refetchBalances } = useBalances(initialGroup.id);
-  const { data: settlementsData, isLoading: settlementsLoading, refetch: refetchSettlements } = useSettlements(initialGroup.id);
+  const {
+    data: groupData,
+    isLoading: groupLoading,
+    error: groupError,
+    refetch: refetchGroup,
+  } = useGroupDetails(initialGroup.id);
+  const {
+    data: txData,
+    isLoading: txLoading,
+    refetch: refetchTx,
+  } = useTransactions(initialGroup.id);
+  const {
+    data: invitations = [] as GroupInvitation[],
+    isLoading: invitationsLoading,
+    refetch: refetchInvites,
+  } = useGroupInvitations(initialGroup.id);
+  const {
+    data: balancesData,
+    isLoading: balancesLoading,
+    refetch: refetchBalances,
+  } = useBalances(initialGroup.id);
+  const {
+    data: settlementsData,
+    isLoading: settlementsLoading,
+    refetch: refetchSettlements,
+  } = useSettlements(initialGroup.id);
   const [cancellingInvitationId, setCancellingInvitationId] = useState<
     string | null
   >(null);
   const [membersExpanded, setMembersExpanded] = useState<boolean>(false);
-  const [settlementsExpanded, setSettlementsExpanded] = useState<boolean>(false);
+  const [settlementsExpanded, setSettlementsExpanded] =
+    useState<boolean>(false);
   const { session, signOut } = useAuth();
   const theme = useTheme();
-  
+
+  // Handle Android hardware back button
+  useEffect(() => {
+    const handleHardwareBack = () => {
+      onBack();
+      return true;
+    };
+
+    const subscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      handleHardwareBack
+    );
+    return () => subscription.remove();
+  }, [onBack]);
+
   // Refetch all data function
   const refetchAll = () => {
-    console.log('[GroupDetailsScreen] refetchAll called');
+    console.log("[GroupDetailsScreen] refetchAll called");
     refetchTx();
     refetchBalances();
     refetchSettlements();
   };
-  
+
   // Mutations
   const createTx = useCreateTransaction(refetchAll);
   const updateTx = useUpdateTransaction(() => refetchAll());
@@ -109,7 +172,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
   // Use groupData directly, fallback to initialGroup while loading
   const group = groupData || initialGroup;
-  
+
   // API already filters by group_id, so no need for client-side filtering
   const transactions = txData;
 
@@ -146,10 +209,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 onBack();
               }
             } catch (err) {
-              Alert.alert(
-                "Error",
-                getUserFriendlyErrorMessage(err)
-              );
+              Alert.alert("Error", getUserFriendlyErrorMessage(err));
             } finally {
               setLeaving(false);
               setMenuVisible(false);
@@ -190,7 +250,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               }
             } catch (err) {
               const errorMessage = getUserFriendlyErrorMessage(err);
-              
+
               // Show user-friendly error messages for specific cases
               if (errorMessage.includes("last owner")) {
                 Alert.alert(
@@ -211,7 +271,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       ]
     );
   };
-
 
   const handleCreateTransaction = async (
     transactionData: Omit<Transaction, "id" | "created_at" | "user_id">
@@ -234,7 +293,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     });
   };
 
-  const handleDeleteTransaction = async (transactionId: number): Promise<void> => {
+  const handleDeleteTransaction = async (
+    transactionId: number
+  ): Promise<void> => {
     await deleteTx.mutate({ id: transactionId, group_id: group.id });
   };
 
@@ -283,10 +344,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 onLeaveGroup();
               }
             } catch (error) {
-              Alert.alert(
-                "Error",
-                getUserFriendlyErrorMessage(error)
-              );
+              Alert.alert("Error", getUserFriendlyErrorMessage(error));
             } finally {
               setRemovingMemberId(null);
             }
@@ -348,7 +406,10 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const handleDeleteSettlement = async (settlement: Settlement) => {
     Alert.alert(
       "Delete Settlement",
-      `Are you sure you want to delete this settlement of ${formatCurrency(settlement.amount, settlement.currency || getDefaultCurrency())}?`,
+      `Are you sure you want to delete this settlement of ${formatCurrency(
+        settlement.amount,
+        settlement.currency || getDefaultCurrency()
+      )}?`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -372,12 +433,13 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const currentUserId = session?.user?.id;
   const isOwner = Boolean(
     currentUserId &&
-    (group.created_by === currentUserId ||
-      group.members?.some(
-        (m) => m.user_id === currentUserId && m.role === "owner"
-      ))
+      (group.created_by === currentUserId ||
+        group.members?.some(
+          (m) => m.user_id === currentUserId && m.role === "owner"
+        ))
   );
-  const isMember = group.members?.some((m) => m.user_id === currentUserId) ?? false;
+  const isMember =
+    group.members?.some((m) => m.user_id === currentUserId) ?? false;
 
   // Memoize isOwner to prevent unnecessary re-renders
   const memoizedIsOwner = React.useMemo(
@@ -409,10 +471,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 groupId: group.id,
               });
             } catch (err) {
-              Alert.alert(
-                "Error",
-                getUserFriendlyErrorMessage(err)
-              );
+              Alert.alert("Error", getUserFriendlyErrorMessage(err));
             } finally {
               setCancellingInvitationId(null);
             }
@@ -458,7 +517,12 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         >
           {getUserFriendlyErrorMessage(groupError)}
         </Text>
-        <Button mode="contained" onPress={() => { void refetchGroup(); }}>
+        <Button
+          mode="contained"
+          onPress={() => {
+            void refetchGroup();
+          }}
+        >
           Retry
         </Button>
       </View>
@@ -471,7 +535,11 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       edges={["top", "bottom"]}
     >
       <Appbar.Header>
-        <Appbar.BackAction onPress={onBack} />
+        <Appbar.BackAction
+          onPress={onBack}
+          accessibilityLabel="Navigate back"
+          testID="back-button"
+        />
         <Appbar.Content title={group.name} />
         {isMember && (
           <Menu
@@ -549,7 +617,11 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 onPress={() => setMembersExpanded(!membersExpanded)}
                 style={styles.expandButton}
               />
-              <Text variant="titleMedium" style={styles.sectionTitle}>
+              <Text
+                variant="titleMedium"
+                style={styles.sectionTitle}
+                testID="members-section-title"
+              >
                 Members ({(group.members?.length || 0) + invitations.length})
               </Text>
             </Pressable>
@@ -572,9 +644,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 removingMemberId={removingMemberId}
                 onRemove={handleRemoveMember}
               />
-              {group.members && group.members.length > 0 && invitations.length > 0 && (
-                <View style={{ height: 8 }} />
-              )}
+              {group.members &&
+                group.members.length > 0 &&
+                invitations.length > 0 && <View style={{ height: 8 }} />}
               <InvitationsList
                 invitations={invitations}
                 loading={invitationsLoading}
@@ -620,8 +692,12 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               <Text variant="titleMedium" style={styles.sectionTitle}>
                 Settlement History
                 {settlementsData?.settlements && (
-                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                    {" "}({settlementsData.settlements.length})
+                  <Text
+                    variant="bodySmall"
+                    style={{ color: theme.colors.onSurfaceVariant }}
+                  >
+                    {" "}
+                    ({settlementsData.settlements.length})
                   </Text>
                 )}
               </Text>
@@ -631,16 +707,27 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           {settlementsExpanded && (
             <>
               {settlementsLoading ? (
-                <ActivityIndicator size="small" style={{ marginVertical: 16 }} />
-              ) : settlementsData?.settlements && settlementsData.settlements.length > 0 ? (
+                <ActivityIndicator
+                  size="small"
+                  style={{ marginVertical: 16 }}
+                />
+              ) : settlementsData?.settlements &&
+                settlementsData.settlements.length > 0 ? (
                 <>
                   {settlementsData.settlements.map((settlement, index) => {
-                    const isCurrentUserPayer = settlement.from_user_id === session?.user?.id;
-                    const isCurrentUserReceiver = settlement.to_user_id === session?.user?.id;
+                    const isCurrentUserPayer =
+                      settlement.from_user_id === session?.user?.id;
+                    const isCurrentUserReceiver =
+                      settlement.to_user_id === session?.user?.id;
                     const otherUserEmail = isCurrentUserPayer
                       ? settlement.to_user_email
                       : settlement.from_user_email;
-                    const otherUserDisplayName = otherUserEmail || `User ${(isCurrentUserPayer ? settlement.to_user_id : settlement.from_user_id).substring(0, 8)}...`;
+                    const otherUserDisplayName =
+                      otherUserEmail ||
+                      `User ${(isCurrentUserPayer
+                        ? settlement.to_user_id
+                        : settlement.from_user_id
+                      ).substring(0, 8)}...`;
 
                     return (
                       <React.Fragment key={settlement.id}>
@@ -648,20 +735,41 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                           <Card.Content>
                             <View style={styles.settlementContent}>
                               <View style={styles.settlementLeft}>
-                                <Text variant="titleSmall" style={styles.settlementDescription}>
+                                <Text
+                                  variant="titleSmall"
+                                  style={styles.settlementDescription}
+                                >
                                   {isCurrentUserPayer
                                     ? `You paid ${otherUserDisplayName}`
                                     : isCurrentUserReceiver
                                     ? `${otherUserDisplayName} paid you`
-                                    : `${settlement.from_user_email || "User"} paid ${settlement.to_user_email || "User"}`}
+                                    : `${
+                                        settlement.from_user_email || "User"
+                                      } paid ${
+                                        settlement.to_user_email || "User"
+                                      }`}
                                 </Text>
                                 {settlement.notes && (
-                                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 4 }}>
+                                  <Text
+                                    variant="bodySmall"
+                                    style={{
+                                      color: theme.colors.onSurfaceVariant,
+                                      marginTop: 4,
+                                    }}
+                                  >
                                     {settlement.notes}
                                   </Text>
                                 )}
-                                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 4 }}>
-                                  {new Date(settlement.created_at).toLocaleDateString()}
+                                <Text
+                                  variant="bodySmall"
+                                  style={{
+                                    color: theme.colors.onSurfaceVariant,
+                                    marginTop: 4,
+                                  }}
+                                >
+                                  {new Date(
+                                    settlement.created_at
+                                  ).toLocaleDateString()}
                                 </Text>
                               </View>
                               <View style={styles.settlementRight}>
@@ -669,10 +777,17 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                                   variant="titleMedium"
                                   style={[
                                     styles.settlementAmount,
-                                    { color: isCurrentUserPayer ? "#ef4444" : "#10b981" },
+                                    {
+                                      color: isCurrentUserPayer
+                                        ? "#ef4444"
+                                        : "#10b981",
+                                    },
                                   ]}
                                 >
-                                  {formatCurrency(settlement.amount, settlement.currency || getDefaultCurrency())}
+                                  {formatCurrency(
+                                    settlement.amount,
+                                    settlement.currency || getDefaultCurrency()
+                                  )}
                                 </Text>
                               </View>
                             </View>
@@ -689,7 +804,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                               </Button>
                               <Button
                                 mode="text"
-                                onPress={() => handleDeleteSettlement(settlement)}
+                                onPress={() =>
+                                  handleDeleteSettlement(settlement)
+                                }
                                 textColor={theme.colors.error}
                                 compact
                               >

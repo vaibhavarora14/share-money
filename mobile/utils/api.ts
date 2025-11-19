@@ -78,14 +78,55 @@ export async function fetchWithAuth(
     throw new Error("Not authenticated");
   }
 
-  const response = await fetch(`${API_URL}${endpoint}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
-  });
+  const fullUrl = `${API_URL}${endpoint}`;
+
+  let response: Response;
+  try {
+    response = await fetch(fullUrl, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    });
+  } catch (networkError: any) {
+    // Handle network-level errors (connection refused, timeout, DNS failure, etc.)
+    const errorName = networkError?.name || "Unknown";
+    const errorMessage = networkError?.message || "Network request failed";
+    
+    if (__DEV__) {
+      console.error("[API Network Error]", {
+        errorName,
+        errorMessage,
+        endpoint,
+      });
+    }
+
+    // Provide helpful error message based on error type
+    let userMessage = "Network request failed";
+    
+    if (errorMessage.includes("Network request failed") || errorName === "TypeError") {
+      // This is the generic React Native fetch error
+      // Check if it's likely an Android emulator localhost issue
+      if (API_URL.includes("localhost") || API_URL.includes("127.0.0.1")) {
+        userMessage = "Cannot connect to server. For Android emulator, use 10.0.2.2 instead of localhost in EXPO_PUBLIC_API_URL";
+      } else if (API_URL.includes("10.0.0.2")) {
+        // Common typo - should be 10.0.2.2 not 10.0.0.2
+        userMessage = "Cannot connect to server. IP address typo detected: use 10.0.2.2 (not 10.0.0.2) for Android emulator in EXPO_PUBLIC_API_URL";
+      } else if (API_URL.includes("10.0.2.") && !API_URL.includes("10.0.2.2")) {
+        userMessage = `Cannot connect to server. For Android emulator, use exactly 10.0.2.2 (found: ${API_URL.match(/10\.0\.2\.\d+/)?.[0] || 'unknown'})`;
+      } else {
+        userMessage = "Cannot connect to server. Please check:\n- Server is running on port 8888\n- Correct API URL in mobile/.env (use 10.0.2.2 for Android emulator)\n- Network connection";
+      }
+    } else if (errorMessage.includes("timeout") || errorName === "TimeoutError") {
+      userMessage = "Request timed out. The server may be slow or unreachable.";
+    } else if (errorMessage.includes("Failed to connect") || errorMessage.includes("ECONNREFUSED")) {
+      userMessage = "Connection refused. Is the Netlify server running on port 8888?";
+    }
+
+    throw new Error(userMessage);
+  }
 
   if (response.status === 401) {
     let errorData: ApiErrorResponse | null = null;
@@ -157,3 +198,4 @@ export async function fetchWithAuth(
 
   return response;
 }
+
