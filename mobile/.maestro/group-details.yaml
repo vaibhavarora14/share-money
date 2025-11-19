@@ -1,0 +1,77 @@
+appId: com.sharemoney.app
+---
+# Test: Group Details
+# This test verifies that a user can view group details after signing in
+# Prerequisites: User must be signed in and have at least one group
+
+- launchApp
+- waitForAnimationToEnd
+
+# Check if already signed in, if not sign in first
+- runFlow:
+    when:
+      visible: "Welcome Back"
+    commands:
+      - tapOn:
+          text: "Email"
+      - inputText: "alice@test.com"
+      - tapOn:
+          text: "Password"
+      - inputText: "testpassword123"
+      - tapOn:
+          text: "Sign In"
+      - waitForAnimationToEnd
+
+# Wait for groups list to load
+- waitForAnimationToEnd
+- assertVisible: "Groups"
+
+# Wait for groups to load
+- waitForAnimationToEnd
+
+# Tap on a group by name
+- tapOn:
+    text: "Summer Vacation 2024"
+
+# Wait for group details screen to load
+- waitForAnimationToEnd
+
+# Verify group details screen elements are visible
+# Use testIDs for stability
+- assertVisible:
+    id: "members-section-title"
+- assertVisible:
+    id: "transactions-section-title"
+- assertVisible:
+    id: "balances-section-title"
+
+- tapOn:
+    text: "Navigate back"
+    optional: true
+
+# Wait for navigation
+- waitForAnimationToEnd
+
+# Verify we're back on groups list
+- assertVisible: "Groups"
+
+# Go to group details again to test Android native back button
+- waitForAnimationToEnd
+- tapOn:
+    text: "Summer Vacation 2024"
+
+# Wait for group details screen to load
+- waitForAnimationToEnd
+
+# Verify we're on group details screen again
+- assertVisible:
+    id: "members-section-title"
+
+# Test Android native back button
+- pressKey: "Back"
+
+# Wait for navigation
+- waitForAnimationToEnd
+
+# Verify we're back on groups list
+- assertVisible: "Groups"

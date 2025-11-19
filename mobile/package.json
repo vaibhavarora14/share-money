@@ -3,18 +3,15 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "npm run start:go",
-    "start:eas-dev": "expo start",
+    "start": "expo start",
     "start:go": "expo start --go",
     "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web",
-    "build:dev": "eas build --platform all --profile development",
-    "build:preview": "eas build --platform all --profile preview",
-    "build:production": "eas build --platform all --profile production",
-    "build:local": "./build-preview-local.sh",
+    "android:release:local": "npx expo run:android --variant release",
     "update": "eas update --branch development",
-    "update:production": "eas update --branch production"
+    "update:production": "eas update --branch production",
+    "test:e2e": "maestro test .maestro/",
+    "test:e2e:signin": "maestro test .maestro/sign-in-success.yaml",
+    "test:e2e:group-details": "maestro test .maestro/group-details.yaml"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
