@@ -101,7 +101,7 @@ You can also set the IP as an environment variable when running tests:
 DEV_SERVER_IP=192.168.0.216 maestro test .maestro/
 ```
 
-**Note:** Make sure your development server is running (`npm run start:dev`) before running Maestro tests.
+**Note:** Make sure your backend API server is running before running Maestro tests.
 
 ## Notes
 
