@@ -2,6 +2,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
+  BackHandler,
   Dimensions,
   FlatList,
   KeyboardAvoidingView,
@@ -330,6 +331,40 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       ]
     );
   };
+
+  const handleHardwareBack = useCallback(() => {
+    if (showCurrencyPicker) {
+      setShowCurrencyPicker(false);
+      return true;
+    }
+
+    if (showPaidByPicker) {
+      setShowPaidByPicker(false);
+      return true;
+    }
+
+    if (showDatePicker && Platform.OS === "android") {
+      setShowDatePicker(false);
+      return true;
+    }
+
+    onDismiss();
+    return true;
+  }, [
+    onDismiss,
+    showCurrencyPicker,
+    showPaidByPicker,
+    showDatePicker,
+  ]);
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      handleHardwareBack
+    );
+
+    return () => subscription.remove();
+  }, [handleHardwareBack]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'left', 'right']}>
