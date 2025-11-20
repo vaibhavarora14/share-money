@@ -1,19 +1,18 @@
 import React, { useEffect } from "react";
 import { BackHandler, ScrollView, StyleSheet, View } from "react-native";
 import {
-  ActivityIndicator,
-  Appbar,
-  Card,
-  Text,
-  useTheme,
+    ActivityIndicator,
+    Appbar,
+    Avatar,
+    Surface,
+    Text,
+    useTheme,
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useAuth } from "../contexts/AuthContext";
-import { Balance } from "../types";
-import { getDefaultCurrency } from "../utils/currency";
-import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
-import { formatCurrency } from "../utils/currency";
 import { useBalances } from "../hooks/useBalances";
+import { Balance } from "../types";
+import { formatCurrency, getDefaultCurrency } from "../utils/currency";
+import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 
 export const BalancesScreen: React.FC<{
   onBack: () => void;
@@ -50,15 +49,19 @@ export const BalancesScreen: React.FC<{
     return balance.email || `User ${balance.user_id.substring(0, 8)}...`;
   };
 
+  const getInitials = (name: string) => {
+    return name.substring(0, 2).toUpperCase();
+  };
+
   if (balancesError) {
     return (
       <SafeAreaView
         style={[styles.container, { backgroundColor: theme.colors.background }]}
         edges={["top", "bottom"]}
       >
-        <Appbar.Header>
+        <Appbar.Header mode="center-aligned" elevated>
           <Appbar.BackAction onPress={onBack} />
-          <Appbar.Content title="Balances" />
+          <Appbar.Content title="Balances" titleStyle={{ fontWeight: 'bold' }} />
         </Appbar.Header>
         <View style={styles.centerContainer}>
           <Text
@@ -83,9 +86,9 @@ export const BalancesScreen: React.FC<{
       style={[styles.container, { backgroundColor: theme.colors.background }]}
       edges={["top", "bottom"]}
     >
-      <Appbar.Header>
+      <Appbar.Header mode="center-aligned" elevated>
         <Appbar.BackAction onPress={onBack} />
-        <Appbar.Content title="Balances" />
+        <Appbar.Content title="Balances" titleStyle={{ fontWeight: 'bold' }} />
       </Appbar.Header>
 
       <ScrollView
@@ -105,7 +108,7 @@ export const BalancesScreen: React.FC<{
             {youAreOwed.length > 0 && (
               <View style={styles.balanceGroup}>
                 <Text
-                  variant="labelLarge"
+                  variant="titleMedium"
                   style={[
                     styles.balanceGroupTitle,
                     { color: theme.colors.primary },
@@ -114,46 +117,47 @@ export const BalancesScreen: React.FC<{
                   You are owed
                 </Text>
                 {youAreOwed.map((balance, index) => (
-                  <React.Fragment key={balance.user_id}>
-                    <Card style={styles.balanceCard} mode="outlined">
-                      <Card.Content style={styles.balanceContent}>
-                        <View style={styles.balanceLeft}>
-                          <Text
-                            variant="titleSmall"
-                            style={styles.balanceName}
-                          >
-                            {getUserDisplayName(balance)}
-                          </Text>
-                        </View>
-                        <View style={styles.balanceRight}>
-                          <Text
-                            variant="titleMedium"
-                            style={[
-                              styles.balanceAmount,
-                              { color: "#10b981" },
-                            ]}
-                          >
-                            {formatCurrency(
-                              Math.abs(balance.amount),
-                              defaultCurrency
-                            )}
-                          </Text>
-                        </View>
-                      </Card.Content>
-                    </Card>
-                    {index < youAreOwed.length - 1 && (
-                      <View style={{ height: 8 }} />
-                    )}
-                  </React.Fragment>
+                  <Surface key={balance.user_id} style={styles.balanceItem} elevation={0}>
+                    <View style={styles.balanceContent}>
+                      <Avatar.Text 
+                        size={40} 
+                        label={getInitials(getUserDisplayName(balance))} 
+                        style={{ backgroundColor: theme.colors.primaryContainer }}
+                        color={theme.colors.onPrimaryContainer}
+                      />
+                      <View style={styles.balanceLeft}>
+                        <Text
+                          variant="bodyLarge"
+                          style={styles.balanceName}
+                        >
+                          {getUserDisplayName(balance)}
+                        </Text>
+                      </View>
+                      <View style={styles.balanceRight}>
+                        <Text
+                          variant="titleMedium"
+                          style={[
+                            styles.balanceAmount,
+                            { color: "#10b981" },
+                          ]}
+                        >
+                          {formatCurrency(
+                            Math.abs(balance.amount),
+                            defaultCurrency
+                          )}
+                        </Text>
+                      </View>
+                    </View>
+                  </Surface>
                 ))}
               </View>
             )}
 
             {/* You Owe */}
             {youOwe.length > 0 && (
-              <View style={[styles.balanceGroup, { marginTop: 16 }]}>
+              <View style={[styles.balanceGroup, { marginTop: 24 }]}>
                 <Text
-                  variant="labelLarge"
+                  variant="titleMedium"
                   style={[
                     styles.balanceGroupTitle,
                     { color: theme.colors.error },
@@ -162,55 +166,55 @@ export const BalancesScreen: React.FC<{
                   You owe
                 </Text>
                 {youOwe.map((balance, index) => (
-                  <React.Fragment key={balance.user_id}>
-                    <Card style={styles.balanceCard} mode="outlined">
-                      <Card.Content style={styles.balanceContent}>
-                        <View style={styles.balanceLeft}>
-                          <Text
-                            variant="titleSmall"
-                            style={styles.balanceName}
-                          >
-                            {getUserDisplayName(balance)}
-                          </Text>
-                        </View>
-                        <View style={styles.balanceRight}>
-                          <Text
-                            variant="titleMedium"
-                            style={[
-                              styles.balanceAmount,
-                              { color: "#ef4444" },
-                            ]}
-                          >
-                            {formatCurrency(
-                              Math.abs(balance.amount),
-                              defaultCurrency
-                            )}
-                          </Text>
-                        </View>
-                      </Card.Content>
-                    </Card>
-                    {index < youOwe.length - 1 && (
-                      <View style={{ height: 8 }} />
-                    )}
-                  </React.Fragment>
+                  <Surface key={balance.user_id} style={styles.balanceItem} elevation={0}>
+                    <View style={styles.balanceContent}>
+                      <Avatar.Text 
+                        size={40} 
+                        label={getInitials(getUserDisplayName(balance))} 
+                        style={{ backgroundColor: theme.colors.errorContainer }}
+                        color={theme.colors.onErrorContainer}
+                      />
+                      <View style={styles.balanceLeft}>
+                        <Text
+                          variant="bodyLarge"
+                          style={styles.balanceName}
+                        >
+                          {getUserDisplayName(balance)}
+                        </Text>
+                      </View>
+                      <View style={styles.balanceRight}>
+                        <Text
+                          variant="titleMedium"
+                          style={[
+                            styles.balanceAmount,
+                            { color: "#ef4444" },
+                          ]}
+                        >
+                          {formatCurrency(
+                            Math.abs(balance.amount),
+                            defaultCurrency
+                          )}
+                        </Text>
+                      </View>
+                    </View>
+                  </Surface>
                 ))}
               </View>
             )}
           </>
         ) : (
-          <Card style={styles.emptyStateCard} mode="outlined">
-            <Card.Content style={styles.emptyStateContent}>
+          <Surface style={styles.emptyStateCard} elevation={0}>
+            <View style={styles.emptyStateContent}>
               <Text
-                variant="headlineSmall"
+                variant="displayMedium"
                 style={[
                   styles.emptyStateIcon,
-                  { color: theme.colors.onSurfaceVariant },
                 ]}
               >
                 💸
               </Text>
               <Text
-                variant="titleMedium"
+                variant="titleLarge"
                 style={[
                   styles.emptyStateTitle,
                   { color: theme.colors.onSurface },
@@ -219,7 +223,7 @@ export const BalancesScreen: React.FC<{
                 No Balances Yet
               </Text>
               <Text
-                variant="bodyMedium"
+                variant="bodyLarge"
                 style={[
                   styles.emptyStateMessage,
                   { color: theme.colors.onSurfaceVariant },
@@ -227,8 +231,8 @@ export const BalancesScreen: React.FC<{
               >
                 Once you add expenses with splits, balances will appear here.
               </Text>
-            </Card.Content>
-          </Card>
+            </View>
+          </Surface>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -255,27 +259,28 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   balanceGroupTitle: {
-    fontWeight: "600",
-    marginBottom: 8,
-    textTransform: "uppercase",
-    fontSize: 12,
-    letterSpacing: 0.5,
+    fontWeight: "bold",
+    marginBottom: 12,
+    marginLeft: 4,
   },
-  balanceCard: {
-    marginBottom: 0,
+  balanceItem: {
+    borderRadius: 12,
+    marginBottom: 8,
+    backgroundColor: 'transparent',
   },
   balanceContent: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
   },
   balanceLeft: {
     flex: 1,
+    marginLeft: 16,
     marginRight: 16,
   },
   balanceName: {
-    fontWeight: "600",
+    fontWeight: "500",
   },
   balanceRight: {
     alignItems: "flex-end",
@@ -284,25 +289,29 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   emptyStateCard: {
-    marginTop: 8,
+    marginTop: 32,
+    backgroundColor: 'transparent',
+    borderStyle: 'dashed',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+    borderRadius: 16,
   },
   emptyStateContent: {
     alignItems: "center",
-    paddingVertical: 32,
-    paddingHorizontal: 16,
+    paddingVertical: 48,
+    paddingHorizontal: 24,
   },
   emptyStateIcon: {
-    fontSize: 48,
     marginBottom: 16,
   },
   emptyStateTitle: {
-    fontWeight: "600",
+    fontWeight: "bold",
     marginBottom: 8,
     textAlign: "center",
   },
   emptyStateMessage: {
     textAlign: "center",
-    lineHeight: 20,
+    lineHeight: 24,
   },
 });
 

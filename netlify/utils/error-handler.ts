@@ -1,4 +1,3 @@
-import { Handler } from '@netlify/functions';
 import { getCorsHeaders } from './cors';
 import { NetlifyResponse } from './response';
 
@@ -46,6 +45,15 @@ function sanitizeForLogging(data: any): any {
 
   if (typeof data !== 'object') {
     return data;
+  }
+
+  if (data instanceof Error) {
+    return {
+      name: data.name,
+      message: data.message,
+      stack: data.stack,
+      ...Object.fromEntries(Object.entries(data))
+    };
   }
 
   const sensitiveFields = [

@@ -1,8 +1,7 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
-import React, { useEffect, useState, useMemo, useRef, useCallback } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
-  Animated,
   Dimensions,
   FlatList,
   KeyboardAvoidingView,
@@ -16,23 +15,22 @@ import {
 import {
   Appbar,
   Button,
+  Checkbox,
   SegmentedButtons,
   Text,
   TextInput,
   useTheme,
 } from "react-native-paper";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Transaction, GroupMember } from "../types";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { GroupMember, Transaction } from "../types";
 import {
   CURRENCIES,
   getCurrencySymbol,
   getDefaultCurrency,
 } from "../utils/currency";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
-import { Checkbox } from "react-native-paper";
 
 interface TransactionFormScreenProps {
-  visible: boolean;
   transaction?: Transaction | null;
   onSave: (
     transaction: Omit<Transaction, "id" | "created_at" | "user_id">
@@ -45,7 +43,6 @@ interface TransactionFormScreenProps {
 }
 
 export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
-  visible,
   transaction,
   onSave,
   onDismiss,
@@ -65,7 +62,6 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   const [currency, setCurrency] = useState<string>(effectiveDefaultCurrency);
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [slideAnim] = useState(new Animated.Value(0));
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [paidBy, setPaidBy] = useState<string>("");
@@ -89,12 +85,16 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
 
   const allMemberIds = useMemo(
     () => groupMembers.map((m) => m.user_id),
+
     [groupMembers]
   );
 
-  // Track if form has been initialized to prevent re-initialization on prop changes
-  const isInitializedRef = useRef(false);
-  const lastTransactionIdRef = useRef<number | null>(null);
+  const areAllMembersSelected = useMemo(
+    () =>
+      groupMembers.length > 0 &&
+      groupMembers.every((m) => splitAmong.includes(m.user_id)),
+    [groupMembers, splitAmong]
+  );
 
   // Helper: Reset form to default state
   const resetFormToDefaults = useCallback(() => {
@@ -131,51 +131,29 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     setCurrency(tx.currency || effectiveDefaultCurrency);
     setPaidBy(tx.paid_by || "");
     setSplitAmong(
-      Array.isArray(tx.split_among) ? tx.split_among : []
+      Array.isArray(tx.split_among) ? [...new Set(tx.split_among)] : []
     );
   }, [effectiveDefaultCurrency]);
 
-  // Initialize form when modal becomes visible
+  // Initialize form on mount
   useEffect(() => {
-    if (!visible) {
-      // Reset initialization flag when modal closes
-      isInitializedRef.current = false;
-      lastTransactionIdRef.current = null;
-      return;
-    }
-
-    // Skip if already initialized for this transaction
-    const currentTransactionId = transaction?.id ?? null;
-    if (isInitializedRef.current && lastTransactionIdRef.current === currentTransactionId) {
-      return;
-    }
-
-    // Initialize form based on mode
     if (transaction) {
       loadTransactionData(transaction);
-      lastTransactionIdRef.current = transaction.id;
     } else {
       resetFormToDefaults();
-      lastTransactionIdRef.current = null;
     }
+  }, [transaction, loadTransactionData, resetFormToDefaults]);
 
-    isInitializedRef.current = true;
-  }, [visible, transaction, loadTransactionData, resetFormToDefaults]);
-
-  // Update split_among when switching to expense type (only for new transactions)
+  // Clear split data when switching away from expense type (only for new transactions)
   useEffect(() => {
-    if (!visible || !isInitializedRef.current) return;
     if (transaction) return; // Don't auto-update when editing
 
-    // Only update if type changed to expense and we have members
-    if (isGroupExpense && splitAmong.length === 0 && allMemberIds.length > 0) {
-      setSplitAmong(allMemberIds);
-    } else if (!isGroupExpense) {
+    if (!isGroupExpense) {
       // Clear split data when switching away from expense
       setSplitAmong([]);
       setPaidBy("");
     }
-  }, [visible, isGroupExpense, transaction, splitAmong.length, allMemberIds]);
+  }, [isGroupExpense, transaction]);
 
   const formatDateForInput = (date: Date): string => {
     return date.toISOString().split("T")[0];
@@ -199,29 +177,6 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     }
   };
 
-  // Animation effect
-  useEffect(() => {
-    if (visible) {
-      Animated.spring(slideAnim, {
-        toValue: 1,
-        useNativeDriver: true,
-        tension: 65,
-        friction: 11,
-      }).start();
-    } else {
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [visible, slideAnim]);
-
-  const handleDismiss = useCallback(() => {
-    resetFormToDefaults();
-    onDismiss();
-  }, [resetFormToDefaults, onDismiss]);
-
   const handleToggleSplitMember = (userId: string) => {
     setSplitAmong((prev) => {
       // Remove duplicates first to ensure data integrity
@@ -239,7 +194,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   };
 
   const handleToggleAllMembers = () => {
-    if (splitAmong.length === groupMembers.length) {
+    if (areAllMembersSelected) {
       // Deselect all
       setSplitAmong([]);
     } else {
@@ -330,7 +285,9 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
         paid_by: isGroupExpense ? paidBy : undefined,
         split_among: isGroupExpense ? splitAmong : undefined,
       });
-      handleDismiss();
+      // onDismiss will be called by the parent after successful save if needed,
+      // but usually we want to close the screen.
+      // Here we rely on the parent to navigate back.
     } catch (error) {
       // Show error in an alert for API errors (not validation errors)
       Alert.alert(
@@ -341,9 +298,6 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       setLoading(false);
     }
   };
-
-  // Note: We don't disable the button based on validation
-  // Instead, we show errors when the user tries to submit
 
   const handleDelete = () => {
     if (!onDelete || !transaction) return;
@@ -362,7 +316,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
             setLoading(true);
             try {
               await onDelete();
-              handleDismiss();
+              // Parent handles navigation
             } catch (error) {
               Alert.alert(
                 "Error",
@@ -377,388 +331,352 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     );
   };
 
-  const bottomSheetHeight = screenHeight * 0.85;
-  const translateY = slideAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [bottomSheetHeight, 0],
-  });
-
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      onRequestClose={handleDismiss}
-    >
-      <View style={styles.modalOverlay}>
-        <TouchableOpacity
-          style={styles.backdrop}
-          activeOpacity={1}
-          onPress={handleDismiss}
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'left', 'right']}>
+      <Appbar.Header style={[styles.header, { backgroundColor: theme.colors.surface }]} elevated>
+        <Appbar.BackAction onPress={onDismiss} />
+        <Appbar.Content
+          title={transaction ? "Edit Transaction" : "New Transaction"}
+          titleStyle={{ fontWeight: 'bold' }}
         />
-        <Animated.View
-          style={[
-            styles.bottomSheet,
-            {
-              height: bottomSheetHeight,
-              transform: [{ translateY }],
-              paddingBottom: insets.bottom,
-              backgroundColor: theme.colors.surface,
-            },
-          ]}
+      </Appbar.Header>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.keyboardView}
+        keyboardVerticalOffset={0}
+      >
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          nestedScrollEnabled={true}
         >
-          <View style={styles.handleContainer}>
-            <View
+          <TextInput
+            label="Description"
+            value={description}
+            onChangeText={(text) => {
+              setDescription(text);
+              if (descriptionError) {
+                setDescriptionError("");
+              }
+            }}
+            mode="outlined"
+            disabled={loading}
+            error={!!descriptionError}
+            style={styles.input}
+            left={<TextInput.Icon icon="text" />}
+            placeholder="e.g., Grocery shopping"
+          />
+
+          <View style={styles.amountRow}>
+            <TextInput
+              label="Amount"
+              value={amount}
+              onChangeText={(text) => {
+                setAmount(text);
+                if (amountError) {
+                  setAmountError("");
+                }
+              }}
+              mode="outlined"
+              keyboardType="decimal-pad"
+              disabled={loading}
+              error={!!amountError}
+              style={styles.amountInput}
+              left={
+                <TextInput.Affix
+                  text={getCurrencySymbol(currency)}
+                  textStyle={styles.currencyAffix}
+                />
+              }
+              placeholder="0.00"
+            />
+            <Button
+              mode="outlined"
+              onPress={() => setShowCurrencyPicker(true)}
+              style={styles.currencyButton}
+              disabled={loading}
+            >
+              {currency}
+            </Button>
+          </View>
+
+          <TextInput
+            label="Date"
+            value={date}
+            mode="outlined"
+            editable={!loading}
+            showSoftInputOnFocus={false}
+            onFocus={() => setShowDatePicker(true)}
+            error={!!dateError}
+            style={styles.input}
+            left={<TextInput.Icon icon="calendar" />}
+            right={
+              <TextInput.Icon
+                icon="calendar"
+                onPress={() => !loading && setShowDatePicker(true)}
+              />
+            }
+            placeholder="YYYY-MM-DD"
+            onPressIn={() => !loading && setShowDatePicker(true)}
+          />
+          {showDatePicker && (
+            <>
+              {Platform.OS === "ios" && (
+                <View
+                  style={[
+                    styles.datePickerContainer,
+                    {
+                      backgroundColor: theme.colors.surface,
+                      borderColor: theme.colors.outlineVariant,
+                    },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.datePickerHeader,
+                      { borderBottomColor: theme.colors.outlineVariant },
+                    ]}
+                  >
+                    <Button onPress={() => setShowDatePicker(false)}>
+                      Cancel
+                    </Button>
+                    <Text variant="titleMedium">Select Date</Text>
+                    <Button
+                      onPress={() => {
+                        const formattedDate = formatDateForInput(selectedDate);
+                        setDate(formattedDate);
+                        setShowDatePicker(false);
+                        // Clear error when date is selected
+                        if (dateError) {
+                          setDateError("");
+                        }
+                      }}
+                    >
+                      Done
+                    </Button>
+                  </View>
+                  <DateTimePicker
+                    value={selectedDate}
+                    mode="date"
+                    display="spinner"
+                    onChange={handleDateChange}
+                    maximumDate={new Date()}
+                    style={styles.datePicker}
+                  />
+                </View>
+              )}
+              {Platform.OS === "android" && (
+                <DateTimePicker
+                  value={selectedDate}
+                  mode="date"
+                  display="default"
+                  onChange={handleDateChange}
+                  maximumDate={new Date()}
+                />
+              )}
+            </>
+          )}
+
+          <View style={styles.segmentedContainer}>
+            <Text
+              variant="labelLarge"
               style={[
-                styles.handle,
-                { backgroundColor: theme.colors.outlineVariant },
+                styles.label,
+                { color: theme.colors.onSurfaceVariant },
               ]}
+            >
+              Type
+            </Text>
+            <SegmentedButtons
+              value={type}
+              onValueChange={(value) => {
+                const newType = value as "income" | "expense";
+                setType(newType);
+                // Clear expense splitting fields when switching to income
+                if (newType === "income") {
+                  setPaidBy("");
+                  setSplitAmong([]);
+                } else if (newType === "expense" && groupMembers.length > 0) {
+                  // When switching to expense, default to all members
+                  setSplitAmong(groupMembers.map((m) => m.user_id));
+                }
+              }}
+              buttons={[
+                {
+                  value: "expense",
+                  label: "Expense",
+                  icon: "arrow-down",
+                },
+                {
+                  value: "income",
+                  label: "Income",
+                  icon: "arrow-up",
+                },
+              ]}
+              style={styles.segmentedButtons}
             />
           </View>
-          <Appbar.Header style={styles.header}>
-            <Appbar.Content
-              title={transaction ? "Edit Transaction" : "New Transaction"}
-            />
-            <Appbar.Action icon="close" onPress={handleDismiss} />
-          </Appbar.Header>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
-            style={styles.keyboardView}
-            keyboardVerticalOffset={0}
-          >
-            <ScrollView
-              style={styles.scrollView}
-              contentContainerStyle={styles.scrollContent}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              nestedScrollEnabled={true}
-            >
+
+          <TextInput
+            label="Category (Optional)"
+            value={category}
+            onChangeText={setCategory}
+            mode="outlined"
+            disabled={loading}
+            style={styles.input}
+            left={<TextInput.Icon icon="tag" />}
+            placeholder="e.g., Food, Transportation"
+          />
+
+          {/* Expense Splitting Fields - Only for group expenses */}
+          {isGroupExpense && (
+            <>
               <TextInput
-                label="Description"
-                value={description}
-                onChangeText={(text) => {
-                  setDescription(text);
-                  if (descriptionError) {
-                    setDescriptionError("");
-                  }
-                }}
+                label="Paid By"
+                value={
+                  paidBy
+                    ? groupMembers.find((m) => m.user_id === paidBy)?.email ||
+                      `User ${paidBy.substring(0, 8)}...`
+                    : ""
+                }
                 mode="outlined"
+                editable={false}
                 disabled={loading}
-                error={!!descriptionError}
+                error={!!paidByError}
                 style={styles.input}
-                left={<TextInput.Icon icon="text" />}
-                placeholder="e.g., Grocery shopping"
-              />
-
-              <View style={styles.amountRow}>
-                <TextInput
-                  label="Amount"
-                  value={amount}
-                  onChangeText={(text) => {
-                    setAmount(text);
-                    if (amountError) {
-                      setAmountError("");
-                    }
-                  }}
-                  mode="outlined"
-                  keyboardType="decimal-pad"
-                  disabled={loading}
-                  error={!!amountError}
-                  style={styles.amountInput}
-                  left={
-                    <TextInput.Affix
-                      text={getCurrencySymbol(currency)}
-                      textStyle={styles.currencyAffix}
-                    />
-                  }
-                  placeholder="0.00"
-                />
-                <Button
-                  mode="outlined"
-                  onPress={() => setShowCurrencyPicker(true)}
-                  style={styles.currencyButton}
-                  disabled={loading}
-                >
-                  {currency}
-                </Button>
-              </View>
-
-              <TextInput
-                label="Date"
-                value={date}
-                mode="outlined"
-                editable={!loading}
-                showSoftInputOnFocus={false}
-                onFocus={() => setShowDatePicker(true)}
-                error={!!dateError}
-                style={styles.input}
-                left={<TextInput.Icon icon="calendar" />}
+                left={<TextInput.Icon icon="account" />}
                 right={
                   <TextInput.Icon
-                    icon="calendar"
-                    onPress={() => !loading && setShowDatePicker(true)}
+                    icon="chevron-down"
+                    onPress={() => !loading && setShowPaidByPicker(true)}
                   />
                 }
-                placeholder="YYYY-MM-DD"
-                onPressIn={() => !loading && setShowDatePicker(true)}
-              />
-              {showDatePicker && (
-                <>
-                  {Platform.OS === "ios" && (
-                    <View
-                      style={[
-                        styles.datePickerContainer,
-                        {
-                          backgroundColor: theme.colors.surface,
-                          borderColor: theme.colors.outlineVariant,
-                        },
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.datePickerHeader,
-                          { borderBottomColor: theme.colors.outlineVariant },
-                        ]}
-                      >
-                        <Button onPress={() => setShowDatePicker(false)}>
-                          Cancel
-                        </Button>
-                        <Text variant="titleMedium">Select Date</Text>
-                        <Button
-                          onPress={() => {
-                            const formattedDate = formatDateForInput(selectedDate);
-                            setDate(formattedDate);
-                            setShowDatePicker(false);
-                            // Clear error when date is selected
-                            if (dateError) {
-                              setDateError("");
-                            }
-                          }}
-                        >
-                          Done
-                        </Button>
-                      </View>
-                      <DateTimePicker
-                        value={selectedDate}
-                        mode="date"
-                        display="spinner"
-                        onChange={handleDateChange}
-                        maximumDate={new Date()}
-                        style={styles.datePicker}
-                      />
-                    </View>
-                  )}
-                  {Platform.OS === "android" && (
-                    <DateTimePicker
-                      value={selectedDate}
-                      mode="date"
-                      display="default"
-                      onChange={handleDateChange}
-                      maximumDate={new Date()}
-                    />
-                  )}
-                </>
-              )}
-
-              <View style={styles.segmentedContainer}>
-                <Text
-                  variant="labelLarge"
-                  style={[
-                    styles.label,
-                    { color: theme.colors.onSurfaceVariant },
-                  ]}
-                >
-                  Type
-                </Text>
-                <SegmentedButtons
-                  value={type}
-                  onValueChange={(value) => {
-                    const newType = value as "income" | "expense";
-                    setType(newType);
-                    // Clear expense splitting fields when switching to income
-                    if (newType === "income") {
-                      setPaidBy("");
-                      setSplitAmong([]);
-                    } else if (newType === "expense" && groupMembers.length > 0) {
-                      // When switching to expense, default to all members
-                      setSplitAmong(groupMembers.map((m) => m.user_id));
-                    }
-                  }}
-                  buttons={[
-                    {
-                      value: "expense",
-                      label: "Expense",
-                      icon: "arrow-down",
-                    },
-                    {
-                      value: "income",
-                      label: "Income",
-                      icon: "arrow-up",
-                    },
-                  ]}
-                  style={styles.segmentedButtons}
-                />
-              </View>
-
-              <TextInput
-                label="Category (Optional)"
-                value={category}
-                onChangeText={setCategory}
-                mode="outlined"
-                disabled={loading}
-                style={styles.input}
-                left={<TextInput.Icon icon="tag" />}
-                placeholder="e.g., Food, Transportation"
+                onPressIn={() => !loading && setShowPaidByPicker(true)}
+                placeholder="Select who paid"
               />
 
-              {/* Expense Splitting Fields - Only for group expenses */}
-              {isGroupExpense && (
-                <>
-                  <TextInput
-                    label="Paid By"
-                    value={
-                      paidBy
-                        ? groupMembers.find((m) => m.user_id === paidBy)?.email ||
-                          `User ${paidBy.substring(0, 8)}...`
-                        : ""
-                    }
-                    mode="outlined"
-                    editable={false}
-                    disabled={loading}
-                    error={!!paidByError}
-                    style={styles.input}
-                    left={<TextInput.Icon icon="account" />}
-                    right={
-                      <TextInput.Icon
-                        icon="chevron-down"
-                        onPress={() => !loading && setShowPaidByPicker(true)}
-                      />
-                    }
-                    onPressIn={() => !loading && setShowPaidByPicker(true)}
-                    placeholder="Select who paid"
-                  />
-
-                  <View style={styles.splitAmongContainer}>
-                    <View style={styles.splitAmongHeader}>
-                      <Text
-                        variant="labelLarge"
-                        style={[
-                          styles.label,
-                          { color: theme.colors.onSurfaceVariant },
-                        ]}
-                      >
-                        Split Among
-                      </Text>
-                      <Button
-                        mode="text"
-                        compact
-                        onPress={handleToggleAllMembers}
-                        disabled={loading}
-                        style={styles.selectAllButton}
-                      >
-                        {splitAmong.length === groupMembers.length
-                          ? "Deselect All"
-                          : "Select All"}
-                      </Button>
-                    </View>
-                    {splitAmongError ? (
-                      <Text
-                        variant="bodySmall"
-                        style={[
-                          styles.errorText,
-                          { color: theme.colors.error },
-                        ]}
-                      >
-                        {splitAmongError}
-                      </Text>
-                    ) : null}
-                    <View
-                      style={[
-                        styles.splitAmongList,
-                        splitAmongError && {
-                          borderColor: theme.colors.error,
-                          borderWidth: 1,
-                        },
-                      ]}
-                    >
-                      {groupMembers.map((member) => {
-                        const isSelected = splitAmong.includes(member.user_id);
-                        return (
-                          <TouchableOpacity
-                            key={member.user_id}
-                            style={[
-                              styles.splitMemberItem,
-                              isSelected && {
-                                backgroundColor: theme.colors.primaryContainer,
-                              },
-                            ]}
-                            onPress={() => handleToggleSplitMember(member.user_id)}
-                            disabled={loading}
-                          >
-                            <Checkbox
-                              status={isSelected ? "checked" : "unchecked"}
-                              onPress={() => handleToggleSplitMember(member.user_id)}
-                              disabled={loading}
-                            />
-                            <Text
-                              variant="bodyLarge"
-                              style={styles.splitMemberText}
-                            >
-                              {member.email || `User ${member.user_id.substring(0, 8)}...`}
-                            </Text>
-                            {isSelected && splitAmong.length > 0 && amount && parseFloat(amount) > 0 && (
-                              <Text
-                                variant="bodySmall"
-                                style={[
-                                  styles.splitAmount,
-                                  { color: theme.colors.onSurfaceVariant },
-                                ]}
-                              >
-                                {getCurrencySymbol(currency)}
-                                {(
-                                  parseFloat(amount) / splitAmong.length
-                                ).toFixed(2)}
-                              </Text>
-                            )}
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  </View>
-                </>
-              )}
-
-              <View style={styles.buttonRow}>
-                {transaction && onDelete && (
-                  <Button
-                    mode="outlined"
-                    onPress={handleDelete}
-                    disabled={loading}
-                    style={[styles.button, styles.deleteButton]}
-                    textColor={theme.colors.error}
-                    icon="delete"
+              <View style={styles.splitAmongContainer}>
+                <View style={styles.splitAmongHeader}>
+                  <Text
+                    variant="labelLarge"
+                    style={[
+                      styles.label,
+                      { color: theme.colors.onSurfaceVariant },
+                    ]}
                   >
-                    Delete
+                    Split Among
+                  </Text>
+                  <Button
+                    mode="text"
+                    compact
+                    onPress={handleToggleAllMembers}
+                    disabled={loading}
+                    style={styles.selectAllButton}
+                  >
+
+                    {areAllMembersSelected
+                      ? "Deselect All"
+                      : "Select All"}
                   </Button>
-                )}
-                <Button
-                  mode="contained"
-                  onPress={handleSave}
-                  disabled={loading}
-                  loading={loading}
+                </View>
+                {splitAmongError ? (
+                  <Text
+                    variant="bodySmall"
+                    style={[
+                      styles.errorText,
+                      { color: theme.colors.error },
+                    ]}
+                  >
+                    {splitAmongError}
+                  </Text>
+                ) : null}
+                <View
                   style={[
-                    styles.button,
-                    styles.saveButton,
-                    !(transaction && onDelete) && styles.saveButtonFullWidth,
+                    styles.splitAmongList,
+                    splitAmongError && {
+                      borderColor: theme.colors.error,
+                      borderWidth: 1,
+                    },
                   ]}
                 >
-                  {transaction ? "Update" : "Create"}
-                </Button>
+                  {groupMembers.map((member) => {
+                    const isSelected = splitAmong.includes(member.user_id);
+                    return (
+                      <TouchableOpacity
+                        key={member.user_id}
+                        style={[
+                          styles.splitMemberItem,
+                          isSelected && {
+                            backgroundColor: theme.colors.primaryContainer,
+                          },
+                        ]}
+                        onPress={() => handleToggleSplitMember(member.user_id)}
+                        disabled={loading}
+                      >
+                        <Checkbox
+                          status={isSelected ? "checked" : "unchecked"}
+                          onPress={() => handleToggleSplitMember(member.user_id)}
+                          disabled={loading}
+                        />
+                        <Text
+                          variant="bodyLarge"
+                          style={styles.splitMemberText}
+                        >
+                          {member.email || `User ${member.user_id.substring(0, 8)}...`}
+                        </Text>
+                        {isSelected && splitAmong.length > 0 && amount && parseFloat(amount) > 0 && (
+                          <Text
+                            variant="bodySmall"
+                            style={[
+                              styles.splitAmount,
+                              { color: theme.colors.onSurfaceVariant },
+                            ]}
+                          >
+                            {getCurrencySymbol(currency)}
+                            {(
+                              parseFloat(amount) / splitAmong.length
+                            ).toFixed(2)}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               </View>
-            </ScrollView>
-          </KeyboardAvoidingView>
-        </Animated.View>
-      </View>
+            </>
+          )}
+
+          <View style={styles.buttonRow}>
+            {transaction && onDelete && (
+              <Button
+                mode="outlined"
+                onPress={handleDelete}
+                disabled={loading}
+                style={[styles.button, styles.deleteButton]}
+                textColor={theme.colors.error}
+                icon="delete"
+              >
+                Delete
+              </Button>
+            )}
+            <Button
+              mode="contained"
+              onPress={handleSave}
+              disabled={loading}
+              loading={loading}
+              style={[
+                styles.button,
+                styles.saveButton,
+                !(transaction && onDelete) && styles.saveButtonFullWidth,
+              ]}
+            >
+              {transaction ? "Update" : "Create"}
+            </Button>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Paid By Picker Modal */}
       <Modal
@@ -798,26 +716,33 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                 <TouchableOpacity
                   style={[
                     styles.currencyItem,
-                    item.user_id === paidBy && {
-                      backgroundColor: theme.colors.primaryContainer,
+                    paidBy === item.user_id && {
+                      backgroundColor: theme.colors.secondaryContainer,
                     },
                   ]}
                   onPress={() => {
                     setPaidBy(item.user_id);
                     setShowPaidByPicker(false);
-                    // Clear error when user makes a selection
                     if (paidByError) {
                       setPaidByError("");
                     }
                   }}
                 >
-                  <View style={styles.currencyItemContent}>
-                    <Text variant="bodyLarge" style={styles.currencyCode}>
-                      {item.email || `User ${item.user_id.substring(0, 8)}...`}
+                  <Text
+                    variant="bodyLarge"
+                    style={{
+                      fontWeight: paidBy === item.user_id ? "bold" : "normal",
+                    }}
+                  >
+                    {item.email || `User ${item.user_id.substring(0, 8)}...`}
+                  </Text>
+                  {paidBy === item.user_id && (
+                    <Text
+                      variant="bodyMedium"
+                      style={{ color: theme.colors.primary }}
+                    >
+                      Selected
                     </Text>
-                  </View>
-                  {item.user_id === paidBy && (
-                    <Text style={{ color: theme.colors.primary }}>✓</Text>
                   )}
                 </TouchableOpacity>
               )}
@@ -864,8 +789,8 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                 <TouchableOpacity
                   style={[
                     styles.currencyItem,
-                    item.code === currency && {
-                      backgroundColor: theme.colors.primaryContainer,
+                    currency === item.code && {
+                      backgroundColor: theme.colors.secondaryContainer,
                     },
                   ]}
                   onPress={() => {
@@ -873,22 +798,21 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                     setShowCurrencyPicker(false);
                   }}
                 >
-                  <View style={styles.currencyItemContent}>
-                    <Text variant="bodyLarge" style={styles.currencyCode}>
-                      {item.code}
-                    </Text>
+                  <Text
+                    variant="bodyLarge"
+                    style={{
+                      fontWeight: currency === item.code ? "bold" : "normal",
+                    }}
+                  >
+                    {item.code} ({item.symbol})
+                  </Text>
+                  {currency === item.code && (
                     <Text
                       variant="bodyMedium"
-                      style={[
-                        styles.currencyName,
-                        { color: theme.colors.onSurfaceVariant },
-                      ]}
+                      style={{ color: theme.colors.primary }}
                     >
-                      {item.name}
+                      Selected
                     </Text>
-                  </View>
-                  {item.code === currency && (
-                    <Text style={{ color: theme.colors.primary }}>✓</Text>
                   )}
                 </TouchableOpacity>
               )}
@@ -896,46 +820,16 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
           </View>
         </TouchableOpacity>
       </Modal>
-    </Modal>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  modalOverlay: {
+  container: {
     flex: 1,
-    justifyContent: "flex-end",
-    zIndex: 1000,
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-  },
-  bottomSheet: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: -2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-    zIndex: 1000,
-  },
-  handleContainer: {
-    alignItems: "center",
-    paddingTop: 8,
-    paddingBottom: 4,
-  },
-  handle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
   },
   header: {
     elevation: 0,
-    backgroundColor: "transparent",
   },
   keyboardView: {
     flex: 1,
@@ -944,7 +838,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 20,
+    padding: 16,
     paddingBottom: 32,
   },
   input: {
@@ -953,18 +847,17 @@ const styles = StyleSheet.create({
   amountRow: {
     flexDirection: "row",
     marginBottom: 16,
-    alignItems: "center",
   },
   amountInput: {
     flex: 1,
     marginRight: 8,
   },
-  currencyAffix: {
-    fontSize: 18,
-    fontWeight: "bold",
-  },
   currencyButton: {
-    minWidth: 80,
+    justifyContent: "center",
+    marginTop: 6,
+  },
+  currencyAffix: {
+    marginRight: 8,
   },
   segmentedContainer: {
     marginBottom: 16,
@@ -973,92 +866,72 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   segmentedButtons: {
-    marginTop: 4,
-  },
-  buttonRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 8,
-    gap: 8,
-  },
-  button: {
-    flex: 1,
-  },
-  deleteButton: {},
-  saveButton: {},
-  saveButtonFullWidth: {
-    flex: 1,
+    marginBottom: 8,
   },
   datePickerContainer: {
+    borderWidth: 1,
     borderRadius: 8,
-    marginTop: 8,
     marginBottom: 16,
     overflow: "hidden",
-    borderWidth: 1,
   },
   datePickerHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    padding: 8,
     borderBottomWidth: 1,
   },
   datePicker: {
     height: 200,
   },
+  buttonRow: {
+    flexDirection: "row",
+    marginTop: 16,
+    marginBottom: 32,
+  },
+  button: {
+    flex: 1,
+  },
+  deleteButton: {
+    marginRight: 8,
+    borderColor: "transparent",
+  },
+  saveButton: {
+    marginLeft: 8,
+  },
+  saveButtonFullWidth: {
+    marginLeft: 0,
+  },
   currencyPickerOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "center",
-    alignItems: "center",
+    padding: 20,
   },
   currencyPickerContainer: {
-    width: "90%",
-    maxWidth: 400,
+    borderRadius: 12,
     maxHeight: "80%",
-    borderRadius: 16,
-    overflow: "hidden",
-    elevation: 8,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    elevation: 5,
   },
   currencyPickerHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    padding: 16,
     borderBottomWidth: 1,
   },
   currencyList: {
-    maxHeight: 400,
+    padding: 8,
   },
   currencyItem: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "rgba(0, 0, 0, 0.1)",
-  },
-  currencyItemContent: {
-    flex: 1,
-  },
-  currencyCode: {
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  currencyName: {
-    fontSize: 14,
+    padding: 16,
+    borderRadius: 8,
   },
   splitAmongContainer: {
+    marginTop: 8,
     marginBottom: 16,
   },
   splitAmongHeader: {
@@ -1068,32 +941,27 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   selectAllButton: {
-    margin: 0,
+    marginRight: -8,
   },
   splitAmongList: {
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "rgba(0, 0, 0, 0.1)",
     overflow: "hidden",
   },
   splitMemberItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "rgba(0, 0, 0, 0.1)",
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderRadius: 8,
   },
   splitMemberText: {
     flex: 1,
-    marginLeft: 8,
+    marginLeft: 4,
   },
   splitAmount: {
-    marginLeft: 8,
-    fontWeight: "600",
+    marginRight: 8,
   },
   errorText: {
-    marginTop: 4,
     marginBottom: 8,
   },
 });

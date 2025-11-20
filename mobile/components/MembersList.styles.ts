@@ -1,9 +1,6 @@
 import { StyleSheet } from "react-native";
 
 export const styles = StyleSheet.create({
-  memberCard: {
-    marginBottom: 0,
-  },
   memberCardRemoving: {
     opacity: 0.7,
   },
@@ -11,7 +8,6 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 4,
   },
   memberLeft: {
     flex: 1,
@@ -22,11 +18,7 @@ export const styles = StyleSheet.create({
     alignItems: "center",
   },
   memberName: {
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  roleChip: {
-    height: 28,
+    marginBottom: 2,
   },
   removeMemberButton: {
     margin: 0,
