@@ -52,25 +52,21 @@ export function getActivityDescription(
 }
 
 /**
- * Gets a color for the activity type (for UI)
+ * Gets a color for the activity action (for UI)
+ * Color represents the action taken, not the entity type
  */
 export function getActivityColor(type: ActivityItem['type']): string {
-  switch (type) {
-    case 'transaction_created':
-      return '#4CAF50'; // Green
-    case 'transaction_updated':
-      return '#FF9800'; // Orange
-    case 'transaction_deleted':
-      return '#F44336'; // Red
-    case 'settlement_created':
-      return '#2196F3'; // Blue
-    case 'settlement_updated':
-      return '#9C27B0'; // Purple
-    case 'settlement_deleted':
-      return '#F44336'; // Red (same as transaction deleted)
-    default:
-      return '#757575'; // Gray
+  // Action-based colors: consistent across transactions and settlements
+  if (type.endsWith('_created')) {
+    return '#4CAF50'; // Green - Something was added
   }
+  if (type.endsWith('_updated')) {
+    return '#FF9800'; // Orange - Something was changed
+  }
+  if (type.endsWith('_deleted')) {
+    return '#F44336'; // Red - Something was removed
+  }
+  return '#757575'; // Gray - Fallback
 }
 
 /**

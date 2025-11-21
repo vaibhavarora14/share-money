@@ -1,19 +1,19 @@
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
 import { View } from "react-native";
 import {
-  ActivityIndicator,
-  Card,
-  Text,
-  useTheme,
+    ActivityIndicator,
+    Card,
+    Text,
+    useTheme,
 } from "react-native-paper";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useAuth } from "../contexts/AuthContext";
 import { ActivityItem } from "../types";
 import {
-  getUserDisplayName,
-  formatActivityTime,
-  groupActivitiesByDate,
-  getActivityColor,
+    formatActivityTime,
+    getActivityColor,
+    getUserDisplayName,
+    groupActivitiesByDate,
 } from "../utils/activityDescriptions";
 import { styles } from "./ActivityFeed.styles";
 
@@ -88,15 +88,18 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
         return (
           <React.Fragment key={dateKey}>
             {dateIndex > 0 && <View style={{ height: 16 }} />}
-            <Text
-              variant="labelLarge"
-              style={[
-                styles.dateHeader,
-                { color: theme.colors.onSurfaceVariant },
-              ]}
-            >
-              {dateKey}
-            </Text>
+            <View style={styles.dateHeaderContainer}>
+              <Text
+                variant="labelMedium"
+                style={[
+                  styles.dateHeaderText,
+                  { color: theme.colors.primary },
+                ]}
+              >
+                {dateKey}
+              </Text>
+              <View style={[styles.dateHeaderLine, { backgroundColor: theme.colors.outlineVariant }]} />
+            </View>
             {activitiesForDate.map((activity, activityIndex) => {
               const userDisplayName = getUserDisplayName(
                 activity.changed_by.id,
@@ -107,7 +110,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
               
               // Get icon based on activity category (transaction vs settlement)
               // Action is indicated by color (green=created, orange=updated, red=deleted)
-              const getActivityIcon = (type: ActivityItem['type']): string => {
+              const getActivityIcon = (type: ActivityItem['type']): any => {
                 if (type.startsWith('settlement')) return 'handshake';
                 // Transaction icon
                 return 'receipt';
@@ -119,15 +122,27 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                 <React.Fragment key={activity.id}>
                   {activityIndex > 0 && <View style={{ height: 8 }} />}
                   <Card 
-                    style={[
-                      styles.activityCard,
-                      { borderLeftColor: activityColor, borderLeftWidth: 4 }
-                    ]} 
-                    mode="outlined"
+                    style={styles.activityCard}
                   >
-                    <Card.Content style={styles.cardContent}>
-                      <View style={styles.activityContent}>
-                        <View style={styles.activityLeft}>
+                    <Card.Content style={{ padding: 16 }}>
+                      <View style={styles.activityRow}>
+                        {/* Left: Circular Icon */}
+                        <View
+                          style={[
+                            styles.iconContainer,
+                            { backgroundColor: activityColor + '20' }, // 20 = 12.5% opacity
+                          ]}
+                        >
+                          <MaterialCommunityIcons
+                            name={activityIcon}
+                            size={24}
+                            color={activityColor}
+                          />
+                        </View>
+
+                        {/* Right: Content */}
+                        <View style={styles.activityContent}>
+                          {/* Header: User and Time */}
                           <View style={styles.activityHeader}>
                             <Text
                               variant="bodyMedium"
@@ -138,32 +153,27 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                             >
                               {userDisplayName}
                             </Text>
-                            <View style={{ marginLeft: 8 }}>
-                              <MaterialCommunityIcons
-                                name={activityIcon}
-                                size={18}
-                                color={activityColor}
-                              />
-                            </View>
+                            <Text
+                              variant="bodySmall"
+                              style={[
+                                styles.activityTime,
+                                { color: theme.colors.outline },
+                              ]}
+                            >
+                              {formatActivityTime(activity.changed_at)}
+                            </Text>
                           </View>
+
+                          {/* Description */}
                           <Text
                             variant="bodyMedium"
                             style={[
                               styles.activityDescription,
-                              { color: theme.colors.onSurface },
-                            ]}
-                            numberOfLines={2}
-                          >
-                            {activity.description}
-                          </Text>
-                          <Text
-                            variant="bodySmall"
-                            style={[
-                              styles.activityTime,
                               { color: theme.colors.onSurfaceVariant },
                             ]}
+                            numberOfLines={3}
                           >
-                            {formatActivityTime(activity.changed_at)}
+                            {activity.description}
                           </Text>
                         </View>
                       </View>
