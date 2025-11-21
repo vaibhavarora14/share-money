@@ -61,9 +61,11 @@ CREATE TABLE IF NOT EXISTS transaction_history (
   user_agent TEXT,   -- Optional: track client info
   
   -- Ensure either transaction_id or settlement_id is set (but not both)
+  -- Allow both NULL only for deleted records (where we preserve snapshot)
   CHECK (
     (transaction_id IS NOT NULL AND settlement_id IS NULL) OR
-    (transaction_id IS NULL AND settlement_id IS NOT NULL)
+    (transaction_id IS NULL AND settlement_id IS NOT NULL) OR
+    (transaction_id IS NULL AND settlement_id IS NULL AND snapshot IS NOT NULL)
   )
 );
 
@@ -137,7 +139,7 @@ BEGIN
     ON DELETE SET NULL;
   END IF;
   
-  -- Add check constraint if it doesn't exist
+  -- Add or update check constraint if it doesn't exist
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.table_constraints 
     WHERE table_name = 'transaction_history' 
@@ -147,7 +149,55 @@ BEGIN
     ADD CONSTRAINT transaction_history_transaction_settlement_check
     CHECK (
       (transaction_id IS NOT NULL AND settlement_id IS NULL) OR
-      (transaction_id IS NULL AND settlement_id IS NOT NULL)
+      (transaction_id IS NULL AND settlement_id IS NOT NULL) OR
+      (transaction_id IS NULL AND settlement_id IS NULL AND snapshot IS NOT NULL)
+    );
+  ELSE
+    -- Update existing constraint to allow both NULL for deleted records
+    ALTER TABLE transaction_history 
+    DROP CONSTRAINT IF EXISTS transaction_history_transaction_settlement_check;
+    
+    ALTER TABLE transaction_history 
+    ADD CONSTRAINT transaction_history_transaction_settlement_check
+    CHECK (
+      (transaction_id IS NOT NULL AND settlement_id IS NULL) OR
+      (transaction_id IS NULL AND settlement_id IS NOT NULL) OR
+      (transaction_id IS NULL AND settlement_id IS NULL AND snapshot IS NOT NULL)
+    );
+  END IF;
+  
+  -- Also update archive table constraint if it exists
+  -- The archive table is created with LIKE, so it might have copied the old constraint
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables 
+    WHERE table_name = 'transaction_history_archive'
+  ) THEN
+    -- Drop any existing check constraints related to transaction/settlement
+    -- We'll find and drop them dynamically
+    DO $$
+    DECLARE
+      constraint_name_var TEXT;
+    BEGIN
+      -- Find the constraint name
+      SELECT constraint_name INTO constraint_name_var
+      FROM information_schema.table_constraints 
+      WHERE table_name = 'transaction_history_archive' 
+      AND constraint_type = 'CHECK'
+      AND constraint_name LIKE '%transaction%settlement%'
+      LIMIT 1;
+      
+      IF constraint_name_var IS NOT NULL THEN
+        EXECUTE format('ALTER TABLE transaction_history_archive DROP CONSTRAINT IF EXISTS %I', constraint_name_var);
+      END IF;
+    END $$;
+    
+    -- Add the updated constraint
+    ALTER TABLE transaction_history_archive 
+    ADD CONSTRAINT transaction_history_archive_transaction_settlement_check
+    CHECK (
+      (transaction_id IS NOT NULL AND settlement_id IS NULL) OR
+      (transaction_id IS NULL AND settlement_id IS NOT NULL) OR
+      (transaction_id IS NULL AND settlement_id IS NULL AND snapshot IS NOT NULL)
     );
   END IF;
 END $$;
