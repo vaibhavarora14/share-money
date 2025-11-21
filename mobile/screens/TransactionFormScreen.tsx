@@ -26,6 +26,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { GroupMember, Transaction } from "../types";
 import {
   CURRENCIES,
+  formatCurrency,
   getCurrencySymbol,
   getDefaultCurrency,
 } from "../utils/currency";
@@ -669,10 +670,10 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                               { color: theme.colors.onSurfaceVariant },
                             ]}
                           >
-                            {getCurrencySymbol(currency)}
-                            {(
-                              parseFloat(amount) / splitAmong.length
-                            ).toFixed(2)}
+                            {formatCurrency(
+                              parseFloat(amount) / splitAmong.length,
+                              currency
+                            )}
                           </Text>
                         )}
                       </TouchableOpacity>

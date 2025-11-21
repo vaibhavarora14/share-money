@@ -206,7 +206,7 @@ BEGIN
   VALUES (
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
     'Summer Vacation 2024',
-    'Trip to Hawaii with friends',
+    'Trip to Goa with friends',
     alice_id,
     NOW(),
     NOW()
@@ -254,7 +254,7 @@ BEGIN
   INSERT INTO transactions (id, amount, description, date, type, category, user_id, group_id, paid_by, split_among, currency, created_at)
   VALUES (
     1001,
-    1200.00,
+    100000.00,
     'Hotel booking for 3 nights',
     '2024-07-15',
     'expense',
@@ -263,7 +263,7 @@ BEGIN
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
     alice_id,
     jsonb_build_array(alice_id::text, bob_id::text, charlie_id::text, diana_id::text),
-    'USD',
+    'INR',
     NOW()
   )
   ON CONFLICT (id) DO NOTHING;
@@ -271,17 +271,17 @@ BEGIN
   -- Transaction splits for hotel
   INSERT INTO transaction_splits (transaction_id, user_id, amount)
   VALUES
-    (1001, alice_id, 300.00),
-    (1001, bob_id, 300.00),
-    (1001, charlie_id, 300.00),
-    (1001, diana_id, 300.00)
+    (1001, alice_id, 25000.00),
+    (1001, bob_id, 25000.00),
+    (1001, charlie_id, 25000.00),
+    (1001, diana_id, 25000.00)
   ON CONFLICT (transaction_id, user_id) DO NOTHING;
 
   -- Restaurant dinner (Vacation group) - Bob paid, split 4 ways
   INSERT INTO transactions (id, amount, description, date, type, category, user_id, group_id, paid_by, split_among, currency, created_at)
   VALUES (
     1002,
-    240.00,
+    20000.00,
     'Dinner at fancy restaurant',
     '2024-07-16',
     'expense',
@@ -290,7 +290,7 @@ BEGIN
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
     bob_id,
     jsonb_build_array(alice_id::text, bob_id::text, charlie_id::text, diana_id::text),
-    'USD',
+    'INR',
     NOW()
   )
   ON CONFLICT (id) DO NOTHING;
@@ -298,17 +298,17 @@ BEGIN
   -- Transaction splits for restaurant
   INSERT INTO transaction_splits (transaction_id, user_id, amount)
   VALUES
-    (1002, alice_id, 60.00),
-    (1002, bob_id, 60.00),
-    (1002, charlie_id, 60.00),
-    (1002, diana_id, 60.00)
+    (1002, alice_id, 5000.00),
+    (1002, bob_id, 5000.00),
+    (1002, charlie_id, 5000.00),
+    (1002, diana_id, 5000.00)
   ON CONFLICT (transaction_id, user_id) DO NOTHING;
 
   -- Car rental (Vacation group) - Charlie paid, split 4 ways
   INSERT INTO transactions (id, amount, description, date, type, category, user_id, group_id, paid_by, split_among, currency, created_at)
   VALUES (
     1003,
-    450.00,
+    37500.00,
     'Car rental for the week',
     '2024-07-14',
     'expense',
@@ -317,7 +317,7 @@ BEGIN
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
     charlie_id,
     jsonb_build_array(alice_id::text, bob_id::text, charlie_id::text, diana_id::text),
-    'USD',
+    'INR',
     NOW()
   )
   ON CONFLICT (id) DO NOTHING;
@@ -325,17 +325,17 @@ BEGIN
   -- Transaction splits for car rental
   INSERT INTO transaction_splits (transaction_id, user_id, amount)
   VALUES
-    (1003, alice_id, 112.50),
-    (1003, bob_id, 112.50),
-    (1003, charlie_id, 112.50),
-    (1003, diana_id, 112.50)
+    (1003, alice_id, 9375.00),
+    (1003, bob_id, 9375.00),
+    (1003, charlie_id, 9375.00),
+    (1003, diana_id, 9375.00)
   ON CONFLICT (transaction_id, user_id) DO NOTHING;
 
   -- Pizza night (Dinner group) - Bob paid, split 3 ways
   INSERT INTO transactions (id, amount, description, date, type, category, user_id, group_id, paid_by, split_among, currency, created_at)
   VALUES (
     2001,
-    75.00,
+    6000.00,
     'Pizza night',
     '2024-08-01',
     'expense',
@@ -344,7 +344,7 @@ BEGIN
     'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
     bob_id,
     jsonb_build_array(alice_id::text, bob_id::text, charlie_id::text),
-    'USD',
+    'INR',
     NOW()
   )
   ON CONFLICT (id) DO NOTHING;
@@ -352,16 +352,16 @@ BEGIN
   -- Transaction splits for pizza
   INSERT INTO transaction_splits (transaction_id, user_id, amount)
   VALUES
-    (2001, alice_id, 25.00),
-    (2001, bob_id, 25.00),
-    (2001, charlie_id, 25.00)
+    (2001, alice_id, 2000.00),
+    (2001, bob_id, 2000.00),
+    (2001, charlie_id, 2000.00)
   ON CONFLICT (transaction_id, user_id) DO NOTHING;
 
   -- Sushi dinner (Dinner group) - Alice paid, split 3 ways
   INSERT INTO transactions (id, amount, description, date, type, category, user_id, group_id, paid_by, split_among, currency, created_at)
   VALUES (
     2002,
-    180.00,
+    15000.00,
     'Sushi dinner',
     '2024-08-08',
     'expense',
@@ -370,7 +370,7 @@ BEGIN
     'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
     alice_id,
     jsonb_build_array(alice_id::text, bob_id::text, charlie_id::text),
-    'USD',
+    'INR',
     NOW()
   )
   ON CONFLICT (id) DO NOTHING;
@@ -378,9 +378,9 @@ BEGIN
   -- Transaction splits for sushi
   INSERT INTO transaction_splits (transaction_id, user_id, amount)
   VALUES
-    (2002, alice_id, 60.00),
-    (2002, bob_id, 60.00),
-    (2002, charlie_id, 60.00)
+    (2002, alice_id, 5000.00),
+    (2002, bob_id, 5000.00),
+    (2002, charlie_id, 5000.00)
   ON CONFLICT (transaction_id, user_id) DO NOTHING;
 
   -- ============================================================================
@@ -394,9 +394,9 @@ BEGIN
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
     bob_id,
     alice_id,
-    300.00,
-    'USD',
-    'Paid via Venmo',
+    25000.00,
+    'INR',
+    'Paid via UPI',
     bob_id,
     NOW()
   )
@@ -409,9 +409,9 @@ BEGIN
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
     diana_id,
     charlie_id,
-    112.50,
-    'USD',
-    'Received via PayPal',
+    9375.00,
+    'INR',
+    'Received via GPay',
     charlie_id,
     NOW()
   )

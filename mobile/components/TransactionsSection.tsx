@@ -154,7 +154,7 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
                       >
                         {formatCurrency(
                           transaction.amount,
-                          transaction.currency
+                          currency
                         )}
                       </Text>
                       {userSplitInfo && (
