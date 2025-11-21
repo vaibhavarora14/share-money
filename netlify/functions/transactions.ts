@@ -4,6 +4,7 @@ import { AuthResult, verifyAuth } from '../utils/auth';
 import { createErrorResponse, handleError } from '../utils/error-handler';
 import { createEmptyResponse, createSuccessResponse } from '../utils/response';
 import { isValidUUID, validateBodySize, validateTransactionData } from '../utils/validation';
+import { formatCurrency } from './currency';
 
 interface Transaction {
   id: number;
@@ -87,7 +88,8 @@ function calculateEqualSplits(
  */
 function validateSplitSum(
   splits: Array<{ amount: number }>,
-  transactionAmount: number
+  transactionAmount: number,
+  currencyCode: string = 'USD'
 ): { valid: boolean; error?: string } {
   const sum = splits.reduce((acc, split) => acc + split.amount, 0);
   const difference = Math.abs(sum - transactionAmount);
@@ -96,7 +98,7 @@ function validateSplitSum(
   if (difference > tolerance) {
     return {
       valid: false,
-      error: `Split amounts sum (${sum.toFixed(2)}) does not equal transaction amount (${transactionAmount.toFixed(2)}). Difference: ${difference.toFixed(2)}`,
+      error: `Split amounts sum (${formatCurrency(sum, currencyCode)}) does not equal transaction amount (${formatCurrency(transactionAmount, currencyCode)}). Difference: ${formatCurrency(difference, currencyCode)}`,
     };
   }
 
@@ -349,7 +351,7 @@ export const handler: Handler = async (event, context) => {
         });
 
         // Validate that splits sum equals transaction amount
-        const splitValidation = validateSplitSum(splits, transaction.amount);
+        const splitValidation = validateSplitSum(splits, transaction.amount, transaction.currency || 'USD');
         if (!splitValidation.valid) {
           // This should not happen with calculateEqualSplits, but log for debugging
           // Don't fail the transaction as split_among column has the data
@@ -374,7 +376,7 @@ export const handler: Handler = async (event, context) => {
             .eq('transaction_id', transaction.id);
 
           if (!verifyError && createdSplits) {
-            const verifyValidation = validateSplitSum(createdSplits, transaction.amount);
+            const verifyValidation = validateSplitSum(createdSplits, transaction.amount, transaction.currency || 'USD');
             if (!verifyValidation.valid) {
               // Log but don't fail - data integrity issue but transaction exists
             }
@@ -596,7 +598,7 @@ export const handler: Handler = async (event, context) => {
           });
 
           // Validate that splits sum equals transaction amount
-          const validation = validateSplitSum(splits, totalAmount);
+          const validation = validateSplitSum(splits, totalAmount, transaction.currency || transactionData.currency || 'USD');
           if (!validation.valid) {
             console.error('Split validation failed:', validation.error);
             // Log error but don't fail - transaction is already updated
@@ -635,7 +637,7 @@ export const handler: Handler = async (event, context) => {
           });
 
           // Validate that splits sum equals transaction amount
-          const validation = validateSplitSum(newSplits, newAmount);
+          const validation = validateSplitSum(newSplits, newAmount, transaction.currency || transactionData.currency || 'USD');
           if (!validation.valid) {
             console.error('Split validation failed:', validation.error);
             // Log error but continue
@@ -668,7 +670,7 @@ export const handler: Handler = async (event, context) => {
                 .eq('transaction_id', transactionData.id);
 
               if (!verifyError && updatedSplits) {
-                const verifyValidation = validateSplitSum(updatedSplits, newAmount);
+                const verifyValidation = validateSplitSum(updatedSplits, newAmount, transaction.currency || transactionData.currency || 'USD');
                 if (!verifyValidation.valid) {
                   console.error('Split verification failed after amount update:', verifyValidation.error);
                 }

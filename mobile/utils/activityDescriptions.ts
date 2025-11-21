@@ -19,18 +19,39 @@ export function getUserDisplayName(
 
 /**
  * Formats a value for display based on field type
+ * @param field - Field name (e.g., 'amount', 'date')
+ * @param value - Value to format (unknown type for type safety)
+ * @param currencyCode - Optional currency code for amount fields
+ * @returns Formatted string representation
  */
-function formatValue(field: string, value: any): string {
+function formatValue(field: string, value: unknown, currencyCode?: string): string {
   if (value === null || value === undefined) {
     return 'none';
   }
   
   if (field === 'amount') {
-    return formatCurrency(value);
+    // Type guard for number
+    if (typeof value === 'number') {
+      return formatCurrency(value, currencyCode);
+    }
+    // Try to parse string to number
+    if (typeof value === 'string') {
+      const num = parseFloat(value);
+      if (!isNaN(num)) {
+        return formatCurrency(num, currencyCode);
+      }
+    }
+    return String(value);
   }
   
   if (field === 'date') {
-    return new Date(value).toLocaleDateString();
+    try {
+      if (typeof value === 'string' || value instanceof Date) {
+        return new Date(value).toLocaleDateString();
+      }
+    } catch {
+      // Fall through to String conversion
+    }
   }
   
   if (Array.isArray(value)) {

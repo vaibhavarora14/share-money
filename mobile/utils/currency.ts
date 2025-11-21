@@ -1,23 +1,71 @@
 import { Currency } from "../types";
 
-// Common currencies with their symbols
+/**
+ * Currency symbol mapping
+ * Aligned with backend CURRENCY_SYMBOLS for consistency
+ */
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  'USD': '$',
+  'INR': '₹',
+  'EUR': '€',
+  'GBP': '£',
+  'JPY': '¥',
+  'KRW': '₩',
+  'CNY': '¥',
+  'AUD': 'A$',
+  'CAD': 'C$',
+};
+
+/**
+ * Common currencies with their symbols and names
+ * Used for currency picker UI
+ */
 export const CURRENCIES: Currency[] = [
+  { code: 'USD', symbol: '$', name: 'US Dollar' },
   { code: 'INR', symbol: '₹', name: 'Indian Rupee' },
+  { code: 'EUR', symbol: '€', name: 'Euro' },
+  { code: 'GBP', symbol: '£', name: 'British Pound' },
+  { code: 'JPY', symbol: '¥', name: 'Japanese Yen' },
+  { code: 'KRW', symbol: '₩', name: 'South Korean Won' },
+  { code: 'CNY', symbol: '¥', name: 'Chinese Yuan' },
+  { code: 'AUD', symbol: 'A$', name: 'Australian Dollar' },
+  { code: 'CAD', symbol: 'C$', name: 'Canadian Dollar' },
 ];
 
+/**
+ * Gets the default currency code from environment variable
+ * Defaults to INR for frontend (can be overridden via EXPO_PUBLIC_DEFAULT_CURRENCY)
+ * Note: Backend defaults to USD, but frontend uses INR by default for user preference
+ * @returns Currency code string (e.g., 'INR', 'USD')
+ */
 export function getDefaultCurrency(): string {
   return process.env.EXPO_PUBLIC_DEFAULT_CURRENCY || 'INR';
 }
 
+/**
+ * Gets the currency symbol for a given currency code
+ * Uses case-insensitive lookup and falls back to '$' if currency not found
+ * @param currencyCode - Currency code (e.g., 'USD', 'INR'). Defaults to default currency
+ * @returns Currency symbol string (e.g., '$', '₹')
+ */
 export function getCurrencySymbol(currencyCode: string = getDefaultCurrency()): string {
-  const currency = CURRENCIES.find(c => c.code === currencyCode);
-  return currency?.symbol || '$';
+  const normalizedCode = currencyCode.toUpperCase();
+  return CURRENCY_SYMBOLS[normalizedCode] || CURRENCY_SYMBOLS['USD'] || '$';
 }
 
+/**
+ * Formats currency amount for display with thousands separators
+ * Uses en-US locale for comma formatting (e.g., 1000 -> 1,000.00)
+ * Handles currencies without decimals (JPY, KRW) and negative amounts
+ * @param amount - Amount to format (number)
+ * @param currencyCode - Currency code (e.g., 'USD', 'INR'). Defaults to default currency
+ * @returns Formatted currency string (e.g., "$1,000.00" or "₹1,000.00")
+ */
 export function formatCurrency(amount: number, currencyCode: string = getDefaultCurrency()): string {
-  const symbol = getCurrencySymbol(currencyCode);
+  const normalizedCode = currencyCode.toUpperCase();
+  const symbol = getCurrencySymbol(normalizedCode);
   // For currencies like JPY that don't use decimals
-  const decimals = ['JPY', 'KRW'].includes(currencyCode) ? 0 : 2;
+  const decimals = ['JPY', 'KRW'].includes(normalizedCode) ? 0 : 2;
   const formattedAmount = Math.abs(amount).toLocaleString('en-US', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
