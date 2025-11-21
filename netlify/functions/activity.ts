@@ -143,9 +143,12 @@ function generateActivityDescription(history: TransactionHistory): string {
 
     case 'updated': {
       const diff = changes?.diff || {};
-      const fields = Object.keys(diff);
+      // Filter out technical fields that shouldn't be shown to users
+      const userVisibleFields = Object.keys(diff).filter(field => 
+        !['updated_at', 'created_at', 'id'].includes(field)
+      );
       
-      if (fields.length === 0) {
+      if (userVisibleFields.length === 0) {
         return 'Updated transaction';
       }
 
@@ -160,24 +163,28 @@ function generateActivityDescription(history: TransactionHistory): string {
       // Build list of changed fields
       const fieldChanges: string[] = [];
       
-      fields.forEach(field => {
+      userVisibleFields.forEach(field => {
         const { old: oldVal, new: newVal } = diff[field];
         
         // Format field name for display
         const fieldDisplayName = formatFieldName(field);
         
         if (field === 'split_among') {
-          // Special handling for splits
-          const oldCount = Array.isArray(oldVal) ? oldVal.length : 0;
-          const newCount = Array.isArray(newVal) ? newVal.length : 0;
+          // Special handling for splits - show who was added/removed
+          const oldSplits = Array.isArray(oldVal) ? oldVal : [];
+          const newSplits = Array.isArray(newVal) ? newVal : [];
+          const oldCount = oldSplits.length;
+          const newCount = newSplits.length;
+          
           if (oldCount !== newCount) {
             if (newCount > oldCount) {
-              fieldChanges.push(`splits: added ${newCount - oldCount} person(s)`);
+              fieldChanges.push(`added ${newCount - oldCount} person${newCount - oldCount > 1 ? 's' : ''} to splits`);
             } else {
-              fieldChanges.push(`splits: removed ${oldCount - newCount} person(s)`);
+              fieldChanges.push(`removed ${oldCount - newCount} person${oldCount - newCount > 1 ? 's' : ''} from splits`);
             }
           } else {
-            fieldChanges.push(`splits: changed`);
+            // Same count but different people - show it as changed splits
+            fieldChanges.push(`changed splits`);
           }
         } else {
           fieldChanges.push(`${fieldDisplayName}: ${formatValue(field, oldVal)} → ${formatValue(field, newVal)}`);
@@ -212,20 +219,20 @@ function generateActivityDescription(history: TransactionHistory): string {
 }
 
 /**
- * Formats field names for display
+ * Formats field names for display (user-friendly)
  */
 function formatFieldName(field: string): string {
   const fieldMap: Record<string, string> = {
-    'amount': 'amount',
-    'description': 'description',
-    'date': 'date',
-    'category': 'category',
-    'type': 'type',
-    'paid_by': 'paid by',
-    'split_among': 'splits',
-    'currency': 'currency',
+    'amount': 'Amount',
+    'description': 'Description',
+    'date': 'Date',
+    'category': 'Category',
+    'type': 'Type',
+    'paid_by': 'Paid by',
+    'split_among': 'Splits',
+    'currency': 'Currency',
   };
-  return fieldMap[field] || field;
+  return fieldMap[field] || field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' ');
 }
 
 /**
@@ -253,17 +260,22 @@ function formatValue(field: string, value: any): string {
   }
   
   if (field === 'split_among' && Array.isArray(value)) {
-    return `${value.length} person(s)`;
+    return `${value.length} person${value.length !== 1 ? 's' : ''}`;
+  }
+  
+  if (field === 'paid_by' && typeof value === 'string') {
+    // For paid_by, just show "User" since we don't have email context here
+    return 'User';
   }
   
   if (Array.isArray(value)) {
-    return `${value.length} item(s)`;
+    return `${value.length} item${value.length !== 1 ? 's' : ''}`;
   }
   
-  // Truncate long strings
+  // Truncate long strings (like UUIDs or long descriptions)
   const str = String(value);
-  if (str.length > 20) {
-    return str.substring(0, 20) + '...';
+  if (str.length > 25) {
+    return str.substring(0, 25) + '...';
   }
   
   return str;

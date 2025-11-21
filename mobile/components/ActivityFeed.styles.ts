@@ -35,10 +35,12 @@ export const styles = StyleSheet.create({
     fontWeight: "600",
   },
   activityDescription: {
-    marginBottom: 4,
+    marginBottom: 6,
+    lineHeight: 20,
   },
   activityTime: {
     marginTop: 4,
+    fontSize: 12,
   },
   emptyStateCard: {
     marginTop: 16,

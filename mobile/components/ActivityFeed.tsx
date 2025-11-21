@@ -134,6 +134,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                               styles.activityDescription,
                               { color: theme.colors.onSurface },
                             ]}
+                            numberOfLines={2}
                           >
                             {activity.description}
                           </Text>

@@ -157,15 +157,19 @@ BEGIN
     new_data := to_jsonb(NEW);
     
     -- Build diff object: {field: {old: value, new: value}}
+    -- Exclude technical fields that users don't need to see
     FOR field IN SELECT jsonb_object_keys(old_data) LOOP
-      IF old_data->>field IS DISTINCT FROM new_data->>field THEN
-        diff := diff || jsonb_build_object(
-          field,
-          jsonb_build_object(
-            'old', old_data->field,
-            'new', new_data->field
-          )
-        );
+      -- Skip updated_at, created_at, and id fields (technical/internal)
+      IF field NOT IN ('updated_at', 'created_at', 'id') THEN
+        IF old_data->>field IS DISTINCT FROM new_data->>field THEN
+          diff := diff || jsonb_build_object(
+            field,
+            jsonb_build_object(
+              'old', old_data->field,
+              'new', new_data->field
+            )
+          );
+        END IF;
       END IF;
     END LOOP;
     
