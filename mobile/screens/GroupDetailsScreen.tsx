@@ -9,24 +9,25 @@ import {
 import {
   ActivityIndicator,
   Appbar,
-  Avatar,
   Button,
-  Divider,
   FAB,
-  IconButton,
   Menu,
+  Modal,
+  Portal,
   SegmentedButtons,
   Surface,
   Text,
-  useTheme,
+  useTheme
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ActivityFeed } from "../components/ActivityFeed";
 import { BalancesSection } from "../components/BalancesSection";
+import { GroupDashboard } from "../components/GroupDashboard";
 import { InvitationsList } from "../components/InvitationsList";
 import { MembersList } from "../components/MembersList";
 import { TransactionsSection } from "../components/TransactionsSection";
 import { useAuth } from "../contexts/AuthContext";
+import { useActivity } from "../hooks/useActivity";
 import { useBalances } from "../hooks/useBalances";
 import {
   useCancelInvitation,
@@ -37,7 +38,6 @@ import {
   useDeleteGroup,
   useRemoveMember,
 } from "../hooks/useGroupMutations";
-import { useActivity } from "../hooks/useActivity";
 import { useGroupDetails } from "../hooks/useGroups";
 import {
   useCreateSettlement,
@@ -92,7 +92,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [editingSettlement, setEditingSettlement] = useState<Settlement | null>(
     null
   );
-  const [viewMode, setViewMode] = useState<string>('transactions');
+  const [showMembers, setShowMembers] = useState<boolean>(false);
+  const [listMode, setListMode] = useState<'transactions' | 'activity'>('transactions');
+  const [balanceModalType, setBalanceModalType] = useState<'none' | 'owe' | 'owed'>('none');
   // Fetch data with hooks
   const {
     data: groupData,
@@ -128,13 +130,16 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [cancellingInvitationId, setCancellingInvitationId] = useState<
     string | null
   >(null);
-  const [membersExpanded, setMembersExpanded] = useState<boolean>(false);
   const { session, signOut } = useAuth();
   const theme = useTheme();
 
   // Handle Android hardware back button
   useEffect(() => {
     const handleHardwareBack = () => {
+      if (showMembers) {
+        setShowMembers(false);
+        return true;
+      }
       onBack();
       return true;
     };
@@ -144,7 +149,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       handleHardwareBack
     );
     return () => subscription.remove();
-  }, [onBack]);
+  }, [onBack, showMembers]);
 
   // Refetch all data function
   const refetchAll = () => {
@@ -499,12 +504,27 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     >
       <Appbar.Header style={{ backgroundColor: theme.colors.background }}>
         <Appbar.BackAction
-          onPress={onBack}
+          onPress={() => {
+            if (showMembers) {
+              setShowMembers(false);
+            } else {
+              onBack();
+            }
+          }}
           accessibilityLabel="Navigate back"
           testID="back-button"
         />
-        <Appbar.Content title={group.name} titleStyle={{ fontWeight: 'bold' }} />
-        {isMember && (
+        <Appbar.Content title={showMembers ? "Group Members" : group.name} titleStyle={{ fontWeight: 'bold' }} />
+        
+        {!showMembers && (
+          <Appbar.Action 
+            icon="information-outline" 
+            onPress={() => setShowMembers(true)} 
+          />
+        )}
+
+        {/* Show Menu only if NOT in members view (or maybe keep it? let's keep it only in main view for now to avoid clutter) */}
+        {!showMembers && isMember && (
           <Menu
             visible={menuVisible}
             onDismiss={() => setMenuVisible(false)}
@@ -560,122 +580,10 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {group.description && (
-          <Surface style={styles.descriptionSurface} elevation={0}>
-            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-              {group.description}
-            </Text>
-          </Surface>
-        )}
-
-        <View style={{ paddingHorizontal: 16, marginBottom: 16 }}>
-          <SegmentedButtons
-            value={viewMode}
-            onValueChange={setViewMode}
-            buttons={[
-              {
-                value: 'transactions',
-                label: 'Transactions',
-                icon: 'format-list-bulleted',
-              },
-              {
-                value: 'activity',
-                label: 'Activity',
-                icon: 'history',
-              },
-              {
-                value: 'balances',
-                label: 'Balances',
-                icon: 'scale-balance',
-              },
-              {
-                value: 'members',
-                label: 'Members',
-                icon: 'account-group',
-              },
-            ]}
-          />
-        </View>
-
-        {viewMode === 'transactions' && (
-          <TransactionsSection
-            items={transactions}
-            loading={txLoading}
-            onEdit={onEditTransaction}
-          />
-        )}
-
-        {viewMode === 'activity' && (
-          <Surface style={styles.sectionSurface} elevation={1}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionTitleContainer}>
-                <Avatar.Icon 
-                  size={32} 
-                  icon="history" 
-                  style={{ backgroundColor: theme.colors.secondaryContainer, marginRight: 12 }} 
-                  color={theme.colors.onSecondaryContainer}
-                />
-                <Text variant="titleMedium" style={styles.sectionTitle}>
-                  Activity Feed
-                </Text>
-                {activityData?.activities && activityData.activities.length > 0 && (
-                  <View style={[styles.badge, { backgroundColor: theme.colors.secondaryContainer }]}>
-                    <Text style={[styles.badgeText, { color: theme.colors.onSecondaryContainer }]}>
-                      {activityData.activities.length}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </View>
-
-            <View style={styles.sectionContent}>
-              <ActivityFeed
-                items={activityData?.activities || []}
-                loading={activityLoading}
-              />
-            </View>
-          </Surface>
-        )}
-
-        {viewMode === 'balances' && (
-          <>
-            <BalancesSection
-              groupBalances={balancesData?.group_balances || []}
-              overallBalances={balancesData?.overall_balances || []}
-              loading={balancesLoading}
-              defaultCurrency={getDefaultCurrency()}
-              showOverallBalances={false}
-              onSettleUp={handleSettleUp}
-              currentUserId={session?.user?.id}
-              groupMembers={group.members || []}
-            />
-            
-          </>
-        )}
-
-        {viewMode === 'members' && (
-          <Surface style={styles.sectionSurface} elevation={1}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionTitleContainer}>
-                <Avatar.Icon 
-                  size={32} 
-                  icon="account-group" 
-                  style={{ backgroundColor: theme.colors.secondaryContainer, marginRight: 12 }} 
-                  color={theme.colors.onSecondaryContainer}
-                />
-                <Text variant="titleMedium" style={styles.sectionTitle}>
-                  Members
-                </Text>
-                <View style={[styles.badge, { backgroundColor: theme.colors.secondaryContainer }]}>
-                  <Text style={[styles.badgeText, { color: theme.colors.onSecondaryContainer }]}>
-                    {(group.members?.length || 0) + invitations.length}
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.sectionContent}>
-              <MembersList
+        {showMembers ? (
+          // MEMBERS VIEW
+          <View style={styles.sectionContent}>
+             <MembersList
                 members={group.members || []}
                 currentUserId={session?.user?.id}
                 isOwner={isOwner}
@@ -684,7 +592,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               />
               {group.members &&
                 group.members.length > 0 &&
-                invitations.length > 0 && <View style={{ height: 8 }} />}
+                invitations.length > 0 && <View style={{ height: 16 }} />}
               <InvitationsList
                 invitations={invitations}
                 loading={invitationsLoading}
@@ -694,31 +602,139 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               />
               {memoizedIsOwner && (
                 <Button 
-                  mode="outlined" 
+                  mode="contained" 
                   onPress={onAddMember} 
                   icon="account-plus"
-                  style={{ marginTop: 16 }}
+                  style={{ marginTop: 24 }}
                 >
                   Add Member
                 </Button>
               )}
+          </View>
+        ) : (
+          // DASHBOARD & LIST VIEW
+          <>
+            {group.description && (
+              <Surface style={styles.descriptionSurface} elevation={0}>
+                <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                  {group.description}
+                </Text>
+              </Surface>
+            )}
+
+            <GroupDashboard
+              balances={balancesData?.overall_balances || []}
+              transactions={transactions || []}
+              currentUserId={session?.user?.id}
+              loading={balancesLoading || txLoading}
+              defaultCurrency={getDefaultCurrency()}
+              onOwePress={() => {
+                console.log('[GroupDetails] Opening "I owe" modal');
+                setBalanceModalType('owe');
+              }}
+              onOwedPress={() => {
+                console.log('[GroupDetails] Opening "I\'m owed" modal');
+                setBalanceModalType('owed');
+              }}
+            />
+
+            <View style={{ paddingHorizontal: 16, marginTop: 24, marginBottom: 8 }}>
+              <SegmentedButtons
+                value={listMode}
+                onValueChange={(val: string) => setListMode(val as 'transactions' | 'activity')}
+                buttons={[
+                  {
+                    value: 'transactions',
+                    label: 'Transactions',
+                    icon: 'format-list-bulleted',
+                  },
+                  {
+                    value: 'activity',
+                    label: 'Activity',
+                    icon: 'history',
+                  },
+                ]}
+              />
             </View>
-          </Surface>
+
+            {listMode === 'transactions' ? (
+              <TransactionsSection
+                items={transactions}
+                loading={txLoading}
+                onEdit={onEditTransaction}
+              />
+            ) : (
+               <View style={styles.sectionContent}>
+                <ActivityFeed
+                  items={activityData?.activities || []}
+                  loading={activityLoading}
+                />
+              </View>
+            )}
+          </>
         )}
-
-
         
         {/* Bottom padding for FAB */}
         <View style={{ height: 80 }} />
       </ScrollView>
 
-      <FAB
-        icon="plus"
-        style={[styles.fab, { backgroundColor: theme.colors.primaryContainer }]}
-        color={theme.colors.onPrimaryContainer}
-        onPress={onAddTransaction}
-        label="Add Expense"
-      />
+      {!showMembers && (
+        <FAB
+          icon="plus"
+          style={[styles.fab, { backgroundColor: theme.colors.primaryContainer }]}
+          color={theme.colors.onPrimaryContainer}
+          onPress={onAddTransaction}
+          label="Add Expense"
+        />
+      )}
+
+      {/* Balances Modal - placed at root level to prevent duplication */}
+      <Portal>
+        <Modal
+          visible={balanceModalType !== 'none'}
+          onDismiss={() => {
+            console.log('[GroupDetails] Dismissing modal');
+            setBalanceModalType('none');
+          }}
+          contentContainerStyle={{
+            backgroundColor: theme.colors.background,
+            margin: 20,
+            borderRadius: 8,
+            padding: 16,
+            maxHeight: '80%'
+          }}
+        >
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <Text variant="titleLarge" style={{ fontWeight: 'bold' }}>
+              {balanceModalType === 'owe' ? 'People you owe' : 'People who owe you'}
+            </Text>
+            <Button onPress={() => setBalanceModalType('none')}>Close</Button>
+          </View>
+          
+          <ScrollView>
+            <BalancesSection
+              overallBalances={(balancesData?.overall_balances || []).filter(b => 
+                balanceModalType === 'owe' ? b.amount < 0 : b.amount > 0
+              )}
+              groupBalances={[]} // Hide group breakdown to keep it focused
+              currentUserId={session?.user?.id}
+              loading={balancesLoading}
+              onSettleUp={handleSettleUp}
+              showOverallBalances={true}
+              defaultCurrency={getDefaultCurrency()}
+            />
+            {(balancesData?.overall_balances || []).filter(b => 
+                balanceModalType === 'owe' ? b.amount < 0 : b.amount > 0
+              ).length === 0 && (
+                <Text style={{ textAlign: 'center', marginTop: 20, color: theme.colors.onSurfaceVariant }}>
+                  {balanceModalType === 'owe' ? "You don't owe anyone." : "No one owes you."}
+                </Text>
+              )}
+          </ScrollView>
+        </Modal>
+      </Portal>
+
+
 
 
 
@@ -781,22 +797,18 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 4,
   },
+  transactionsHeader: {
+    marginTop: 8,
+  },
+  sectionContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     padding: 16,
-  },
-  sectionTitleContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  sectionTitle: {
-    fontWeight: "bold",
-  },
-  sectionContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
   },
   badge: {
     paddingHorizontal: 8,
