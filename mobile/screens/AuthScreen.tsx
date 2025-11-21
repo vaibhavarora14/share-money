@@ -1,19 +1,20 @@
 import React, { useState } from "react";
 import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  View,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    View,
 } from "react-native";
 import {
-  Button,
-  Card,
-  Divider,
-  Text,
-  TextInput,
-  useTheme,
+    Button,
+    Divider,
+    Icon,
+    Surface,
+    Text,
+    TextInput,
+    useTheme
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
@@ -108,6 +109,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.header}>
+            <Surface style={[styles.logoContainer, { backgroundColor: theme.colors.primaryContainer }]} elevation={0}>
+              <Icon source="wallet" size={48} color={theme.colors.primary} />
+            </Surface>
             <Text variant="displaySmall" style={styles.title}>
               {isSignUp ? "Create Account" : "Welcome Back"}
             </Text>
@@ -124,89 +128,87 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             </Text>
           </View>
 
-          <Card style={styles.card} mode="elevated" elevation={2}>
-            <Card.Content style={styles.cardContent}>
-              <TextInput
-                label="Email"
-                value={email}
-                onChangeText={setEmail}
-                mode="outlined"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-                disabled={loading || googleLoading}
-                style={styles.input}
-                left={<TextInput.Icon icon="email" />}
-              />
+          <Surface style={styles.formContainer} elevation={0}>
+            <TextInput
+              label="Email"
+              value={email}
+              onChangeText={setEmail}
+              mode="outlined"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+              disabled={loading || googleLoading}
+              style={styles.input}
+              left={<TextInput.Icon icon="email" />}
+            />
 
-              <TextInput
-                label="Password"
-                value={password}
-                onChangeText={setPassword}
-                mode="outlined"
-                secureTextEntry={!showPassword}
-                autoCapitalize="none"
-                autoComplete="password"
-                disabled={loading || googleLoading}
-                style={styles.input}
-                left={<TextInput.Icon icon="lock" />}
-                right={
-                  <TextInput.Icon
-                    icon={showPassword ? "eye-off" : "eye"}
-                    onPress={() => setShowPassword(!showPassword)}
-                  />
-                }
-              />
+            <TextInput
+              label="Password"
+              value={password}
+              onChangeText={setPassword}
+              mode="outlined"
+              secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              autoComplete="password"
+              disabled={loading || googleLoading}
+              style={styles.input}
+              left={<TextInput.Icon icon="lock" />}
+              right={
+                <TextInput.Icon
+                  icon={showPassword ? "eye-off" : "eye"}
+                  onPress={() => setShowPassword(!showPassword)}
+                />
+              }
+            />
 
-              <Button
-                mode="contained"
-                onPress={handleSubmit}
-                disabled={loading || googleLoading}
-                loading={loading}
-                style={styles.button}
-                contentStyle={styles.buttonContent}
+            <Button
+              mode="contained"
+              onPress={handleSubmit}
+              disabled={loading || googleLoading}
+              loading={loading}
+              style={styles.button}
+              contentStyle={styles.buttonContent}
+            >
+              {isSignUp ? "Sign Up" : "Sign In"}
+            </Button>
+
+            <View style={styles.dividerContainer}>
+              <Divider style={styles.divider} />
+              <Text
+                variant="bodySmall"
+                style={[
+                  styles.dividerText,
+                  { color: theme.colors.onSurfaceVariant },
+                ]}
               >
-                {isSignUp ? "Sign Up" : "Sign In"}
-              </Button>
+                OR
+              </Text>
+              <Divider style={styles.divider} />
+            </View>
 
-              <View style={styles.dividerContainer}>
-                <Divider style={styles.divider} />
-                <Text
-                  variant="bodySmall"
-                  style={[
-                    styles.dividerText,
-                    { color: theme.colors.onSurfaceVariant },
-                  ]}
-                >
-                  OR
-                </Text>
-                <Divider style={styles.divider} />
-              </View>
+            <Button
+              mode="outlined"
+              onPress={handleGoogleSignIn}
+              disabled={loading || googleLoading}
+              loading={googleLoading}
+              style={styles.googleButton}
+              contentStyle={styles.buttonContent}
+              icon="google"
+            >
+              Continue with Google
+            </Button>
 
-              <Button
-                mode="outlined"
-                onPress={handleGoogleSignIn}
-                disabled={loading || googleLoading}
-                loading={googleLoading}
-                style={styles.googleButton}
-                contentStyle={styles.buttonContent}
-                icon="google"
-              >
-                Continue with Google
-              </Button>
-
-              <Button
-                mode="text"
-                onPress={onToggleMode}
-                disabled={loading || googleLoading}
-                style={styles.toggleButton}
-              >
-                {isSignUp
-                  ? "Already have an account? Sign In"
-                  : "Don't have an account? Sign Up"}
-              </Button>
-            </Card.Content>
-          </Card>
+            <Button
+              mode="text"
+              onPress={onToggleMode}
+              disabled={loading || googleLoading}
+              style={styles.toggleButton}
+            >
+              {isSignUp
+                ? "Already have an account? Sign In"
+                : "Don't have an account? Sign Up"}
+            </Button>
+          </Surface>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -223,11 +225,19 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: "center",
-    padding: 20,
+    padding: 24,
   },
   header: {
-    marginBottom: 32,
+    marginBottom: 48,
     alignItems: "center",
+  },
+  logoContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 24,
   },
   title: {
     fontWeight: "bold",
@@ -237,11 +247,8 @@ const styles = StyleSheet.create({
   subtitle: {
     textAlign: "center",
   },
-  card: {
-    borderRadius: 16,
-  },
-  cardContent: {
-    paddingVertical: 8,
+  formContainer: {
+    backgroundColor: 'transparent',
   },
   input: {
     marginBottom: 16,
@@ -256,7 +263,7 @@ const styles = StyleSheet.create({
   dividerContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginVertical: 24,
+    marginBottom: 24,
   },
   divider: {
     flex: 1,

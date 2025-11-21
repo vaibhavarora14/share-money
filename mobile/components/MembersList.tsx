@@ -2,9 +2,10 @@ import React from "react";
 import { View } from "react-native";
 import {
   ActivityIndicator,
-  Card,
-  Chip,
+  Avatar,
+  Divider,
   IconButton,
+  Surface,
   Text,
   useTheme,
 } from "react-native-paper";
@@ -43,8 +44,12 @@ export const MembersList: React.FC<MembersListProps> = ({
     );
   }
 
+  const getInitials = (name: string) => {
+    return name.substring(0, 2).toUpperCase();
+  };
+
   return (
-    <>
+    <Surface elevation={0} style={{ backgroundColor: theme.colors.surface, borderRadius: 12 }}>
       {members.map((member, index) => {
         const memberName =
           member.email || `User ${member.user_id.substring(0, 8)}...`;
@@ -60,81 +65,80 @@ export const MembersList: React.FC<MembersListProps> = ({
 
         return (
           <React.Fragment key={member.id}>
-            <Card
+            <View
               style={[
-                styles.memberCard,
+                styles.memberContent,
                 isRemoving && styles.memberCardRemoving,
+                { paddingHorizontal: 16, paddingVertical: 12 }
               ]}
-              mode="outlined"
             >
-              <Card.Content style={styles.memberContent}>
-                <View style={styles.memberLeft}>
+              <Avatar.Text
+                size={40}
+                label={getInitials(memberName)}
+                style={{
+                  backgroundColor: member.role === 'owner' ? theme.colors.primaryContainer : theme.colors.secondaryContainer,
+                  marginRight: 16
+                }}
+                color={member.role === 'owner' ? theme.colors.onPrimaryContainer : theme.colors.onSecondaryContainer}
+              />
+              <View style={styles.memberLeft}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <Text
-                    variant="titleSmall"
+                    variant="titleMedium"
                     style={[
                       styles.memberName,
                       isRemoving && { opacity: 0.6 },
+                      { fontWeight: member.role === 'owner' ? 'bold' : 'normal' }
                     ]}
                   >
-                    {memberName}
+                    {memberName} {isCurrentUser ? "(You)" : ""}
                   </Text>
-                  <Text
-                    variant="bodySmall"
-                    style={{
-                      color: theme.colors.onSurfaceVariant,
-                      opacity: isRemoving ? 0.6 : 1,
-                    }}
-                  >
-                    Joined {formatDate(member.joined_at)}
-                  </Text>
-                </View>
-                <View style={styles.memberRight}>
-                  {isRemoving ? (
-                    <ActivityIndicator
-                      size="small"
-                      color={theme.colors.primary}
-                      style={styles.removingIndicator}
+                  {member.role === 'owner' && (
+                    <IconButton
+                      icon="crown"
+                      size={16}
+                      iconColor={theme.colors.primary}
+                      style={{ margin: 0, marginLeft: 4 }}
                     />
-                  ) : (
-                    <>
-                      <Chip
-                        style={[
-                          styles.roleChip,
-                          {
-                            backgroundColor:
-                              member.role === "owner"
-                                ? theme.colors.primaryContainer
-                                : theme.colors.surfaceVariant,
-                          },
-                        ]}
-                        textStyle={{
-                          color:
-                            member.role === "owner"
-                              ? theme.colors.onPrimaryContainer
-                              : theme.colors.onSurfaceVariant,
-                        }}
-                      >
-                        {member.role}
-                      </Chip>
-                      {canRemove && (
-                        <IconButton
-                          icon="delete-outline"
-                          size={20}
-                          iconColor={theme.colors.error}
-                          onPress={() => onRemove(member.user_id, member.email)}
-                          style={styles.removeMemberButton}
-                          disabled={removingMemberId !== null}
-                        />
-                      )}
-                    </>
                   )}
                 </View>
-              </Card.Content>
-            </Card>
-            {index < members.length - 1 && <View style={{ height: 8 }} />}
+                <Text
+                  variant="bodyMedium"
+                  style={{
+                    color: theme.colors.onSurfaceVariant,
+                    opacity: isRemoving ? 0.6 : 1,
+                  }}
+                >
+                  Joined {formatDate(member.joined_at)}
+                </Text>
+              </View>
+              <View style={styles.memberRight}>
+                {isRemoving ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={theme.colors.primary}
+                    style={styles.removingIndicator}
+                  />
+                ) : (
+                  <>
+                    {canRemove && (
+                      <IconButton
+                        icon="delete-outline"
+                        size={24}
+                        iconColor={theme.colors.error}
+                        onPress={() => onRemove(member.user_id, member.email)}
+                        style={styles.removeMemberButton}
+                        disabled={removingMemberId !== null}
+                      />
+                    )}
+                  </>
+                )}
+              </View>
+            </View>
+            {index < members.length - 1 && <Divider />}
           </React.Fragment>
         );
       })}
-    </>
+    </Surface>
   );
 };
