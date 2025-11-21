@@ -1,20 +1,20 @@
 import React, { useState } from "react";
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    View,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  View
 } from "react-native";
 import {
-    Button,
-    Divider,
-    Icon,
-    Surface,
-    Text,
-    TextInput,
-    useTheme
+  Button,
+  Divider,
+  Surface,
+  Text,
+  TextInput,
+  useTheme
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
@@ -109,9 +109,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.header}>
-            <Surface style={[styles.logoContainer, { backgroundColor: theme.colors.primaryContainer }]} elevation={0}>
-              <Icon source="wallet" size={48} color={theme.colors.primary} />
-            </Surface>
+            <View style={[styles.logoContainer, { backgroundColor: 'transparent' }]}>
+              <Image 
+                source={require('../assets/logo.png')} 
+                style={styles.logoImage}
+                resizeMode="contain"
+                accessibilityLabel="ShareMoney app icon"
+              />
+            </View>
             <Text variant="displaySmall" style={styles.title}>
               {isSignUp ? "Create Account" : "Welcome Back"}
             </Text>
@@ -232,12 +237,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   logoContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    overflow: 'hidden', // Ensure proper clipping of rounded corners
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 24,
+  },
+  logoImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
   },
   title: {
     fontWeight: "bold",
