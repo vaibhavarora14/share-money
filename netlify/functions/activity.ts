@@ -48,7 +48,42 @@ interface UserResponse {
 }
 
 /**
- * Enriches activity items with email addresses for changed_by users
+ * Fetches email for a single user ID
+ */
+async function fetchUserEmail(
+  userId: string,
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  currentUserId: string,
+  currentUserEmail: string | null
+): Promise<string | null> {
+  if (userId === currentUserId && currentUserEmail) {
+    return currentUserEmail;
+  }
+
+  try {
+    const userResponse = await fetch(
+      `${supabaseUrl}/auth/v1/admin/users/${userId}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${serviceRoleKey}`,
+          'apikey': serviceRoleKey,
+        },
+      }
+    );
+    
+    if (userResponse.ok) {
+      const userData = await userResponse.json() as UserResponse;
+      return userData.user?.email || userData.email || null;
+    }
+  } catch (err) {
+    // Log error but continue - email enrichment is optional
+  }
+  return null;
+}
+
+/**
+ * Enriches activity items with email addresses for changed_by users and split users
  */
 async function enrichActivitiesWithEmails(
   supabase: SupabaseClient,
@@ -57,48 +92,33 @@ async function enrichActivitiesWithEmails(
   activities: ActivityItem[],
   currentUserId: string,
   currentUserEmail: string | null
-): Promise<void> {
+): Promise<Map<string, string>> {
+  const emailMap = new Map<string, string>();
+  
   if (!serviceRoleKey || activities.length === 0) {
-    return;
+    return emailMap;
   }
 
   const userIds = new Set<string>();
+  
+  // Collect user IDs from changed_by
   activities.forEach(a => {
     userIds.add(a.changed_by.id);
   });
+  
+  // Collect user IDs from split changes in history records
+  // We need to check the raw history records, not the transformed activities
+  // This will be done separately before transformation
 
   const userIdsArray = Array.from(userIds);
   
   // Fetch emails in parallel
   const emailPromises = userIdsArray.map(async (userId): Promise<{ userId: string; email: string | null }> => {
-    if (userId === currentUserId && currentUserEmail) {
-      return { userId, email: currentUserEmail };
-    }
-
-    try {
-      const userResponse = await fetch(
-        `${supabaseUrl}/auth/v1/admin/users/${userId}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${serviceRoleKey}`,
-            'apikey': serviceRoleKey,
-          },
-        }
-      );
-      
-      if (userResponse.ok) {
-        const userData = await userResponse.json() as UserResponse;
-        const email = userData.user?.email || userData.email || null;
-        return { userId, email };
-      }
-    } catch (err) {
-      // Log error but continue - email enrichment is optional
-    }
-    return { userId, email: null };
+    const email = await fetchUserEmail(userId, supabaseUrl, serviceRoleKey, currentUserId, currentUserEmail);
+    return { userId, email };
   });
 
   const emailResults = await Promise.allSettled(emailPromises);
-  const emailMap = new Map<string, string>();
   
   for (const result of emailResults) {
     if (result.status === 'fulfilled' && result.value.email) {
@@ -106,7 +126,7 @@ async function enrichActivitiesWithEmails(
     }
   }
 
-  // Add emails to activities
+  // Add emails to activities' changed_by
   activities.forEach(a => {
     const email = emailMap.get(a.changed_by.id);
     if (email) {
@@ -116,12 +136,17 @@ async function enrichActivitiesWithEmails(
       a.changed_by.email = a.changed_by.id.substring(0, 8) + '...';
     }
   });
+  
+  return emailMap;
 }
 
 /**
  * Generates human-readable description for an activity item
  */
-function generateActivityDescription(history: TransactionHistory): string {
+function generateActivityDescription(
+  history: TransactionHistory,
+  emailMap?: Map<string, string>
+): string {
   const action = history.action;
   const changes = history.changes;
   const snapshot = history.snapshot;
@@ -173,17 +198,56 @@ function generateActivityDescription(history: TransactionHistory): string {
           // Special handling for splits - show who was added/removed
           const oldSplits = Array.isArray(oldVal) ? oldVal : [];
           const newSplits = Array.isArray(newVal) ? newVal : [];
-          const oldCount = oldSplits.length;
-          const newCount = newSplits.length;
+          const oldSet = new Set(oldSplits);
+          const newSet = new Set(newSplits);
           
-          if (oldCount !== newCount) {
-            if (newCount > oldCount) {
-              fieldChanges.push(`added ${newCount - oldCount} person${newCount - oldCount > 1 ? 's' : ''} to splits`);
-            } else {
-              fieldChanges.push(`removed ${oldCount - newCount} person${oldCount - newCount > 1 ? 's' : ''} from splits`);
+          // Find added users
+          const addedUsers = newSplits.filter((id: string) => !oldSet.has(id));
+          // Find removed users
+          const removedUsers = oldSplits.filter((id: string) => !newSet.has(id));
+          
+          if (addedUsers.length > 0 || removedUsers.length > 0) {
+            const changes: string[] = [];
+            
+            if (addedUsers.length > 0) {
+              const userNames = addedUsers.map((userId: string) => {
+                if (emailMap) {
+                  const email = emailMap.get(userId);
+                  if (email) {
+                    return email.split('@')[0]; // Show username part
+                  }
+                }
+                return userId.substring(0, 8) + '...';
+              });
+              
+              if (addedUsers.length === 1) {
+                changes.push(`added ${userNames[0]} to splits`);
+              } else {
+                changes.push(`added ${userNames.join(', ')} to splits`);
+              }
             }
+            
+            if (removedUsers.length > 0) {
+              const userNames = removedUsers.map((userId: string) => {
+                if (emailMap) {
+                  const email = emailMap.get(userId);
+                  if (email) {
+                    return email.split('@')[0]; // Show username part
+                  }
+                }
+                return userId.substring(0, 8) + '...';
+              });
+              
+              if (removedUsers.length === 1) {
+                changes.push(`removed ${userNames[0]} from splits`);
+              } else {
+                changes.push(`removed ${userNames.join(', ')} from splits`);
+              }
+            }
+            
+            fieldChanges.push(changes.join(', '));
           } else {
-            // Same count but different people - show it as changed splits
+            // Same people but maybe amounts changed
             fieldChanges.push(`changed splits`);
           }
         } else {
@@ -293,7 +357,10 @@ function formatCurrency(amount: number | string): string {
 /**
  * Transforms database history record to ActivityItem
  */
-function transformHistoryToActivity(history: TransactionHistory): ActivityItem {
+function transformHistoryToActivity(
+  history: TransactionHistory,
+  emailMap?: Map<string, string>
+): ActivityItem {
   const typeMap: Record<string, ActivityItem['type']> = {
     'created': 'transaction_created',
     'updated': 'transaction_updated',
@@ -324,7 +391,7 @@ function transformHistoryToActivity(history: TransactionHistory): ActivityItem {
       email: '', // Will be populated by enrichActivitiesWithEmails
     },
     changed_at: history.changed_at,
-    description: generateActivityDescription(history),
+    description: generateActivityDescription(history, emailMap),
     details,
   };
 }
@@ -403,19 +470,57 @@ export const handler: Handler = async (event, context) => {
       return handleError(historyError, 'fetching transaction history');
     }
 
-    // Transform history records to activity items
-    const activities: ActivityItem[] = (historyRecords || []).map(transformHistoryToActivity);
-
-    // Enrich with email addresses
+    // Collect all user IDs that need email enrichment
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    await enrichActivitiesWithEmails(
-      supabase,
-      supabaseUrl,
-      serviceRoleKey,
-      activities,
-      user.id,
-      user.email || null
+    const userIds = new Set<string>();
+    
+    // Collect user IDs from changed_by
+    (historyRecords || []).forEach((h: TransactionHistory) => {
+      userIds.add(h.changed_by);
+    });
+    
+    // Collect user IDs from split changes
+    (historyRecords || []).forEach((h: TransactionHistory) => {
+      if (h.action === 'updated' && h.changes?.diff?.split_among) {
+        const splitDiff = h.changes.diff.split_among;
+        const oldSplits = Array.isArray(splitDiff.old) ? splitDiff.old : [];
+        const newSplits = Array.isArray(splitDiff.new) ? splitDiff.new : [];
+        oldSplits.forEach((userId: string) => userIds.add(userId));
+        newSplits.forEach((userId: string) => userIds.add(userId));
+      }
+    });
+    
+    // Fetch all emails
+    const emailMap = new Map<string, string>();
+    if (serviceRoleKey && userIds.size > 0) {
+      const userIdsArray = Array.from(userIds);
+      const emailPromises = userIdsArray.map(async (userId): Promise<{ userId: string; email: string | null }> => {
+        const email = await fetchUserEmail(userId, supabaseUrl, serviceRoleKey, user.id, user.email || null);
+        return { userId, email };
+      });
+      
+      const emailResults = await Promise.allSettled(emailPromises);
+      for (const result of emailResults) {
+        if (result.status === 'fulfilled' && result.value.email) {
+          emailMap.set(result.value.userId, result.value.email);
+        }
+      }
+    }
+    
+    // Transform history records to activity items with email map
+    const activities: ActivityItem[] = (historyRecords || []).map((h: TransactionHistory) => 
+      transformHistoryToActivity(h, emailMap)
     );
+    
+    // Ensure changed_by emails are set
+    activities.forEach(a => {
+      const email = emailMap.get(a.changed_by.id);
+      if (email) {
+        a.changed_by.email = email;
+      } else {
+        a.changed_by.email = a.changed_by.id.substring(0, 8) + '...';
+      }
+    });
 
     // Get total count for pagination
     const { count, error: countError } = await supabase
