@@ -118,17 +118,17 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
               return (
                 <React.Fragment key={activity.id}>
                   {activityIndex > 0 && <View style={{ height: 8 }} />}
-                  <Card style={styles.activityCard} mode="outlined">
-                    <Card.Content>
+                  <Card 
+                    style={[
+                      styles.activityCard,
+                      { borderLeftColor: activityColor, borderLeftWidth: 4 }
+                    ]} 
+                    mode="outlined"
+                  >
+                    <Card.Content style={styles.cardContent}>
                       <View style={styles.activityContent}>
                         <View style={styles.activityLeft}>
                           <View style={styles.activityHeader}>
-                            <View
-                              style={[
-                                styles.activityIndicator,
-                                { backgroundColor: activityColor },
-                              ]}
-                            />
                             <Text
                               variant="bodyMedium"
                               style={[

@@ -11,6 +11,12 @@ export const styles = StyleSheet.create({
   },
   activityCard: {
     marginBottom: 0,
+    borderLeftWidth: 4,
+    borderRadius: 4,
+  },
+  cardContent: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
   },
   activityContent: {
     flexDirection: "row",
@@ -24,12 +30,6 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 8,
-  },
-  activityIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 8,
   },
   activityUser: {
     fontWeight: "600",
