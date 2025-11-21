@@ -111,9 +111,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           <View style={styles.header}>
             <View style={[styles.logoContainer, { backgroundColor: 'transparent' }]}>
               <Image 
-                source={{ uri: 'logo' }} 
+                source={require('../assets/icon.png')} 
                 style={styles.logoImage}
                 resizeMode="contain"
+                accessibilityLabel="ShareMoney app icon"
               />
             </View>
             <Text variant="displaySmall" style={styles.title}>
@@ -239,6 +240,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
+    overflow: 'hidden', // Ensure proper clipping of rounded corners
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 24,
