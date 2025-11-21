@@ -28,7 +28,7 @@ module.exports = ({ config }) => {
       splash: {
         image: "./assets/splash-icon.png",
         resizeMode: "contain",
-        backgroundColor: "#ffffff"
+        backgroundColor: "#14B8A6"
       },
       ios: {
         supportsTablet: true,
@@ -40,7 +40,7 @@ module.exports = ({ config }) => {
         scheme: "com.sharemoney.app",
         adaptiveIcon: {
           foregroundImage: "./assets/adaptive-icon.png",
-          backgroundColor: "#ffffff"
+          backgroundColor: "#14B8A6"
         },
         edgeToEdgeEnabled: true
       },
