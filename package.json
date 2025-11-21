@@ -12,6 +12,8 @@
     "dev:server": "npm run dev --workspace=netlify"
   },
   "devDependencies": {
+    "imagemin": "^9.0.1",
+    "imagemin-pngquant": "^10.0.0",
     "sharp": "^0.34.5",
     "supabase": "^2.58.5"
   }
