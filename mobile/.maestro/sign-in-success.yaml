@@ -2,8 +2,11 @@ appId: com.sharemoney.app
 ---
 # Test: Sign In Success
 # This test verifies that a user can successfully sign in to the app
+# Note: App should be launched manually or already running before running this test
 
-- launchApp
+# Skip launchApp if app is already running - Maestro has issues with TCP forwarding timeout
+# - launchApp
+# Instead, we'll assume the app is already running or will be launched manually
 - waitForAnimationToEnd
 
 - assertVisible: "Welcome Back"
@@ -25,6 +28,9 @@ appId: com.sharemoney.app
 
 # Wait for navigation to groups screen
 - waitForAnimationToEnd
-- assertVisible: "Groups"
+# The groups screen shows "Your Groups" as the main title
+- assertVisible: "Your Groups"
 - assertNotVisible: "Welcome Back"
+# Also verify the bottom nav bar is visible
+- assertVisible: "Groups"
 
