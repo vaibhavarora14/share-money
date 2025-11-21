@@ -95,15 +95,16 @@ export function formatFieldName(field: string): string {
  * Formats a value for display based on field type
  * @param field - Field name
  * @param value - Value to format
+ * @param currencyCode - Optional currency code for amount fields
  * @returns Formatted string representation
  */
-export function formatValue(field: string, value: unknown): string {
+export function formatValue(field: string, value: unknown, currencyCode?: string): string {
   if (value === null || value === undefined) {
     return 'none';
   }
   
   if (field === 'amount') {
-    return formatCurrency(value as number);
+    return formatCurrency(value as number, currencyCode || 'USD');
   }
   
   if (field === 'date') {
@@ -221,11 +222,12 @@ function getUserName(userId: string, emailMap?: Map<string, string>): string {
  */
 function generateTransactionCreatedDescription(transaction: TransactionSnapshot): string {
   const amount = transaction.amount || 0;
+  const currency = transaction.currency || 'USD';
   const description = transaction.description || 'transaction';
   const descriptionGlimpse = description.length > 30 
     ? description.substring(0, 30) + '...' 
     : description;
-  return `${formatCurrency(amount)} - ${descriptionGlimpse}`;
+  return `${formatCurrency(amount, currency)} - ${descriptionGlimpse}`;
 }
 
 /**
@@ -248,6 +250,7 @@ function generateTransactionUpdatedDescription(
     return 'Updated transaction';
   }
 
+  const currency = transaction?.currency || 'USD';
   const descriptionGlimpse = transaction?.description 
     ? (transaction.description.length > 25 
         ? transaction.description.substring(0, 25) + '...' 
@@ -265,7 +268,9 @@ function generateTransactionUpdatedDescription(
       const newSplits = Array.isArray(newVal) ? newVal : [];
       fieldChanges.push(formatSplitChanges(oldSplits, newSplits, emailMap));
     } else {
-      fieldChanges.push(`${fieldDisplayName}: ${formatValue(field, oldVal)} → ${formatValue(field, newVal)}`);
+      // Pass currency code for amount fields
+      const currencyCode = field === 'amount' ? currency : undefined;
+      fieldChanges.push(`${fieldDisplayName}: ${formatValue(field, oldVal, currencyCode)} → ${formatValue(field, newVal, currencyCode)}`);
     }
   });
 
@@ -283,11 +288,12 @@ function generateTransactionUpdatedDescription(
  */
 function generateTransactionDeletedDescription(transaction: TransactionSnapshot): string {
   const amount = transaction.amount || 0;
+  const currency = transaction.currency || 'USD';
   const description = transaction.description || 'transaction';
   const descriptionGlimpse = description.length > 30 
     ? description.substring(0, 30) + '...' 
     : description;
-  return `Deleted: ${formatCurrency(amount)} - ${descriptionGlimpse}`;
+  return `Deleted: ${formatCurrency(amount, currency)} - ${descriptionGlimpse}`;
 }
 
 /**
@@ -301,6 +307,7 @@ function generateSettlementCreatedDescription(
   emailMap?: Map<string, string>
 ): string {
   const amount = settlement.amount || 0;
+  const currency = settlement.currency || 'USD';
   const fromUserId = settlement.from_user_id;
   const toUserId = settlement.to_user_id;
   const notes = settlement.notes;
@@ -308,7 +315,7 @@ function generateSettlementCreatedDescription(
   const fromName = getUserName(fromUserId, emailMap);
   const toName = getUserName(toUserId, emailMap);
   
-  let description = `${fromName} paid ${toName} ${formatCurrency(amount)}`;
+  let description = `${fromName} paid ${toName} ${formatCurrency(amount, currency)}`;
   if (notes) {
     const notesGlimpse = notes.length > 20 ? notes.substring(0, 20) + '...' : notes;
     description += ` - ${notesGlimpse}`;
@@ -337,6 +344,7 @@ function generateSettlementUpdatedDescription(
   }
   
   const amount = settlement?.amount || 0;
+  const currency = settlement?.currency || 'USD';
   const fromUserId = settlement?.from_user_id;
   const toUserId = settlement?.to_user_id;
   
@@ -349,7 +357,8 @@ function generateSettlementUpdatedDescription(
     const fieldDisplayName = formatFieldName(field);
     
     if (field === 'amount') {
-      fieldChanges.push(`Amount: ${formatValue(field, oldVal)} → ${formatValue(field, newVal)}`);
+      // Pass currency code for amount field
+      fieldChanges.push(`Amount: ${formatValue(field, oldVal, currency)} → ${formatValue(field, newVal, currency)}`);
     } else if (field === 'notes') {
       const oldNotes = oldVal || 'none';
       const newNotes = newVal || 'none';
@@ -359,7 +368,7 @@ function generateSettlementUpdatedDescription(
     }
   });
   
-  return `${fromName} paid ${toName} ${formatCurrency(amount)} - ${fieldChanges.join(', ')}`;
+  return `${fromName} paid ${toName} ${formatCurrency(amount, currency)} - ${fieldChanges.join(', ')}`;
 }
 
 /**
@@ -373,13 +382,14 @@ function generateSettlementDeletedDescription(
   emailMap?: Map<string, string>
 ): string {
   const amount = settlement.amount || 0;
+  const currency = settlement.currency || 'USD';
   const fromUserId = settlement.from_user_id;
   const toUserId = settlement.to_user_id;
   
   const fromName = getUserName(fromUserId, emailMap);
   const toName = getUserName(toUserId, emailMap);
   
-  return `Deleted settlement: ${fromName} paid ${toName} ${formatCurrency(amount)}`;
+  return `Deleted settlement: ${fromName} paid ${toName} ${formatCurrency(amount, currency)}`;
 }
 
 /**
