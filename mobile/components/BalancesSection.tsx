@@ -41,8 +41,9 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
 
   // Separate balances into "you owe" and "you are owed" (memoized for performance)
   const { youOwe, youAreOwed } = useMemo(() => {
-    const owe = overallBalances.filter((b) => b.amount < 0);
-    const owed = overallBalances.filter((b) => b.amount > 0);
+    // Clone arrays before sorting to avoid mutating React Query cache
+    const owe = [...overallBalances.filter((b) => b.amount < 0)];
+    const owed = [...overallBalances.filter((b) => b.amount > 0)];
     
     // Sort by absolute amount (largest first)
     owe.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
