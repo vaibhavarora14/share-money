@@ -39,6 +39,8 @@ CREATE TRIGGER transaction_updated_at_trigger
 CREATE TABLE IF NOT EXISTS transaction_history (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   transaction_id INTEGER REFERENCES transactions(id) ON DELETE SET NULL, -- Nullable for deleted transactions
+  settlement_id UUID REFERENCES settlements(id) ON DELETE SET NULL, -- Nullable for settlements
+  activity_type VARCHAR(20) NOT NULL DEFAULT 'transaction' CHECK (activity_type IN ('transaction', 'settlement')),
   group_id UUID REFERENCES groups(id) ON DELETE SET NULL, -- Denormalized for faster queries
   action VARCHAR(20) NOT NULL CHECK (action IN ('created', 'updated', 'deleted')),
   changed_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE SET NULL,
@@ -50,31 +52,69 @@ CREATE TABLE IF NOT EXISTS transaction_history (
   -- For 'deleted': stores final values before deletion
   changes JSONB NOT NULL,
   
-  -- Optional: Store full snapshot of transaction at time of change
-  -- Useful for deleted transactions or complex diffs
+  -- Optional: Store full snapshot of transaction/settlement at time of change
+  -- Useful for deleted items or complex diffs
   snapshot JSONB,
   
   -- Metadata
   ip_address INET, -- Optional: track where change came from
-  user_agent TEXT   -- Optional: track client info
+  user_agent TEXT,   -- Optional: track client info
+  
+  -- Ensure either transaction_id or settlement_id is set (but not both)
+  CHECK (
+    (transaction_id IS NOT NULL AND settlement_id IS NULL) OR
+    (transaction_id IS NULL AND settlement_id IS NOT NULL)
+  )
 );
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_transaction_history_transaction_id ON transaction_history(transaction_id);
+CREATE INDEX IF NOT EXISTS idx_transaction_history_settlement_id ON transaction_history(settlement_id);
+CREATE INDEX IF NOT EXISTS idx_transaction_history_activity_type ON transaction_history(activity_type);
 CREATE INDEX IF NOT EXISTS idx_transaction_history_group_id ON transaction_history(group_id);
 CREATE INDEX IF NOT EXISTS idx_transaction_history_changed_at ON transaction_history(changed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_transaction_history_changed_by ON transaction_history(changed_by);
 CREATE INDEX IF NOT EXISTS idx_transaction_history_action ON transaction_history(action);
 CREATE INDEX IF NOT EXISTS idx_transaction_history_group_changed_at ON transaction_history(group_id, changed_at DESC); -- For activity feed queries
+CREATE INDEX IF NOT EXISTS idx_transaction_history_group_type_changed_at ON transaction_history(group_id, activity_type, changed_at DESC); -- For filtered queries
 
 -- GIN index for JSONB queries
 CREATE INDEX IF NOT EXISTS idx_transaction_history_changes_gin ON transaction_history USING GIN (changes);
 
--- Fix existing installations: Make transaction_id nullable if table already exists
--- This allows deletion history to be recorded even after transaction is deleted
+-- Fix existing installations: Add settlement support if table already exists
 DO $$
 BEGIN
-  -- Check if column exists and is NOT NULL
+  -- Add settlement_id column if it doesn't exist
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'transaction_history' 
+    AND column_name = 'settlement_id'
+  ) THEN
+    ALTER TABLE transaction_history 
+    ADD COLUMN settlement_id UUID REFERENCES settlements(id) ON DELETE SET NULL;
+    
+    CREATE INDEX IF NOT EXISTS idx_transaction_history_settlement_id 
+      ON transaction_history(settlement_id);
+  END IF;
+  
+  -- Add activity_type column if it doesn't exist
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'transaction_history' 
+    AND column_name = 'activity_type'
+  ) THEN
+    ALTER TABLE transaction_history 
+    ADD COLUMN activity_type VARCHAR(20) NOT NULL DEFAULT 'transaction' 
+      CHECK (activity_type IN ('transaction', 'settlement'));
+    
+    CREATE INDEX IF NOT EXISTS idx_transaction_history_activity_type 
+      ON transaction_history(activity_type);
+    
+    CREATE INDEX IF NOT EXISTS idx_transaction_history_group_type_changed_at 
+      ON transaction_history(group_id, activity_type, changed_at DESC);
+  END IF;
+  
+  -- Make transaction_id nullable if it's NOT NULL
   IF EXISTS (
     SELECT 1 FROM information_schema.columns 
     WHERE table_name = 'transaction_history' 
@@ -95,6 +135,20 @@ BEGIN
     FOREIGN KEY (transaction_id) 
     REFERENCES transactions(id) 
     ON DELETE SET NULL;
+  END IF;
+  
+  -- Add check constraint if it doesn't exist
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints 
+    WHERE table_name = 'transaction_history' 
+    AND constraint_name = 'transaction_history_transaction_settlement_check'
+  ) THEN
+    ALTER TABLE transaction_history 
+    ADD CONSTRAINT transaction_history_transaction_settlement_check
+    CHECK (
+      (transaction_id IS NOT NULL AND settlement_id IS NULL) OR
+      (transaction_id IS NULL AND settlement_id IS NOT NULL)
+    );
   END IF;
 END $$;
 
@@ -135,6 +189,7 @@ BEGIN
     
     INSERT INTO transaction_history (
       transaction_id,
+      activity_type,
       group_id,
       action,
       changed_by,
@@ -142,6 +197,7 @@ BEGIN
       snapshot
     ) VALUES (
       NEW.id,
+      'transaction',
       NEW.group_id,
       'created',
       COALESCE(NEW.user_id, auth.uid()), -- Fallback to auth context
@@ -184,6 +240,7 @@ BEGIN
       
       INSERT INTO transaction_history (
         transaction_id,
+        activity_type,
         group_id,
         action,
         changed_by,
@@ -191,6 +248,7 @@ BEGIN
         snapshot
       ) VALUES (
         NEW.id,
+        'transaction',
         COALESCE(NEW.group_id, OLD.group_id), -- Use new or old group_id
         'updated',
         COALESCE(auth.uid(), NEW.user_id, OLD.user_id),
@@ -212,6 +270,7 @@ BEGIN
     
     INSERT INTO transaction_history (
       transaction_id,
+      activity_type,
       group_id,
       action,
       changed_by,
@@ -219,6 +278,7 @@ BEGIN
       snapshot
     ) VALUES (
       NULL, -- Set to NULL since transaction is deleted (foreign key constraint)
+      'transaction',
       OLD.group_id,
       'deleted',
       COALESCE(auth.uid(), OLD.user_id),
@@ -233,6 +293,127 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+
+-- Function to capture settlement changes
+CREATE OR REPLACE FUNCTION track_settlement_changes()
+RETURNS TRIGGER AS $$
+DECLARE
+  change_data JSONB;
+  old_data JSONB;
+  new_data JSONB;
+  diff JSONB := '{}'::JSONB;
+  field TEXT;
+BEGIN
+  -- Determine action type
+  IF TG_OP = 'INSERT' THEN
+    -- Created: store initial values
+    change_data := jsonb_build_object(
+      'action', 'created',
+      'settlement', to_jsonb(NEW)
+    );
+    
+    INSERT INTO transaction_history (
+      settlement_id,
+      activity_type,
+      group_id,
+      action,
+      changed_by,
+      changes,
+      snapshot
+    ) VALUES (
+      NEW.id,
+      'settlement',
+      NEW.group_id,
+      'created',
+      COALESCE(NEW.created_by, auth.uid()), -- Use created_by for settlements
+      change_data,
+      to_jsonb(NEW) -- Full snapshot
+    );
+    
+    RETURN NEW;
+    
+  ELSIF TG_OP = 'UPDATE' THEN
+    -- Updated: calculate diff
+    old_data := to_jsonb(OLD);
+    new_data := to_jsonb(NEW);
+    
+    -- Build diff object: {field: {old: value, new: value}}
+    -- Exclude technical fields that users don't need to see
+    FOR field IN SELECT jsonb_object_keys(old_data) LOOP
+      -- Skip created_at, id fields (technical/internal)
+      IF field NOT IN ('created_at', 'id') THEN
+        IF old_data->>field IS DISTINCT FROM new_data->>field THEN
+          diff := diff || jsonb_build_object(
+            field,
+            jsonb_build_object(
+              'old', old_data->field,
+              'new', new_data->field
+            )
+          );
+        END IF;
+      END IF;
+    END LOOP;
+    
+    -- Only record if there are actual changes
+    IF diff != '{}'::jsonb THEN
+      change_data := jsonb_build_object(
+        'action', 'updated',
+        'diff', diff,
+        'settlement_id', NEW.id
+      );
+      
+      INSERT INTO transaction_history (
+        settlement_id,
+        activity_type,
+        group_id,
+        action,
+        changed_by,
+        changes,
+        snapshot
+      ) VALUES (
+        NEW.id,
+        'settlement',
+        NEW.group_id,
+        'updated',
+        COALESCE(auth.uid(), NEW.created_by, OLD.created_by),
+        change_data,
+        to_jsonb(NEW) -- Current state snapshot
+      );
+    END IF;
+    
+    RETURN NEW;
+    
+  ELSIF TG_OP = 'DELETE' THEN
+    -- Deleted: store final values
+    change_data := jsonb_build_object(
+      'action', 'deleted',
+      'settlement', to_jsonb(OLD)
+    );
+    
+    INSERT INTO transaction_history (
+      settlement_id,
+      activity_type,
+      group_id,
+      action,
+      changed_by,
+      changes,
+      snapshot
+    ) VALUES (
+      NULL, -- Set to NULL since settlement is deleted (foreign key constraint)
+      'settlement',
+      OLD.group_id,
+      'deleted',
+      COALESCE(auth.uid(), OLD.created_by),
+      change_data,
+      to_jsonb(OLD) -- Final snapshot before deletion
+    );
+    
+    RETURN OLD;
+  END IF;
+  
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Function to archive old history records (>1 year)
 CREATE OR REPLACE FUNCTION archive_old_transaction_history()
@@ -265,6 +446,13 @@ CREATE TRIGGER transaction_history_trigger
   FOR EACH ROW
   EXECUTE FUNCTION track_transaction_changes();
 
+-- Trigger for settlements table
+DROP TRIGGER IF EXISTS settlement_history_trigger ON settlements;
+CREATE TRIGGER settlement_history_trigger
+  AFTER INSERT OR UPDATE OR DELETE ON settlements
+  FOR EACH ROW
+  EXECUTE FUNCTION track_settlement_changes();
+
 
 -- ============================================================================
 -- PART 6: ROW LEVEL SECURITY
@@ -273,7 +461,7 @@ CREATE TRIGGER transaction_history_trigger
 -- Enable RLS
 ALTER TABLE transaction_history ENABLE ROW LEVEL SECURITY;
 
--- Users can view history for transactions in groups they belong to
+-- Users can view history for transactions and settlements in groups they belong to
 CREATE POLICY "Users can view transaction history in their groups"
   ON transaction_history
   FOR SELECT
@@ -283,6 +471,10 @@ CREATE POLICY "Users can view transaction history in their groups"
     )
     OR transaction_id IN (
       SELECT id FROM transactions WHERE user_id = auth.uid()
+    )
+    OR settlement_id IN (
+      SELECT id FROM settlements 
+      WHERE from_user_id = auth.uid() OR to_user_id = auth.uid()
     )
   );
 

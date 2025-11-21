@@ -33,6 +33,11 @@ export const styles = StyleSheet.create({
   },
   activityUser: {
     fontWeight: "600",
+    marginRight: 8,
+  },
+  activityIcon: {
+    fontSize: 16,
+    marginLeft: 4,
   },
   activityDescription: {
     marginBottom: 6,

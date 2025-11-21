@@ -106,8 +106,9 @@ export interface SettlementsResponse {
 
 export interface ActivityItem {
   id: string;
-  type: 'transaction_created' | 'transaction_updated' | 'transaction_deleted';
+  type: 'transaction_created' | 'transaction_updated' | 'transaction_deleted' | 'settlement_created' | 'settlement_updated' | 'settlement_deleted';
   transaction_id?: number;
+  settlement_id?: string;
   group_id: string;
   changed_by: {
     id: string;
@@ -124,6 +125,7 @@ export interface ActivityItem {
       };
     };
     transaction?: Transaction;
+    settlement?: Settlement;
   };
 }
 

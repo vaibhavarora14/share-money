@@ -103,6 +103,17 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                 currentUserId
               );
               const activityColor = getActivityColor(activity.type);
+              
+              // Get icon based on activity type
+              const getActivityIcon = (type: ActivityItem['type']): string => {
+                if (type.startsWith('settlement')) return '🤝';
+                if (type.includes('created')) return '➕';
+                if (type.includes('updated')) return '✏️';
+                if (type.includes('deleted')) return '🗑️';
+                return '📋';
+              };
+              
+              const activityIcon = getActivityIcon(activity.type);
 
               return (
                 <React.Fragment key={activity.id}>
@@ -126,6 +137,15 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                               ]}
                             >
                               {userDisplayName}
+                            </Text>
+                            <Text
+                              variant="bodySmall"
+                              style={[
+                                styles.activityIcon,
+                                { color: theme.colors.onSurfaceVariant },
+                              ]}
+                            >
+                              {activityIcon}
                             </Text>
                           </View>
                           <Text

@@ -8,6 +8,8 @@ import { isValidUUID } from '../utils/validation';
 interface TransactionHistory {
   id: string;
   transaction_id: number | null; // Nullable for deleted transactions
+  settlement_id: string | null; // Nullable for settlements
+  activity_type: 'transaction' | 'settlement';
   group_id: string;
   action: 'created' | 'updated' | 'deleted';
   changed_by: string;
@@ -18,8 +20,9 @@ interface TransactionHistory {
 
 interface ActivityItem {
   id: string;
-  type: 'transaction_created' | 'transaction_updated' | 'transaction_deleted';
+  type: 'transaction_created' | 'transaction_updated' | 'transaction_deleted' | 'settlement_created' | 'settlement_updated' | 'settlement_deleted';
   transaction_id?: number;
+  settlement_id?: string;
   group_id: string;
   changed_by: {
     id: string;
@@ -36,6 +39,7 @@ interface ActivityItem {
       };
     };
     transaction?: any;
+    settlement?: any;
   };
 }
 
@@ -151,39 +155,114 @@ function generateActivityDescription(
   const changes = history.changes;
   const snapshot = history.snapshot;
 
+  const activityType = history.activity_type || 'transaction';
+  
   switch (action) {
     case 'created': {
-      const transaction = snapshot || changes?.transaction;
-      if (transaction) {
-        const amount = transaction.amount || 0;
-        const description = transaction.description || 'transaction';
-        // Show description glimpse (first 30 chars) + amount
-        const descriptionGlimpse = description.length > 30 
-          ? description.substring(0, 30) + '...' 
-          : description;
-        return `${formatCurrency(amount)} - ${descriptionGlimpse}`;
+      if (activityType === 'settlement') {
+        const settlement = snapshot || changes?.settlement;
+        if (settlement) {
+          const amount = settlement.amount || 0;
+          const fromUserId = settlement.from_user_id;
+          const toUserId = settlement.to_user_id;
+          const notes = settlement.notes;
+          
+          // Get user names from email map if available
+          let fromName = 'User';
+          let toName = 'User';
+          if (emailMap) {
+            const fromEmail = emailMap.get(fromUserId);
+            const toEmail = emailMap.get(toUserId);
+            if (fromEmail) fromName = fromEmail.split('@')[0];
+            if (toEmail) toName = toEmail.split('@')[0];
+          }
+          
+          let description = `${fromName} paid ${toName} ${formatCurrency(amount)}`;
+          if (notes) {
+            const notesGlimpse = notes.length > 20 ? notes.substring(0, 20) + '...' : notes;
+            description += ` - ${notesGlimpse}`;
+          }
+          return description;
+        }
+        return 'Created settlement';
+      } else {
+        // Transaction created
+        const transaction = snapshot || changes?.transaction;
+        if (transaction) {
+          const amount = transaction.amount || 0;
+          const description = transaction.description || 'transaction';
+          // Show description glimpse (first 30 chars) + amount
+          const descriptionGlimpse = description.length > 30 
+            ? description.substring(0, 30) + '...' 
+            : description;
+          return `${formatCurrency(amount)} - ${descriptionGlimpse}`;
+        }
+        return 'Added transaction';
       }
-      return 'Added transaction';
     }
 
     case 'updated': {
-      const diff = changes?.diff || {};
-      // Filter out technical fields that shouldn't be shown to users
-      const userVisibleFields = Object.keys(diff).filter(field => 
-        !['updated_at', 'created_at', 'id'].includes(field)
-      );
-      
-      if (userVisibleFields.length === 0) {
-        return 'Updated transaction';
-      }
+      if (activityType === 'settlement') {
+        const diff = changes?.diff || {};
+        const userVisibleFields = Object.keys(diff).filter(field => 
+          !['created_at', 'id'].includes(field)
+        );
+        
+        if (userVisibleFields.length === 0) {
+          return 'Updated settlement';
+        }
+        
+        const settlement = snapshot?.settlement || changes?.settlement;
+        const amount = settlement?.amount || 0;
+        const fromUserId = settlement?.from_user_id;
+        const toUserId = settlement?.to_user_id;
+        
+        // Get user names from email map if available
+        let fromName = 'User';
+        let toName = 'User';
+        if (emailMap) {
+          const fromEmail = emailMap.get(fromUserId);
+          const toEmail = emailMap.get(toUserId);
+          if (fromEmail) fromName = fromEmail.split('@')[0];
+          if (toEmail) toName = toEmail.split('@')[0];
+        }
+        
+        const fieldChanges: string[] = [];
+        userVisibleFields.forEach(field => {
+          const { old: oldVal, new: newVal } = diff[field];
+          const fieldDisplayName = formatFieldName(field);
+          
+          if (field === 'amount') {
+            fieldChanges.push(`Amount: ${formatValue(field, oldVal)} → ${formatValue(field, newVal)}`);
+          } else if (field === 'notes') {
+            const oldNotes = oldVal || 'none';
+            const newNotes = newVal || 'none';
+            fieldChanges.push(`Notes: ${oldNotes} → ${newNotes}`);
+          } else {
+            fieldChanges.push(`${fieldDisplayName}: ${formatValue(field, oldVal)} → ${formatValue(field, newVal)}`);
+          }
+        });
+        
+        return `${fromName} paid ${toName} ${formatCurrency(amount)} - ${fieldChanges.join(', ')}`;
+      } else {
+        // Transaction updated
+        const diff = changes?.diff || {};
+        // Filter out technical fields that shouldn't be shown to users
+        const userVisibleFields = Object.keys(diff).filter(field => 
+          !['updated_at', 'created_at', 'id'].includes(field)
+        );
+        
+        if (userVisibleFields.length === 0) {
+          return 'Updated transaction';
+        }
 
-      // Get transaction description for context (from snapshot or changes)
-      const transaction = snapshot?.transaction || changes?.transaction;
-      const descriptionGlimpse = transaction?.description 
-        ? (transaction.description.length > 25 
-            ? transaction.description.substring(0, 25) + '...' 
-            : transaction.description)
-        : null;
+        // Get transaction description for context (from snapshot or changes)
+        const transaction = snapshot?.transaction || changes?.transaction;
+        const descriptionGlimpse = transaction?.description 
+          ? (transaction.description.length > 25 
+              ? transaction.description.substring(0, 25) + '...' 
+              : transaction.description)
+          : null;
 
       // Build list of changed fields
       const fieldChanges: string[] = [];
@@ -255,26 +334,50 @@ function generateActivityDescription(
         }
       });
 
-      // Combine description glimpse with changes
-      if (descriptionGlimpse) {
-        return `${descriptionGlimpse} - ${fieldChanges.join(', ')}`;
-      } else {
-        return fieldChanges.join(', ');
+        // Combine description glimpse with changes
+        if (descriptionGlimpse) {
+          return `${descriptionGlimpse} - ${fieldChanges.join(', ')}`;
+        } else {
+          return fieldChanges.join(', ');
+        }
       }
     }
 
     case 'deleted': {
-      const transaction = snapshot || changes?.transaction;
-      if (transaction) {
-        const amount = transaction.amount || 0;
-        const description = transaction.description || 'transaction';
-        // Show description glimpse (first 30 chars) + amount
-        const descriptionGlimpse = description.length > 30 
-          ? description.substring(0, 30) + '...' 
-          : description;
-        return `Deleted: ${formatCurrency(amount)} - ${descriptionGlimpse}`;
+      if (activityType === 'settlement') {
+        const settlement = snapshot || changes?.settlement;
+        if (settlement) {
+          const amount = settlement.amount || 0;
+          const fromUserId = settlement.from_user_id;
+          const toUserId = settlement.to_user_id;
+          
+          // Get user names from email map if available
+          let fromName = 'User';
+          let toName = 'User';
+          if (emailMap) {
+            const fromEmail = emailMap.get(fromUserId);
+            const toEmail = emailMap.get(toUserId);
+            if (fromEmail) fromName = fromEmail.split('@')[0];
+            if (toEmail) toName = toEmail.split('@')[0];
+          }
+          
+          return `Deleted settlement: ${fromName} paid ${toName} ${formatCurrency(amount)}`;
+        }
+        return 'Deleted settlement';
+      } else {
+        // Transaction deleted
+        const transaction = snapshot || changes?.transaction;
+        if (transaction) {
+          const amount = transaction.amount || 0;
+          const description = transaction.description || 'transaction';
+          // Show description glimpse (first 30 chars) + amount
+          const descriptionGlimpse = description.length > 30 
+            ? description.substring(0, 30) + '...' 
+            : description;
+          return `Deleted: ${formatCurrency(amount)} - ${descriptionGlimpse}`;
+        }
+        return 'Deleted transaction';
       }
-      return 'Deleted transaction';
     }
 
     default:
@@ -295,6 +398,9 @@ function formatFieldName(field: string): string {
     'paid_by': 'Paid by',
     'split_among': 'Splits',
     'currency': 'Currency',
+    'notes': 'Notes',
+    'from_user_id': 'From',
+    'to_user_id': 'To',
   };
   return fieldMap[field] || field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' ');
 }
@@ -458,7 +564,7 @@ export const handler: Handler = async (event, context) => {
     const limit = Math.min(parseInt(event.queryStringParameters?.limit || '50'), 100);
     const offset = parseInt(event.queryStringParameters?.offset || '0');
 
-    // Fetch transaction history for this group
+    // Fetch transaction and settlement history for this group
     const { data: historyRecords, error: historyError } = await supabase
       .from('transaction_history')
       .select('*')
@@ -487,6 +593,15 @@ export const handler: Handler = async (event, context) => {
         const newSplits = Array.isArray(splitDiff.new) ? splitDiff.new : [];
         oldSplits.forEach((userId: string) => userIds.add(userId));
         newSplits.forEach((userId: string) => userIds.add(userId));
+      }
+      
+      // Collect user IDs from settlements (from_user_id and to_user_id)
+      if (h.activity_type === 'settlement') {
+        const settlement = h.snapshot?.settlement || h.changes?.settlement;
+        if (settlement) {
+          if (settlement.from_user_id) userIds.add(settlement.from_user_id);
+          if (settlement.to_user_id) userIds.add(settlement.to_user_id);
+        }
       }
     });
     

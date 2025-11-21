@@ -62,6 +62,12 @@ export function getActivityColor(type: ActivityItem['type']): string {
       return '#FF9800'; // Orange
     case 'transaction_deleted':
       return '#F44336'; // Red
+    case 'settlement_created':
+      return '#2196F3'; // Blue
+    case 'settlement_updated':
+      return '#9C27B0'; // Purple
+    case 'settlement_deleted':
+      return '#F44336'; // Red (same as transaction deleted)
     default:
       return '#757575'; // Gray
   }
