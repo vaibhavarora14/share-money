@@ -19,8 +19,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
 
-
-
 interface AuthScreenProps {
   onToggleMode: () => void;
   isSignUp: boolean;
