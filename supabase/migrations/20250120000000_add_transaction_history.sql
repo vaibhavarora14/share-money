@@ -5,7 +5,7 @@
 -- 1. Creates transaction_history table to track all changes
 -- 2. Creates transaction_history_archive table for records older than 1 year
 -- 3. Adds updated_at column to transactions table
--- 4. Creates triggers to automatically capture transaction and split changes
+-- 4. Creates triggers to automatically capture transaction changes (create, update, delete)
 -- 5. Sets up RLS policies for history access
 
 -- ============================================================================
@@ -271,7 +271,7 @@ CREATE POLICY "Users can view archived transaction history in their groups"
 -- COMMENTS
 -- ============================================================================
 
-COMMENT ON TABLE transaction_history IS 'Tracks all changes to transactions (create, update, delete, splits changes) for activity feed and audit trail';
+COMMENT ON TABLE transaction_history IS 'Tracks all changes to transactions (create, update, delete) for activity feed and audit trail';
 COMMENT ON TABLE transaction_history_archive IS 'Archived transaction history records older than 1 year';
 COMMENT ON COLUMN transaction_history.changes IS 'JSONB object storing change details (diff for updates, full data for create/delete)';
 COMMENT ON COLUMN transaction_history.snapshot IS 'Full snapshot of transaction state at time of change';
