@@ -132,8 +132,11 @@ function generateActivityDescription(history: TransactionHistory): string {
       if (transaction) {
         const amount = transaction.amount || 0;
         const description = transaction.description || 'transaction';
-        const type = transaction.type || 'expense';
-        return `Added ${type}: ${formatCurrency(amount)} for ${description}`;
+        // Show description glimpse (first 30 chars) + amount
+        const descriptionGlimpse = description.length > 30 
+          ? description.substring(0, 30) + '...' 
+          : description;
+        return `${formatCurrency(amount)} - ${descriptionGlimpse}`;
       }
       return 'Added transaction';
     }
@@ -141,14 +144,52 @@ function generateActivityDescription(history: TransactionHistory): string {
     case 'updated': {
       const diff = changes?.diff || {};
       const fields = Object.keys(diff);
-      if (fields.length === 1) {
-        const field = fields[0];
-        const { old: oldVal, new: newVal } = diff[field];
-        return `Updated ${field}: Changed from ${formatValue(field, oldVal)} to ${formatValue(field, newVal)}`;
-      } else if (fields.length > 1) {
-        return `Updated transaction: ${fields.length} fields changed`;
+      
+      if (fields.length === 0) {
+        return 'Updated transaction';
       }
-      return 'Updated transaction';
+
+      // Get transaction description for context (from snapshot or changes)
+      const transaction = snapshot?.transaction || changes?.transaction;
+      const descriptionGlimpse = transaction?.description 
+        ? (transaction.description.length > 25 
+            ? transaction.description.substring(0, 25) + '...' 
+            : transaction.description)
+        : null;
+
+      // Build list of changed fields
+      const fieldChanges: string[] = [];
+      
+      fields.forEach(field => {
+        const { old: oldVal, new: newVal } = diff[field];
+        
+        // Format field name for display
+        const fieldDisplayName = formatFieldName(field);
+        
+        if (field === 'split_among') {
+          // Special handling for splits
+          const oldCount = Array.isArray(oldVal) ? oldVal.length : 0;
+          const newCount = Array.isArray(newVal) ? newVal.length : 0;
+          if (oldCount !== newCount) {
+            if (newCount > oldCount) {
+              fieldChanges.push(`splits: added ${newCount - oldCount} person(s)`);
+            } else {
+              fieldChanges.push(`splits: removed ${oldCount - newCount} person(s)`);
+            }
+          } else {
+            fieldChanges.push(`splits: changed`);
+          }
+        } else {
+          fieldChanges.push(`${fieldDisplayName}: ${formatValue(field, oldVal)} → ${formatValue(field, newVal)}`);
+        }
+      });
+
+      // Combine description glimpse with changes
+      if (descriptionGlimpse) {
+        return `${descriptionGlimpse} - ${fieldChanges.join(', ')}`;
+      } else {
+        return fieldChanges.join(', ');
+      }
     }
 
     case 'deleted': {
@@ -156,8 +197,11 @@ function generateActivityDescription(history: TransactionHistory): string {
       if (transaction) {
         const amount = transaction.amount || 0;
         const description = transaction.description || 'transaction';
-        const type = transaction.type || 'expense';
-        return `Deleted ${type}: ${formatCurrency(amount)} for ${description}`;
+        // Show description glimpse (first 30 chars) + amount
+        const descriptionGlimpse = description.length > 30 
+          ? description.substring(0, 30) + '...' 
+          : description;
+        return `Deleted: ${formatCurrency(amount)} - ${descriptionGlimpse}`;
       }
       return 'Deleted transaction';
     }
@@ -165,6 +209,23 @@ function generateActivityDescription(history: TransactionHistory): string {
     default:
       return 'Transaction activity';
   }
+}
+
+/**
+ * Formats field names for display
+ */
+function formatFieldName(field: string): string {
+  const fieldMap: Record<string, string> = {
+    'amount': 'amount',
+    'description': 'description',
+    'date': 'date',
+    'category': 'category',
+    'type': 'type',
+    'paid_by': 'paid by',
+    'split_among': 'splits',
+    'currency': 'currency',
+  };
+  return fieldMap[field] || field;
 }
 
 /**
@@ -180,14 +241,32 @@ function formatValue(field: string, value: any): string {
   }
   
   if (field === 'date') {
-    return new Date(value).toLocaleDateString();
+    try {
+      return new Date(value).toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric',
+        year: 'numeric' 
+      });
+    } catch {
+      return String(value);
+    }
+  }
+  
+  if (field === 'split_among' && Array.isArray(value)) {
+    return `${value.length} person(s)`;
   }
   
   if (Array.isArray(value)) {
     return `${value.length} item(s)`;
   }
   
-  return String(value);
+  // Truncate long strings
+  const str = String(value);
+  if (str.length > 20) {
+    return str.substring(0, 20) + '...';
+  }
+  
+  return str;
 }
 
 /**
