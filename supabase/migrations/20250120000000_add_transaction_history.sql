@@ -170,7 +170,8 @@ BEGIN
     END LOOP;
     
     -- Only record if there are actual changes
-    IF jsonb_object_keys(diff) IS NOT NULL THEN
+    -- Check if diff object has any keys by comparing to empty object
+    IF diff != '{}'::jsonb THEN
       change_data := jsonb_build_object(
         'action', 'updated',
         'diff', diff,
