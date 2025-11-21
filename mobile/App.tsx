@@ -40,14 +40,8 @@ function AppContent() {
   const { session, loading, signOut } = useAuth();
   const theme = useTheme();
   const [isSignUp, setIsSignUp] = useState(false);
-  const [currentView, setCurrentView] = useState<"transactions" | "groups">(
-    "groups"
-  );
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [showAddMember, setShowAddMember] = useState(false);
-  const [groupDetails, setGroupDetails] = useState<GroupWithMembers | null>(
-    null
-  );
   const [currentRoute, setCurrentRoute] = useState<string>("groups");
   const [invitationsRefreshTrigger, setInvitationsRefreshTrigger] =
     useState<number>(0);
@@ -66,14 +60,7 @@ function AppContent() {
   const removeMemberMutation = useRemoveMember(refetchSelectedGroup);
   
   // Transaction mutations
-  // We need a way to refetch transactions in GroupDetailsScreen after mutation
-  // Since we don't have direct access to that refetch function here, we can rely on React Query's cache invalidation
-  // or pass a callback. For now, we'll assume the GroupDetailsScreen will refetch on mount/focus or we can add a trigger.
-  // Actually, we can add a transactionRefreshTrigger state to pass to GroupDetailsScreen.
-  const [transactionRefreshTrigger, setTransactionRefreshTrigger] = useState<number>(0);
-  
   const onTransactionSuccess = () => {
-    setTransactionRefreshTrigger(prev => prev + 1);
     setCurrentRoute("group-details");
     setEditingTransaction(null);
   };
@@ -89,10 +76,8 @@ function AppContent() {
 
     // Only reset when transitioning between logged in/out states
     if (hadSession !== hasSession) {
-      setCurrentView("groups");
       setCurrentRoute("groups");
       setSelectedGroup(null);
-      setGroupDetails(null);
       setShowAddMember(false);
       setEditingTransaction(null);
     }
@@ -107,7 +92,6 @@ function AppContent() {
     description?: string;
   }) => {
     await createGroupMutation.mutate(groupData);
-    setCurrentView("groups");
     // Refetch groups list to show the newly created group
     if (groupsListRefetchRef.current) {
       groupsListRefetchRef.current();
@@ -149,13 +133,6 @@ function AppContent() {
     setCurrentRoute("group-details");
     // Group details will be fetched via useGroupDetails hook
   };
-
-  // Update groupDetails when selectedGroupDetails changes
-  useEffect(() => {
-    if (selectedGroupDetails && selectedGroup) {
-      setGroupDetails(selectedGroupDetails);
-    }
-  }, [selectedGroupDetails, selectedGroup]);
 
   const handleSaveTransaction = async (
     transactionData: any
@@ -245,7 +222,7 @@ function AppContent() {
           }}
           onDelete={editingTransaction ? handleDeleteTransaction : undefined}
           defaultCurrency={getDefaultCurrency()}
-          groupMembers={selectedGroupDetails?.members || groupDetails?.members || []}
+          groupMembers={selectedGroupDetails?.members || []}
           groupId={selectedGroup.id}
         />
         <StatusBar style={theme.dark ? "light" : "dark"} />
@@ -271,7 +248,6 @@ function AppContent() {
           refreshTrigger={invitationsRefreshTrigger}
           groupRefreshTrigger={groupRefreshTrigger}
           onBack={() => {
-            setGroupDetails(null);
             setSelectedGroup(null);
             setCurrentRoute("groups");
           }}
@@ -280,15 +256,11 @@ function AppContent() {
             await handleRemoveMember(userId);
           }}
           onLeaveGroup={() => {
-            setGroupDetails(null);
             setSelectedGroup(null);
-            setCurrentView("groups");
             setCurrentRoute("groups");
           }}
           onDeleteGroup={() => {
-            setGroupDetails(null);
             setSelectedGroup(null);
-            setCurrentView("groups");
             setCurrentRoute("groups");
           }}
           onAddTransaction={() => {
@@ -303,12 +275,10 @@ function AppContent() {
         <BottomNavBar
           currentRoute={currentRoute}
           onGroupsPress={() => {
-            setGroupDetails(null);
             setSelectedGroup(null);
             setCurrentRoute("groups");
           }}
           onBalancesPress={() => {
-            setGroupDetails(null);
             setSelectedGroup(null);
             setCurrentRoute("balances");
           }}
