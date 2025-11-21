@@ -68,7 +68,8 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                 { color: theme.colors.onSurfaceVariant },
               ]}
             >
-              Activity feed shows all transaction changes made in this group.
+              Activity feed will show all transaction changes made in this
+              group.
             </Text>
           </Card.Content>
         </Card>
@@ -107,9 +108,11 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
               );
               const activityColor = getActivityColor(activity.type);
               
-              // Get icon for transaction activities
+              // Get icon based on activity category (transaction vs settlement)
               // Action is indicated by color (green=created, orange=updated, red=deleted)
-              const getActivityIcon = (type: ActivityItem['type']): string => {
+              const getActivityIcon = (type: ActivityItem['type']): any => {
+                if (type.startsWith('settlement')) return 'handshake';
+                // Transaction icon
                 return 'receipt';
               };
               

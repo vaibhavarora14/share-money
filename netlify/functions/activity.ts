@@ -564,12 +564,11 @@ export const handler: Handler = async (event, context) => {
     const limit = Math.min(parseInt(event.queryStringParameters?.limit || '50'), 100);
     const offset = parseInt(event.queryStringParameters?.offset || '0');
 
-    // Fetch transaction history only for this group (filter out settlements)
+    // Fetch transaction and settlement history for this group
     const { data: historyRecords, error: historyError } = await supabase
       .from('transaction_history')
       .select('*')
       .eq('group_id', groupId)
-      .eq('activity_type', 'transaction') // Only show transaction activities
       .order('changed_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
