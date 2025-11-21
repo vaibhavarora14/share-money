@@ -18,50 +18,6 @@ export function getUserDisplayName(
 }
 
 /**
- * Formats a value for display based on field type
- * @param field - Field name (e.g., 'amount', 'date')
- * @param value - Value to format (unknown type for type safety)
- * @param currencyCode - Optional currency code for amount fields
- * @returns Formatted string representation
- */
-function formatValue(field: string, value: unknown, currencyCode?: string): string {
-  if (value === null || value === undefined) {
-    return 'none';
-  }
-  
-  if (field === 'amount') {
-    // Type guard for number
-    if (typeof value === 'number') {
-      return formatCurrency(value, currencyCode);
-    }
-    // Try to parse string to number
-    if (typeof value === 'string') {
-      const num = parseFloat(value);
-      if (!isNaN(num)) {
-        return formatCurrency(num, currencyCode);
-      }
-    }
-    return String(value);
-  }
-  
-  if (field === 'date') {
-    try {
-      if (typeof value === 'string' || value instanceof Date) {
-        return new Date(value).toLocaleDateString();
-      }
-    } catch {
-      // Fall through to String conversion
-    }
-  }
-  
-  if (Array.isArray(value)) {
-    return `${value.length} item(s)`;
-  }
-  
-  return String(value);
-}
-
-/**
  * Generates a more detailed description for an activity item
  * (Backend already provides basic description, this adds context)
  */

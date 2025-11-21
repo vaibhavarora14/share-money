@@ -93,8 +93,9 @@ export function formatFieldName(field: string): string {
 
 /**
  * Formats a value for display based on field type
- * @param field - Field name
- * @param value - Value to format
+ * Uses type guards for type safety instead of type assertions
+ * @param field - Field name (e.g., 'amount', 'date', 'split_among')
+ * @param value - Value to format (unknown type for type safety)
  * @param currencyCode - Optional currency code for amount fields
  * @returns Formatted string representation
  */
@@ -104,14 +105,27 @@ export function formatValue(field: string, value: unknown, currencyCode?: string
   }
   
   if (field === 'amount') {
-    return formatCurrency(value as number, currencyCode || 'USD');
+    // Type guard for number - safer than type assertion
+    if (typeof value === 'number') {
+      return formatCurrency(value, currencyCode || 'USD');
+    }
+    // Try to parse string to number
+    if (typeof value === 'string') {
+      const num = parseFloat(value);
+      if (!isNaN(num)) {
+        return formatCurrency(num, currencyCode || 'USD');
+      }
+    }
+    return String(value);
   }
   
   if (field === 'date') {
     try {
-      return new Date(value as string).toLocaleDateString();
+      if (typeof value === 'string' || value instanceof Date) {
+        return new Date(value).toLocaleDateString();
+      }
     } catch {
-      return String(value);
+      // Fall through to String conversion
     }
   }
   
