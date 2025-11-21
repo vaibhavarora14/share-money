@@ -2,19 +2,21 @@ import React, { useEffect, useState } from "react";
 import {
   Alert,
   BackHandler,
-  Pressable,
   ScrollView,
   StyleSheet,
-  View,
+  View
 } from "react-native";
 import {
   ActivityIndicator,
   Appbar,
+  Avatar,
   Button,
-  Card,
+  Divider,
   FAB,
   IconButton,
   Menu,
+  SegmentedButtons,
+  Surface,
   Text,
   useTheme,
 } from "react-native-paper";
@@ -42,10 +44,7 @@ import {
   useUpdateSettlement,
 } from "../hooks/useSettlements";
 import {
-  useCreateTransaction,
-  useDeleteTransaction,
   useTransactions,
-  useUpdateTransaction,
 } from "../hooks/useTransactions";
 import {
   Balance,
@@ -57,7 +56,6 @@ import {
 import { formatCurrency, getDefaultCurrency } from "../utils/currency";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 import { SettlementFormScreen } from "./SettlementFormScreen";
-import { TransactionFormScreen } from "./TransactionFormScreen";
 
 interface GroupDetailsScreenProps {
   group: GroupWithMembers;
@@ -66,7 +64,8 @@ interface GroupDetailsScreenProps {
   onRemoveMember?: (userId: string) => Promise<void>;
   onLeaveGroup?: () => void;
   onDeleteGroup?: () => void;
-  onTransactionAdded?: () => void;
+  onAddTransaction: () => void;
+  onEditTransaction: (transaction: Transaction) => void;
   refreshTrigger?: number; // When this changes, refresh invitations
   groupRefreshTrigger?: number; // When this changes, refresh group data
 }
@@ -78,22 +77,20 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   onRemoveMember,
   onLeaveGroup,
   onDeleteGroup,
-  onTransactionAdded,
+  onAddTransaction,
+  onEditTransaction,
   refreshTrigger,
   groupRefreshTrigger,
 }) => {
   const [leaving, setLeaving] = useState<boolean>(false);
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
   const [menuVisible, setMenuVisible] = useState<boolean>(false);
-  const [showTransactionForm, setShowTransactionForm] =
-    useState<boolean>(false);
-  const [editingTransaction, setEditingTransaction] =
-    useState<Transaction | null>(null);
   const [showSettlementForm, setShowSettlementForm] = useState<boolean>(false);
   const [settlingBalance, setSettlingBalance] = useState<Balance | null>(null);
   const [editingSettlement, setEditingSettlement] = useState<Settlement | null>(
     null
   );
+  const [viewMode, setViewMode] = useState<string>('transactions');
   // Fetch data with hooks
   const {
     data: groupData,
@@ -153,9 +150,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   };
 
   // Mutations
-  const createTx = useCreateTransaction(refetchAll);
-  const updateTx = useUpdateTransaction(() => refetchAll());
-  const deleteTx = useDeleteTransaction(refetchAll);
+
   const deleteGroupMutation = useDeleteGroup(refetchGroup);
   const addMemberMutation = useAddMember(() => {
     refetchGroup();
@@ -272,32 +267,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     );
   };
 
-  const handleCreateTransaction = async (
-    transactionData: Omit<Transaction, "id" | "created_at" | "user_id">
-  ): Promise<void> => {
-    await createTx.mutate({
-      ...transactionData,
-      group_id: group.id,
-      currency: transactionData.currency || getDefaultCurrency(),
-    });
-  };
 
-  const handleUpdateTransaction = async (
-    transactionData: Omit<Transaction, "id" | "created_at" | "user_id">
-  ): Promise<void> => {
-    if (!editingTransaction) throw new Error("Invalid request");
-    await updateTx.mutate({
-      ...transactionData,
-      id: editingTransaction.id,
-      currency: transactionData.currency || getDefaultCurrency(),
-    });
-  };
-
-  const handleDeleteTransaction = async (
-    transactionId: number
-  ): Promise<void> => {
-    await deleteTx.mutate({ id: transactionId, group_id: group.id });
-  };
 
   const handleRemoveMember = async (
     memberUserId: string,
@@ -354,20 +324,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     );
   };
 
-  const handleEditTransaction = (transaction: Transaction) => {
-    setEditingTransaction(transaction);
-    setShowTransactionForm(true);
-  };
 
-  const handleTransactionFormSave = async (
-    transactionData: Omit<Transaction, "id" | "created_at" | "user_id">
-  ) => {
-    if (editingTransaction) {
-      await handleUpdateTransaction(transactionData);
-    } else {
-      await handleCreateTransaction(transactionData);
-    }
-  };
 
   const handleSettleUp = (balance: Balance) => {
     setSettlingBalance(balance);
@@ -534,13 +491,13 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       style={[styles.container, { backgroundColor: theme.colors.background }]}
       edges={["top", "bottom"]}
     >
-      <Appbar.Header>
+      <Appbar.Header style={{ backgroundColor: theme.colors.background }}>
         <Appbar.BackAction
           onPress={onBack}
           accessibilityLabel="Navigate back"
           testID="back-button"
         />
-        <Appbar.Content title={group.name} />
+        <Appbar.Content title={group.name} titleStyle={{ fontWeight: 'bold' }} />
         {isMember && (
           <Menu
             visible={menuVisible}
@@ -595,144 +552,113 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
       >
         {group.description && (
-          <Card style={styles.descriptionCard} mode="outlined">
-            <Card.Content>
-              <Text variant="bodyMedium">{group.description}</Text>
-            </Card.Content>
-          </Card>
+          <Surface style={styles.descriptionSurface} elevation={0}>
+            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+              {group.description}
+            </Text>
+          </Surface>
         )}
 
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Pressable
-              style={styles.sectionTitleRow}
-              onPress={() => setMembersExpanded(!membersExpanded)}
-            >
-              <IconButton
-                icon={membersExpanded ? "chevron-down" : "chevron-right"}
-                size={20}
-                iconColor={theme.colors.onSurface}
-                onPress={() => setMembersExpanded(!membersExpanded)}
-                style={styles.expandButton}
-              />
-              <Text
-                variant="titleMedium"
-                style={styles.sectionTitle}
-                testID="members-section-title"
-              >
-                Members ({(group.members?.length || 0) + invitations.length})
-              </Text>
-            </Pressable>
-            {memoizedIsOwner && (
-              <IconButton
-                icon="plus"
-                size={20}
-                iconColor={theme.colors.primary}
-                onPress={onAddMember}
-              />
-            )}
-          </View>
-
-          {membersExpanded && (
-            <>
-              <MembersList
-                members={group.members || []}
-                currentUserId={session?.user?.id}
-                isOwner={isOwner}
-                removingMemberId={removingMemberId}
-                onRemove={handleRemoveMember}
-              />
-              {group.members &&
-                group.members.length > 0 &&
-                invitations.length > 0 && <View style={{ height: 8 }} />}
-              <InvitationsList
-                invitations={invitations}
-                loading={invitationsLoading}
-                isOwner={memoizedIsOwner}
-                cancellingInvitationId={cancellingInvitationId}
-                onCancel={handleCancelInvitation}
-              />
-            </>
-          )}
+        <View style={{ paddingHorizontal: 16, marginBottom: 16 }}>
+          <SegmentedButtons
+            value={viewMode}
+            onValueChange={setViewMode}
+            buttons={[
+              {
+                value: 'transactions',
+                label: 'Transactions',
+                icon: 'format-list-bulleted',
+              },
+              {
+                value: 'balances',
+                label: 'Balances',
+                icon: 'scale-balance',
+              },
+              {
+                value: 'members',
+                label: 'Members',
+                icon: 'account-group',
+              },
+            ]}
+          />
         </View>
 
-        <BalancesSection
-          groupBalances={balancesData?.group_balances || []}
-          overallBalances={balancesData?.overall_balances || []}
-          loading={balancesLoading}
-          defaultCurrency={getDefaultCurrency()}
-          showOverallBalances={false}
-          onSettleUp={handleSettleUp}
-          currentUserId={session?.user?.id}
-          groupMembers={group.members || []}
-        />
+        {viewMode === 'transactions' && (
+          <TransactionsSection
+            items={transactions}
+            loading={txLoading}
+            onEdit={onEditTransaction}
+          />
+        )}
 
-        <TransactionsSection
-          items={transactions}
-          loading={txLoading}
-          onEdit={handleEditTransaction}
-        />
+        {viewMode === 'balances' && (
+          <>
+            <BalancesSection
+              groupBalances={balancesData?.group_balances || []}
+              overallBalances={balancesData?.overall_balances || []}
+              loading={balancesLoading}
+              defaultCurrency={getDefaultCurrency()}
+              showOverallBalances={false}
+              onSettleUp={handleSettleUp}
+              currentUserId={session?.user?.id}
+              groupMembers={group.members || []}
+            />
+            
+            <View style={styles.spacer} />
 
-        {/* Settlement History Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Pressable
-              style={styles.sectionTitleRow}
-              onPress={() => setSettlementsExpanded(!settlementsExpanded)}
-            >
-              <IconButton
-                icon={settlementsExpanded ? "chevron-down" : "chevron-right"}
-                size={20}
-                iconColor={theme.colors.onSurface}
-                onPress={() => setSettlementsExpanded(!settlementsExpanded)}
-                style={styles.expandButton}
-              />
-              <Text variant="titleMedium" style={styles.sectionTitle}>
-                Settlement History
-                {settlementsData?.settlements && (
-                  <Text
-                    variant="bodySmall"
-                    style={{ color: theme.colors.onSurfaceVariant }}
-                  >
-                    {" "}
-                    ({settlementsData.settlements.length})
+            {/* Settlement History Section */}
+            <Surface style={styles.sectionSurface} elevation={1}>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionTitleContainer}>
+                  <Avatar.Icon 
+                    size={32} 
+                    icon="handshake" 
+                    style={{ backgroundColor: theme.colors.tertiaryContainer, marginRight: 12 }} 
+                    color={theme.colors.onTertiaryContainer}
+                  />
+                  <Text variant="titleMedium" style={styles.sectionTitle}>
+                    Settlements
                   </Text>
-                )}
-              </Text>
-            </Pressable>
-          </View>
+                  {settlementsData?.settlements && settlementsData.settlements.length > 0 && (
+                    <View style={[styles.badge, { backgroundColor: theme.colors.tertiaryContainer }]}>
+                      <Text style={[styles.badgeText, { color: theme.colors.onTertiaryContainer }]}>
+                        {settlementsData.settlements.length}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
 
-          {settlementsExpanded && (
-            <>
-              {settlementsLoading ? (
-                <ActivityIndicator
-                  size="small"
-                  style={{ marginVertical: 16 }}
-                />
-              ) : settlementsData?.settlements &&
-                settlementsData.settlements.length > 0 ? (
-                <>
-                  {settlementsData.settlements.map((settlement, index) => {
-                    const isCurrentUserPayer =
-                      settlement.from_user_id === session?.user?.id;
-                    const isCurrentUserReceiver =
-                      settlement.to_user_id === session?.user?.id;
-                    const otherUserEmail = isCurrentUserPayer
-                      ? settlement.to_user_email
-                      : settlement.from_user_email;
-                    const otherUserDisplayName =
-                      otherUserEmail ||
-                      `User ${(isCurrentUserPayer
-                        ? settlement.to_user_id
-                        : settlement.from_user_id
-                      ).substring(0, 8)}...`;
+              <View style={styles.sectionContent}>
+                {settlementsLoading ? (
+                  <ActivityIndicator
+                    size="small"
+                    style={{ marginVertical: 16 }}
+                  />
+                ) : settlementsData?.settlements &&
+                  settlementsData.settlements.length > 0 ? (
+                  <>
+                    {settlementsData.settlements.map((settlement, index) => {
+                      const isCurrentUserPayer =
+                        settlement.from_user_id === session?.user?.id;
+                      const isCurrentUserReceiver =
+                        settlement.to_user_id === session?.user?.id;
+                      const otherUserEmail = isCurrentUserPayer
+                        ? settlement.to_user_email
+                        : settlement.from_user_email;
+                      const otherUserDisplayName =
+                        otherUserEmail ||
+                        `User ${(isCurrentUserPayer
+                          ? settlement.to_user_id
+                          : settlement.from_user_id
+                        ).substring(0, 8)}...`;
 
-                    return (
-                      <React.Fragment key={settlement.id}>
-                        <Card style={styles.settlementCard} mode="outlined">
-                          <Card.Content>
+                      return (
+                        <React.Fragment key={settlement.id}>
+                          <Surface style={styles.settlementItem} elevation={0}>
                             <View style={styles.settlementContent}>
                               <View style={styles.settlementLeft}>
                                 <Text
@@ -779,8 +705,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                                     styles.settlementAmount,
                                     {
                                       color: isCurrentUserPayer
-                                        ? "#ef4444"
-                                        : "#10b981",
+                                        ? theme.colors.error
+                                        : theme.colors.primary,
                                     },
                                   ]}
                                 >
@@ -789,101 +715,110 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                                     settlement.currency || getDefaultCurrency()
                                   )}
                                 </Text>
+                                <View style={styles.settlementActions}>
+                                  <IconButton
+                                    icon="pencil"
+                                    size={20}
+                                    onPress={() => handleEditSettlement(settlement)}
+                                  />
+                                  <IconButton
+                                    icon="delete"
+                                    size={20}
+                                    iconColor={theme.colors.error}
+                                    onPress={() => handleDeleteSettlement(settlement)}
+                                  />
+                                </View>
                               </View>
                             </View>
-                          </Card.Content>
-                          {/* Only show edit/delete if current user created the settlement */}
-                          {settlement.created_by === session?.user?.id && (
-                            <Card.Actions>
-                              <Button
-                                mode="text"
-                                onPress={() => handleEditSettlement(settlement)}
-                                compact
-                              >
-                                Edit
-                              </Button>
-                              <Button
-                                mode="text"
-                                onPress={() =>
-                                  handleDeleteSettlement(settlement)
-                                }
-                                textColor={theme.colors.error}
-                                compact
-                              >
-                                Delete
-                              </Button>
-                            </Card.Actions>
-                          )}
-                        </Card>
-                        {index < settlementsData.settlements.length - 1 && (
-                          <View style={{ height: 8 }} />
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </>
-              ) : (
-                <Card style={styles.emptyStateCard} mode="outlined">
-                  <Card.Content style={styles.emptyStateContent}>
+                          </Surface>
+                          {index < settlementsData.settlements.length - 1 && <Divider />}
+                        </React.Fragment>
+                      );
+                    })}
+                  </>
+                ) : (
+                  <View style={styles.emptyStateContent}>
                     <Text
                       variant="bodyMedium"
-                      style={[
-                        styles.emptyStateMessage,
-                        { color: theme.colors.onSurfaceVariant },
-                      ]}
+                      style={{ color: theme.colors.onSurfaceVariant }}
                     >
-                      No settlements yet
+                      No settlements recorded yet.
                     </Text>
-                  </Card.Content>
-                </Card>
+                  </View>
+                )}
+              </View>
+            </Surface>
+          </>
+        )}
+
+        {viewMode === 'members' && (
+          <Surface style={styles.sectionSurface} elevation={1}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionTitleContainer}>
+                <Avatar.Icon 
+                  size={32} 
+                  icon="account-group" 
+                  style={{ backgroundColor: theme.colors.secondaryContainer, marginRight: 12 }} 
+                  color={theme.colors.onSecondaryContainer}
+                />
+                <Text variant="titleMedium" style={styles.sectionTitle}>
+                  Members
+                </Text>
+                <View style={[styles.badge, { backgroundColor: theme.colors.secondaryContainer }]}>
+                  <Text style={[styles.badgeText, { color: theme.colors.onSecondaryContainer }]}>
+                    {(group.members?.length || 0) + invitations.length}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.sectionContent}>
+              <MembersList
+                members={group.members || []}
+                currentUserId={session?.user?.id}
+                isOwner={isOwner}
+                removingMemberId={removingMemberId}
+                onRemove={handleRemoveMember}
+              />
+              {group.members &&
+                group.members.length > 0 &&
+                invitations.length > 0 && <View style={{ height: 8 }} />}
+              <InvitationsList
+                invitations={invitations}
+                loading={invitationsLoading}
+                isOwner={memoizedIsOwner}
+                cancellingInvitationId={cancellingInvitationId}
+                onCancel={handleCancelInvitation}
+              />
+              {memoizedIsOwner && (
+                <Button 
+                  mode="outlined" 
+                  onPress={onAddMember} 
+                  icon="account-plus"
+                  style={{ marginTop: 16 }}
+                >
+                  Add Member
+                </Button>
               )}
-            </>
-          )}
-        </View>
+            </View>
+          </Surface>
+        )}
+
+
+        
+        {/* Bottom padding for FAB */}
+        <View style={{ height: 80 }} />
       </ScrollView>
 
-      {isMember && (
-        <FAB
-          icon="plus"
-          label="Add"
-          onPress={() => setShowTransactionForm(true)}
-          style={styles.addTransactionButton}
-        />
-      )}
-
-      <TransactionFormScreen
-        visible={showTransactionForm}
-        transaction={editingTransaction}
-        onSave={async (transactionData) => {
-          await handleTransactionFormSave(transactionData);
-          setShowTransactionForm(false);
-          setEditingTransaction(null);
-        }}
-        onDismiss={() => {
-          setShowTransactionForm(false);
-          setEditingTransaction(null);
-        }}
-        onDelete={
-          editingTransaction
-            ? async () => {
-                try {
-                  await handleDeleteTransaction(editingTransaction.id);
-                  setShowTransactionForm(false);
-                  setEditingTransaction(null);
-                } catch (error) {
-                  // Error is already handled in handleDeleteTransaction
-                  throw error;
-                }
-              }
-            : undefined
-        }
-        defaultCurrency={getDefaultCurrency()}
-        // Note: Only actual group members are included in expense splitting.
-        // Pending invitations are excluded because they haven't accepted yet
-        // and don't have a user_id until they join the group.
-        groupMembers={group.members || []}
-        groupId={group.id}
+      <FAB
+        icon="plus"
+        style={[styles.fab, { backgroundColor: theme.colors.primaryContainer }]}
+        color={theme.colors.onPrimaryContainer}
+        onPress={onAddTransaction}
+        label="Add Expense"
       />
+
+
 
       <SettlementFormScreen
         visible={showSettlementForm}
@@ -893,8 +828,20 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         currentUserId={session?.user?.id || ""}
         groupId={group.id}
         defaultCurrency={getDefaultCurrency()}
-        onSave={handleSettlementSave}
-        onUpdate={handleSettlementUpdate}
+        onSave={async (data) => {
+          if (editingSettlement) {
+            await handleSettlementUpdate({
+              id: editingSettlement.id,
+              ...data,
+            });
+          } else {
+            await handleSettlementSave({
+              ...data,
+              group_id: group.id,
+              from_user_id: session?.user?.id || "",
+            });
+          }
+        }}
         onDismiss={() => {
           setShowSettlementForm(false);
           setSettlingBalance(null);
@@ -921,104 +868,131 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 16,
   },
-  descriptionCard: {
+  descriptionSurface: {
+    padding: 16,
+    borderRadius: 12,
     marginBottom: 16,
+    backgroundColor: 'rgba(0,0,0,0.02)',
   },
-  section: {
-    marginTop: 8,
+  sectionSurface: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: 4,
   },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 6,
+    padding: 16,
+  },
+  sectionTitleContainer: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   sectionTitle: {
-    fontWeight: "600",
+    fontWeight: "bold",
   },
-  sectionTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
+  sectionContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
-  expandButton: {
-    margin: 0,
-    marginLeft: -8,
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    marginLeft: 8,
   },
-  memberCard: {
-    marginBottom: 0,
+  badgeText: {
+    fontSize: 12,
+    fontWeight: "bold",
   },
-  memberCardRemoving: {
-    opacity: 0.7,
+  spacer: {
+    height: 16,
   },
-  memberContent: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 4,
+  settlementItem: {
+    paddingVertical: 8,
+    backgroundColor: 'transparent',
   },
-  memberLeft: {
-    flex: 1,
-    marginRight: 8,
-  },
-  memberRight: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  memberName: {
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  roleChip: {
-    height: 28,
-  },
-  removeMemberButton: {
-    margin: 0,
-  },
-  removingIndicator: {
-    marginHorizontal: 8,
-  },
-  transactionCard: {
-    marginBottom: 0,
-  },
-  transactionContent: {
+  settlementContent: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 4,
+    alignItems: "flex-start",
+  },
+  settlementLeft: {
+    flex: 1,
+    marginRight: 16,
+  },
+  settlementRight: {
+    alignItems: "flex-end",
+  },
+  settlementDescription: {
+    fontWeight: "500",
+  },
+  settlementAmount: {
+    fontWeight: "bold",
+  },
+  settlementActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    marginTop: 8,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    marginVertical: 8,
+  },
+  fab: {
+    position: "absolute",
+    margin: 16,
+    right: 0,
+    bottom: 10,
+    borderRadius: 16,
   },
   transactionLeft: {
     flex: 1,
     marginRight: 16,
   },
-  transactionDescription: {
-    fontWeight: "600",
-    marginBottom: 4,
+  transactionRight: {
+    alignItems: "flex-end",
   },
-  transactionMeta: {
+  description: {
+    fontWeight: "500",
+  },
+  amount: {
+    fontWeight: "bold",
+  },
+  metaRow: {
     flexDirection: "row",
     alignItems: "center",
     marginTop: 4,
   },
-  transactionAmount: {
-    fontWeight: "bold",
-    marginBottom: 8,
+  chipAndActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 4,
   },
-  transactionRight: {
-    alignItems: "flex-end",
+  typeChip: {
+    height: 24,
+    marginRight: 0,
+  },
+  actionButtons: {
+    flexDirection: "row",
+    marginLeft: 4,
   },
   addTransactionButton: {
     position: "absolute",
-    right: 16,
-    bottom: 16, // Space for bottom navigation bar
+    margin: 16,
+    right: 0,
+    bottom: 0,
   },
   emptyStateCard: {
-    marginTop: 8,
+    marginBottom: 0,
+    borderStyle: "dashed",
+    backgroundColor: "transparent",
   },
   emptyStateContent: {
     alignItems: "center",
-    paddingVertical: 32,
-    paddingHorizontal: 16,
+    paddingVertical: 24,
   },
   emptyStateIcon: {
     fontSize: 48,
@@ -1032,27 +1006,5 @@ const styles = StyleSheet.create({
   emptyStateMessage: {
     textAlign: "center",
     lineHeight: 20,
-  },
-  settlementCard: {
-    marginBottom: 0,
-  },
-  settlementContent: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 4,
-  },
-  settlementLeft: {
-    flex: 1,
-    marginRight: 16,
-  },
-  settlementDescription: {
-    fontWeight: "600",
-  },
-  settlementRight: {
-    alignItems: "flex-end",
-  },
-  settlementAmount: {
-    fontWeight: "bold",
   },
 });

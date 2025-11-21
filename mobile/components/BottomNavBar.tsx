@@ -1,8 +1,7 @@
 import React from "react";
-import { View } from "react-native";
-import { IconButton, Surface, Text, useTheme } from "react-native-paper";
+import { Platform, StyleSheet, View } from "react-native";
+import { Icon, Surface, Text, TouchableRipple, useTheme } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { styles } from "./BottomNavBar.styles";
 
 interface BottomNavBarProps {
   onGroupsPress: () => void;
@@ -21,82 +20,121 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
   const isGroupsActive = currentRoute === "groups";
   const isBalancesActive = currentRoute === "balances";
 
-  return (
-    <SafeAreaView
-      edges={["bottom"]}
-      style={[styles.container, { backgroundColor: theme.colors.surface }]}
-    >
-      <Surface
-        style={[
-          styles.bar,
-          {
-            backgroundColor: theme.colors.surface,
-            borderTopColor: theme.colors.outlineVariant,
-          },
-        ]}
-        elevation={4}
+  const renderItem = (
+    label: string,
+    icon: string,
+    activeIcon: string,
+    isActive: boolean,
+    onPress: () => void,
+    isLogout: boolean = false
+  ) => {
+    const iconColor = isLogout
+      ? theme.colors.error
+      : isActive
+      ? theme.colors.onSecondaryContainer
+      : theme.colors.onSurfaceVariant;
+      
+    const labelColor = isLogout
+      ? theme.colors.error
+      : isActive
+      ? theme.colors.onSurface
+      : theme.colors.onSurfaceVariant;
+
+    return (
+      <TouchableRipple
+        onPress={onPress}
+        style={styles.tab}
+        borderless
+        rippleColor={isLogout ? theme.colors.errorContainer : theme.colors.secondaryContainer}
       >
-        <View style={styles.navContent}>
-          <View style={styles.navItem}>
-            <IconButton
-              icon={isGroupsActive ? "account-group" : "account-group-outline"}
+        <View style={styles.tabContent}>
+          <View
+            style={[
+              styles.iconContainer,
+              isActive && !isLogout && { backgroundColor: theme.colors.secondaryContainer },
+            ]}
+          >
+            <Icon
+              source={isActive ? activeIcon : icon}
               size={24}
-              iconColor={isGroupsActive ? theme.colors.primary : theme.colors.onSurfaceVariant}
-              onPress={onGroupsPress}
+              color={iconColor}
             />
-            <Text
-              variant="labelSmall"
-              style={[
-                styles.navLabel,
-                {
-                  color: isGroupsActive
-                    ? theme.colors.primary
-                    : theme.colors.onSurfaceVariant,
-                },
-              ]}
-            >
-              Groups
-            </Text>
           </View>
-
-          <View style={styles.navItem}>
-            <IconButton
-              icon={isBalancesActive ? "wallet" : "wallet-outline"}
-              size={24}
-              iconColor={isBalancesActive ? theme.colors.primary : theme.colors.onSurfaceVariant}
-              onPress={onBalancesPress}
-            />
-            <Text
-              variant="labelSmall"
-              style={[
-                styles.navLabel,
-                {
-                  color: isBalancesActive
-                    ? theme.colors.primary
-                    : theme.colors.onSurfaceVariant,
-                },
-              ]}
-            >
-              Balances
-            </Text>
-          </View>
-
-          <View style={styles.navItem}>
-            <IconButton
-              icon="logout"
-              size={24}
-              iconColor={theme.colors.error}
-              onPress={onLogoutPress}
-            />
-            <Text
-              variant="labelSmall"
-              style={[styles.navLabel, { color: theme.colors.error }]}
-            >
-              Logout
-            </Text>
-          </View>
+          <Text
+            variant="labelMedium"
+            style={[styles.label, { color: labelColor, fontWeight: isActive ? "bold" : "normal" }]}
+          >
+            {label}
+          </Text>
         </View>
-      </Surface>
-    </SafeAreaView>
+      </TouchableRipple>
+    );
+  };
+
+  return (
+    <Surface elevation={2} style={[styles.container, { backgroundColor: theme.colors.surface }]}>
+      <SafeAreaView edges={["bottom"]} style={styles.safeArea}>
+        <View style={styles.content}>
+          {renderItem(
+            "Groups",
+            "account-group-outline",
+            "account-group",
+            isGroupsActive,
+            onGroupsPress
+          )}
+          {renderItem(
+            "Balances",
+            "wallet-outline",
+            "wallet",
+            isBalancesActive,
+            onBalancesPress
+          )}
+          {renderItem(
+            "Logout",
+            "logout",
+            "logout",
+            false,
+            onLogoutPress,
+            true
+          )}
+        </View>
+      </SafeAreaView>
+    </Surface>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+  },
+  safeArea: {
+    backgroundColor: "transparent",
+  },
+  content: {
+    flexDirection: "row",
+    height: 80,
+    paddingBottom: Platform.OS === 'ios' ? 0 : 12,
+  },
+  tab: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tabContent: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+  },
+  iconContainer: {
+    width: 64,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  label: {
+    textAlign: "center",
+  },
+});

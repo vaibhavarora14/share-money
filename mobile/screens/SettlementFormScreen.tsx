@@ -1,26 +1,24 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  Alert,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  View,
+    Alert,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    View,
 } from "react-native";
 import {
-  Appbar,
-  Button,
-  Text,
-  TextInput,
-  useTheme,
-  ActivityIndicator,
+    Appbar,
+    Button,
+    Text,
+    TextInput,
+    useTheme
 } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Balance, GroupMember, Settlement } from "../types";
-import { getCurrencySymbol, getDefaultCurrency } from "../utils/currency";
+import { formatCurrency, getCurrencySymbol, getDefaultCurrency } from "../utils/currency";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
-import { formatCurrency } from "../utils/currency";
 
 interface SettlementFormScreenProps {
   visible: boolean;
@@ -242,24 +240,24 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
           keyboardShouldPersistTaps="handled"
         >
           {!isEditing && balance && (
-            <View style={styles.balanceInfo}>
-              <Text variant="titleMedium" style={styles.balanceText}>
+            <View style={[styles.balanceInfo, { backgroundColor: theme.colors.secondaryContainer }]}>
+              <Text variant="titleMedium" style={[styles.balanceText, { color: theme.colors.onSecondaryContainer }]}>
                 {getUserDisplayName(balance.user_id)}
               </Text>
-              <Text variant="bodyMedium" style={styles.balanceAmount}>
+              <Text variant="bodyMedium" style={[styles.balanceAmount, { color: theme.colors.onSecondaryContainer }]}>
                 {getBalanceDisplay()}
               </Text>
             </View>
           )}
 
           {isEditing && settlement && (
-            <View style={styles.balanceInfo}>
-              <Text variant="titleMedium" style={styles.balanceText}>
+            <View style={[styles.balanceInfo, { backgroundColor: theme.colors.secondaryContainer }]}>
+              <Text variant="titleMedium" style={[styles.balanceText, { color: theme.colors.onSecondaryContainer }]}>
                 {settlement.from_user_id === currentUserId
                   ? `You paid ${getUserDisplayName(settlement.to_user_id)}`
                   : `${getUserDisplayName(settlement.from_user_id)} paid you`}
               </Text>
-              <Text variant="bodyMedium" style={styles.balanceAmount}>
+              <Text variant="bodyMedium" style={[styles.balanceAmount, { color: theme.colors.onSecondaryContainer }]}>
                 {formatCurrency(settlement.amount, settlement.currency || effectiveDefaultCurrency)}
               </Text>
             </View>
@@ -374,7 +372,6 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   balanceInfo: {
-    backgroundColor: "#f5f5f5",
     padding: 16,
     borderRadius: 8,
     marginBottom: 24,
@@ -385,7 +382,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   balanceAmount: {
-    color: "#666",
+    // color removed, set via theme
   },
   section: {
     marginBottom: 24,
