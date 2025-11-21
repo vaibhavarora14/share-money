@@ -12,6 +12,7 @@
     "dev:server": "npm run dev --workspace=netlify"
   },
   "devDependencies": {
+    "sharp": "^0.34.5",
     "supabase": "^2.58.5"
   }
 }
