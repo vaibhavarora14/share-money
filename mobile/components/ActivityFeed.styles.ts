@@ -35,10 +35,6 @@ export const styles = StyleSheet.create({
     fontWeight: "600",
     marginRight: 8,
   },
-  activityIcon: {
-    fontSize: 16,
-    marginLeft: 4,
-  },
   activityDescription: {
     marginBottom: 6,
     lineHeight: 20,

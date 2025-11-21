@@ -5,6 +5,7 @@ import {
   Card,
   Text,
   useTheme,
+  Icon,
 } from "react-native-paper";
 import { useAuth } from "../contexts/AuthContext";
 import { ActivityItem } from "../types";
@@ -104,13 +105,12 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
               );
               const activityColor = getActivityColor(activity.type);
               
-              // Get icon based on activity type
+              // Get icon based on activity category (transaction vs settlement)
+              // Action is indicated by color (green=created, orange=updated, red=deleted)
               const getActivityIcon = (type: ActivityItem['type']): string => {
-                if (type.startsWith('settlement')) return '🤝';
-                if (type.includes('created')) return '➕';
-                if (type.includes('updated')) return '✏️';
-                if (type.includes('deleted')) return '🗑️';
-                return '📋';
+                if (type.startsWith('settlement')) return 'handshake';
+                // Transaction icon
+                return 'receipt';
               };
               
               const activityIcon = getActivityIcon(activity.type);
@@ -138,15 +138,13 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                             >
                               {userDisplayName}
                             </Text>
-                            <Text
-                              variant="bodySmall"
-                              style={[
-                                styles.activityIcon,
-                                { color: theme.colors.onSurfaceVariant },
-                              ]}
-                            >
-                              {activityIcon}
-                            </Text>
+                            <View style={{ marginLeft: 8 }}>
+                              <Icon
+                                source={activityIcon}
+                                size={18}
+                                color={activityColor}
+                              />
+                            </View>
                           </View>
                           <Text
                             variant="bodyMedium"
