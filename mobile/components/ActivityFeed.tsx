@@ -5,8 +5,8 @@ import {
   Card,
   Text,
   useTheme,
-  Icon,
 } from "react-native-paper";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useAuth } from "../contexts/AuthContext";
 import { ActivityItem } from "../types";
 import {
@@ -139,8 +139,8 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                               {userDisplayName}
                             </Text>
                             <View style={{ marginLeft: 8 }}>
-                              <Icon
-                                source={activityIcon}
+                              <MaterialCommunityIcons
+                                name={activityIcon}
                                 size={18}
                                 color={activityColor}
                               />
