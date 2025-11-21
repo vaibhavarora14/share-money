@@ -62,6 +62,12 @@ module.exports = ({ config }) => {
         fallbackToCacheTimeout: 0
       },
       plugins: [
+        [
+          "expo-asset",
+          {
+            "assets": ["./assets"]
+          }
+        ],
         "expo-font",
         "expo-web-browser",
         // Only include expo-dev-client plugin for development builds

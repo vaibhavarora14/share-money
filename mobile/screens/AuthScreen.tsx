@@ -19,6 +19,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
 
+
+
 interface AuthScreenProps {
   onToggleMode: () => void;
   isSignUp: boolean;
@@ -111,7 +113,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           <View style={styles.header}>
             <View style={[styles.logoContainer, { backgroundColor: 'transparent' }]}>
               <Image 
-                source={require('../assets/icon.png')} 
+                source={require('../assets/logo.png')} 
                 style={styles.logoImage}
                 resizeMode="contain"
                 accessibilityLabel="ShareMoney app icon"
