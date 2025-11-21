@@ -129,9 +129,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     string | null
   >(null);
   const [membersExpanded, setMembersExpanded] = useState<boolean>(false);
-  const [activityExpanded, setActivityExpanded] = useState<boolean>(false);
-  const [settlementsExpanded, setSettlementsExpanded] =
-    useState<boolean>(false);
   const { session, signOut } = useAuth();
   const theme = useTheme();
 
