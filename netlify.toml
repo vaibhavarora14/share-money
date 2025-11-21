@@ -31,3 +31,8 @@
   to = "/.netlify/functions/settlements"
   status = 200
 
+[[redirects]]
+  from = "/api/activity"
+  to = "/.netlify/functions/activity"
+  status = 200
+

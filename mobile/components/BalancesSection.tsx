@@ -1,12 +1,11 @@
 
-import React, { useMemo, useState } from "react";
-import { Pressable, View } from "react-native";
+import React, { useMemo } from "react";
+import { View } from "react-native";
 import {
     ActivityIndicator,
     Avatar,
     Button,
     Divider,
-    IconButton,
     Surface,
     Text,
     useTheme
@@ -37,7 +36,6 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
   groupMembers = [],
 }) => {
   const theme = useTheme();
-  const [expanded, setExpanded] = useState<boolean>(false);
 
   // Separate balances into "you owe" and "you are owed" (memoized for performance)
   const { youOwe, youAreOwed } = useMemo(() => {
@@ -64,33 +62,11 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
   };
 
   return (
-    <Surface style={styles.sectionSurface} elevation={1}>
-      <Pressable
-        style={styles.sectionHeader}
-        onPress={() => setExpanded(!expanded)}
-      >
-        <View style={styles.sectionTitleContainer}>
-          <Avatar.Icon 
-            size={32} 
-            icon="scale-balance" 
-            style={{ backgroundColor: theme.colors.errorContainer, marginRight: 12 }} 
-            color={theme.colors.onErrorContainer}
-          />
-          <Text variant="titleMedium" style={styles.sectionTitle}>
-            Your Balances
-          </Text>
-        </View>
-        <IconButton
-          icon={expanded ? "chevron-up" : "chevron-down"}
-          size={20}
-          onPress={() => setExpanded(!expanded)}
-        />
-      </Pressable>
-
+    <View>
       {loading ? (
         <ActivityIndicator size="small" style={{ marginVertical: 16 }} />
-      ) : expanded ? (
-        <View style={styles.sectionContent}>
+      ) : (
+        <View>
           {/* Overall Summary - only show if showOverallBalances is true */}
           {showOverallBalances && overallBalances.length > 0 && (
             <>
@@ -363,7 +339,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
             </View>
           ) : null}
         </View>
-      ) : null}
-    </Surface>
+      )}
+    </View>
   );
 };

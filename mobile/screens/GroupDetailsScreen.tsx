@@ -1,31 +1,27 @@
 import React, { useEffect, useState } from "react";
-import {
-  Alert,
-  BackHandler,
-  ScrollView,
-  StyleSheet,
-  View
-} from "react-native";
+import { Alert, BackHandler, ScrollView, StyleSheet, View } from "react-native";
 import {
   ActivityIndicator,
   Appbar,
-  Avatar,
   Button,
-  Divider,
   FAB,
-  IconButton,
   Menu,
+  Modal,
+  Portal,
   SegmentedButtons,
   Surface,
   Text,
   useTheme,
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { ActivityFeed } from "../components/ActivityFeed";
 import { BalancesSection } from "../components/BalancesSection";
+import { GroupDashboard } from "../components/GroupDashboard";
 import { InvitationsList } from "../components/InvitationsList";
 import { MembersList } from "../components/MembersList";
 import { TransactionsSection } from "../components/TransactionsSection";
 import { useAuth } from "../contexts/AuthContext";
+import { useActivity } from "../hooks/useActivity";
 import { useBalances } from "../hooks/useBalances";
 import {
   useCancelInvitation,
@@ -43,9 +39,7 @@ import {
   useSettlements,
   useUpdateSettlement,
 } from "../hooks/useSettlements";
-import {
-  useTransactions,
-} from "../hooks/useTransactions";
+import { useTransactions } from "../hooks/useTransactions";
 import {
   Balance,
   GroupInvitation,
@@ -90,7 +84,13 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [editingSettlement, setEditingSettlement] = useState<Settlement | null>(
     null
   );
-  const [viewMode, setViewMode] = useState<string>('transactions');
+  const [showMembers, setShowMembers] = useState<boolean>(false);
+  const [listMode, setListMode] = useState<"transactions" | "activity">(
+    "transactions"
+  );
+  const [balanceModalType, setBalanceModalType] = useState<
+    "none" | "owe" | "owed"
+  >("none");
   // Fetch data with hooks
   const {
     data: groupData,
@@ -118,18 +118,24 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     isLoading: settlementsLoading,
     refetch: refetchSettlements,
   } = useSettlements(initialGroup.id);
+  const {
+    data: activityData,
+    isLoading: activityLoading,
+    refetch: refetchActivity,
+  } = useActivity(initialGroup.id);
   const [cancellingInvitationId, setCancellingInvitationId] = useState<
     string | null
   >(null);
-  const [membersExpanded, setMembersExpanded] = useState<boolean>(false);
-  const [settlementsExpanded, setSettlementsExpanded] =
-    useState<boolean>(false);
   const { session, signOut } = useAuth();
   const theme = useTheme();
 
   // Handle Android hardware back button
   useEffect(() => {
     const handleHardwareBack = () => {
+      if (showMembers) {
+        setShowMembers(false);
+        return true;
+      }
       onBack();
       return true;
     };
@@ -139,12 +145,13 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       handleHardwareBack
     );
     return () => subscription.remove();
-  }, [onBack]);
+  }, [onBack, showMembers]);
 
   // Refetch all data function
   const refetchAll = () => {
     console.log("[GroupDetailsScreen] refetchAll called");
     refetchTx();
+    refetchActivity();
     refetchBalances();
     refetchSettlements();
   };
@@ -267,8 +274,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     );
   };
 
-
-
   const handleRemoveMember = async (
     memberUserId: string,
     memberEmail?: string
@@ -323,8 +328,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       ]
     );
   };
-
-
 
   const handleSettleUp = (balance: Balance) => {
     setSettlingBalance(balance);
@@ -493,12 +496,32 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     >
       <Appbar.Header style={{ backgroundColor: theme.colors.background }}>
         <Appbar.BackAction
-          onPress={onBack}
+          onPress={() => {
+            if (showMembers) {
+              setShowMembers(false);
+            } else {
+              onBack();
+            }
+          }}
           accessibilityLabel="Navigate back"
           testID="back-button"
         />
-        <Appbar.Content title={group.name} titleStyle={{ fontWeight: 'bold' }} />
-        {isMember && (
+        <Appbar.Content
+          title={showMembers ? "Group Members" : group.name}
+          titleStyle={{ fontWeight: "bold" }}
+        />
+
+        {!showMembers && (
+          <Appbar.Action
+            icon="information-outline"
+            onPress={() => setShowMembers(true)}
+            accessibilityLabel="View group members"
+            testID="info-icon-button"
+          />
+        )}
+
+        {/* Show Menu only if NOT in members view (or maybe keep it? let's keep it only in main view for now to avoid clutter) */}
+        {!showMembers && isMember && (
           <Menu
             visible={menuVisible}
             onDismiss={() => setMenuVisible(false)}
@@ -554,271 +577,187 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {group.description && (
-          <Surface style={styles.descriptionSurface} elevation={0}>
-            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-              {group.description}
-            </Text>
-          </Surface>
-        )}
-
-        <View style={{ paddingHorizontal: 16, marginBottom: 16 }}>
-          <SegmentedButtons
-            value={viewMode}
-            onValueChange={setViewMode}
-            buttons={[
-              {
-                value: 'transactions',
-                label: 'Transactions',
-                icon: 'format-list-bulleted',
-              },
-              {
-                value: 'balances',
-                label: 'Balances',
-                icon: 'scale-balance',
-              },
-              {
-                value: 'members',
-                label: 'Members',
-                icon: 'account-group',
-              },
-            ]}
-          />
-        </View>
-
-        {viewMode === 'transactions' && (
-          <TransactionsSection
-            items={transactions}
-            loading={txLoading}
-            onEdit={onEditTransaction}
-          />
-        )}
-
-        {viewMode === 'balances' && (
-          <>
-            <BalancesSection
-              groupBalances={balancesData?.group_balances || []}
-              overallBalances={balancesData?.overall_balances || []}
-              loading={balancesLoading}
-              defaultCurrency={getDefaultCurrency()}
-              showOverallBalances={false}
-              onSettleUp={handleSettleUp}
+        {showMembers ? (
+          // MEMBERS VIEW
+          <View style={styles.sectionContent}>
+            <MembersList
+              members={group.members || []}
               currentUserId={session?.user?.id}
-              groupMembers={group.members || []}
+              isOwner={isOwner}
+              removingMemberId={removingMemberId}
+              onRemove={handleRemoveMember}
             />
-            
-            <View style={styles.spacer} />
+            {group.members &&
+              group.members.length > 0 &&
+              invitations.length > 0 && <View style={{ height: 16 }} />}
+            <InvitationsList
+              invitations={invitations}
+              loading={invitationsLoading}
+              isOwner={memoizedIsOwner}
+              cancellingInvitationId={cancellingInvitationId}
+              onCancel={handleCancelInvitation}
+            />
+            {memoizedIsOwner && (
+              <Button
+                mode="contained"
+                onPress={onAddMember}
+                icon="account-plus"
+                style={{ marginTop: 24 }}
+              >
+                Add Member
+              </Button>
+            )}
+          </View>
+        ) : (
+          // DASHBOARD & LIST VIEW
+          <>
+            {group.description && (
+              <Surface style={styles.descriptionSurface} elevation={0}>
+                <Text
+                  variant="bodyMedium"
+                  style={{ color: theme.colors.onSurfaceVariant }}
+                >
+                  {group.description}
+                </Text>
+              </Surface>
+            )}
 
-            {/* Settlement History Section */}
-            <Surface style={styles.sectionSurface} elevation={1}>
-              <View style={styles.sectionHeader}>
-                <View style={styles.sectionTitleContainer}>
-                  <Avatar.Icon 
-                    size={32} 
-                    icon="handshake" 
-                    style={{ backgroundColor: theme.colors.tertiaryContainer, marginRight: 12 }} 
-                    color={theme.colors.onTertiaryContainer}
-                  />
-                  <Text variant="titleMedium" style={styles.sectionTitle}>
-                    Settlements
-                  </Text>
-                  {settlementsData?.settlements && settlementsData.settlements.length > 0 && (
-                    <View style={[styles.badge, { backgroundColor: theme.colors.tertiaryContainer }]}>
-                      <Text style={[styles.badgeText, { color: theme.colors.onTertiaryContainer }]}>
-                        {settlementsData.settlements.length}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              </View>
+            <GroupDashboard
+              balances={balancesData?.overall_balances || []}
+              transactions={transactions || []}
+              currentUserId={session?.user?.id}
+              loading={balancesLoading || txLoading}
+              defaultCurrency={getDefaultCurrency()}
+              onOwePress={() => {
+                console.log('[GroupDetails] Opening "I owe" modal');
+                setBalanceModalType("owe");
+              }}
+              onOwedPress={() => {
+                console.log('[GroupDetails] Opening "I\'m owed" modal');
+                setBalanceModalType("owed");
+              }}
+            />
 
+            <View
+              style={{ paddingHorizontal: 16, marginTop: 24, marginBottom: 8 }}
+            >
+              <SegmentedButtons
+                value={listMode}
+                onValueChange={(val: string) =>
+                  setListMode(val as "transactions" | "activity")
+                }
+                buttons={[
+                  {
+                    value: "transactions",
+                    label: "Transactions",
+                    icon: "format-list-bulleted",
+                  },
+                  {
+                    value: "activity",
+                    label: "Activity",
+                    icon: "history",
+                  },
+                ]}
+              />
+            </View>
+
+            {listMode === "transactions" ? (
+              <TransactionsSection
+                items={transactions}
+                loading={txLoading}
+                onEdit={onEditTransaction}
+              />
+            ) : (
               <View style={styles.sectionContent}>
-                {settlementsLoading ? (
-                  <ActivityIndicator
-                    size="small"
-                    style={{ marginVertical: 16 }}
-                  />
-                ) : settlementsData?.settlements &&
-                  settlementsData.settlements.length > 0 ? (
-                  <>
-                    {settlementsData.settlements.map((settlement, index) => {
-                      const isCurrentUserPayer =
-                        settlement.from_user_id === session?.user?.id;
-                      const isCurrentUserReceiver =
-                        settlement.to_user_id === session?.user?.id;
-                      const otherUserEmail = isCurrentUserPayer
-                        ? settlement.to_user_email
-                        : settlement.from_user_email;
-                      const otherUserDisplayName =
-                        otherUserEmail ||
-                        `User ${(isCurrentUserPayer
-                          ? settlement.to_user_id
-                          : settlement.from_user_id
-                        ).substring(0, 8)}...`;
-
-                      return (
-                        <React.Fragment key={settlement.id}>
-                          <Surface style={styles.settlementItem} elevation={0}>
-                            <View style={styles.settlementContent}>
-                              <View style={styles.settlementLeft}>
-                                <Text
-                                  variant="titleSmall"
-                                  style={styles.settlementDescription}
-                                >
-                                  {isCurrentUserPayer
-                                    ? `You paid ${otherUserDisplayName}`
-                                    : isCurrentUserReceiver
-                                    ? `${otherUserDisplayName} paid you`
-                                    : `${
-                                        settlement.from_user_email || "User"
-                                      } paid ${
-                                        settlement.to_user_email || "User"
-                                      }`}
-                                </Text>
-                                {settlement.notes && (
-                                  <Text
-                                    variant="bodySmall"
-                                    style={{
-                                      color: theme.colors.onSurfaceVariant,
-                                      marginTop: 4,
-                                    }}
-                                  >
-                                    {settlement.notes}
-                                  </Text>
-                                )}
-                                <Text
-                                  variant="bodySmall"
-                                  style={{
-                                    color: theme.colors.onSurfaceVariant,
-                                    marginTop: 4,
-                                  }}
-                                >
-                                  {new Date(
-                                    settlement.created_at
-                                  ).toLocaleDateString()}
-                                </Text>
-                              </View>
-                              <View style={styles.settlementRight}>
-                                <Text
-                                  variant="titleMedium"
-                                  style={[
-                                    styles.settlementAmount,
-                                    {
-                                      color: isCurrentUserPayer
-                                        ? theme.colors.error
-                                        : theme.colors.primary,
-                                    },
-                                  ]}
-                                >
-                                  {formatCurrency(
-                                    settlement.amount,
-                                    settlement.currency || getDefaultCurrency()
-                                  )}
-                                </Text>
-                                <View style={styles.settlementActions}>
-                                  <IconButton
-                                    icon="pencil"
-                                    size={20}
-                                    onPress={() => handleEditSettlement(settlement)}
-                                  />
-                                  <IconButton
-                                    icon="delete"
-                                    size={20}
-                                    iconColor={theme.colors.error}
-                                    onPress={() => handleDeleteSettlement(settlement)}
-                                  />
-                                </View>
-                              </View>
-                            </View>
-                          </Surface>
-                          {index < settlementsData.settlements.length - 1 && <Divider />}
-                        </React.Fragment>
-                      );
-                    })}
-                  </>
-                ) : (
-                  <View style={styles.emptyStateContent}>
-                    <Text
-                      variant="bodyMedium"
-                      style={{ color: theme.colors.onSurfaceVariant }}
-                    >
-                      No settlements recorded yet.
-                    </Text>
-                  </View>
-                )}
+                <ActivityFeed
+                  items={activityData?.activities || []}
+                  loading={activityLoading}
+                />
               </View>
-            </Surface>
+            )}
           </>
         )}
 
-        {viewMode === 'members' && (
-          <Surface style={styles.sectionSurface} elevation={1}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionTitleContainer}>
-                <Avatar.Icon 
-                  size={32} 
-                  icon="account-group" 
-                  style={{ backgroundColor: theme.colors.secondaryContainer, marginRight: 12 }} 
-                  color={theme.colors.onSecondaryContainer}
-                />
-                <Text variant="titleMedium" style={styles.sectionTitle}>
-                  Members
-                </Text>
-                <View style={[styles.badge, { backgroundColor: theme.colors.secondaryContainer }]}>
-                  <Text style={[styles.badgeText, { color: theme.colors.onSecondaryContainer }]}>
-                    {(group.members?.length || 0) + invitations.length}
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.sectionContent}>
-              <MembersList
-                members={group.members || []}
-                currentUserId={session?.user?.id}
-                isOwner={isOwner}
-                removingMemberId={removingMemberId}
-                onRemove={handleRemoveMember}
-              />
-              {group.members &&
-                group.members.length > 0 &&
-                invitations.length > 0 && <View style={{ height: 8 }} />}
-              <InvitationsList
-                invitations={invitations}
-                loading={invitationsLoading}
-                isOwner={memoizedIsOwner}
-                cancellingInvitationId={cancellingInvitationId}
-                onCancel={handleCancelInvitation}
-              />
-              {memoizedIsOwner && (
-                <Button 
-                  mode="outlined" 
-                  onPress={onAddMember} 
-                  icon="account-plus"
-                  style={{ marginTop: 16 }}
-                >
-                  Add Member
-                </Button>
-              )}
-            </View>
-          </Surface>
-        )}
-
-
-        
         {/* Bottom padding for FAB */}
         <View style={{ height: 80 }} />
       </ScrollView>
 
-      <FAB
-        icon="plus"
-        style={[styles.fab, { backgroundColor: theme.colors.primaryContainer }]}
-        color={theme.colors.onPrimaryContainer}
-        onPress={onAddTransaction}
-        label="Add Expense"
-      />
+      {!showMembers && (
+        <FAB
+          icon="plus"
+          style={[
+            styles.fab,
+            { backgroundColor: theme.colors.primaryContainer },
+          ]}
+          color={theme.colors.onPrimaryContainer}
+          onPress={onAddTransaction}
+          label="Add Expense"
+        />
+      )}
 
+      {/* Balances Modal - placed at root level to prevent duplication */}
+      <Portal>
+        <Modal
+          visible={balanceModalType !== "none"}
+          onDismiss={() => {
+            console.log("[GroupDetails] Dismissing modal");
+            setBalanceModalType("none");
+          }}
+          contentContainerStyle={{
+            backgroundColor: theme.colors.background,
+            margin: 20,
+            borderRadius: 8,
+            padding: 16,
+            maxHeight: "80%",
+          }}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 16,
+            }}
+          >
+            <Text variant="titleLarge" style={{ fontWeight: "bold" }}>
+              {balanceModalType === "owe"
+                ? "People you owe"
+                : "People who owe you"}
+            </Text>
+            <Button onPress={() => setBalanceModalType("none")}>Close</Button>
+          </View>
 
+          <ScrollView>
+            <BalancesSection
+              overallBalances={(balancesData?.overall_balances || []).filter(
+                (b) =>
+                  balanceModalType === "owe" ? b.amount < 0 : b.amount > 0
+              )}
+              groupBalances={[]} // Hide group breakdown to keep it focused
+              currentUserId={session?.user?.id}
+              loading={balancesLoading}
+              onSettleUp={handleSettleUp}
+              showOverallBalances={true}
+              defaultCurrency={getDefaultCurrency()}
+            />
+            {(balancesData?.overall_balances || []).filter((b) =>
+              balanceModalType === "owe" ? b.amount < 0 : b.amount > 0
+            ).length === 0 && (
+              <Text
+                style={{
+                  textAlign: "center",
+                  marginTop: 20,
+                  color: theme.colors.onSurfaceVariant,
+                }}
+              >
+                {balanceModalType === "owe"
+                  ? "You don't owe anyone."
+                  : "No one owes you."}
+              </Text>
+            )}
+          </ScrollView>
+        </Modal>
+      </Portal>
 
       <SettlementFormScreen
         visible={showSettlementForm}
@@ -872,29 +811,25 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     marginBottom: 16,
-    backgroundColor: 'rgba(0,0,0,0.02)',
+    backgroundColor: "rgba(0,0,0,0.02)",
   },
   sectionSurface: {
     borderRadius: 16,
-    overflow: 'hidden',
+    overflow: "hidden",
     marginBottom: 4,
+  },
+  transactionsHeader: {
+    marginTop: 8,
+  },
+  sectionContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     padding: 16,
-  },
-  sectionTitleContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  sectionTitle: {
-    fontWeight: "bold",
-  },
-  sectionContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
   },
   badge: {
     paddingHorizontal: 8,
@@ -911,7 +846,7 @@ const styles = StyleSheet.create({
   },
   settlementItem: {
     paddingVertical: 8,
-    backgroundColor: 'transparent',
+    backgroundColor: "transparent",
   },
   settlementContent: {
     flexDirection: "row",
@@ -938,7 +873,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    backgroundColor: "rgba(0,0,0,0.05)",
     marginVertical: 8,
   },
   fab: {
