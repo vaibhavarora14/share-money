@@ -106,7 +106,7 @@ export interface SettlementsResponse {
 
 export interface ActivityItem {
   id: string;
-  type: 'transaction_created' | 'transaction_updated' | 'transaction_deleted' | 'transaction_splits_updated';
+  type: 'transaction_created' | 'transaction_updated' | 'transaction_deleted';
   transaction_id?: number;
   group_id: string;
   changed_by: {
@@ -116,15 +116,13 @@ export interface ActivityItem {
   changed_at: string;
   description: string;
   details: {
-    action: 'created' | 'updated' | 'deleted' | 'splits_updated';
+    action: 'created' | 'updated' | 'deleted';
     changes?: {
       [field: string]: {
         old: any;
         new: any;
       };
     };
-    old_splits?: Array<{ user_id: string; amount: number }>;
-    new_splits?: Array<{ user_id: string; amount: number }>;
     transaction?: Transaction;
   };
 }

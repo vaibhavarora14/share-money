@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS transaction_history (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   transaction_id INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
   group_id UUID REFERENCES groups(id) ON DELETE SET NULL, -- Denormalized for faster queries
-  action VARCHAR(20) NOT NULL CHECK (action IN ('created', 'updated', 'deleted', 'splits_updated')),
+  action VARCHAR(20) NOT NULL CHECK (action IN ('created', 'updated', 'deleted')),
   changed_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE SET NULL,
   changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
   
@@ -48,7 +48,6 @@ CREATE TABLE IF NOT EXISTS transaction_history (
   -- For 'created': stores initial values
   -- For 'updated': stores {field: {old: value, new: value}} diff
   -- For 'deleted': stores final values before deletion
-  -- For 'splits_updated': stores split changes (old/new splits arrays)
   changes JSONB NOT NULL,
   
   -- Optional: Store full snapshot of transaction at time of change
@@ -199,163 +198,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Function to capture transaction_splits changes
-CREATE OR REPLACE FUNCTION track_transaction_splits_changes()
-RETURNS TRIGGER AS $$
-DECLARE
-  transaction_record RECORD;
-  old_splits JSONB;
-  new_splits JSONB;
-  change_data JSONB;
-BEGIN
-  -- Get the parent transaction
-  SELECT * INTO transaction_record
-  FROM transactions
-  WHERE id = COALESCE(NEW.transaction_id, OLD.transaction_id);
-  
-  IF NOT FOUND THEN
-    RETURN COALESCE(NEW, OLD);
-  END IF;
-  
-  -- Only track for group transactions
-  IF transaction_record.group_id IS NULL THEN
-    RETURN COALESCE(NEW, OLD);
-  END IF;
-  
-  IF TG_OP = 'INSERT' OR TG_OP = 'UPDATE' THEN
-    -- Get current splits for this transaction
-    SELECT COALESCE(jsonb_agg(
-      jsonb_build_object(
-        'user_id', user_id,
-        'amount', amount
-      ) ORDER BY user_id
-    ), '[]'::jsonb) INTO new_splits
-    FROM transaction_splits
-    WHERE transaction_id = NEW.transaction_id;
-    
-    -- For updates, get old splits (before this change)
-    IF TG_OP = 'UPDATE' THEN
-      SELECT COALESCE(jsonb_agg(
-        jsonb_build_object(
-          'user_id', user_id,
-          'amount', amount
-        ) ORDER BY user_id
-      ), '[]'::jsonb) INTO old_splits
-      FROM transaction_splits
-      WHERE transaction_id = OLD.transaction_id
-      AND id != NEW.id; -- Exclude the one being updated
-      
-      -- Add the old version of this split
-      old_splits := old_splits || jsonb_build_object(
-        'user_id', OLD.user_id,
-        'amount', OLD.amount
-      );
-      
-      -- Sort for comparison
-      SELECT jsonb_agg(value ORDER BY value->>'user_id')
-      INTO old_splits
-      FROM jsonb_array_elements(old_splits);
-    ELSE
-      -- For insert, get splits before this insert
-      SELECT COALESCE(jsonb_agg(
-        jsonb_build_object(
-          'user_id', user_id,
-          'amount', amount
-        ) ORDER BY user_id
-      ), '[]'::jsonb) INTO old_splits
-      FROM transaction_splits
-      WHERE transaction_id = NEW.transaction_id
-      AND id != NEW.id;
-    END IF;
-    
-    -- Only record if splits actually changed
-    IF old_splits IS DISTINCT FROM new_splits THEN
-      change_data := jsonb_build_object(
-        'action', 'splits_updated',
-        'transaction_id', NEW.transaction_id,
-        'old_splits', old_splits,
-        'new_splits', new_splits
-      );
-      
-      INSERT INTO transaction_history (
-        transaction_id,
-        group_id,
-        action,
-        changed_by,
-        changes,
-        snapshot
-      ) VALUES (
-        NEW.transaction_id,
-        transaction_record.group_id,
-        'splits_updated',
-        COALESCE(auth.uid(), transaction_record.user_id),
-        change_data,
-        jsonb_build_object(
-          'transaction', to_jsonb(transaction_record),
-          'splits', new_splits
-        )
-      );
-    END IF;
-    
-    RETURN NEW;
-    
-  ELSIF TG_OP = 'DELETE' THEN
-    -- Get splits before deletion
-    SELECT COALESCE(jsonb_agg(
-      jsonb_build_object(
-        'user_id', user_id,
-        'amount', amount
-      ) ORDER BY user_id
-    ), '[]'::jsonb) INTO old_splits
-    FROM transaction_splits
-    WHERE transaction_id = OLD.transaction_id;
-    
-    -- Get splits after deletion
-    SELECT COALESCE(jsonb_agg(
-      jsonb_build_object(
-        'user_id', user_id,
-        'amount', amount
-      ) ORDER BY user_id
-    ), '[]'::jsonb) INTO new_splits
-    FROM transaction_splits
-    WHERE transaction_id = OLD.transaction_id
-    AND id != OLD.id;
-    
-    -- Only record if splits changed
-    IF old_splits IS DISTINCT FROM new_splits THEN
-      change_data := jsonb_build_object(
-        'action', 'splits_updated',
-        'transaction_id', OLD.transaction_id,
-        'old_splits', old_splits,
-        'new_splits', new_splits
-      );
-      
-      INSERT INTO transaction_history (
-        transaction_id,
-        group_id,
-        action,
-        changed_by,
-        changes,
-        snapshot
-      ) VALUES (
-        OLD.transaction_id,
-        transaction_record.group_id,
-        'splits_updated',
-        COALESCE(auth.uid(), transaction_record.user_id),
-        change_data,
-        jsonb_build_object(
-          'transaction', to_jsonb(transaction_record),
-          'splits', new_splits
-        )
-      );
-    END IF;
-    
-    RETURN OLD;
-  END IF;
-  
-  RETURN NULL;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Function to archive old history records (>1 year)
 CREATE OR REPLACE FUNCTION archive_old_transaction_history()
@@ -388,17 +230,6 @@ CREATE TRIGGER transaction_history_trigger
   FOR EACH ROW
   EXECUTE FUNCTION track_transaction_changes();
 
--- Trigger for transaction_splits table (only if table exists)
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'transaction_splits') THEN
-    DROP TRIGGER IF EXISTS transaction_splits_history_trigger ON transaction_splits;
-    CREATE TRIGGER transaction_splits_history_trigger
-      AFTER INSERT OR UPDATE OR DELETE ON transaction_splits
-      FOR EACH ROW
-      EXECUTE FUNCTION track_transaction_splits_changes();
-  END IF;
-END $$;
 
 -- ============================================================================
 -- PART 6: ROW LEVEL SECURITY

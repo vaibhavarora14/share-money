@@ -9,7 +9,7 @@ interface TransactionHistory {
   id: string;
   transaction_id: number;
   group_id: string;
-  action: 'created' | 'updated' | 'deleted' | 'splits_updated';
+  action: 'created' | 'updated' | 'deleted';
   changed_by: string;
   changed_at: string;
   changes: any;
@@ -18,7 +18,7 @@ interface TransactionHistory {
 
 interface ActivityItem {
   id: string;
-  type: 'transaction_created' | 'transaction_updated' | 'transaction_deleted' | 'transaction_splits_updated';
+  type: 'transaction_created' | 'transaction_updated' | 'transaction_deleted';
   transaction_id?: number;
   group_id: string;
   changed_by: {
@@ -28,15 +28,13 @@ interface ActivityItem {
   changed_at: string;
   description: string;
   details: {
-    action: 'created' | 'updated' | 'deleted' | 'splits_updated';
+    action: 'created' | 'updated' | 'deleted';
     changes?: {
       [field: string]: {
         old: any;
         new: any;
       };
     };
-    old_splits?: Array<{ user_id: string; amount: number }>;
-    new_splits?: Array<{ user_id: string; amount: number }>;
     transaction?: any;
   };
 }
@@ -153,21 +151,6 @@ function generateActivityDescription(history: TransactionHistory): string {
       return 'Updated transaction';
     }
 
-    case 'splits_updated': {
-      const oldSplits = changes?.old_splits || [];
-      const newSplits = changes?.new_splits || [];
-      const oldCount = Array.isArray(oldSplits) ? oldSplits.length : 0;
-      const newCount = Array.isArray(newSplits) ? newSplits.length : 0;
-      
-      if (newCount > oldCount) {
-        return `Updated splits: Added ${newCount - oldCount} person(s)`;
-      } else if (newCount < oldCount) {
-        return `Updated splits: Removed ${oldCount - newCount} person(s)`;
-      } else {
-        return 'Updated splits: Changed split amounts';
-      }
-    }
-
     case 'deleted': {
       const transaction = snapshot || changes?.transaction;
       if (transaction) {
@@ -224,7 +207,6 @@ function transformHistoryToActivity(history: TransactionHistory): ActivityItem {
     'created': 'transaction_created',
     'updated': 'transaction_updated',
     'deleted': 'transaction_deleted',
-    'splits_updated': 'transaction_splits_updated',
   };
 
   const details: ActivityItem['details'] = {
@@ -233,11 +215,6 @@ function transformHistoryToActivity(history: TransactionHistory): ActivityItem {
 
   if (history.action === 'updated' && history.changes?.diff) {
     details.changes = history.changes.diff;
-  }
-
-  if (history.action === 'splits_updated') {
-    details.old_splits = history.changes?.old_splits;
-    details.new_splits = history.changes?.new_splits;
   }
 
   if (history.snapshot?.transaction) {

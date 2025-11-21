@@ -59,7 +59,6 @@ export function getActivityColor(type: ActivityItem['type']): string {
     case 'transaction_created':
       return '#4CAF50'; // Green
     case 'transaction_updated':
-    case 'transaction_splits_updated':
       return '#FF9800'; // Orange
     case 'transaction_deleted':
       return '#F44336'; // Red
