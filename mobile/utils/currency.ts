@@ -18,5 +18,9 @@ export function formatCurrency(amount: number, currencyCode: string = getDefault
   const symbol = getCurrencySymbol(currencyCode);
   // For currencies like JPY that don't use decimals
   const decimals = ['JPY', 'KRW'].includes(currencyCode) ? 0 : 2;
-  return `${symbol}${Math.abs(amount).toFixed(decimals)}`;
+  const formattedAmount = Math.abs(amount).toLocaleString('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+  return `${symbol}${formattedAmount}`;
 }

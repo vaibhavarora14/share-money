@@ -38,5 +38,9 @@ export function formatCurrency(amount: number | string, currencyCode: string = D
   const symbol = CURRENCY_SYMBOLS[currencyCode.toUpperCase()] || CURRENCY_SYMBOLS[DEFAULT_CURRENCY] || '$';
   // For currencies like JPY that don't use decimals
   const decimals = ['JPY', 'KRW'].includes(currencyCode.toUpperCase()) ? 0 : 2;
-  return `${symbol}${Math.abs(num).toFixed(decimals)}`;
+  const formattedAmount = Math.abs(num).toLocaleString('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+  return `${symbol}${formattedAmount}`;
 }
