@@ -579,6 +579,11 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 icon: 'format-list-bulleted',
               },
               {
+                value: 'activity',
+                label: 'Activity',
+                icon: 'history',
+              },
+              {
                 value: 'balances',
                 label: 'Balances',
                 icon: 'scale-balance',
@@ -593,46 +598,43 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         </View>
 
         {viewMode === 'transactions' && (
-          <>
-            <TransactionsSection
-              items={transactions}
-              loading={txLoading}
-              onEdit={onEditTransaction}
-            />
-            
-            <View style={styles.spacer} />
+          <TransactionsSection
+            items={transactions}
+            loading={txLoading}
+            onEdit={onEditTransaction}
+          />
+        )}
 
-            {/* Activity Feed Section */}
-            <Surface style={styles.sectionSurface} elevation={1}>
-              <View style={styles.sectionHeader}>
-                <View style={styles.sectionTitleContainer}>
-                  <Avatar.Icon 
-                    size={32} 
-                    icon="history" 
-                    style={{ backgroundColor: theme.colors.secondaryContainer, marginRight: 12 }} 
-                    color={theme.colors.onSecondaryContainer}
-                  />
-                  <Text variant="titleMedium" style={styles.sectionTitle}>
-                    Activity Feed
-                  </Text>
-                  {activityData?.activities && activityData.activities.length > 0 && (
-                    <View style={[styles.badge, { backgroundColor: theme.colors.secondaryContainer }]}>
-                      <Text style={[styles.badgeText, { color: theme.colors.onSecondaryContainer }]}>
-                        {activityData.activities.length}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-
-              <View style={styles.sectionContent}>
-                <ActivityFeed
-                  items={activityData?.activities || []}
-                  loading={activityLoading}
+        {viewMode === 'activity' && (
+          <Surface style={styles.sectionSurface} elevation={1}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionTitleContainer}>
+                <Avatar.Icon 
+                  size={32} 
+                  icon="history" 
+                  style={{ backgroundColor: theme.colors.secondaryContainer, marginRight: 12 }} 
+                  color={theme.colors.onSecondaryContainer}
                 />
+                <Text variant="titleMedium" style={styles.sectionTitle}>
+                  Activity Feed
+                </Text>
+                {activityData?.activities && activityData.activities.length > 0 && (
+                  <View style={[styles.badge, { backgroundColor: theme.colors.secondaryContainer }]}>
+                    <Text style={[styles.badgeText, { color: theme.colors.onSecondaryContainer }]}>
+                      {activityData.activities.length}
+                    </Text>
+                  </View>
+                )}
               </View>
-            </Surface>
-          </>
+            </View>
+
+            <View style={styles.sectionContent}>
+              <ActivityFeed
+                items={activityData?.activities || []}
+                loading={activityLoading}
+              />
+            </View>
+          </Surface>
         )}
 
         {viewMode === 'balances' && (
