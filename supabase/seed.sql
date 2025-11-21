@@ -11,6 +11,9 @@
 -- Enable required extensions
 CREATE EXTENSION IF NOT EXISTS "pgcrypto" WITH SCHEMA "extensions";
 
+-- Set search path to include extensions schema for gen_salt function
+SET search_path = public, extensions;
+
 -- ============================================================================
 -- CREATE TEST USERS
 -- ============================================================================
@@ -55,7 +58,7 @@ BEGIN
       '00000000-0000-0000-0000-000000000000',
       'authenticated',
       'alice@test.com',
-      crypt(test_password, gen_salt('bf')),
+      crypt(test_password, gen_salt('bf', 10)),
       NOW(),
       '',
       '',
@@ -76,7 +79,7 @@ BEGIN
       '00000000-0000-0000-0000-000000000000',
       'authenticated',
       'bob@test.com',
-      crypt(test_password, gen_salt('bf')),
+      crypt(test_password, gen_salt('bf', 10)),
       NOW(),
       '',
       '',
@@ -97,7 +100,7 @@ BEGIN
       '00000000-0000-0000-0000-000000000000',
       'authenticated',
       'charlie@test.com',
-      crypt(test_password, gen_salt('bf')),
+      crypt(test_password, gen_salt('bf', 10)),
       NOW(),
       '',
       '',
@@ -118,7 +121,7 @@ BEGIN
       '00000000-0000-0000-0000-000000000000',
       'authenticated',
       'diana@test.com',
-      crypt(test_password, gen_salt('bf')),
+      crypt(test_password, gen_salt('bf', 10)),
       NOW(),
       '',
       '',
