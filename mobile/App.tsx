@@ -245,7 +245,7 @@ function AppContent() {
           }}
           onDelete={editingTransaction ? handleDeleteTransaction : undefined}
           defaultCurrency={getDefaultCurrency()}
-          groupMembers={groupDetails?.members || []}
+          groupMembers={selectedGroupDetails?.members || groupDetails?.members || []}
           groupId={selectedGroup.id}
         />
         <StatusBar style={theme.dark ? "light" : "dark"} />
@@ -254,11 +254,20 @@ function AppContent() {
   }
 
   // Show group details screen (with bottom nav)
-  if ((currentRoute === "group-details" || (groupDetails && selectedGroup && currentRoute !== "groups")) && groupDetails && selectedGroup) {
+  // Render as soon as a group is selected - the screen handles loading states internally
+  if (currentRoute === "group-details" && selectedGroup) {
+    // Use fetched group details if available, otherwise use selectedGroup as initial data
+    // GroupDetailsScreen will handle loading state while fetching full details
+    const groupToDisplay: GroupWithMembers = selectedGroupDetails || {
+      ...selectedGroup,
+      members: [],
+      invitations: [],
+    };
+
     return (
       <>
         <GroupDetailsScreen
-          group={groupDetails}
+          group={groupToDisplay}
           refreshTrigger={invitationsRefreshTrigger}
           groupRefreshTrigger={groupRefreshTrigger}
           onBack={() => {
