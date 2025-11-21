@@ -1,22 +1,22 @@
 import React, { useEffect, useState } from "react";
 import {
-  Alert,
-  Animated,
-  Dimensions,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  View,
+    Alert,
+    Animated,
+    Dimensions,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import {
-  Appbar,
-  Button,
-  Text,
-  TextInput,
-  useTheme,
+    Appbar,
+    Button,
+    Text,
+    TextInput,
+    useTheme,
 } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
@@ -144,7 +144,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
             />
           </View>
           <Appbar.Header style={styles.header}>
-            <Appbar.Content title="Add Member" />
+            <Appbar.Content title="Add Member" titleStyle={{ fontWeight: 'bold' }} />
             <Appbar.Action icon="close" onPress={handleDismiss} />
           </Appbar.Header>
           <KeyboardAvoidingView

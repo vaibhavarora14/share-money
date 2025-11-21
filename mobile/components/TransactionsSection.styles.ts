@@ -1,59 +1,60 @@
 import { StyleSheet } from "react-native";
 
 export const styles = StyleSheet.create({
-  section: {
+  sectionSurface: {
+    borderRadius: 12,
+    overflow: 'hidden',
     marginTop: 16,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  sectionTitleContainer: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   sectionTitle: {
     fontWeight: "600",
-    marginBottom: 12,
+    marginRight: 8,
   },
-  transactionCard: {
-    marginBottom: 0,
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     borderRadius: 12,
-    elevation: 0,
-    borderWidth: 0,
   },
-  transactionContent: {
+  badgeText: {
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  sectionContent: {
+    paddingBottom: 8,
+  },
+  transactionItem: {
     paddingVertical: 12,
     paddingHorizontal: 16,
   },
-  transactionDescription: {
-    fontWeight: "700",
-    marginBottom: 8,
-    fontSize: 14,
-    textTransform: "capitalize",
-  },
-  amountsRow: {
+  transactionContent: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
+    alignItems: "center",
   },
   transactionLeft: {
     flex: 1,
+    marginRight: 16,
   },
-  splitAmountContainer: {
-    flexDirection: "row",
-    alignItems: "baseline",
-  },
-  transactionMeta: {
-    fontSize: 12,
-    fontWeight: "400",
-    marginRight: 4,
-  },
-  splitCount: {
-    fontSize: 12,
-    fontWeight: "400",
-  },
-  transactionAmount: {
-    fontWeight: "400",
-    fontSize: 13,
+  transactionDescription: {
+    fontWeight: "600",
+    marginBottom: 4,
   },
   transactionRight: {
     alignItems: "flex-end",
   },
-  emptyStateCard: {
-    marginTop: 8,
+  transactionAmount: {
+    fontWeight: "bold",
+    marginBottom: 4,
   },
   emptyStateContent: {
     alignItems: "center",
@@ -72,9 +73,6 @@ export const styles = StyleSheet.create({
   emptyStateMessage: {
     textAlign: "center",
     lineHeight: 20,
-  },
-  cardSpacing: {
-    height: 8,
   },
 });
 
