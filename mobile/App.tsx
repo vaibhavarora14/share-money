@@ -1,31 +1,20 @@
 import { Session } from "@supabase/supabase-js";
 import { StatusBar } from "expo-status-bar";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import {
-  Alert,
   Text as RNText,
-  ScrollView,
   StyleSheet,
   useColorScheme,
-  View,
+  View
 } from "react-native";
 import {
   ActivityIndicator,
-  Appbar,
   Button,
-  Card,
-  Chip,
-  FAB,
-  IconButton,
-  MD3DarkTheme,
-  MD3LightTheme,
   Provider as PaperProvider,
-  Surface,
-  Text,
-  useTheme,
+  useTheme
 } from "react-native-paper";
-import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BottomNavBar } from "./components/BottomNavBar";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import {
@@ -34,479 +23,30 @@ import {
   useRemoveMember,
 } from "./hooks/useGroupMutations";
 import { useGroupDetails } from "./hooks/useGroups";
-import {
-  useCreateTransaction,
-  useDeleteTransaction,
-  useTransactions,
-  useUpdateTransaction,
-} from "./hooks/useTransactions";
+import { useCreateTransaction, useDeleteTransaction, useUpdateTransaction } from "./hooks/useTransactions";
 import { AddMemberScreen } from "./screens/AddMemberScreen";
 import { AuthScreen } from "./screens/AuthScreen";
 import { BalancesScreen } from "./screens/BalancesScreen";
 import { GroupDetailsScreen } from "./screens/GroupDetailsScreen";
 import { GroupsListScreen } from "./screens/GroupsListScreen";
 import { TransactionFormScreen } from "./screens/TransactionFormScreen";
-import { Group, GroupWithMembers, Transaction } from "./types";
-import { formatCurrency, getDefaultCurrency } from "./utils/currency";
-import { formatDate } from "./utils/date";
-import { getUserFriendlyErrorMessage } from "./utils/errorMessages";
-// Devtools disabled
+import { darkTheme, lightTheme } from "./theme";
+import { Group, GroupWithMembers } from "./types";
+import { getDefaultCurrency } from "./utils/currency";
 
-// Constants
-const INCOME_COLOR = "#10b981";
-const EXPENSE_COLOR = "#ef4444";
-
-// API_URL removed - all API calls now go through fetchWithAuth in utils/api.ts
-
-function TransactionsScreen({
-  onNavigateToGroups,
-}: {
-  onNavigateToGroups: () => void;
-}) {
-  const [showForm, setShowForm] = useState<boolean>(false);
-  const [editingTransaction, setEditingTransaction] =
-    useState<Transaction | null>(null);
-  const { session, signOut } = useAuth();
-  const theme = useTheme();
-
-  const {
-    data: transactions,
-    isLoading: loading,
-    error,
-    refetch,
-  } = useTransactions();
-  const createTransaction = useCreateTransaction(refetch);
-  const updateTransaction = useUpdateTransaction(refetch);
-  const deleteTransaction = useDeleteTransaction(refetch);
-
-  // Memoize calculations to avoid recalculating on every render
-  // Must be called before any early returns to maintain hook order
-  // Note: Totals are calculated without currency conversion (mixed currencies possible)
-  const { totalIncome, totalExpense, balance, currencies } = useMemo(() => {
-    const income = transactions
-      .filter((t) => t.type === "income")
-      .reduce((sum, t) => sum + t.amount, 0);
-    const expense = transactions
-      .filter((t) => t.type === "expense")
-      .reduce((sum, t) => sum + t.amount, 0);
-    const uniqueCurrencies = Array.from(
-      new Set(
-        transactions
-          .map((t) => t.currency || getDefaultCurrency())
-          .filter(Boolean)
-      )
-    );
-    return {
-      totalIncome: income,
-      totalExpense: expense,
-      balance: income - expense,
-      currencies: uniqueCurrencies,
-    };
-  }, [transactions]);
-
-  const formatAmount = (
-    amount: number,
-    type: "income" | "expense",
-    currency?: string
-  ): string => {
-    const sign = type === "income" ? "+" : "-";
-    return `${sign}${formatCurrency(amount, currency || getDefaultCurrency())}`;
-  };
-
-  const handleCreateTransaction = async (
-    transactionData: Omit<Transaction, "id" | "created_at" | "user_id">
-  ): Promise<void> => {
-    await createTransaction.mutate(transactionData);
-    setShowForm(false);
-    setEditingTransaction(null);
-  };
-
-  const handleUpdateTransaction = async (
-    transactionData: Omit<Transaction, "id" | "created_at" | "user_id">
-  ): Promise<void> => {
-    if (!editingTransaction) {
-      throw new Error("Invalid request");
-    }
-
-    await updateTransaction.mutate({
-      ...transactionData,
-      id: editingTransaction.id,
-    });
-    setShowForm(false);
-    setEditingTransaction(null);
-  };
-
-  const handleDeleteTransaction = async (tx: Transaction): Promise<void> => {
-    await deleteTransaction.mutate({ id: tx.id, group_id: tx.group_id });
-  };
-
-  const handleEditClick = (transaction: Transaction) => {
-    setEditingTransaction(transaction);
-    setShowForm(true);
-  };
-
-  const handleDeleteClick = (transaction: Transaction) => {
-    Alert.alert(
-      "Delete Transaction",
-      `Are you sure you want to delete "${transaction.description}"?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await handleDeleteTransaction(transaction);
-            } catch (error) {
-              Alert.alert("Error", getUserFriendlyErrorMessage(error));
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const handleFormSave = async (
-    transactionData: Omit<Transaction, "id" | "created_at" | "user_id">
-  ) => {
-    if (editingTransaction) {
-      await handleUpdateTransaction(transactionData);
-    } else {
-      await handleCreateTransaction(transactionData);
-    }
-  };
-
-  if (loading) {
-    return (
-      <View
-        style={[
-          styles.centerContainer,
-          { backgroundColor: theme.colors.background },
-        ]}
-      >
-        <ActivityIndicator size="large" />
-        <Text variant="bodyLarge" style={{ marginTop: 16 }}>
-          Loading transactions...
-        </Text>
-        <StatusBar style={theme.dark ? "light" : "dark"} />
-      </View>
-    );
-  }
-
-  if (error) {
-    return (
-      <View
-        style={[
-          styles.centerContainer,
-          { backgroundColor: theme.colors.background },
-        ]}
-      >
-        <Text
-          variant="headlineSmall"
-          style={{ color: theme.colors.error, marginBottom: 16 }}
-        >
-          Error
-        </Text>
-        <Text
-          variant="bodyMedium"
-          style={{ marginBottom: 24, textAlign: "center" }}
-        >
-          {getUserFriendlyErrorMessage(error)}
-        </Text>
-        <Button mode="contained" onPress={() => refetch()}>
-          Retry
-        </Button>
-        <StatusBar style={theme.dark ? "light" : "dark"} />
-      </View>
-    );
-  }
-
-  return (
-    <SafeAreaView
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
-      edges={["top"]}
-    >
-      <Appbar.Header>
-        <Appbar.Content
-          title="Transactions"
-          subtitle={`${transactions.length} total`}
-        />
-        <Appbar.Action
-          icon="account-multiple"
-          onPress={onNavigateToGroups || (() => {})}
-        />
-        <Appbar.Action icon="logout" onPress={signOut} />
-      </Appbar.Header>
-
-      {transactions.length > 0 && (
-        <Surface style={styles.summarySurface} elevation={1}>
-          <View style={styles.summaryRow}>
-            <View style={styles.summaryItem}>
-              <Text
-                variant="labelSmall"
-                style={{ color: theme.colors.onSurfaceVariant }}
-              >
-                Income
-              </Text>
-              <Text
-                variant="titleMedium"
-                style={{ color: INCOME_COLOR, fontWeight: "bold" }}
-              >
-                {formatCurrency(
-                  totalIncome,
-                  currencies[0] || getDefaultCurrency()
-                )}
-              </Text>
-              {currencies.length > 1 && (
-                <Text
-                  variant="bodySmall"
-                  style={{ color: theme.colors.onSurfaceVariant, fontSize: 10 }}
-                >
-                  Mixed currencies
-                </Text>
-              )}
-            </View>
-            <View
-              style={[
-                styles.summaryDivider,
-                { backgroundColor: theme.colors.outlineVariant },
-              ]}
-            />
-            <View style={styles.summaryItem}>
-              <Text
-                variant="labelSmall"
-                style={{ color: theme.colors.onSurfaceVariant }}
-              >
-                Expense
-              </Text>
-              <Text
-                variant="titleMedium"
-                style={{ color: EXPENSE_COLOR, fontWeight: "bold" }}
-              >
-                {formatCurrency(
-                  totalExpense,
-                  currencies[0] || getDefaultCurrency()
-                )}
-              </Text>
-              {currencies.length > 1 && (
-                <Text
-                  variant="bodySmall"
-                  style={{ color: theme.colors.onSurfaceVariant, fontSize: 10 }}
-                >
-                  Mixed currencies
-                </Text>
-              )}
-            </View>
-            <View
-              style={[
-                styles.summaryDivider,
-                { backgroundColor: theme.colors.outlineVariant },
-              ]}
-            />
-            <View style={styles.summaryItem}>
-              <Text
-                variant="labelSmall"
-                style={{ color: theme.colors.onSurfaceVariant }}
-              >
-                Balance
-              </Text>
-              <Text
-                variant="titleMedium"
-                style={{
-                  color: balance >= 0 ? INCOME_COLOR : EXPENSE_COLOR,
-                  fontWeight: "bold",
-                }}
-              >
-                {formatCurrency(balance, currencies[0] || getDefaultCurrency())}
-              </Text>
-              {currencies.length > 1 && (
-                <Text
-                  variant="bodySmall"
-                  style={{ color: theme.colors.onSurfaceVariant, fontSize: 10 }}
-                >
-                  Mixed currencies
-                </Text>
-              )}
-            </View>
-          </View>
-        </Surface>
-      )}
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {transactions.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text variant="headlineSmall" style={{ marginBottom: 8 }}>
-              No transactions
-            </Text>
-            <Text
-              variant="bodyMedium"
-              style={{ color: theme.colors.onSurfaceVariant }}
-            >
-              Your transactions will appear here
-            </Text>
-            <Button
-              mode="contained"
-              icon="account-multiple"
-              onPress={onNavigateToGroups}
-              style={{ marginTop: 24 }}
-            >
-              Go to Groups
-            </Button>
-          </View>
-        ) : (
-          transactions.map((transaction, index) => {
-            const isIncome = transaction.type === "income";
-            const amountColor = isIncome ? INCOME_COLOR : EXPENSE_COLOR;
-            const chipColor = isIncome
-              ? {
-                  backgroundColor: theme.dark
-                    ? "rgba(16, 185, 129, 0.2)"
-                    : "#d1fae5",
-                  textColor: theme.dark ? "#10b981" : "#065f46",
-                }
-              : {
-                  backgroundColor: theme.dark
-                    ? "rgba(239, 68, 68, 0.2)"
-                    : "#fee2e2",
-                  textColor: theme.dark ? "#ef4444" : "#991b1b",
-                };
-
-            return (
-              <React.Fragment key={transaction.id}>
-                <Card style={styles.transactionCard} mode="outlined">
-                  <Card.Content style={styles.cardContent}>
-                    <View style={styles.transactionLeft}>
-                      <Text
-                        variant="titleMedium"
-                        style={styles.description}
-                        numberOfLines={2}
-                      >
-                        {transaction.description || "No description"}
-                      </Text>
-                      <View style={styles.metaRow}>
-                        <Text
-                          variant="bodySmall"
-                          style={{ color: theme.colors.onSurfaceVariant }}
-                        >
-                          {formatDate(transaction.date)}
-                        </Text>
-                        {transaction.category && (
-                          <>
-                            <Text
-                              variant="bodySmall"
-                              style={{
-                                color: theme.colors.onSurfaceVariant,
-                                marginHorizontal: 4,
-                              }}
-                            >
-                              •
-                            </Text>
-                            <Text
-                              variant="bodySmall"
-                              style={{ color: theme.colors.onSurfaceVariant }}
-                            >
-                              {transaction.category}
-                            </Text>
-                          </>
-                        )}
-                      </View>
-                    </View>
-                    <View style={styles.transactionRight}>
-                      <Text
-                        variant="titleLarge"
-                        style={[styles.amount, { color: amountColor }]}
-                      >
-                        {formatAmount(
-                          transaction.amount,
-                          transaction.type,
-                          transaction.currency
-                        )}
-                      </Text>
-                      <View style={styles.chipAndActions}>
-                        <Chip
-                          style={[
-                            styles.typeChip,
-                            { backgroundColor: chipColor.backgroundColor },
-                          ]}
-                          textStyle={{
-                            color: chipColor.textColor,
-                            fontSize: 11,
-                            fontWeight: "600",
-                          }}
-                        >
-                          {transaction.type}
-                        </Chip>
-                        <View style={styles.actionButtons}>
-                          <IconButton
-                            icon="pencil"
-                            size={20}
-                            onPress={() => handleEditClick(transaction)}
-                            iconColor={theme.colors.primary}
-                          />
-                          <IconButton
-                            icon="delete"
-                            size={20}
-                            onPress={() => handleDeleteClick(transaction)}
-                            iconColor={theme.colors.error}
-                          />
-                        </View>
-                      </View>
-                    </View>
-                  </Card.Content>
-                </Card>
-                {index < transactions.length - 1 && (
-                  <View style={{ height: 8 }} />
-                )}
-              </React.Fragment>
-            );
-          })
-        )}
-      </ScrollView>
-
-      <FAB
-        icon="plus"
-        style={styles.fab}
-        onPress={() => setShowForm(true)}
-        label="Add"
-      />
-
-      <TransactionFormScreen
-        visible={showForm}
-        transaction={editingTransaction}
-        onSave={async (transactionData) => {
-          await handleFormSave(transactionData);
-          setShowForm(false);
-          setEditingTransaction(null);
-        }}
-        onDismiss={() => {
-          setShowForm(false);
-          setEditingTransaction(null);
-        }}
-        defaultCurrency={editingTransaction?.currency || getDefaultCurrency()}
-      />
-    </SafeAreaView>
-  );
-}
+// ... imports
 
 function AppContent() {
   const { session, loading, signOut } = useAuth();
   const theme = useTheme();
   const [isSignUp, setIsSignUp] = useState(false);
-  const [currentView, setCurrentView] = useState<"transactions" | "groups">(
-    "groups"
-  );
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [showAddMember, setShowAddMember] = useState(false);
-  const [groupDetails, setGroupDetails] = useState<GroupWithMembers | null>(
-    null
-  );
   const [currentRoute, setCurrentRoute] = useState<string>("groups");
   const [invitationsRefreshTrigger, setInvitationsRefreshTrigger] =
     useState<number>(0);
   const [groupRefreshTrigger, setGroupRefreshTrigger] = useState<number>(0);
+  const [editingTransaction, setEditingTransaction] = useState<any>(null);
   const prevSessionRef = React.useRef<Session | null>(null);
   const groupsListRefetchRef = React.useRef<(() => void) | null>(null);
 
@@ -518,6 +58,16 @@ function AppContent() {
   const createGroupMutation = useCreateGroup(refetchSelectedGroup);
   const addMemberMutation = useAddMember(refetchSelectedGroup);
   const removeMemberMutation = useRemoveMember(refetchSelectedGroup);
+  
+  // Transaction mutations
+  const onTransactionSuccess = () => {
+    setCurrentRoute("group-details");
+    setEditingTransaction(null);
+  };
+
+  const createTx = useCreateTransaction(onTransactionSuccess);
+  const updateTx = useUpdateTransaction(onTransactionSuccess);
+  const deleteTx = useDeleteTransaction(onTransactionSuccess);
 
   // Reset navigation state on logout and login (only when session state changes)
   useEffect(() => {
@@ -526,11 +76,10 @@ function AppContent() {
 
     // Only reset when transitioning between logged in/out states
     if (hadSession !== hasSession) {
-      setCurrentView("groups");
       setCurrentRoute("groups");
       setSelectedGroup(null);
-      setGroupDetails(null);
       setShowAddMember(false);
+      setEditingTransaction(null);
     }
 
     prevSessionRef.current = session;
@@ -543,7 +92,6 @@ function AppContent() {
     description?: string;
   }) => {
     await createGroupMutation.mutate(groupData);
-    setCurrentView("groups");
     // Refetch groups list to show the newly created group
     if (groupsListRefetchRef.current) {
       groupsListRefetchRef.current();
@@ -582,15 +130,34 @@ function AppContent() {
 
   const handleGroupPress = (group: Group) => {
     setSelectedGroup(group);
+    setCurrentRoute("group-details");
     // Group details will be fetched via useGroupDetails hook
   };
 
-  // Update groupDetails when selectedGroupDetails changes
-  useEffect(() => {
-    if (selectedGroupDetails && selectedGroup) {
-      setGroupDetails(selectedGroupDetails);
+  const handleSaveTransaction = async (
+    transactionData: any
+  ) => {
+    if (!selectedGroup) return;
+    
+    if (editingTransaction) {
+      await updateTx.mutate({
+        ...transactionData,
+        id: editingTransaction.id,
+        currency: transactionData.currency || getDefaultCurrency(),
+      });
+    } else {
+      await createTx.mutate({
+        ...transactionData,
+        group_id: selectedGroup.id,
+        currency: transactionData.currency || getDefaultCurrency(),
+      });
     }
-  }, [selectedGroupDetails, selectedGroup]);
+  };
+
+  const handleDeleteTransaction = async () => {
+    if (!editingTransaction || !selectedGroup) return;
+    await deleteTx.mutate({ id: editingTransaction.id, group_id: selectedGroup.id });
+  };
 
   if (loading) {
     return (
@@ -642,16 +209,45 @@ function AppContent() {
     );
   }
 
+  // Show transaction form screen
+  if (currentRoute === "transaction-form" && selectedGroup) {
+    return (
+      <>
+        <TransactionFormScreen
+          transaction={editingTransaction}
+          onSave={handleSaveTransaction}
+          onDismiss={() => {
+            setCurrentRoute("group-details");
+            setEditingTransaction(null);
+          }}
+          onDelete={editingTransaction ? handleDeleteTransaction : undefined}
+          defaultCurrency={getDefaultCurrency()}
+          groupMembers={selectedGroupDetails?.members || []}
+          groupId={selectedGroup.id}
+        />
+        <StatusBar style={theme.dark ? "light" : "dark"} />
+      </>
+    );
+  }
+
   // Show group details screen (with bottom nav)
-  if (groupDetails && selectedGroup) {
+  // Render as soon as a group is selected - the screen handles loading states internally
+  if (currentRoute === "group-details" && selectedGroup) {
+    // Use fetched group details if available, otherwise use selectedGroup as initial data
+    // GroupDetailsScreen will handle loading state while fetching full details
+    const groupToDisplay: GroupWithMembers = selectedGroupDetails || {
+      ...selectedGroup,
+      members: [],
+      invitations: [],
+    };
+
     return (
       <>
         <GroupDetailsScreen
-          group={groupDetails}
+          group={groupToDisplay}
           refreshTrigger={invitationsRefreshTrigger}
           groupRefreshTrigger={groupRefreshTrigger}
           onBack={() => {
-            setGroupDetails(null);
             setSelectedGroup(null);
             setCurrentRoute("groups");
           }}
@@ -660,27 +256,29 @@ function AppContent() {
             await handleRemoveMember(userId);
           }}
           onLeaveGroup={() => {
-            setGroupDetails(null);
             setSelectedGroup(null);
-            setCurrentView("groups");
             setCurrentRoute("groups");
           }}
           onDeleteGroup={() => {
-            setGroupDetails(null);
             setSelectedGroup(null);
-            setCurrentView("groups");
             setCurrentRoute("groups");
+          }}
+          onAddTransaction={() => {
+            setEditingTransaction(null);
+            setCurrentRoute("transaction-form");
+          }}
+          onEditTransaction={(transaction) => {
+            setEditingTransaction(transaction);
+            setCurrentRoute("transaction-form");
           }}
         />
         <BottomNavBar
           currentRoute={currentRoute}
           onGroupsPress={() => {
-            setGroupDetails(null);
             setSelectedGroup(null);
             setCurrentRoute("groups");
           }}
           onBalancesPress={() => {
-            setGroupDetails(null);
             setSelectedGroup(null);
             setCurrentRoute("balances");
           }}
@@ -763,7 +361,7 @@ function ErrorFallback({
 
 export default function App() {
   const colorScheme = useColorScheme();
-  const theme = colorScheme === "dark" ? MD3DarkTheme : MD3LightTheme;
+  const theme = colorScheme === "dark" ? darkTheme : lightTheme;
 
   return (
     <ErrorBoundary

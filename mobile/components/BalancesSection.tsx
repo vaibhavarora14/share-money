@@ -1,12 +1,15 @@
+
 import React, { useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
 import {
-  ActivityIndicator,
-  Button,
-  Card,
-  IconButton,
-  Text,
-  useTheme,
+    ActivityIndicator,
+    Avatar,
+    Button,
+    Divider,
+    IconButton,
+    Surface,
+    Text,
+    useTheme
 } from "react-native-paper";
 import { Balance, GroupBalance } from "../types";
 import { formatCurrency } from "../utils/currency";
@@ -38,8 +41,9 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
 
   // Separate balances into "you owe" and "you are owed" (memoized for performance)
   const { youOwe, youAreOwed } = useMemo(() => {
-    const owe = overallBalances.filter((b) => b.amount < 0);
-    const owed = overallBalances.filter((b) => b.amount > 0);
+    // Clone arrays before sorting to avoid mutating React Query cache
+    const owe = [...overallBalances.filter((b) => b.amount < 0)];
+    const owed = [...overallBalances.filter((b) => b.amount > 0)];
     
     // Sort by absolute amount (largest first)
     owe.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
@@ -49,37 +53,44 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
   }, [overallBalances]);
 
   const getUserDisplayName = (balance: Balance): string => {
-    return balance.email || `User ${balance.user_id.substring(0, 8)}...`;
+    // Find the member by user_id
+    const member = groupMembers.find(m => m.user_id === balance.user_id);
+    // Prioritize email if available, otherwise use a truncated user_id
+    return member?.email || `User ${balance.user_id.substring(0, 8)}...`;
+  };
+
+  const getInitials = (name: string) => {
+    return name.substring(0, 2).toUpperCase();
   };
 
   return (
-    <View style={styles.section}>
-      <View style={styles.sectionHeader}>
-        <Pressable
-          style={styles.sectionTitleRow}
-          onPress={() => setExpanded(!expanded)}
-        >
-          <IconButton
-            icon={expanded ? "chevron-down" : "chevron-right"}
-            size={20}
-            iconColor={theme.colors.onSurface}
-            onPress={() => setExpanded(!expanded)}
-            style={styles.expandButton}
+    <Surface style={styles.sectionSurface} elevation={1}>
+      <Pressable
+        style={styles.sectionHeader}
+        onPress={() => setExpanded(!expanded)}
+      >
+        <View style={styles.sectionTitleContainer}>
+          <Avatar.Icon 
+            size={32} 
+            icon="scale-balance" 
+            style={{ backgroundColor: theme.colors.errorContainer, marginRight: 12 }} 
+            color={theme.colors.onErrorContainer}
           />
-          <Text
-            variant="titleMedium"
-            style={styles.sectionTitle}
-            testID="balances-section-title"
-          >
+          <Text variant="titleMedium" style={styles.sectionTitle}>
             Your Balances
           </Text>
-        </Pressable>
-      </View>
+        </View>
+        <IconButton
+          icon={expanded ? "chevron-up" : "chevron-down"}
+          size={20}
+          onPress={() => setExpanded(!expanded)}
+        />
+      </Pressable>
 
       {loading ? (
         <ActivityIndicator size="small" style={{ marginVertical: 16 }} />
       ) : expanded ? (
-        <>
+        <View style={styles.sectionContent}>
           {/* Overall Summary - only show if showOverallBalances is true */}
           {showOverallBalances && overallBalances.length > 0 && (
             <>
@@ -95,10 +106,16 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                   >
                     You are owed
                   </Text>
-                  {youAreOwed.map((balance, index) => (
-                    <React.Fragment key={balance.user_id}>
-                      <Card style={styles.balanceCard} mode="outlined">
-                        <Card.Content style={styles.balanceContent}>
+                  <Surface elevation={0} style={{ backgroundColor: theme.colors.surface, borderRadius: 12, borderWidth: 1, borderColor: theme.colors.outlineVariant }}>
+                    {youAreOwed.map((balance, index) => (
+                      <React.Fragment key={balance.user_id}>
+                        <View style={styles.balanceContent}>
+                          <Avatar.Text 
+                            size={40} 
+                            label={getInitials(getUserDisplayName(balance))} 
+                            style={{ backgroundColor: theme.colors.primaryContainer, marginRight: 12 }}
+                            color={theme.colors.onPrimaryContainer}
+                          />
                           <View style={styles.balanceLeft}>
                             <Text
                               variant="titleSmall"
@@ -120,25 +137,22 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                                 defaultCurrency
                               )}
                             </Text>
+                            {onSettleUp && (
+                              <Button
+                                mode="text"
+                                onPress={() => onSettleUp(balance)}
+                                compact
+                                textColor={theme.colors.primary}
+                              >
+                                Received
+                              </Button>
+                            )}
                           </View>
-                        </Card.Content>
-                        {onSettleUp && (
-                          <Card.Actions>
-                            <Button
-                              mode="contained"
-                              onPress={() => onSettleUp(balance)}
-                              compact
-                            >
-                              Mark as Received
-                            </Button>
-                          </Card.Actions>
-                        )}
-                      </Card>
-                      {index < youAreOwed.length - 1 && (
-                        <View style={{ height: 8 }} />
-                      )}
-                    </React.Fragment>
-                  ))}
+                        </View>
+                        {index < youAreOwed.length - 1 && <Divider />}
+                      </React.Fragment>
+                    ))}
+                  </Surface>
                 </View>
               )}
 
@@ -154,10 +168,16 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                   >
                     You owe
                   </Text>
-                  {youOwe.map((balance, index) => (
-                    <React.Fragment key={balance.user_id}>
-                      <Card style={styles.balanceCard} mode="outlined">
-                        <Card.Content style={styles.balanceContent}>
+                  <Surface elevation={0} style={{ backgroundColor: theme.colors.surface, borderRadius: 12, borderWidth: 1, borderColor: theme.colors.outlineVariant }}>
+                    {youOwe.map((balance, index) => (
+                      <React.Fragment key={balance.user_id}>
+                        <View style={styles.balanceContent}>
+                          <Avatar.Text 
+                            size={40} 
+                            label={getInitials(getUserDisplayName(balance))} 
+                            style={{ backgroundColor: theme.colors.errorContainer, marginRight: 12 }}
+                            color={theme.colors.onErrorContainer}
+                          />
                           <View style={styles.balanceLeft}>
                             <Text
                               variant="titleSmall"
@@ -179,25 +199,22 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                                 defaultCurrency
                               )}
                             </Text>
+                            {onSettleUp && (
+                              <Button
+                                mode="text"
+                                onPress={() => onSettleUp(balance)}
+                                compact
+                                textColor={theme.colors.error}
+                              >
+                                Pay
+                              </Button>
+                            )}
                           </View>
-                        </Card.Content>
-                        {onSettleUp && (
-                          <Card.Actions>
-                            <Button
-                              mode="contained"
-                              onPress={() => onSettleUp(balance)}
-                              compact
-                            >
-                              Settle Up
-                            </Button>
-                          </Card.Actions>
-                        )}
-                      </Card>
-                      {index < youOwe.length - 1 && (
-                        <View style={{ height: 8 }} />
-                      )}
-                    </React.Fragment>
-                  ))}
+                        </View>
+                        {index < youOwe.length - 1 && <Divider />}
+                      </React.Fragment>
+                    ))}
+                  </Surface>
                 </View>
               )}
             </>
@@ -225,125 +242,106 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                 const hasBalances =
                   groupYouOwe.length > 0 || groupYouAreOwed.length > 0;
 
+                if (!hasBalances) return null;
+
                 return (
                   <React.Fragment key={groupBalance.group_id}>
-                    <Card style={styles.groupBalanceCard} mode="outlined">
-                      <Card.Content>
-                        <Text
-                          variant="titleSmall"
-                          style={styles.groupBalanceTitle}
-                        >
-                          {groupBalance.group_name}
-                        </Text>
-
-                        {hasBalances ? (
-                          <>
-                            {/* Group: You Are Owed */}
-                            {groupYouAreOwed.length > 0 && (
-                              <View style={{ marginTop: 12 }}>
-                                {groupYouAreOwed.map((balance) => (
-                                  <View key={balance.user_id}>
-                                    <View
-                                      style={styles.groupBalanceRow}
-                                    >
-                                      <Text
-                                        variant="bodyMedium"
-                                        style={styles.groupBalanceName}
-                                      >
-                                        {getUserDisplayName(balance)} owes you
-                                      </Text>
-                                      <Text
-                                        variant="bodyMedium"
-                                        style={[
-                                          styles.groupBalanceAmount,
-                                          { color: "#10b981" },
-                                        ]}
-                                      >
-                                        {formatCurrency(
-                                          Math.abs(balance.amount),
-                                          defaultCurrency
-                                        )}
-                                      </Text>
-                                    </View>
-                                    {onSettleUp && (
-                                      <View style={{ marginTop: 8, alignItems: "flex-end" }}>
-                                        <Button
-                                          mode="contained"
-                                          onPress={() => onSettleUp(balance)}
-                                          compact
-                                          style={{ minWidth: 100 }}
-                                        >
-                                          Mark as Received
-                                        </Button>
-                                      </View>
-                                    )}
-                                  </View>
-                                ))}
-                              </View>
-                            )}
-
-                            {/* Group: You Owe */}
-                            {groupYouOwe.length > 0 && (
-                              <View style={{ marginTop: 8 }}>
-                                {groupYouOwe.map((balance) => (
-                                  <View key={balance.user_id}>
-                                    <View
-                                      style={styles.groupBalanceRow}
-                                    >
-                                      <Text
-                                        variant="bodyMedium"
-                                        style={styles.groupBalanceName}
-                                      >
-                                        You owe {getUserDisplayName(balance)}
-                                      </Text>
-                                      <Text
-                                        variant="bodyMedium"
-                                        style={[
-                                          styles.groupBalanceAmount,
-                                          { color: "#ef4444" },
-                                        ]}
-                                      >
-                                        {formatCurrency(
-                                          Math.abs(balance.amount),
-                                          defaultCurrency
-                                        )}
-                                      </Text>
-                                    </View>
-                                    {onSettleUp && (
-                                      <View style={{ marginTop: 8, alignItems: "flex-end" }}>
-                                        <Button
-                                          mode="contained"
-                                          onPress={() => onSettleUp(balance)}
-                                          compact
-                                          style={{ minWidth: 100 }}
-                                        >
-                                          Settle Up
-                                        </Button>
-                                      </View>
-                                    )}
-                                  </View>
-                                ))}
-                              </View>
-                            )}
-                          </>
-                        ) : (
-                          <View style={{ marginTop: 12 }}>
-                            <Text
-                              variant="bodyMedium"
-                              style={[
-                                styles.groupBalanceName,
-                                { color: theme.colors.onSurfaceVariant },
-                              ]}
-                            >
-                              No balances in this group yet
-                            </Text>
+                    <Text
+                      variant="titleSmall"
+                      style={[styles.groupBalanceTitle, { marginTop: groupIndex > 0 ? 16 : 0 }]}
+                    >
+                      {groupBalance.group_name}
+                    </Text>
+                    
+                    <Surface elevation={0} style={{ backgroundColor: theme.colors.surface, borderRadius: 12, borderWidth: 1, borderColor: theme.colors.outlineVariant }}>
+                      {/* Group: You Are Owed */}
+                      {groupYouAreOwed.map((balance, idx) => (
+                        <React.Fragment key={balance.user_id}>
+                          <View style={styles.balanceContent}>
+                            <Avatar.Text 
+                              size={40} 
+                              label={getInitials(getUserDisplayName(balance))} 
+                              style={{ backgroundColor: theme.colors.primaryContainer, marginRight: 12 }}
+                              color={theme.colors.onPrimaryContainer}
+                            />
+                            <View style={styles.balanceLeft}>
+                              <Text variant="bodyMedium" style={styles.balanceName}>
+                                {getUserDisplayName(balance)} owes you
+                              </Text>
+                            </View>
+                            <View style={styles.balanceRight}>
+                              <Text
+                                variant="bodyMedium"
+                                style={[
+                                  styles.balanceAmount,
+                                  { color: "#10b981" },
+                                ]}
+                              >
+                                {formatCurrency(
+                                  Math.abs(balance.amount),
+                                  defaultCurrency
+                                )}
+                              </Text>
+                              {onSettleUp && (
+                                <Button
+                                  mode="text"
+                                  onPress={() => onSettleUp(balance)}
+                                  compact
+                                  textColor={theme.colors.primary}
+                                >
+                                  Received
+                                </Button>
+                              )}
+                            </View>
                           </View>
-                        )}
-                      </Card.Content>
-                    </Card>
-                    {groupIndex < groupBalances.length - 1 && (
-                      <View style={{ height: 8 }} />
-                    )}
+                          {(idx < groupYouAreOwed.length - 1 || groupYouOwe.length > 0) && <Divider />}
+                        </React.Fragment>
+                      ))}
+
+                      {/* Group: You Owe */}
+                      {groupYouOwe.map((balance, idx) => (
+                        <React.Fragment key={balance.user_id}>
+                          <View style={styles.balanceContent}>
+                            <Avatar.Text 
+                              size={40} 
+                              label={getInitials(getUserDisplayName(balance))} 
+                              style={{ backgroundColor: theme.colors.errorContainer, marginRight: 12 }}
+                              color={theme.colors.onErrorContainer}
+                            />
+                            <View style={styles.balanceLeft}>
+                              <Text variant="bodyMedium" style={styles.balanceName}>
+                                You owe {getUserDisplayName(balance)}
+                              </Text>
+                            </View>
+                            <View style={styles.balanceRight}>
+                              <Text
+                                variant="bodyMedium"
+                                style={[
+                                  styles.balanceAmount,
+                                  { color: "#ef4444" },
+                                ]}
+                              >
+                                {formatCurrency(
+                                  Math.abs(balance.amount),
+                                  defaultCurrency
+                                )}
+                              </Text>
+                              {onSettleUp && (
+                                <Button
+                                  mode="text"
+                                  onPress={() => onSettleUp(balance)}
+                                  compact
+                                  textColor={theme.colors.error}
+                                >
+                                  Pay
+                                </Button>
+                              )}
+                            </View>
+                          </View>
+                          {idx < groupYouOwe.length - 1 && <Divider />}
+                        </React.Fragment>
+                      ))}
+                    </Surface>
                   </React.Fragment>
                 );
               })}
@@ -355,40 +353,17 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
             overallBalances.length === 0 &&
             groupBalances.length === 0) ||
           (!showOverallBalances && groupBalances.length === 0) ? (
-            <Card style={styles.emptyStateCard} mode="outlined">
-              <Card.Content style={styles.emptyStateContent}>
-                <Text
-                  variant="headlineSmall"
-                  style={[
-                    styles.emptyStateIcon,
-                    { color: theme.colors.onSurfaceVariant },
-                  ]}
-                >
-                  💸
-                </Text>
-                <Text
-                  variant="titleMedium"
-                  style={[
-                    styles.emptyStateTitle,
-                    { color: theme.colors.onSurface },
-                  ]}
-                >
-                  No Balances Yet
-                </Text>
-                <Text
-                  variant="bodyMedium"
-                  style={[
-                    styles.emptyStateMessage,
-                    { color: theme.colors.onSurfaceVariant },
-                  ]}
-                >
-                  Once you add expenses with splits, balances will appear here.
-                </Text>
-              </Card.Content>
-            </Card>
+            <View style={styles.emptyStateContent}>
+              <Text
+                variant="bodyMedium"
+                style={{ color: theme.colors.onSurfaceVariant, textAlign: "center" }}
+              >
+                No balances yet
+              </Text>
+            </View>
           ) : null}
-        </>
+        </View>
       ) : null}
-    </View>
+    </Surface>
   );
 };

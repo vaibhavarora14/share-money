@@ -36,14 +36,41 @@ appId: com.sharemoney.app
 # Wait for group details screen to load
 - waitForAnimationToEnd
 
+
 # Verify group details screen elements are visible
-# Use testIDs for stability
+# The screen now uses segmented buttons to switch between views
 - assertVisible:
-    id: "members-section-title"
+    text: "Transactions"
 - assertVisible:
-    id: "transactions-section-title"
+    text: "Balances"
 - assertVisible:
-    id: "balances-section-title"
+    text: "Members"
+
+# Test switching to Balances tab
+- tapOn:
+    text: "Balances"
+- waitForAnimationToEnd
+
+# Verify Balances content is visible
+- assertVisible:
+    text: "Your Balances"
+- assertVisible:
+    text: "Settlements"
+
+# Test switching to Members tab
+- tapOn:
+    text: "Members"
+- waitForAnimationToEnd
+
+# Verify Members section content is visible
+- assertVisible:
+    text: "Add Member"
+
+# Switch back to Transactions tab
+- tapOn:
+    text: "Transactions"
+- waitForAnimationToEnd
+
 
 - tapOn:
     text: "Navigate back"
@@ -63,9 +90,9 @@ appId: com.sharemoney.app
 # Wait for group details screen to load
 - waitForAnimationToEnd
 
-# Verify we're on group details screen again
+# Verify we're on group details screen again by checking segmented buttons
 - assertVisible:
-    id: "members-section-title"
+    text: "Transactions"
 
 # Test Android native back button
 - pressKey: "Back"

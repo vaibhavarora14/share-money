@@ -1,19 +1,18 @@
 import React, { useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import {
-  ActivityIndicator,
-  Appbar,
-  Button,
-  Card,
-  FAB,
-  IconButton,
-  Text,
-  useTheme,
+    ActivityIndicator,
+    Appbar,
+    Button,
+    FAB,
+    IconButton,
+    Surface,
+    Text,
+    useTheme,
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useGroups } from "../hooks/useGroups";
 import { Group } from "../types";
-import { formatDate } from "../utils/date";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 import { CreateGroupScreen } from "./CreateGroupScreen";
 
@@ -92,76 +91,98 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
       style={[styles.container, { backgroundColor: theme.colors.background }]}
       edges={["top", "bottom"]}
     >
-      <Appbar.Header>
-        <Appbar.Content title="Groups" subtitle={`${groups.length} total`} />
+      <Appbar.Header style={{ backgroundColor: theme.colors.background }} mode="center-aligned">
+        <Appbar.Content 
+          title="ShareMoney" 
+          titleStyle={{ fontWeight: 'bold', color: theme.colors.primary }}
+        />
       </Appbar.Header>
 
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
       >
+        <Text variant="headlineMedium" style={styles.headerTitle}>
+          Your Groups
+        </Text>
+        
         {groups.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Text variant="headlineSmall" style={{ marginBottom: 8 }}>
-              No groups
-            </Text>
-            <Text
-              variant="bodyMedium"
-              style={{ color: theme.colors.onSurfaceVariant }}
-            >
-              Create a group to get started
-            </Text>
+            <Surface style={styles.emptySurface} elevation={0}>
+              <IconButton icon="account-group-outline" size={48} iconColor={theme.colors.primary} />
+              <Text variant="titleLarge" style={{ marginBottom: 8, fontWeight: 'bold' }}>
+                No groups yet
+              </Text>
+              <Text
+                variant="bodyMedium"
+                style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center', marginBottom: 24 }}
+              >
+                Create a group to start sharing expenses with friends and family.
+              </Text>
+              <Button mode="contained" onPress={() => setShowCreateGroup(true)}>
+                Create your first group
+              </Button>
+            </Surface>
           </View>
         ) : (
-          groups.map((group, index) => (
-            <React.Fragment key={group.id}>
-              <Card
-                style={styles.groupCard}
-                mode="outlined"
+          groups.map((group) => (
+            <Surface
+              key={group.id}
+              style={[styles.groupItem, { backgroundColor: theme.colors.surface }]}
+              elevation={1}
+            >
+              <TouchableOpacity
+                style={styles.groupTouchable}
                 onPress={() => onGroupPress(group)}
+                activeOpacity={0.7}
               >
-                <Card.Content style={styles.cardContent}>
-                  <View style={styles.groupLeft}>
-                    <Text variant="titleMedium" style={styles.groupName}>
-                      {group.name}
+                <View style={styles.groupIconContainer}>
+                  <Surface style={[styles.groupIcon, { backgroundColor: theme.colors.primaryContainer }]} elevation={0}>
+                    <Text style={{ fontSize: 20, fontWeight: 'bold', color: theme.colors.onPrimaryContainer }}>
+                      {group.name.charAt(0).toUpperCase()}
                     </Text>
-                    {group.description && (
-                      <Text
-                        variant="bodySmall"
-                        style={{ color: theme.colors.onSurfaceVariant }}
-                        numberOfLines={2}
-                      >
-                        {group.description}
-                      </Text>
-                    )}
+                  </Surface>
+                </View>
+                
+                <View style={styles.groupContent}>
+                  <Text variant="titleMedium" style={styles.groupName} numberOfLines={1}>
+                    {group.name}
+                  </Text>
+                  {group.description ? (
                     <Text
                       variant="bodySmall"
-                      style={{
-                        color: theme.colors.onSurfaceVariant,
-                        marginTop: 4,
-                      }}
+                      style={{ color: theme.colors.onSurfaceVariant }}
+                      numberOfLines={1}
                     >
-                      Created {formatDate(group.created_at)}
+                      {group.description}
                     </Text>
-                  </View>
-                  <IconButton
-                    icon="chevron-right"
-                    size={24}
-                    onPress={() => onGroupPress(group)}
-                  />
-                </Card.Content>
-              </Card>
-              {index < groups.length - 1 && <View style={{ height: 8 }} />}
-            </React.Fragment>
+                  ) : (
+                     <Text
+                      variant="bodySmall"
+                      style={{ color: theme.colors.onSurfaceVariant }}
+                    >
+                      No description
+                    </Text>
+                  )}
+                </View>
+                
+                <IconButton icon="chevron-right" size={20} iconColor={theme.colors.onSurfaceVariant} />
+              </TouchableOpacity>
+            </Surface>
           ))
         )}
+        
+        {/* Bottom padding for FAB */}
+        <View style={{ height: 80 }} />
       </ScrollView>
 
       <FAB
         icon="plus"
-        style={styles.fab}
+        style={[styles.fab, { backgroundColor: theme.colors.primaryContainer }]}
+        color={theme.colors.onPrimaryContainer}
         onPress={() => setShowCreateGroup(true)}
-        label="Create"
+        label="New Group"
       />
 
       <CreateGroupScreen
@@ -192,33 +213,55 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 16,
   },
+  headerTitle: {
+    fontWeight: 'bold',
+    marginBottom: 24,
+    marginTop: 8,
+  },
   emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: 60,
+    paddingVertical: 40,
+    alignItems: 'center',
   },
-  groupCard: {
-    marginBottom: 0,
+  emptySurface: {
+    padding: 32,
+    alignItems: 'center',
+    borderRadius: 24,
+    width: '100%',
+    backgroundColor: 'transparent',
   },
-  cardContent: {
+  groupItem: {
+    marginBottom: 12,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  groupTouchable: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 4,
+    padding: 16,
   },
-  groupLeft: {
+  groupIconContainer: {
+    marginRight: 16,
+  },
+  groupIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  groupContent: {
     flex: 1,
-    marginRight: 8,
+    justifyContent: 'center',
   },
   groupName: {
     fontWeight: "600",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   fab: {
     position: "absolute",
     margin: 16,
     right: 0,
-    bottom: 10, // Space for bottom navigation bar
+    bottom: 10,
+    borderRadius: 16,
   },
 });
