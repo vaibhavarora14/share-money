@@ -7,7 +7,7 @@ import { isValidUUID } from '../utils/validation';
 
 interface TransactionHistory {
   id: string;
-  transaction_id: number;
+  transaction_id: number | null; // Nullable for deleted transactions
   group_id: string;
   action: 'created' | 'updated' | 'deleted';
   changed_by: string;

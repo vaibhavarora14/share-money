@@ -38,7 +38,7 @@ CREATE TRIGGER transaction_updated_at_trigger
 
 CREATE TABLE IF NOT EXISTS transaction_history (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  transaction_id INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+  transaction_id INTEGER REFERENCES transactions(id) ON DELETE SET NULL, -- Nullable for deleted transactions
   group_id UUID REFERENCES groups(id) ON DELETE SET NULL, -- Denormalized for faster queries
   action VARCHAR(20) NOT NULL CHECK (action IN ('created', 'updated', 'deleted')),
   changed_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE SET NULL,
@@ -69,6 +69,34 @@ CREATE INDEX IF NOT EXISTS idx_transaction_history_group_changed_at ON transacti
 
 -- GIN index for JSONB queries
 CREATE INDEX IF NOT EXISTS idx_transaction_history_changes_gin ON transaction_history USING GIN (changes);
+
+-- Fix existing installations: Make transaction_id nullable if table already exists
+-- This allows deletion history to be recorded even after transaction is deleted
+DO $$
+BEGIN
+  -- Check if column exists and is NOT NULL
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'transaction_history' 
+    AND column_name = 'transaction_id' 
+    AND is_nullable = 'NO'
+  ) THEN
+    -- Drop the foreign key constraint first
+    ALTER TABLE transaction_history 
+    DROP CONSTRAINT IF EXISTS transaction_history_transaction_id_fkey;
+    
+    -- Make column nullable
+    ALTER TABLE transaction_history 
+    ALTER COLUMN transaction_id DROP NOT NULL;
+    
+    -- Recreate foreign key with ON DELETE SET NULL
+    ALTER TABLE transaction_history 
+    ADD CONSTRAINT transaction_history_transaction_id_fkey 
+    FOREIGN KEY (transaction_id) 
+    REFERENCES transactions(id) 
+    ON DELETE SET NULL;
+  END IF;
+END $$;
 
 -- ============================================================================
 -- PART 3: CREATE ARCHIVE TABLE (for records older than 1 year)
@@ -170,6 +198,8 @@ BEGIN
     
   ELSIF TG_OP = 'DELETE' THEN
     -- Deleted: store final values
+    -- Note: transaction_id is set to NULL since the transaction no longer exists
+    -- but we store the full snapshot in the snapshot field
     change_data := jsonb_build_object(
       'action', 'deleted',
       'transaction', to_jsonb(OLD)
@@ -183,7 +213,7 @@ BEGIN
       changes,
       snapshot
     ) VALUES (
-      OLD.id,
+      NULL, -- Set to NULL since transaction is deleted (foreign key constraint)
       OLD.group_id,
       'deleted',
       COALESCE(auth.uid(), OLD.user_id),
