@@ -104,3 +104,34 @@ export interface SettlementsResponse {
   settlements: Settlement[];
 }
 
+export interface ActivityItem {
+  id: string;
+  type: 'transaction_created' | 'transaction_updated' | 'transaction_deleted' | 'settlement_created' | 'settlement_updated' | 'settlement_deleted';
+  transaction_id?: number;
+  settlement_id?: string;
+  group_id: string;
+  changed_by: {
+    id: string;
+    email: string;
+  };
+  changed_at: string;
+  description: string;
+  details: {
+    action: 'created' | 'updated' | 'deleted';
+    changes?: {
+      [field: string]: {
+        old: any;
+        new: any;
+      };
+    };
+    transaction?: Transaction;
+    settlement?: Settlement;
+  };
+}
+
+export interface ActivityFeedResponse {
+  activities: ActivityItem[];
+  total: number;
+  has_more: boolean;
+}
+
