@@ -83,10 +83,23 @@ CREATE INDEX IF NOT EXISTS idx_transaction_history_group_type_changed_at ON tran
 -- GIN index for JSONB queries
 CREATE INDEX IF NOT EXISTS idx_transaction_history_changes_gin ON transaction_history USING GIN (changes);
 
--- Fix existing installations: Add settlement support if table already exists
+-- ============================================================================
+-- PART 2.5: BACKWARD COMPATIBILITY - Fix existing installations
+-- ============================================================================
+-- This section handles migrations for existing installations that may have
+-- the transaction_history table without settlement support.
+-- 
+-- Migration steps:
+-- 1. Add settlement_id column if missing (for settlement tracking)
+-- 2. Add activity_type column if missing (to distinguish transaction vs settlement)
+-- 3. Make transaction_id nullable if needed (for deleted transaction records)
+-- 4. Update check constraint to allow both NULL for deleted records
+-- ============================================================================
+
 DO $$
 BEGIN
-  -- Add settlement_id column if it doesn't exist
+  -- Step 1: Add settlement_id column if it doesn't exist
+  -- This allows tracking settlement history in the same table
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns 
     WHERE table_name = 'transaction_history' 
@@ -99,7 +112,8 @@ BEGIN
       ON transaction_history(settlement_id);
   END IF;
   
-  -- Add activity_type column if it doesn't exist
+  -- Step 2: Add activity_type column if it doesn't exist
+  -- This distinguishes between transaction and settlement activities
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns 
     WHERE table_name = 'transaction_history' 
@@ -116,14 +130,15 @@ BEGIN
       ON transaction_history(group_id, activity_type, changed_at DESC);
   END IF;
   
-  -- Make transaction_id nullable if it's NOT NULL
+  -- Step 3: Make transaction_id nullable if it's NOT NULL
+  -- This is needed for deleted transactions where we preserve snapshot but transaction is gone
   IF EXISTS (
     SELECT 1 FROM information_schema.columns 
     WHERE table_name = 'transaction_history' 
     AND column_name = 'transaction_id' 
     AND is_nullable = 'NO'
   ) THEN
-    -- Drop the foreign key constraint first
+    -- Drop the foreign key constraint first to allow modification
     ALTER TABLE transaction_history 
     DROP CONSTRAINT IF EXISTS transaction_history_transaction_id_fkey;
     
@@ -132,6 +147,7 @@ BEGIN
     ALTER COLUMN transaction_id DROP NOT NULL;
     
     -- Recreate foreign key with ON DELETE SET NULL
+    -- This ensures deleted transactions don't break history records
     ALTER TABLE transaction_history 
     ADD CONSTRAINT transaction_history_transaction_id_fkey 
     FOREIGN KEY (transaction_id) 
@@ -139,7 +155,9 @@ BEGIN
     ON DELETE SET NULL;
   END IF;
   
-  -- Add or update check constraint if it doesn't exist
+  -- Step 4: Add or update check constraint if it doesn't exist
+  -- This ensures data integrity: either transaction_id OR settlement_id must be set
+  -- Exception: both can be NULL for deleted records (where snapshot preserves data)
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.table_constraints 
     WHERE table_name = 'transaction_history' 
@@ -154,6 +172,7 @@ BEGIN
     );
   ELSE
     -- Update existing constraint to allow both NULL for deleted records
+    -- This fixes the deletion constraint violation issue
     ALTER TABLE transaction_history 
     DROP CONSTRAINT IF EXISTS transaction_history_transaction_settlement_check;
     
@@ -168,8 +187,13 @@ BEGIN
   
 END $$;
 
--- Also update archive table constraint if it exists
--- The archive table is created with LIKE, so it might have copied the old constraint
+-- ============================================================================
+-- PART 2.6: UPDATE ARCHIVE TABLE CONSTRAINT
+-- ============================================================================
+-- The archive table is created with LIKE, so it might have copied the old constraint.
+-- We need to update it to match the new constraint that allows both NULL for deleted records.
+-- ============================================================================
+
 DO $$
 DECLARE
   constraint_name_var TEXT;
@@ -179,6 +203,7 @@ BEGIN
     WHERE table_name = 'transaction_history_archive'
   ) THEN
     -- Find and drop any existing check constraints related to transaction/settlement
+    -- The constraint name might vary, so we search for it dynamically
     SELECT constraint_name INTO constraint_name_var
     FROM information_schema.table_constraints 
     WHERE table_name = 'transaction_history_archive' 
@@ -191,6 +216,7 @@ BEGIN
     END IF;
     
     -- Add the updated constraint (only if it doesn't already exist with the new definition)
+    -- This ensures archive table has the same constraint as main table
     IF NOT EXISTS (
       SELECT 1 FROM information_schema.table_constraints 
       WHERE table_name = 'transaction_history_archive' 
@@ -223,8 +249,13 @@ CREATE INDEX IF NOT EXISTS idx_transaction_history_archive_changed_at ON transac
 -- ============================================================================
 -- PART 4: CREATE TRIGGER FUNCTIONS
 -- ============================================================================
+-- These functions automatically capture all changes to transactions and settlements
+-- They run as SECURITY DEFINER to ensure proper user context is captured
+-- ============================================================================
 
 -- Function to capture transaction changes
+-- This trigger function runs on INSERT, UPDATE, DELETE operations on transactions table
+-- It creates history records with full snapshots and diffs for audit trail
 CREATE OR REPLACE FUNCTION track_transaction_changes()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -255,7 +286,15 @@ BEGIN
       'transaction',
       NEW.group_id,
       'created',
-      COALESCE(NEW.user_id, auth.uid()), -- Fallback to auth context
+      -- Use NEW.user_id if available, otherwise use auth.uid()
+      -- Validate auth.uid() is not NULL to prevent security issues
+      COALESCE(
+        NEW.user_id, 
+        CASE 
+          WHEN auth.uid() IS NOT NULL THEN auth.uid()
+          ELSE (SELECT id FROM auth.users WHERE id = auth.uid() LIMIT 1)
+        END
+      ),
       change_data,
       to_jsonb(NEW) -- Full snapshot
     );
@@ -306,7 +345,13 @@ BEGIN
         'transaction',
         COALESCE(NEW.group_id, OLD.group_id), -- Use new or old group_id
         'updated',
-        COALESCE(auth.uid(), NEW.user_id, OLD.user_id),
+        -- Prioritize auth.uid(), then NEW.user_id, then OLD.user_id
+        -- Validate auth.uid() is not NULL
+        COALESCE(
+          CASE WHEN auth.uid() IS NOT NULL THEN auth.uid() ELSE NULL END,
+          NEW.user_id, 
+          OLD.user_id
+        ),
         change_data,
         to_jsonb(NEW) -- Current state snapshot
       );
@@ -336,7 +381,12 @@ BEGIN
       'transaction',
       OLD.group_id,
       'deleted',
-      COALESCE(auth.uid(), OLD.user_id),
+      -- Use auth.uid() if available, otherwise fallback to OLD.user_id
+      -- Validate auth.uid() is not NULL
+      COALESCE(
+        CASE WHEN auth.uid() IS NOT NULL THEN auth.uid() ELSE NULL END,
+        OLD.user_id
+      ),
       change_data,
       to_jsonb(OLD) -- Final snapshot before deletion
     );
@@ -350,6 +400,8 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 
 -- Function to capture settlement changes
+-- This trigger function runs on INSERT, UPDATE, DELETE operations on settlements table
+-- Similar to track_transaction_changes but for settlement entities
 CREATE OR REPLACE FUNCTION track_settlement_changes()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -380,7 +432,15 @@ BEGIN
       'settlement',
       NEW.group_id,
       'created',
-      COALESCE(NEW.created_by, auth.uid()), -- Use created_by for settlements
+      -- Use NEW.created_by if available, otherwise use auth.uid()
+      -- Validate auth.uid() is not NULL
+      COALESCE(
+        NEW.created_by,
+        CASE 
+          WHEN auth.uid() IS NOT NULL THEN auth.uid()
+          ELSE (SELECT id FROM auth.users WHERE id = auth.uid() LIMIT 1)
+        END
+      ),
       change_data,
       to_jsonb(NEW) -- Full snapshot
     );
@@ -430,7 +490,13 @@ BEGIN
         'settlement',
         NEW.group_id,
         'updated',
-        COALESCE(auth.uid(), NEW.created_by, OLD.created_by),
+        -- Prioritize auth.uid(), then NEW.created_by, then OLD.created_by
+        -- Validate auth.uid() is not NULL
+        COALESCE(
+          CASE WHEN auth.uid() IS NOT NULL THEN auth.uid() ELSE NULL END,
+          NEW.created_by, 
+          OLD.created_by
+        ),
         change_data,
         to_jsonb(NEW) -- Current state snapshot
       );
@@ -458,7 +524,12 @@ BEGIN
       'settlement',
       OLD.group_id,
       'deleted',
-      COALESCE(auth.uid(), OLD.created_by),
+      -- Use auth.uid() if available, otherwise fallback to OLD.created_by
+      -- Validate auth.uid() is not NULL
+      COALESCE(
+        CASE WHEN auth.uid() IS NOT NULL THEN auth.uid() ELSE NULL END,
+        OLD.created_by
+      ),
       change_data,
       to_jsonb(OLD) -- Final snapshot before deletion
     );

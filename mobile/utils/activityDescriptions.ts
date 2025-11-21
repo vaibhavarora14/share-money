@@ -1,3 +1,4 @@
+import { formatDistanceToNow, format, parseISO, startOfDay, differenceInDays } from 'date-fns';
 import { ActivityItem } from '../types';
 import { formatCurrency } from './currency';
 
@@ -70,11 +71,14 @@ export function getActivityColor(type: ActivityItem['type']): string {
 }
 
 /**
- * Formats the timestamp for display
+ * Formats the timestamp for display with timezone awareness
+ * Uses date-fns for consistent timezone handling across platforms
+ * @param timestamp - ISO timestamp string from database
+ * @returns User-friendly relative or absolute time string
  */
 export function formatActivityTime(timestamp: string): string {
   try {
-    const date = new Date(timestamp);
+    const date = parseISO(timestamp);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
@@ -93,24 +97,21 @@ export function formatActivityTime(timestamp: string): string {
       return `${diffDays} days ago`;
     } else {
       // Format as "Jan 20, 2025 at 3:45 PM" for older dates
-      return date.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric', 
-        year: 'numeric' 
-      }) + ' at ' + date.toLocaleTimeString('en-US', { 
-        hour: 'numeric', 
-        minute: '2-digit',
-        hour12: true 
-      });
+      // Using date-fns for consistent formatting across timezones
+      return format(date, 'MMM d, yyyy') + ' at ' + format(date, 'h:mm a');
     }
   } catch (error) {
     // Fallback if date parsing fails
+    console.error('Error formatting activity time:', error);
     return timestamp;
   }
 }
 
 /**
  * Groups activities by date for display
+ * Uses date-fns for timezone-aware date calculations
+ * @param activities - Array of activity items to group
+ * @returns Object mapping date keys to arrays of activities
  */
 export function groupActivitiesByDate(activities: ActivityItem[]): {
   [key: string]: ActivityItem[];
@@ -118,30 +119,38 @@ export function groupActivitiesByDate(activities: ActivityItem[]): {
   const groups: { [key: string]: ActivityItem[] } = {};
   
   activities.forEach(activity => {
-    const date = new Date(activity.changed_at);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const activityDate = new Date(date);
-    activityDate.setHours(0, 0, 0, 0);
-    
-    let key: string;
-    const diffDays = Math.floor((today.getTime() - activityDate.getTime()) / 86400000);
-    
-    if (diffDays === 0) {
-      key = 'Today';
-    } else if (diffDays === 1) {
-      key = 'Yesterday';
-    } else if (diffDays < 7) {
-      key = `${diffDays} days ago`;
-    } else {
-      key = date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    try {
+      const date = parseISO(activity.changed_at);
+      const today = startOfDay(new Date());
+      const activityDate = startOfDay(date);
+      
+      let key: string;
+      const diffDays = differenceInDays(today, activityDate);
+      
+      if (diffDays === 0) {
+        key = 'Today';
+      } else if (diffDays === 1) {
+        key = 'Yesterday';
+      } else if (diffDays < 7) {
+        key = `${diffDays} days ago`;
+      } else {
+        // Use date-fns for consistent formatting
+        key = format(date, 'MMMM d, yyyy');
+      }
+      
+      if (!groups[key]) {
+        groups[key] = [];
+      }
+      groups[key].push(activity);
+    } catch (error) {
+      // Fallback: use timestamp as key if parsing fails
+      console.error('Error grouping activity by date:', error);
+      const fallbackKey = 'Recent';
+      if (!groups[fallbackKey]) {
+        groups[fallbackKey] = [];
+      }
+      groups[fallbackKey].push(activity);
     }
-    
-    if (!groups[key]) {
-      groups[key] = [];
-    }
-    groups[key].push(activity);
   });
   
   return groups;

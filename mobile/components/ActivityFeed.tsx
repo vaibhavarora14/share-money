@@ -15,6 +15,7 @@ import {
     getUserDisplayName,
     groupActivitiesByDate,
 } from "../utils/activityDescriptions";
+import { ACTIVITY_FEED_UI, ACTIVITY_ICONS } from "../constants/activityFeed";
 import { styles } from "./ActivityFeed.styles";
 
 interface ActivityFeedProps {
@@ -30,6 +31,9 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
   const { session } = useAuth();
   const currentUserId = session?.user?.id;
 
+  // Error boundary - catch any rendering errors
+  try {
+
   if (loading) {
     return (
       <View style={styles.section}>
@@ -43,15 +47,11 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
       <View style={styles.section}>
         <Card style={styles.emptyStateCard} mode="outlined">
           <Card.Content style={styles.emptyStateContent}>
-            <Text
-              variant="headlineSmall"
-              style={[
-                styles.emptyStateIcon,
-                { color: theme.colors.onSurfaceVariant },
-              ]}
-            >
-              📋
-            </Text>
+            <MaterialCommunityIcons
+              name={ACTIVITY_ICONS.EMPTY_STATE}
+              size={ACTIVITY_FEED_UI.EMPTY_STATE_ICON_SIZE}
+              color={theme.colors.onSurfaceVariant}
+            />
             <Text
               variant="titleMedium"
               style={[
@@ -110,10 +110,9 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
               
               // Get icon based on activity category (transaction vs settlement)
               // Action is indicated by color (green=created, orange=updated, red=deleted)
-              const getActivityIcon = (type: ActivityItem['type']): any => {
-                if (type.startsWith('settlement')) return 'handshake';
-                // Transaction icon
-                return 'receipt';
+              const getActivityIcon = (type: ActivityItem['type']): string => {
+                if (type.startsWith('settlement')) return ACTIVITY_ICONS.SETTLEMENT;
+                return ACTIVITY_ICONS.TRANSACTION;
               };
               
               const activityIcon = getActivityIcon(activity.type);
@@ -130,12 +129,12 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                         <View
                           style={[
                             styles.iconContainer,
-                            { backgroundColor: activityColor + '20' }, // 20 = 12.5% opacity
+                            { backgroundColor: activityColor + ACTIVITY_FEED_UI.ICON_OPACITY },
                           ]}
                         >
                           <MaterialCommunityIcons
                             name={activityIcon}
-                            size={24}
+                            size={ACTIVITY_FEED_UI.ACTIVITY_ICON_SIZE}
                             color={activityColor}
                           />
                         </View>
@@ -171,7 +170,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                               styles.activityDescription,
                               { color: theme.colors.onSurfaceVariant },
                             ]}
-                            numberOfLines={3}
+                            numberOfLines={ACTIVITY_FEED_UI.MAX_DESCRIPTION_LINES}
                           >
                             {activity.description}
                           </Text>
@@ -187,4 +186,34 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
       })}
     </View>
   );
+  } catch (error) {
+    // Error boundary - log and show user-friendly message
+    console.error('Error rendering ActivityFeed:', error);
+    return (
+      <View style={styles.section}>
+        <Card style={styles.emptyStateCard} mode="outlined">
+          <Card.Content style={styles.emptyStateContent}>
+            <Text
+              variant="titleMedium"
+              style={[
+                styles.emptyStateTitle,
+                { color: theme.colors.error },
+              ]}
+            >
+              Error Loading Activity
+            </Text>
+            <Text
+              variant="bodyMedium"
+              style={[
+                styles.emptyStateMessage,
+                { color: theme.colors.onSurfaceVariant },
+              ]}
+            >
+              There was an error loading the activity feed. Please try again.
+            </Text>
+          </Card.Content>
+        </Card>
+      </View>
+    );
+  }
 };
