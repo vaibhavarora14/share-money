@@ -210,6 +210,13 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     }
   };
 
+  // Handler to open Paid By picker
+  const handleOpenPaidByPicker = useCallback(() => {
+    if (!loading) {
+      setShowPaidByPicker(true);
+    }
+  }, [loading]);
+
   // Validation function that returns true if form is valid
   const validateForm = (): boolean => {
     let isValid = true;
@@ -570,8 +577,11 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
           {isGroupExpense && (
             <>
               <TouchableOpacity
-                onPress={() => !loading && setShowPaidByPicker(true)}
+                onPress={handleOpenPaidByPicker}
                 activeOpacity={0.7}
+                disabled={loading}
+                accessibilityRole="button"
+                accessibilityLabel="Select who paid for this expense"
               >
                 <TextInput
                   label="Paid By"
@@ -590,7 +600,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                   right={
                     <TextInput.Icon
                       icon="chevron-down"
-                      onPress={() => !loading && setShowPaidByPicker(true)}
+                      onPress={handleOpenPaidByPicker}
                     />
                   }
                   placeholder="Select who paid"
