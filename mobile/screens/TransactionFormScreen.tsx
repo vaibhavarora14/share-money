@@ -569,29 +569,33 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
           {/* Expense Splitting Fields - Only for group expenses */}
           {isGroupExpense && (
             <>
-              <TextInput
-                label="Paid By"
-                value={
-                  paidBy
-                    ? groupMembers.find((m) => m.user_id === paidBy)?.email ||
-                      `User ${paidBy.substring(0, 8)}...`
-                    : ""
-                }
-                mode="outlined"
-                editable={false}
-                disabled={loading}
-                error={!!paidByError}
-                style={styles.input}
-                left={<TextInput.Icon icon="account" />}
-                right={
-                  <TextInput.Icon
-                    icon="chevron-down"
-                    onPress={() => !loading && setShowPaidByPicker(true)}
-                  />
-                }
-                onPressIn={() => !loading && setShowPaidByPicker(true)}
-                placeholder="Select who paid"
-              />
+              <TouchableOpacity
+                onPress={() => !loading && setShowPaidByPicker(true)}
+                activeOpacity={0.7}
+              >
+                <TextInput
+                  label="Paid By"
+                  value={
+                    paidBy
+                      ? groupMembers.find((m) => m.user_id === paidBy)?.email ||
+                        `User ${paidBy.substring(0, 8)}...`
+                      : ""
+                  }
+                  mode="outlined"
+                  editable={false}
+                  disabled={loading}
+                  error={!!paidByError}
+                  style={styles.input}
+                  left={<TextInput.Icon icon="account" />}
+                  right={
+                    <TextInput.Icon
+                      icon="chevron-down"
+                      onPress={() => !loading && setShowPaidByPicker(true)}
+                    />
+                  }
+                  placeholder="Select who paid"
+                />
+              </TouchableOpacity>
 
               <View style={styles.splitAmongContainer}>
                 <View style={styles.splitAmongHeader}>
