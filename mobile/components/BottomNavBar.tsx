@@ -2,6 +2,7 @@ import React from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { Icon, Surface, Text, TouchableRipple, useTheme } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { ProfileIcon } from "./ProfileIcon";
 
 interface BottomNavBarProps {
   onGroupsPress: () => void;
@@ -89,14 +90,19 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
             isBalancesActive,
             onBalancesPress
           )}
-          {renderItem(
-            "Logout",
-            "logout",
-            "logout",
-            false,
-            onLogoutPress,
-            true
-          )}
+          <View style={styles.tab}>
+            <View style={styles.tabContent}>
+              <View style={styles.iconContainer}>
+                <ProfileIcon onLogout={onLogoutPress} />
+              </View>
+              <Text
+                variant="labelMedium"
+                style={[styles.label, { color: theme.colors.onSurfaceVariant }]}
+              >
+                Profile
+              </Text>
+            </View>
+          </View>
         </View>
       </SafeAreaView>
     </Surface>

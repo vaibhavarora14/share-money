@@ -19,7 +19,8 @@ import {
     useTheme,
 } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
+import { useAuth } from "../contexts/AuthContext";
+import { showErrorAlert } from "../utils/errorHandling";
 
 interface AddMemberScreenProps {
   visible: boolean;
@@ -40,6 +41,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const screenHeight = Dimensions.get("window").height;
+  const { signOut } = useAuth();
 
   // Animation effect
   useEffect(() => {
@@ -96,10 +98,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
         );
       }
     } catch (error) {
-      Alert.alert(
-        "Error",
-        getUserFriendlyErrorMessage(error)
-      );
+      showErrorAlert(error, signOut, "Error");
     } finally {
       setLoading(false);
     }

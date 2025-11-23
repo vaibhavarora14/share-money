@@ -36,3 +36,8 @@
   to = "/.netlify/functions/activity"
   status = 200
 
+[[redirects]]
+  from = "/api/profile"
+  to = "/.netlify/functions/profile"
+  status = 200
+
