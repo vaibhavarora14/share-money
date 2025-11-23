@@ -5,6 +5,20 @@
  * To use Development Build: Run `npm run build:android` or `npm run build:ios` first
  */
 
+const fs = require('fs');
+const path = require('path');
+
+// Read version from version.json
+const versionPath = path.join(__dirname, 'version.json');
+let versionConfig = { version: '1.0.0', buildNumber: 1 };
+
+try {
+  const versionFile = fs.readFileSync(versionPath, 'utf8');
+  versionConfig = JSON.parse(versionFile);
+} catch (error) {
+  console.warn('Warning: Could not read version.json, using defaults:', error.message);
+}
+
 module.exports = ({ config }) => {
   // Check if we're building for development builds (via EAS or local)
   // EAS_BUILD_PROFILE is automatically set by EAS Build
@@ -19,7 +33,7 @@ module.exports = ({ config }) => {
       name: "ShareMoney",
       slug: "share-money",
       owner: "share-money",
-      version: "1.0.0",
+      version: versionConfig.version,
       orientation: "portrait",
       icon: "./assets/icon.png",
       userInterfaceStyle: "automatic", // Respects system dark/light mode preference
@@ -33,11 +47,13 @@ module.exports = ({ config }) => {
       ios: {
         supportsTablet: true,
         bundleIdentifier: "com.sharemoney.app",
-        scheme: "com.sharemoney.app"
+        scheme: "com.sharemoney.app",
+        buildNumber: versionConfig.buildNumber.toString()
       },
       android: {
         package: "com.sharemoney.app",
         scheme: "com.sharemoney.app",
+        versionCode: versionConfig.buildNumber,
         adaptiveIcon: {
           foregroundImage: "./assets/adaptive-icon.png",
           backgroundColor: "#14B8A6"
