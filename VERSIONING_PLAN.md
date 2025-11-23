@@ -2,12 +2,12 @@
 
 ## Overview
 
-This document outlines a comprehensive versioning strategy for the ShareMoney application, covering mobile app versioning, API versioning, and version management workflows.
+This document outlines a versioning strategy for the ShareMoney mobile application. Since we control both the client and server, we don't need API versioning - we can update both together. This plan focuses on **app versioning** for app stores, updates, and user tracking.
 
 ## Current State
 
 - **Mobile App**: Version `1.0.0` (hardcoded in `app.json`, `app.config.js`, `package.json`)
-- **Backend API**: No versioning currently implemented
+- **Backend API**: Single version (no versioning needed - we control both client and server)
 - **Database**: Already versioned via Supabase migrations
 - **Runtime Version**: Using `appVersion` policy for Expo updates
 
@@ -35,11 +35,7 @@ We'll follow [Semantic Versioning 2.0.0](https://semver.org/) format: `MAJOR.MIN
   - Android: `versionCode`
 - **Runtime Version**: Used by Expo Updates (currently `appVersion` policy)
 
-#### 2.2 API Version
-- **API Version**: Version string in API responses (e.g., `v1`)
-- **API Compatibility**: Track minimum supported app version
-
-#### 2.3 Database Version
+#### 2.2 Database Version
 - Already handled via Supabase migrations (timestamp-based)
 
 ## Implementation Plan
@@ -51,9 +47,7 @@ We'll follow [Semantic Versioning 2.0.0](https://semver.org/) format: `MAJOR.MIN
 ```json
 {
   "version": "1.0.0",
-  "buildNumber": 1,
-  "apiVersion": "v1",
-  "minSupportedVersion": "1.0.0"
+  "buildNumber": 1
 }
 ```
 
@@ -65,41 +59,20 @@ We'll follow [Semantic Versioning 2.0.0](https://semver.org/) format: `MAJOR.MIN
 #### 1.3 Version Display in App
 - Add version display in Settings/About screen
 - Show: `Version 1.0.0 (Build 1)`
-- Optionally show API version and build date
+- Optionally show build date
 
-### Phase 2: API Versioning
+### Phase 2: Build Number Management
 
-#### 2.1 API Version Headers
-- Add `X-API-Version` header to all API responses
-- Add `X-Min-Client-Version` header for compatibility checks
-
-#### 2.2 Version Endpoint
-- Create `/api/version` endpoint returning:
-  ```json
-  {
-    "apiVersion": "v1",
-    "minSupportedAppVersion": "1.0.0",
-    "latestAppVersion": "1.0.0"
-  }
-  ```
-
-#### 2.3 Client-Side Version Check
-- Check API version on app startup
-- Warn user if app version is too old
-- Handle API version mismatches gracefully
-
-### Phase 3: Build Number Management
-
-#### 3.1 Build Number Strategy
+#### 2.1 Build Number Strategy
 - **Development**: Auto-increment on each build
 - **Preview**: Increment manually or via CI/CD
 - **Production**: Increment on release
 
-#### 3.2 Integration with EAS Build
+#### 2.2 Integration with EAS Build
 - Use EAS build hooks to auto-increment build numbers
 - Store build numbers in version file or environment
 
-### Phase 4: Automation & Tooling
+### Phase 3: Automation & Tooling
 
 #### 4.1 Version Management Scripts
 Create npm scripts:
@@ -131,11 +104,6 @@ Create npm scripts:
 │   │   └── version.js        # NEW: Version management script
 │   └── screens/
 │       └── AboutScreen.tsx   # NEW: Version display screen
-├── netlify/
-│   └── functions/
-│       └── version.ts        # NEW: API version endpoint
-└── scripts/
-    └── version-sync.js       # NEW: Sync version across files
 ```
 
 ## Version Display Locations
@@ -144,17 +112,12 @@ Create npm scripts:
 1. **Settings/About Screen** (primary)
    - App version: `1.0.0`
    - Build number: `1`
-   - API version: `v1`
    - Build date: `2025-01-XX`
 
 2. **Debug Menu** (development only)
    - Full version info
    - Runtime version
    - Update channel
-
-### API Responses
-- All API responses include `X-API-Version` header
-- Version endpoint for compatibility checks
 
 ## Version Update Workflow
 
@@ -186,16 +149,6 @@ npm run version:major
 
 ## Compatibility & Migration Strategy
 
-### App Version Compatibility
-- Track minimum supported app version in API
-- Show upgrade prompt for outdated apps
-- Support graceful degradation
-
-### API Version Compatibility
-- Maintain backward compatibility for at least 2 major versions
-- Deprecation warnings before breaking changes
-- Version negotiation on API calls
-
 ### Database Migrations
 - Already handled via Supabase migrations
 - No changes needed
@@ -206,11 +159,6 @@ npm run version:major
 - Verify version appears correctly in UI
 - Test version display in different locales
 - Verify build number increments
-
-### API Version Testing
-- Test version endpoint
-- Test version header in responses
-- Test compatibility checks
 
 ### Build Testing
 - Verify version syncs across all files
@@ -244,14 +192,10 @@ npm run version:major
 - [ ] Update `app.config.js` to read from version file
 - [ ] Create version management scripts
 - [ ] Add version display in app UI
-- [ ] Create API version endpoint
-- [ ] Add version headers to API responses
-- [ ] Implement client-side version checking
 - [ ] Update CI/CD for version management
 - [ ] Document versioning workflow
 - [ ] Test version management scripts
 - [ ] Test version display in app
-- [ ] Test API versioning
 
 ## Notes
 
