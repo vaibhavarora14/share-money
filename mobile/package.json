@@ -16,6 +16,7 @@
     "version:patch": "node scripts/version.js patch",
     "version:minor": "node scripts/version.js minor",
     "version:major": "node scripts/version.js major",
+    "version:build": "node scripts/version.js build",
     "version:show": "node scripts/version.js show"
   },
   "dependencies": {

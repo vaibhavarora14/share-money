@@ -56,6 +56,26 @@ import { VersionDisplay } from './components/VersionDisplay';
 <VersionDisplay showBuildDate />
 ```
 
+## CI/CD Automation
+
+### Automatic Build Number Increment
+
+Build numbers are **automatically incremented** when you push to the `main` branch.
+
+**How it works:**
+- Push any code change to `main`
+- CI/CD detects the push
+- Build number increments automatically (1 → 2 → 3...)
+- Version stays the same unless manually bumped
+
+**Skip auto-increment:**
+- Add `[skip ci]` or `[skip build]` to your commit message
+- Example: `git commit -m "docs: update README [skip ci]"`
+
+**Manual version bumps:**
+- When you run `npm run version:patch/minor/major`, CI/CD detects the manual change and skips auto-increment
+- Manual bumps increment both version AND build number
+
 ## Release Workflow
 
 ### For Bug Fixes (Patch)
@@ -64,6 +84,7 @@ npm run version:patch
 git add mobile/version.json mobile/package.json
 git commit -m "chore: bump version to 1.0.1"
 git tag v1.0.1
+git push origin main --tags
 ```
 
 ### For New Features (Minor)
@@ -72,6 +93,7 @@ npm run version:minor
 git add mobile/version.json mobile/package.json
 git commit -m "chore: bump version to 1.1.0"
 git tag v1.1.0
+git push origin main --tags
 ```
 
 ### For Breaking Changes (Major)
@@ -80,6 +102,20 @@ npm run version:major
 git add mobile/version.json mobile/package.json
 git commit -m "chore: bump version to 2.0.0"
 git tag v2.0.0
+git push origin main --tags
+```
+
+### Regular Development (Build Number Only)
+```bash
+# Just push to main - build number increments automatically!
+git add .
+git commit -m "feat: add new feature"
+git push origin main
+
+# CI/CD automatically:
+# - Increments build number
+# - Commits: "ci: auto-increment build number to X [skip ci]"
+# - Pushes back to main
 ```
 
 ## Files Modified

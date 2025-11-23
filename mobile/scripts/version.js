@@ -7,6 +7,7 @@
  *   node scripts/version.js patch   - Increment patch version (1.0.0 -> 1.0.1)
  *   node scripts/version.js minor    - Increment minor version (1.0.0 -> 1.1.0)
  *   node scripts/version.js major    - Increment major version (1.0.0 -> 2.0.0)
+ *   node scripts/version.js build    - Increment build number only (CI/CD use)
  *   node scripts/version.js show     - Display current version
  */
 
@@ -76,6 +77,25 @@ function showVersion() {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 }
 
+function bumpBuild() {
+  const versionConfig = readVersion();
+  const newBuildNumber = versionConfig.buildNumber + 1;
+  
+  const newVersionConfig = {
+    version: versionConfig.version,
+    buildNumber: newBuildNumber
+  };
+  
+  console.log(`\n🔄 Incrementing build number`);
+  console.log(`   Build: ${versionConfig.buildNumber} → ${newBuildNumber}\n`);
+  
+  writeVersion(newVersionConfig);
+  
+  console.log(`\n✅ Build number updated successfully!`);
+  console.log(`   Version: ${versionConfig.version}`);
+  console.log(`   New build: ${newBuildNumber}\n`);
+}
+
 function bumpVersion(type) {
   const versionConfig = readVersion();
   const oldVersion = versionConfig.version;
@@ -105,7 +125,7 @@ function bumpVersion(type) {
 const command = process.argv[2];
 
 if (!command) {
-  console.error('Usage: node scripts/version.js [patch|minor|major|show]');
+  console.error('Usage: node scripts/version.js [patch|minor|major|build|show]');
   process.exit(1);
 }
 
@@ -115,11 +135,14 @@ switch (command) {
   case 'major':
     bumpVersion(command);
     break;
+  case 'build':
+    bumpBuild();
+    break;
   case 'show':
     showVersion();
     break;
   default:
     console.error(`Unknown command: ${command}`);
-    console.error('Usage: node scripts/version.js [patch|minor|major|show]');
+    console.error('Usage: node scripts/version.js [patch|minor|major|build|show]');
     process.exit(1);
 }

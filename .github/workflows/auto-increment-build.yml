@@ -1,0 +1,106 @@
+name: Auto Increment Build Number
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      # Ignore changes to version files to avoid infinite loops
+      - 'mobile/version.json'
+      - 'mobile/package.json'
+      # Ignore workflow file changes (to avoid triggering on workflow updates)
+      - '.github/workflows/auto-increment-build.yml'
+
+jobs:
+  increment-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Read current version
+        id: version
+        run: |
+          cd mobile
+          CURRENT_VERSION=$(node -p "require('./version.json').version")
+          CURRENT_BUILD=$(node -p "require('./version.json').buildNumber")
+          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "build=$CURRENT_BUILD" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT_VERSION"
+          echo "Current build: $CURRENT_BUILD"
+
+      - name: Check if version.json changed in this commit
+        id: check_changes
+        run: |
+          # Check if version.json was modified in this commit
+          if git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -q "mobile/version.json"; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "⚠️ Version file was manually updated, skipping auto-increment"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "✓ Version file not changed, will auto-increment build"
+          fi
+
+      - name: Check commit message for skip flag
+        id: check_skip
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          if echo "$COMMIT_MSG" | grep -q "\[skip ci\]" || echo "$COMMIT_MSG" | grep -q "\[skip build\]"; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "⚠️ Commit message contains [skip ci], skipping auto-increment"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Increment build number
+        if: steps.check_changes.outputs.changed == 'false' && steps.check_skip.outputs.skip == 'false'
+        run: |
+          cd mobile
+          echo "🔄 Incrementing build number..."
+          npm run version:build || node scripts/version.js build
+
+      - name: Commit and push changes
+        if: steps.check_changes.outputs.changed == 'false' && steps.check_skip.outputs.skip == 'false'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          # Check if there are changes to commit
+          if git diff --quiet mobile/version.json; then
+            echo "ℹ️ No changes to commit (build number already incremented)"
+            exit 0
+          fi
+          
+          NEW_BUILD=$(node -p "require('./mobile/version.json').buildNumber")
+          echo "📝 Committing build number increment..."
+          git add mobile/version.json
+          git commit -m "ci: auto-increment build number to $NEW_BUILD [skip ci]"
+          git push
+          echo "✅ Build number incremented and pushed"
+
+      - name: Summary
+        if: steps.check_changes.outputs.changed == 'false' && steps.check_skip.outputs.skip == 'false'
+        run: |
+          NEW_BUILD=$(node -p "require('./mobile/version.json').buildNumber")
+          echo "## ✅ Build Number Incremented" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Build number automatically incremented to **$NEW_BUILD**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Version: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Previous build: ${{ steps.version.outputs.build }}" >> $GITHUB_STEP_SUMMARY
+          echo "- New build: $NEW_BUILD" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "This commit was automatically created by CI/CD." >> $GITHUB_STEP_SUMMARY
