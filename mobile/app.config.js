@@ -15,8 +15,32 @@ let versionConfig = { version: '1.0.0', buildNumber: 1 };
 try {
   const versionFile = fs.readFileSync(versionPath, 'utf8');
   versionConfig = JSON.parse(versionFile);
+  
+  // Validate structure
+  if (!versionConfig.version || typeof versionConfig.version !== 'string') {
+    throw new Error('Invalid version.json: missing or invalid "version" field');
+  }
+  if (typeof versionConfig.buildNumber !== 'number' || versionConfig.buildNumber < 1) {
+    throw new Error('Invalid version.json: missing or invalid "buildNumber" field (must be >= 1)');
+  }
+  
+  // Validate version format (basic check)
+  const versionRegex = /^\d+\.\d+\.\d+$/;
+  if (!versionRegex.test(versionConfig.version)) {
+    throw new Error(`Invalid version format: "${versionConfig.version}". Expected MAJOR.MINOR.PATCH`);
+  }
 } catch (error) {
-  console.warn('Warning: Could not read version.json, using defaults:', error.message);
+  // In production builds, fail hard to catch configuration issues early
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.EAS_BUILD;
+  
+  if (isProduction) {
+    console.error('ERROR: Could not read or validate version.json:', error.message);
+    console.error('This is a production build - version.json is required.');
+    process.exit(1);
+  } else {
+    console.warn('Warning: Could not read version.json, using defaults:', error.message);
+    console.warn('This is acceptable in development, but version.json is required for production builds.');
+  }
 }
 
 module.exports = ({ config }) => {

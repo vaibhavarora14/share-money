@@ -41,12 +41,46 @@ jobs:
           echo "build=$CURRENT_BUILD" >> $GITHUB_OUTPUT
           echo "Current version: $CURRENT_VERSION"
           echo "Current build: $CURRENT_BUILD"
+          
+          # Validate build number
+          if [ "$CURRENT_BUILD" -lt 1 ]; then
+            echo "❌ Invalid build number: $CURRENT_BUILD (must be >= 1)"
+            exit 1
+          fi
+          
+          # Validate version format
+          if ! echo "$CURRENT_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "❌ Invalid version format: $CURRENT_VERSION (expected MAJOR.MINOR.PATCH)"
+            exit 1
+          fi
 
       - name: Check if version.json changed in this commit
         id: check_changes
         run: |
-          # Check if version.json was modified in this commit
-          if git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -q "mobile/version.json"; then
+          # Get list of changed files in this commit
+          # Try multiple methods to handle edge cases (first commit, force push, etc.)
+          CHANGED_FILES=""
+          
+          # Method 1: Use github.event (most reliable)
+          if [ -n "${{ github.event.before }}" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} 2>/dev/null || echo "")
+          fi
+          
+          # Method 2: Fallback to HEAD~1 if available
+          if [ -z "$CHANGED_FILES" ]; then
+            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
+          fi
+          
+          # Method 3: If still empty, check if this is the first commit
+          if [ -z "$CHANGED_FILES" ]; then
+            COMMIT_COUNT=$(git rev-list --count HEAD 2>/dev/null || echo "0")
+            if [ "$COMMIT_COUNT" -le "1" ]; then
+              # First commit - check all files
+              CHANGED_FILES=$(git diff --name-only --diff-filter=A HEAD 2>/dev/null || echo "")
+            fi
+          fi
+          
+          if echo "$CHANGED_FILES" | grep -q "mobile/version.json"; then
             echo "changed=true" >> $GITHUB_OUTPUT
             echo "⚠️ Version file was manually updated, skipping auto-increment"
           else
@@ -85,11 +119,51 @@ jobs:
           fi
           
           NEW_BUILD=$(node -p "require('./mobile/version.json').buildNumber")
+          
+          # Validate new build number
+          if [ "$NEW_BUILD" -lt 1 ]; then
+            echo "❌ Invalid build number after increment: $NEW_BUILD"
+            exit 1
+          fi
+          
           echo "📝 Committing build number increment..."
           git add mobile/version.json
           git commit -m "ci: auto-increment build number to $NEW_BUILD [skip ci]"
-          git push
-          echo "✅ Build number incremented and pushed"
+          
+          # Retry logic for push failures (network issues, conflicts, etc.)
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+          PUSH_SUCCESS=false
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if git push; then
+              echo "✅ Build number incremented and pushed"
+              PUSH_SUCCESS=true
+              break
+            else
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              echo "⚠️ Push failed, retrying ($RETRY_COUNT/$MAX_RETRIES)..."
+              
+              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                # Pull latest changes and rebase
+                sleep 2
+                if ! git pull --rebase; then
+                  echo "❌ Failed to pull and rebase"
+                  # Try to abort rebase if it fails
+                  git rebase --abort 2>/dev/null || true
+                fi
+              fi
+            fi
+          done
+          
+          if [ "$PUSH_SUCCESS" = false ]; then
+            echo "❌ Failed to push after $MAX_RETRIES attempts"
+            echo "This may be due to:"
+            echo "  - Network issues"
+            echo "  - Permission problems"
+            echo "  - Merge conflicts"
+            exit 1
+          fi
 
       - name: Summary
         if: steps.check_changes.outputs.changed == 'false' && steps.check_skip.outputs.skip == 'false'

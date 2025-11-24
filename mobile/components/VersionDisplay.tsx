@@ -1,6 +1,6 @@
 import Constants from 'expo-constants';
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleProp, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
 import { useTheme } from 'react-native-paper';
 
 /**
@@ -28,9 +28,9 @@ interface VersionDisplayProps {
   variant?: 'default' | 'compact';
   
   /**
-   * Custom text style
+   * Custom style (ViewStyle for default variant, TextStyle for compact variant)
    */
-  style?: any;
+  style?: StyleProp<ViewStyle | TextStyle>;
 }
 
 export const VersionDisplay: React.FC<VersionDisplayProps> = ({
@@ -52,34 +52,55 @@ export const VersionDisplay: React.FC<VersionDisplayProps> = ({
 
   if (variant === 'compact') {
     return (
-      <Text style={[styles.compactText, { color: theme.colors.onSurfaceVariant }, style]}>
+      <Text 
+        style={[styles.compactText, { color: theme.colors.onSurfaceVariant }, style]}
+        accessibilityLabel={`Version ${version}, Build ${buildNumber}`}
+      >
         v{version} ({buildNumber})
       </Text>
     );
   }
 
   return (
-    <View style={[styles.container, style]}>
-      <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>
+    <View style={[styles.container, style]} accessibilityRole="text">
+      <Text 
+        style={[styles.label, { color: theme.colors.onSurfaceVariant }]}
+        accessibilityRole="text"
+      >
         Version
       </Text>
-      <Text style={[styles.value, { color: theme.colors.onSurface }]}>
+      <Text 
+        style={[styles.value, { color: theme.colors.onSurface }]}
+        accessibilityLabel={`Version ${version}`}
+      >
         {version}
       </Text>
       
-      <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>
+      <Text 
+        style={[styles.label, { color: theme.colors.onSurfaceVariant }]}
+        accessibilityRole="text"
+      >
         Build
       </Text>
-      <Text style={[styles.value, { color: theme.colors.onSurface }]}>
+      <Text 
+        style={[styles.value, { color: theme.colors.onSurface }]}
+        accessibilityLabel={`Build ${buildNumber}`}
+      >
         {buildNumber}
       </Text>
       
       {buildDate && (
         <>
-          <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>
+          <Text 
+            style={[styles.label, { color: theme.colors.onSurfaceVariant }]}
+            accessibilityRole="text"
+          >
             Build Date
           </Text>
-          <Text style={[styles.value, { color: theme.colors.onSurface }]}>
+          <Text 
+            style={[styles.value, { color: theme.colors.onSurface }]}
+            accessibilityLabel={`Build date ${buildDate}`}
+          >
             {buildDate}
           </Text>
         </>
