@@ -268,20 +268,18 @@ export const handler: Handler = async (event, context) => {
       }
 
       // Validate paid_by and split_among for group expenses
-      // Note: Only actual group members (from group_members table) can be included.
-      // Pending invitations are excluded because they haven't accepted yet.
+      // Note: Both group members and invited users (pending invitations) can be included.
       if (transactionData.group_id && transactionData.type === 'expense') {
         if (transactionData.paid_by) {
-          // Verify that paid_by is a member of the group (not just invited)
-          const { data: paidByMember, error: paidByError } = await supabase
-            .from('group_members')
-            .select('id')
-            .eq('group_id', transactionData.group_id)
-            .eq('user_id', transactionData.paid_by)
-            .single();
+          // Verify that paid_by is a member of the group OR has a pending invitation
+          const { data: paidByCheck, error: paidByError } = await supabase
+            .rpc('is_user_member_or_invited', {
+              check_group_id: transactionData.group_id,
+              check_user_id: transactionData.paid_by
+            });
 
-          if (paidByError || !paidByMember) {
-            return createErrorResponse(400, 'paid_by must be a member of the group', 'VALIDATION_ERROR');
+          if (paidByError || !paidByCheck) {
+            return createErrorResponse(400, 'paid_by must be a member of the group or have a pending invitation', 'VALIDATION_ERROR');
           }
         }
 
@@ -289,24 +287,25 @@ export const handler: Handler = async (event, context) => {
           // Remove duplicates before validation
           const uniqueSplitAmong = [...new Set(transactionData.split_among)];
           
-          // Verify that all split_among users are actual members of the group
-          // (not just pending invitations - they must have accepted and joined)
+          // Verify that all split_among users are members OR have pending invitations
           if (uniqueSplitAmong.length > 0) {
-            const { data: splitMembers, error: splitError } = await supabase
-              .from('group_members')
-              .select('user_id')
-              .eq('group_id', transactionData.group_id)
-              .in('user_id', uniqueSplitAmong);
+            // Check each user individually using the helper function
+            const validationPromises = uniqueSplitAmong.map(async (userId) => {
+              const { data: isValid, error } = await supabase
+                .rpc('is_user_member_or_invited', {
+                  check_group_id: transactionData.group_id,
+                  check_user_id: userId
+                });
+              return { userId, isValid: isValid && !error };
+            });
 
-            if (splitError) {
-              return handleError(splitError, 'validating split_among members');
-            }
-
-            const validUserIds = splitMembers?.map(m => m.user_id) || [];
-            const invalidUserIds = uniqueSplitAmong.filter(id => !validUserIds.includes(id));
+            const validationResults = await Promise.all(validationPromises);
+            const invalidUserIds = validationResults
+              .filter(result => !result.isValid)
+              .map(result => result.userId);
             
             if (invalidUserIds.length > 0) {
-              return createErrorResponse(400, 'All split_among users must be members of the group', 'VALIDATION_ERROR');
+              return createErrorResponse(400, 'All split_among users must be members of the group or have pending invitations', 'VALIDATION_ERROR');
             }
           }
         }
@@ -461,6 +460,7 @@ export const handler: Handler = async (event, context) => {
       }
 
       // Verify user can update: either owns it OR is a group member
+      // Group members can update any transaction in their group, including those created by uninvited users
       let canUpdate = existingTransaction.user_id === user.id;
       
       if (!canUpdate && existingTransaction.group_id) {
@@ -488,22 +488,20 @@ export const handler: Handler = async (event, context) => {
         : existingTransaction.type;
 
       // Validate paid_by and split_among for group expenses
-      // Note: Only actual group members (from group_members table) can be included.
-      // Pending invitations are excluded because they haven't accepted yet.
+      // Note: Both group members and invited users (pending invitations) can be included.
       if (groupId && transactionType === 'expense') {
         // Validate paid_by if provided
         if (transactionData.paid_by !== undefined) {
           if (transactionData.paid_by) {
-            // Verify that paid_by is a member of the group (not just invited)
-            const { data: paidByMember, error: paidByError } = await supabase
-              .from('group_members')
-              .select('id')
-              .eq('group_id', groupId)
-              .eq('user_id', transactionData.paid_by)
-              .single();
+            // Verify that paid_by is a member of the group OR has a pending invitation
+            const { data: paidByCheck, error: paidByError } = await supabase
+              .rpc('is_user_member_or_invited', {
+                check_group_id: groupId,
+                check_user_id: transactionData.paid_by
+              });
 
-            if (paidByError || !paidByMember) {
-              return createErrorResponse(400, 'paid_by must be a member of the group', 'VALIDATION_ERROR');
+            if (paidByError || !paidByCheck) {
+              return createErrorResponse(400, 'paid_by must be a member of the group or have a pending invitation', 'VALIDATION_ERROR');
             }
           }
         }
@@ -515,23 +513,23 @@ export const handler: Handler = async (event, context) => {
             const uniqueSplitAmong = [...new Set(transactionData.split_among)];
             
             if (uniqueSplitAmong.length > 0) {
-              // Verify that all split_among users are actual members of the group
-              // (not just pending invitations - they must have accepted and joined)
-              const { data: splitMembers, error: splitError } = await supabase
-                .from('group_members')
-                .select('user_id')
-                .eq('group_id', groupId)
-                .in('user_id', uniqueSplitAmong);
+              // Verify that all split_among users are members OR have pending invitations
+              const validationPromises = uniqueSplitAmong.map(async (userId) => {
+                const { data: isValid, error } = await supabase
+                  .rpc('is_user_member_or_invited', {
+                    check_group_id: groupId,
+                    check_user_id: userId
+                  });
+                return { userId, isValid: isValid && !error };
+              });
 
-              if (splitError) {
-                return handleError(splitError, 'validating split_among members');
-              }
-
-              const validUserIds = splitMembers?.map(m => m.user_id) || [];
-              const invalidUserIds = uniqueSplitAmong.filter(id => !validUserIds.includes(id));
+              const validationResults = await Promise.all(validationPromises);
+              const invalidUserIds = validationResults
+                .filter(result => !result.isValid)
+                .map(result => result.userId);
               
               if (invalidUserIds.length > 0) {
-                return createErrorResponse(400, 'All split_among users must be members of the group', 'VALIDATION_ERROR');
+                return createErrorResponse(400, 'All split_among users must be members of the group or have pending invitations', 'VALIDATION_ERROR');
               }
             }
           }
@@ -743,6 +741,7 @@ export const handler: Handler = async (event, context) => {
       }
 
       // Verify user can delete: either owns it OR is a group member
+      // Group members can delete any transaction in their group, including those created by uninvited users
       let canDelete = transaction.user_id === user.id;
       
       if (!canDelete && transaction.group_id) {
