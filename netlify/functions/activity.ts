@@ -338,11 +338,13 @@ async function enrichActivitiesWithEmails(
 /**
  * Transforms database history record to ActivityItem
  * @param history - Transaction history record from database
+ * @param currencyMap - Map of transaction/settlement IDs to currency codes (from actual records)
  * @param emailMap - Map of user IDs to email addresses for name resolution
  * @returns ActivityItem for frontend consumption
  */
 function transformHistoryToActivity(
   history: TransactionHistory,
+  currencyMap?: Map<string | number, string>,
   emailMap?: Map<string, string>
 ): ActivityItem {
   const activityType = history.activity_type || 'transaction';
@@ -362,28 +364,56 @@ function transformHistoryToActivity(
   }
 
   if (activityType === 'settlement') {
+    // For settlements, prioritize snapshot, then changes
+    // Also enrich currency from actual settlement record if available
+    let settlement: SettlementSnapshot | undefined = undefined;
+    
     if (history.snapshot?.settlement) {
-      details.settlement = history.snapshot.settlement;
+      settlement = history.snapshot.settlement as SettlementSnapshot;
     } else if (history.changes?.settlement) {
-      details.settlement = history.changes.settlement;
+      settlement = history.changes.settlement as SettlementSnapshot;
+    }
+    
+    // Enrich currency from actual settlement record if snapshot doesn't have it
+    if (settlement && history.settlement_id) {
+      const actualCurrency = currencyMap?.get(history.settlement_id);
+      if (actualCurrency) {
+        settlement.currency = actualCurrency;
+      } else if (!settlement.currency || settlement.currency === null || settlement.currency === '') {
+        // Fallback: default to USD
+        settlement.currency = 'USD';
+      }
+    }
+    
+    if (settlement) {
+      details.settlement = settlement;
     }
   } else {
     // For transactions, prioritize snapshot, then changes
-    // Also ensure currency is preserved from JSONB
+    // Also enrich currency from actual transaction record if available
     let transaction: TransactionSnapshot | undefined = undefined;
     
     if (history.snapshot?.transaction) {
       transaction = history.snapshot.transaction as TransactionSnapshot;
-      // Ensure currency is properly extracted from JSONB
-      if (!transaction.currency || transaction.currency === null) {
-        // Try to get currency from changes if snapshot doesn't have it
+    } else if (history.changes?.transaction) {
+      transaction = history.changes.transaction as TransactionSnapshot;
+    }
+    
+    // Enrich currency from actual transaction record if snapshot doesn't have it
+    if (transaction && history.transaction_id) {
+      const actualCurrency = currencyMap?.get(history.transaction_id);
+      if (actualCurrency) {
+        transaction.currency = actualCurrency;
+      } else if (!transaction.currency || transaction.currency === null || transaction.currency === '') {
+        // Fallback: try to get from changes if available
         const changesTransaction = history.changes?.transaction as TransactionSnapshot | undefined;
         if (changesTransaction?.currency) {
           transaction.currency = changesTransaction.currency;
+        } else {
+          // Last resort: default to USD
+          transaction.currency = 'USD';
         }
       }
-    } else if (history.changes?.transaction) {
-      transaction = history.changes.transaction as TransactionSnapshot;
     }
     
     if (transaction) {
@@ -484,9 +514,54 @@ export const handler: Handler = async (event, context) => {
       return handleError(historyError, 'fetching transaction history');
     }
 
+    // Fetch currency from actual transaction/settlement records for enrichment
+    // This is more reliable than reading from JSONB snapshots
+    const transactionIds = (historyRecords || [])
+      .filter((h: TransactionHistory) => h.transaction_id !== null)
+      .map((h: TransactionHistory) => h.transaction_id) as number[];
+    
+    const settlementIds = (historyRecords || [])
+      .filter((h: TransactionHistory) => h.settlement_id !== null)
+      .map((h: TransactionHistory) => h.settlement_id) as string[];
+
+    // Fetch transactions with currency
+    const currencyMap = new Map<string | number, string>();
+    
+    if (transactionIds.length > 0) {
+      const { data: transactions, error: txError } = await supabase
+        .from('transactions')
+        .select('id, currency')
+        .in('id', transactionIds);
+      
+      if (!txError && transactions) {
+        transactions.forEach((tx: { id: number; currency: string }) => {
+          if (tx.currency) {
+            currencyMap.set(tx.id, tx.currency.toUpperCase());
+          }
+        });
+      }
+    }
+
+    // Fetch settlements with currency
+    if (settlementIds.length > 0) {
+      const { data: settlements, error: stError } = await supabase
+        .from('settlements')
+        .select('id, currency')
+        .in('id', settlementIds);
+      
+      if (!stError && settlements) {
+        settlements.forEach((st: { id: string; currency: string }) => {
+          if (st.currency) {
+            currencyMap.set(st.id, st.currency.toUpperCase());
+          }
+        });
+      }
+    }
+
     // Transform history records to activity items (before email enrichment)
+    // Pass currencyMap to enrich snapshots with currency from actual records
     const activities: ActivityItem[] = (historyRecords || []).map((h: TransactionHistory) => 
-      transformHistoryToActivity(h)
+      transformHistoryToActivity(h, currencyMap)
     );
 
     // Enrich activities with email addresses
