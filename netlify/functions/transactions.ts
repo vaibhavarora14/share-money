@@ -459,12 +459,12 @@ export const handler: Handler = async (event, context) => {
         return createErrorResponse(404, 'Transaction not found', 'NOT_FOUND');
       }
 
-      // Verify user can update: either owns it OR is a group member
-      // Group members can update any transaction in their group, including those created by uninvited users
-      let canUpdate = existingTransaction.user_id === user.id;
+      // Verify user can update: any group member can update any transaction in their group
+      // This allows all group members to modify any transaction, regardless of who created it
+      let canUpdate = false;
       
-      if (!canUpdate && existingTransaction.group_id) {
-        // Check if user is a group member
+      if (existingTransaction.group_id) {
+        // Check if user is a group member - if so, they can update any transaction in the group
         const { data: groupMember, error: memberError } = await supabase
           .from('group_members')
           .select('user_id')
@@ -473,6 +473,11 @@ export const handler: Handler = async (event, context) => {
           .single();
         
         canUpdate = !memberError && !!groupMember;
+      }
+      
+      // Also allow users to update their own transactions (even if not in a group)
+      if (!canUpdate && existingTransaction.user_id === user.id) {
+        canUpdate = true;
       }
 
       if (!canUpdate) {
@@ -740,12 +745,12 @@ export const handler: Handler = async (event, context) => {
         return createErrorResponse(404, 'Transaction not found', 'NOT_FOUND');
       }
 
-      // Verify user can delete: either owns it OR is a group member
-      // Group members can delete any transaction in their group, including those created by uninvited users
-      let canDelete = transaction.user_id === user.id;
+      // Verify user can delete: any group member can delete any transaction in their group
+      // This allows all group members to delete any transaction, regardless of who created it
+      let canDelete = false;
       
-      if (!canDelete && transaction.group_id) {
-        // Check if user is a group member
+      if (transaction.group_id) {
+        // Check if user is a group member - if so, they can delete any transaction in the group
         const { data: groupMember, error: memberError } = await supabase
           .from('group_members')
           .select('user_id')
@@ -754,6 +759,11 @@ export const handler: Handler = async (event, context) => {
           .single();
         
         canDelete = !memberError && !!groupMember;
+      }
+      
+      // Also allow users to delete their own transactions (even if not in a group)
+      if (!canDelete && transaction.user_id === user.id) {
+        canDelete = true;
       }
 
       if (!canDelete) {

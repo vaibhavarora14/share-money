@@ -329,10 +329,10 @@ export const handler: Handler = async (event, context) => {
         return createErrorResponse(400, 'Amount must be greater than 0', 'VALIDATION_ERROR');
       }
 
-      // Fetch the settlement to verify ownership
+      // Fetch the settlement to get group_id
       const { data: existingSettlement, error: fetchError } = await supabase
         .from('settlements')
-        .select('id, created_by')
+        .select('id, group_id, created_by')
         .eq('id', updateData.id)
         .single();
 
@@ -340,28 +340,25 @@ export const handler: Handler = async (event, context) => {
         return createErrorResponse(404, 'Settlement not found', 'NOT_FOUND');
       }
 
-      // Creator OR group members can update settlements in their groups
-      // This allows group members to modify settlements created by uninvited users
-      let canUpdate = existingSettlement.created_by === currentUserId;
+      // Verify user can update: any group member can update any settlement in their group
+      // This allows all group members to modify any settlement, regardless of who created it
+      let canUpdate = false;
       
-      if (!canUpdate) {
-        // Check if user is a group member
-        const { data: settlementGroup, error: groupError } = await supabase
-          .from('settlements')
-          .select('group_id')
-          .eq('id', updateData.id)
+      if (existingSettlement.group_id) {
+        // Check if user is a group member - if so, they can update any settlement in the group
+        const { data: groupMember, error: memberError } = await supabase
+          .from('group_members')
+          .select('user_id')
+          .eq('group_id', existingSettlement.group_id)
+          .eq('user_id', currentUserId)
           .single();
-
-        if (!groupError && settlementGroup) {
-          const { data: groupMember, error: memberError } = await supabase
-            .from('group_members')
-            .select('user_id')
-            .eq('group_id', settlementGroup.group_id)
-            .eq('user_id', currentUserId)
-            .single();
-          
-          canUpdate = !memberError && !!groupMember;
-        }
+        
+        canUpdate = !memberError && !!groupMember;
+      }
+      
+      // Also allow users to update settlements they created (even if not in a group)
+      if (!canUpdate && existingSettlement.created_by === currentUserId) {
+        canUpdate = true;
       }
 
       if (!canUpdate) {
@@ -425,10 +422,10 @@ export const handler: Handler = async (event, context) => {
         return createErrorResponse(400, 'Invalid settlement id format. Expected UUID.', 'VALIDATION_ERROR');
       }
 
-      // Fetch the settlement to verify ownership
+      // Fetch the settlement to get group_id
       const { data: existingSettlement, error: fetchError } = await supabase
         .from('settlements')
-        .select('id, created_by')
+        .select('id, group_id, created_by')
         .eq('id', settlementId)
         .single();
 
@@ -436,28 +433,25 @@ export const handler: Handler = async (event, context) => {
         return createErrorResponse(404, 'Settlement not found', 'NOT_FOUND');
       }
 
-      // Creator OR group members can delete settlements in their groups
-      // This allows group members to delete settlements created by uninvited users
-      let canDelete = existingSettlement.created_by === currentUserId;
+      // Verify user can delete: any group member can delete any settlement in their group
+      // This allows all group members to delete any settlement, regardless of who created it
+      let canDelete = false;
       
-      if (!canDelete) {
-        // Check if user is a group member
-        const { data: settlementGroup, error: groupError } = await supabase
-          .from('settlements')
-          .select('group_id')
-          .eq('id', settlementId)
+      if (existingSettlement.group_id) {
+        // Check if user is a group member - if so, they can delete any settlement in the group
+        const { data: groupMember, error: memberError } = await supabase
+          .from('group_members')
+          .select('user_id')
+          .eq('group_id', existingSettlement.group_id)
+          .eq('user_id', currentUserId)
           .single();
-
-        if (!groupError && settlementGroup) {
-          const { data: groupMember, error: memberError } = await supabase
-            .from('group_members')
-            .select('user_id')
-            .eq('group_id', settlementGroup.group_id)
-            .eq('user_id', currentUserId)
-            .single();
-          
-          canDelete = !memberError && !!groupMember;
-        }
+        
+        canDelete = !memberError && !!groupMember;
+      }
+      
+      // Also allow users to delete settlements they created (even if not in a group)
+      if (!canDelete && existingSettlement.created_by === currentUserId) {
+        canDelete = true;
       }
 
       if (!canDelete) {
