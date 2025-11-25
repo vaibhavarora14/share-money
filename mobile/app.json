@@ -5,6 +5,7 @@
     "slug": "share-money",
     "owner": "share-money",
     "version": "1.0.0",
+    "_comment_version": "This is superseded by app.config.js which reads from version.json",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
