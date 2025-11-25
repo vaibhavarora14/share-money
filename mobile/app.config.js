@@ -5,6 +5,44 @@
  * To use Development Build: Run `npm run build:android` or `npm run build:ios` first
  */
 
+const fs = require('fs');
+const path = require('path');
+
+// Read version from version.json
+const versionPath = path.join(__dirname, 'version.json');
+let versionConfig = { version: '1.0.0', buildNumber: 1 };
+
+try {
+  const versionFile = fs.readFileSync(versionPath, 'utf8');
+  versionConfig = JSON.parse(versionFile);
+  
+  // Validate structure
+  if (!versionConfig.version || typeof versionConfig.version !== 'string') {
+    throw new Error('Invalid version.json: missing or invalid "version" field');
+  }
+  if (typeof versionConfig.buildNumber !== 'number' || versionConfig.buildNumber < 1) {
+    throw new Error('Invalid version.json: missing or invalid "buildNumber" field (must be >= 1)');
+  }
+  
+  // Validate version format (basic check)
+  const versionRegex = /^\d+\.\d+\.\d+$/;
+  if (!versionRegex.test(versionConfig.version)) {
+    throw new Error(`Invalid version format: "${versionConfig.version}". Expected MAJOR.MINOR.PATCH`);
+  }
+} catch (error) {
+  // In production builds, fail hard to catch configuration issues early
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.EAS_BUILD;
+  
+  if (isProduction) {
+    console.error('ERROR: Could not read or validate version.json:', error.message);
+    console.error('This is a production build - version.json is required.');
+    process.exit(1);
+  } else {
+    console.warn('Warning: Could not read version.json, using defaults:', error.message);
+    console.warn('This is acceptable in development, but version.json is required for production builds.');
+  }
+}
+
 module.exports = ({ config }) => {
   // Check if we're building for development builds (via EAS or local)
   // EAS_BUILD_PROFILE is automatically set by EAS Build
@@ -19,7 +57,7 @@ module.exports = ({ config }) => {
       name: "ShareMoney",
       slug: "share-money",
       owner: "share-money",
-      version: "1.0.0",
+      version: versionConfig.version,
       orientation: "portrait",
       icon: "./assets/icon.png",
       userInterfaceStyle: "automatic", // Respects system dark/light mode preference
@@ -33,11 +71,13 @@ module.exports = ({ config }) => {
       ios: {
         supportsTablet: true,
         bundleIdentifier: "com.sharemoney.app",
-        scheme: "com.sharemoney.app"
+        scheme: "com.sharemoney.app",
+        buildNumber: versionConfig.buildNumber.toString()
       },
       android: {
         package: "com.sharemoney.app",
         scheme: "com.sharemoney.app",
+        versionCode: versionConfig.buildNumber,
         adaptiveIcon: {
           foregroundImage: "./assets/adaptive-icon.png",
           backgroundColor: "#14B8A6"
