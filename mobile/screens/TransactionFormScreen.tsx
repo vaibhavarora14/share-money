@@ -210,6 +210,11 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     }
   };
 
+  // Handler to open Paid By picker
+  const handleOpenPaidByPicker = useCallback(() => {
+    setShowPaidByPicker(true);
+  }, []);
+
   // Validation function that returns true if form is valid
   const validateForm = (): boolean => {
     let isValid = true;
@@ -569,29 +574,37 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
           {/* Expense Splitting Fields - Only for group expenses */}
           {isGroupExpense && (
             <>
-              <TextInput
-                label="Paid By"
-                value={
-                  paidBy
-                    ? groupMembers.find((m) => m.user_id === paidBy)?.email ||
-                      `User ${paidBy.substring(0, 8)}...`
-                    : ""
-                }
-                mode="outlined"
-                editable={false}
+              <TouchableOpacity
+                onPress={handleOpenPaidByPicker}
+                activeOpacity={0.7}
                 disabled={loading}
-                error={!!paidByError}
-                style={styles.input}
-                left={<TextInput.Icon icon="account" />}
-                right={
-                  <TextInput.Icon
-                    icon="chevron-down"
-                    onPress={() => !loading && setShowPaidByPicker(true)}
-                  />
-                }
-                onPressIn={() => !loading && setShowPaidByPicker(true)}
-                placeholder="Select who paid"
-              />
+                accessibilityRole="button"
+                accessibilityLabel="Select who paid for this expense"
+              >
+                <TextInput
+                  label="Paid By"
+                  value={
+                    paidBy
+                      ? groupMembers.find((m) => m.user_id === paidBy)?.email ||
+                        `User ${paidBy.substring(0, 8)}...`
+                      : ""
+                  }
+                  mode="outlined"
+                  editable={false}
+                  disabled={loading}
+                  error={!!paidByError}
+                  style={styles.input}
+                  showSoftInputOnFocus={false}
+                  left={<TextInput.Icon icon="account" />}
+                  right={
+                    <TextInput.Icon
+                      icon="chevron-down"
+                      onPress={handleOpenPaidByPicker}
+                    />
+                  }
+                  placeholder="Select who paid"
+                />
+              </TouchableOpacity>
 
               <View style={styles.splitAmongContainer}>
                 <View style={styles.splitAmongHeader}>
