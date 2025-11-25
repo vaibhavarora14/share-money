@@ -11,6 +11,123 @@ import { ACTIVITY_FEED_CONFIG } from './constants';
 export type { ChangesDiff, HistoryChanges, HistorySnapshot, SettlementSnapshot, TransactionHistory, TransactionSnapshot };
 
 /**
+ * Default currency code
+ */
+const DEFAULT_CURRENCY = 'USD';
+
+/**
+ * Type guard to check if snapshot is a wrapped structure (for created/deleted)
+ */
+function isWrappedSnapshot(snapshot: HistorySnapshot | null): snapshot is { transaction?: TransactionSnapshot; settlement?: SettlementSnapshot } {
+  return snapshot !== null && typeof snapshot === 'object' && ('transaction' in snapshot || 'settlement' in snapshot);
+}
+
+/**
+ * Type guard to check if snapshot is a transaction (for updated actions)
+ */
+function isTransactionSnapshot(snapshot: HistorySnapshot | null): snapshot is TransactionSnapshot {
+  if (!snapshot || typeof snapshot !== 'object') return false;
+  // Check for transaction-specific fields
+  return 'id' in snapshot && 'amount' in snapshot && 'description' in snapshot && 'type' in snapshot;
+}
+
+/**
+ * Type guard to check if snapshot is a settlement (for updated actions)
+ */
+function isSettlementSnapshot(snapshot: HistorySnapshot | null): snapshot is SettlementSnapshot {
+  if (!snapshot || typeof snapshot !== 'object') return false;
+  // Check for settlement-specific fields
+  return 'id' in snapshot && 'amount' in snapshot && 'from_user_id' in snapshot && 'to_user_id' in snapshot;
+}
+
+/**
+ * Extracts transaction from history snapshot/changes, handling both wrapped and direct structures
+ */
+function extractTransactionFromHistory(
+  history: TransactionHistory
+): TransactionSnapshot | undefined {
+  const snapshot = history.snapshot;
+  
+  // Try wrapped structure first (created/deleted)
+  if (isWrappedSnapshot(snapshot) && snapshot.transaction) {
+    return snapshot.transaction;
+  }
+  
+  // Try direct structure (updated)
+  if (history.action === 'updated' && isTransactionSnapshot(snapshot)) {
+    return snapshot;
+  }
+  
+  // Fallback to changes
+  return history.changes?.transaction as TransactionSnapshot | undefined;
+}
+
+/**
+ * Extracts settlement from history snapshot/changes, handling both wrapped and direct structures
+ */
+function extractSettlementFromHistory(
+  history: TransactionHistory
+): SettlementSnapshot | undefined {
+  const snapshot = history.snapshot;
+  
+  // Try wrapped structure first (created/deleted)
+  if (isWrappedSnapshot(snapshot) && snapshot.settlement) {
+    return snapshot.settlement;
+  }
+  
+  // Try direct structure (updated)
+  if (history.action === 'updated' && isSettlementSnapshot(snapshot)) {
+    return snapshot;
+  }
+  
+  // Fallback to changes
+  return history.changes?.settlement as SettlementSnapshot | undefined;
+}
+
+/**
+ * Safely extracts currency from a value, handling JSONB edge cases
+ */
+function extractCurrency(value: unknown): string | undefined {
+  if (value === null || value === undefined) return undefined;
+  
+  const currencyStr = String(value).trim();
+  
+  // Filter out invalid currency strings
+  if (currencyStr === '' || currencyStr === 'null' || currencyStr === 'undefined') {
+    return undefined;
+  }
+  
+  return currencyStr;
+}
+
+/**
+ * Enriches currency for a transaction/settlement snapshot
+ * Priority: snapshot currency → changes currency → current record currency → default
+ */
+function enrichCurrency<T extends { currency?: string }>(
+  snapshot: T | undefined,
+  changesSnapshot: T | undefined,
+  recordId: string | number | null | undefined,
+  currencyMap?: Map<string | number, string>
+): string {
+  // Try snapshot currency first (preserves historical accuracy)
+  let currency = snapshot ? extractCurrency(snapshot.currency) : undefined;
+  
+  // Try changes currency if snapshot doesn't have it
+  if (!currency && changesSnapshot) {
+    currency = extractCurrency(changesSnapshot.currency);
+  }
+  
+  // Fallback to current record currency (for backward compatibility)
+  if (!currency && recordId && currencyMap) {
+    currency = currencyMap.get(recordId);
+  }
+  
+  // Default fallback
+  return (currency || DEFAULT_CURRENCY).toUpperCase();
+}
+
+/**
  * Transaction snapshot structure
  */
 interface TransactionSnapshot {
@@ -369,144 +486,31 @@ function transformHistoryToActivity(
   }
 
   if (activityType === 'settlement') {
-    // For settlements, prioritize snapshot, then changes
-    // Also enrich currency from actual settlement record if available
-    let settlement: SettlementSnapshot | undefined = undefined;
-    
-    // For updates, snapshot IS the settlement directly (to_jsonb(NEW) from trigger)
-    // For created/deleted, snapshot.settlement contains the settlement
-    // Check both structures
-    if (history.snapshot) {
-      if (history.snapshot.settlement) {
-        // Standard structure: snapshot.settlement (for created/deleted)
-        settlement = history.snapshot.settlement as SettlementSnapshot;
-      } else if (history.action === 'updated' && 'id' in history.snapshot && 'amount' in history.snapshot) {
-        // For updates, snapshot IS the settlement (to_jsonb(NEW) from trigger)
-        // The snapshot contains settlement fields directly: id, amount, currency, etc.
-        settlement = history.snapshot as unknown as SettlementSnapshot;
-      }
-    }
-    
-    // Fallback to changes.settlement if not found in snapshot
-    if (!settlement && history.changes?.settlement) {
-      settlement = history.changes.settlement as SettlementSnapshot;
-    }
-    
-    // Enrich currency: prioritize snapshot (historical accuracy), then fallback to current record
-    // Always enrich currency if we have a settlement, even if settlement_id is missing (for edge cases)
-    if (settlement) {
-      // First, try to get currency from snapshot (preserves historical state)
-      // Handle JSONB parsing - currency might be a string or need type coercion
-      let currency: string | undefined = undefined;
-      if (settlement.currency) {
-        currency = String(settlement.currency).trim();
-      }
-      
-      // If snapshot doesn't have currency, try changes.settlement
-      if (!currency || currency === '') {
-        const changesSettlement = history.changes?.settlement as SettlementSnapshot | undefined;
-        if (changesSettlement?.currency) {
-          currency = String(changesSettlement.currency).trim();
-        }
-      }
-      
-      // Only fallback to current record if snapshot/changes don't have it
-      // This ensures historical accuracy - if currency was changed later, old activities still show old currency
-      if ((!currency || currency === '') && history.settlement_id) {
-        const currentCurrency = currencyMap?.get(history.settlement_id);
-        if (currentCurrency) {
-          currency = currentCurrency;
-        } else {
-          // Last resort: default to USD
-          currency = 'USD';
-        }
-      } else if (!currency || currency === '') {
-        // If we don't have settlement_id, just default to USD
-        currency = 'USD';
-      }
-      
-      // Ensure currency is uppercase and set it
-      settlement.currency = currency.toUpperCase();
-    }
+    const settlement = extractSettlementFromHistory(history);
+    const changesSettlement = history.changes?.settlement as SettlementSnapshot | undefined;
     
     if (settlement) {
+      // Enrich currency: prioritize snapshot (historical accuracy), then fallback to current record
+      settlement.currency = enrichCurrency(
+        settlement,
+        changesSettlement,
+        history.settlement_id,
+        currencyMap
+      );
       details.settlement = settlement;
     }
   } else {
-    // For transactions, prioritize snapshot, then changes
-    // Also enrich currency from actual transaction record if available
-    let transaction: TransactionSnapshot | undefined = undefined;
-    
-    // For updates, snapshot IS the transaction directly (to_jsonb(NEW) from trigger)
-    // For created/deleted, snapshot.transaction contains the transaction
-    // Check both structures
-    if (history.snapshot) {
-      if (history.snapshot.transaction) {
-        // Standard structure: snapshot.transaction (for created/deleted)
-        transaction = history.snapshot.transaction as TransactionSnapshot;
-      } else if (history.action === 'updated' && 'id' in history.snapshot && 'amount' in history.snapshot) {
-        // For updates, snapshot IS the transaction (to_jsonb(NEW) from trigger)
-        // The snapshot contains transaction fields directly: id, amount, currency, etc.
-        transaction = history.snapshot as unknown as TransactionSnapshot;
-      }
-    }
-    
-    // Fallback to changes.transaction if not found in snapshot
-    if (!transaction && history.changes?.transaction) {
-      transaction = history.changes.transaction as TransactionSnapshot;
-    }
-    
-    // Enrich currency: prioritize snapshot (historical accuracy), then fallback to current record
-    // Always enrich currency if we have a transaction, even if transaction_id is missing (for edge cases)
-    if (transaction) {
-      // First, try to get currency from snapshot (preserves historical state)
-      // Handle JSONB parsing - currency might be a string or need type coercion
-      let currency: string | undefined = undefined;
-      
-      // Check transaction.currency - handle various JSONB formats
-      const rawCurrency = transaction.currency;
-      if (rawCurrency !== null && rawCurrency !== undefined) {
-        const currencyStr = String(rawCurrency).trim();
-        if (currencyStr !== '' && currencyStr !== 'null' && currencyStr !== 'undefined') {
-          currency = currencyStr;
-        }
-      }
-      
-      // If snapshot doesn't have currency, try changes.transaction
-      if (!currency || currency === '') {
-        const changesTransaction = history.changes?.transaction as TransactionSnapshot | undefined;
-        if (changesTransaction) {
-          const changesCurrency = changesTransaction.currency;
-          if (changesCurrency !== null && changesCurrency !== undefined) {
-            const currencyStr = String(changesCurrency).trim();
-            if (currencyStr !== '' && currencyStr !== 'null' && currencyStr !== 'undefined') {
-              currency = currencyStr;
-            }
-          }
-        }
-      }
-      
-      // Only fallback to current record if snapshot/changes don't have it
-      // This ensures historical accuracy - if currency was changed later, old activities still show old currency
-      if ((!currency || currency === '') && history.transaction_id) {
-        const currentCurrency = currencyMap?.get(history.transaction_id);
-        if (currentCurrency) {
-          currency = currentCurrency;
-        } else {
-          // Last resort: default to USD
-          currency = 'USD';
-        }
-      } else if (!currency || currency === '') {
-        // If we don't have transaction_id, just default to USD
-        currency = 'USD';
-      }
-      
-      // Ensure currency is uppercase and set it
-      const finalCurrency = currency.toUpperCase();
-      transaction.currency = finalCurrency;
-    }
+    const transaction = extractTransactionFromHistory(history);
+    const changesTransaction = history.changes?.transaction as TransactionSnapshot | undefined;
     
     if (transaction) {
+      // Enrich currency: prioritize snapshot (historical accuracy), then fallback to current record
+      transaction.currency = enrichCurrency(
+        transaction,
+        changesTransaction,
+        history.transaction_id,
+        currencyMap
+      );
       details.transaction = transaction;
     }
   }

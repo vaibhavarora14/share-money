@@ -85,6 +85,73 @@ interface ActivityItemDetails {
 }
 
 /**
+ * Type guard to check if snapshot is a wrapped structure (for created/deleted)
+ */
+function isWrappedSnapshot(snapshot: HistorySnapshot | null): snapshot is { transaction?: TransactionSnapshot; settlement?: SettlementSnapshot } {
+  return snapshot !== null && typeof snapshot === 'object' && ('transaction' in snapshot || 'settlement' in snapshot);
+}
+
+/**
+ * Type guard to check if snapshot is a transaction (for updated actions)
+ */
+function isTransactionSnapshot(snapshot: HistorySnapshot | null): snapshot is TransactionSnapshot {
+  if (!snapshot || typeof snapshot !== 'object') return false;
+  return 'id' in snapshot && 'amount' in snapshot && 'description' in snapshot && 'type' in snapshot;
+}
+
+/**
+ * Type guard to check if snapshot is a settlement (for updated actions)
+ */
+function isSettlementSnapshot(snapshot: HistorySnapshot | null): snapshot is SettlementSnapshot {
+  if (!snapshot || typeof snapshot !== 'object') return false;
+  return 'id' in snapshot && 'amount' in snapshot && 'from_user_id' in snapshot && 'to_user_id' in snapshot;
+}
+
+/**
+ * Extracts transaction from history snapshot/changes, handling both wrapped and direct structures
+ */
+function extractTransactionFromSnapshot(
+  snapshot: HistorySnapshot | null,
+  changes: HistoryChanges | undefined,
+  action: 'created' | 'updated' | 'deleted'
+): TransactionSnapshot | undefined {
+  // Try wrapped structure first (created/deleted)
+  if (isWrappedSnapshot(snapshot) && snapshot.transaction) {
+    return snapshot.transaction;
+  }
+  
+  // Try direct structure (updated)
+  if (action === 'updated' && isTransactionSnapshot(snapshot)) {
+    return snapshot;
+  }
+  
+  // Fallback to changes
+  return changes?.transaction;
+}
+
+/**
+ * Extracts settlement from history snapshot/changes, handling both wrapped and direct structures
+ */
+function extractSettlementFromSnapshot(
+  snapshot: HistorySnapshot | null,
+  changes: HistoryChanges | undefined,
+  action: 'created' | 'updated' | 'deleted'
+): SettlementSnapshot | undefined {
+  // Try wrapped structure first (created/deleted)
+  if (isWrappedSnapshot(snapshot) && snapshot.settlement) {
+    return snapshot.settlement;
+  }
+  
+  // Try direct structure (updated)
+  if (action === 'updated' && isSettlementSnapshot(snapshot)) {
+    return snapshot;
+  }
+  
+  // Fallback to changes
+  return changes?.settlement;
+}
+
+/**
  * Formats field names for display (user-friendly)
  * @param field - Database field name
  * @returns User-friendly field name
@@ -489,19 +556,17 @@ export function generateActivityDescription(
   switch (action) {
     case 'created': {
       if (activityType === 'settlement') {
-        // Prefer enriched details (with currency) over raw snapshot
         const settlement = useEnriched 
           ? enrichedDetails!.settlement 
-          : (snapshot?.settlement || changes?.settlement);
+          : extractSettlementFromSnapshot(snapshot, changes, action);
         if (settlement) {
           return generateSettlementCreatedDescription(settlement, emailMap);
         }
         return 'Created settlement';
       } else {
-        // Prefer enriched details (with currency) over raw snapshot
         const transaction = useEnriched
           ? enrichedDetails!.transaction
-          : (snapshot?.transaction || changes?.transaction);
+          : extractTransactionFromSnapshot(snapshot, changes, action);
         if (transaction) {
           return generateTransactionCreatedDescription(transaction);
         }
@@ -510,76 +575,34 @@ export function generateActivityDescription(
     }
 
     case 'updated': {
+      const diff = changes?.diff || {};
+      
       if (activityType === 'settlement') {
-        const diff = changes?.diff || {};
-        // Prefer enriched details (with currency) over raw snapshot
-        let settlement: SettlementSnapshot | undefined = undefined;
-        
-        if (useEnriched && enrichedDetails!.settlement) {
-          settlement = enrichedDetails!.settlement;
-        } else {
-          // For updates, snapshot IS the settlement (not snapshot.settlement)
-          // For created/deleted, snapshot.settlement contains the settlement
-          if (snapshot) {
-            if (snapshot.settlement) {
-              settlement = snapshot.settlement;
-            } else if ('id' in snapshot && 'amount' in snapshot) {
-              // For updates, snapshot is the settlement directly
-              settlement = snapshot as unknown as SettlementSnapshot;
-            }
-          }
-          
-          // Fallback to changes.settlement
-          if (!settlement && changes?.settlement) {
-            settlement = changes.settlement;
-          }
-        }
-        
+        const settlement = useEnriched && enrichedDetails!.settlement
+          ? enrichedDetails!.settlement
+          : extractSettlementFromSnapshot(snapshot, changes, action);
         return generateSettlementUpdatedDescription(settlement, diff, emailMap);
       } else {
-        const diff = changes?.diff || {};
-        // Prefer enriched details (with currency) over raw snapshot
-        let transaction: TransactionSnapshot | undefined = undefined;
-        
-        if (useEnriched && enrichedDetails!.transaction) {
-          transaction = enrichedDetails!.transaction;
-        } else {
-          // For updates, snapshot IS the transaction (not snapshot.transaction)
-          // For created/deleted, snapshot.transaction contains the transaction
-          if (snapshot) {
-            if (snapshot.transaction) {
-              transaction = snapshot.transaction;
-            } else if ('id' in snapshot && 'amount' in snapshot) {
-              // For updates, snapshot is the transaction directly
-              transaction = snapshot as unknown as TransactionSnapshot;
-            }
-          }
-          
-          // Fallback to changes.transaction
-          if (!transaction && changes?.transaction) {
-            transaction = changes.transaction;
-          }
-        }
-        
+        const transaction = useEnriched && enrichedDetails!.transaction
+          ? enrichedDetails!.transaction
+          : extractTransactionFromSnapshot(snapshot, changes, action);
         return generateTransactionUpdatedDescription(transaction, diff, emailMap);
       }
     }
 
     case 'deleted': {
       if (activityType === 'settlement') {
-        // Prefer enriched details (with currency) over raw snapshot
         const settlement = useEnriched
           ? enrichedDetails!.settlement
-          : (snapshot?.settlement || changes?.settlement);
+          : extractSettlementFromSnapshot(snapshot, changes, action);
         if (settlement) {
           return generateSettlementDeletedDescription(settlement, emailMap);
         }
         return 'Deleted settlement';
       } else {
-        // Prefer enriched details (with currency) over raw snapshot
         const transaction = useEnriched
           ? enrichedDetails!.transaction
-          : (snapshot?.transaction || changes?.transaction);
+          : extractTransactionFromSnapshot(snapshot, changes, action);
         if (transaction) {
           return generateTransactionDeletedDescription(transaction);
         }
