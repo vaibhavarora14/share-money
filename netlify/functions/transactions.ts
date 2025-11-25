@@ -312,6 +312,11 @@ export const handler: Handler = async (event, context) => {
       }
 
       // Set user_id from authenticated user (RLS will also enforce this)
+      // Ensure currency is provided (default to 'USD' if not specified)
+      const currency = transactionData.currency && typeof transactionData.currency === 'string' && transactionData.currency.trim() !== ''
+        ? transactionData.currency.toUpperCase()
+        : 'USD';
+      
       const { data: transaction, error } = await supabase
         .from('transactions')
         .insert({
@@ -322,7 +327,7 @@ export const handler: Handler = async (event, context) => {
           type: transactionData.type,
           category: transactionData.category || null,
           group_id: transactionData.group_id || null,
-          currency: transactionData.currency,
+          currency: currency,
           paid_by: transactionData.paid_by || null,
           // Supabase automatically handles JSONB conversion - no need to stringify
           split_among: transactionData.split_among && Array.isArray(transactionData.split_among)

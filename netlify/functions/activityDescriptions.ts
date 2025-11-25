@@ -242,9 +242,23 @@ function getUserName(userId: string, emailMap?: Map<string, string>): string {
 function generateTransactionCreatedDescription(transaction: TransactionSnapshot): string {
   const amount = transaction.amount || 0;
   // Ensure currency is properly extracted from JSONB (handle null/undefined/empty string)
-  const currency = (transaction.currency && typeof transaction.currency === 'string' && transaction.currency.trim() !== '') 
-    ? transaction.currency.toUpperCase() 
-    : 'USD';
+  // Check multiple possible locations for currency in JSONB structure
+  let currencyValue: string | undefined = undefined;
+  
+  // Try direct property access
+  if (transaction.currency && typeof transaction.currency === 'string' && transaction.currency.trim() !== '') {
+    currencyValue = transaction.currency;
+  }
+  
+  // If still not found, try accessing via any property (for JSONB edge cases)
+  if (!currencyValue && (transaction as any)?.currency) {
+    const possibleCurrency = (transaction as any).currency;
+    if (typeof possibleCurrency === 'string' && possibleCurrency.trim() !== '') {
+      currencyValue = possibleCurrency;
+    }
+  }
+  
+  const currency = currencyValue ? currencyValue.toUpperCase() : 'USD';
   const description = transaction.description || 'transaction';
   const descriptionGlimpse = description.length > 30 
     ? description.substring(0, 30) + '...' 

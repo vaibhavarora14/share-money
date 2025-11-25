@@ -368,10 +368,26 @@ function transformHistoryToActivity(
       details.settlement = history.changes.settlement;
     }
   } else {
+    // For transactions, prioritize snapshot, then changes
+    // Also ensure currency is preserved from JSONB
+    let transaction: TransactionSnapshot | undefined = undefined;
+    
     if (history.snapshot?.transaction) {
-      details.transaction = history.snapshot.transaction;
+      transaction = history.snapshot.transaction as TransactionSnapshot;
+      // Ensure currency is properly extracted from JSONB
+      if (!transaction.currency || transaction.currency === null) {
+        // Try to get currency from changes if snapshot doesn't have it
+        const changesTransaction = history.changes?.transaction as TransactionSnapshot | undefined;
+        if (changesTransaction?.currency) {
+          transaction.currency = changesTransaction.currency;
+        }
+      }
     } else if (history.changes?.transaction) {
-      details.transaction = history.changes.transaction;
+      transaction = history.changes.transaction as TransactionSnapshot;
+    }
+    
+    if (transaction) {
+      details.transaction = transaction;
     }
   }
 
