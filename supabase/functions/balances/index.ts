@@ -3,6 +3,8 @@ import { verifyAuth } from '../_shared/auth.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { isValidUUID } from '../_shared/validation.ts';
 import { createSuccessResponse } from '../_shared/response.ts';
+import { fetchUserEmails } from '../_shared/user-email.ts';
+import { log } from '../_shared/logger.ts';
 
 interface Balance {
   user_id: string;
@@ -44,18 +46,17 @@ interface TransactionWithSplits {
   transaction_splits?: TransactionSplit[];
 }
 
-interface UserResponse {
-  id: string;
-  email?: string;
-  user?: {
-    email?: string;
-  };
-}
-
-interface EmailFetchResult {
-  userId: string;
-  email: string | null;
-}
+/**
+ * Balances Edge Function
+ * 
+ * Calculates and returns balances between users in groups:
+ * - GET /balances?group_id=xxx - Get balances (optionally filtered by group)
+ * 
+ * Returns both per-group balances and overall balances across all groups.
+ * 
+ * @route /functions/v1/balances
+ * @requires Authentication
+ */
 
 async function calculateGroupBalances(
   supabase: SupabaseClient,
@@ -78,10 +79,10 @@ async function calculateGroupBalances(
     .eq('group_id', groupId)
     .eq('type', 'expense');
 
-  if (error) {
-    console.error('Error fetching transactions:', error);
-    throw error;
-  }
+    if (error) {
+      log.error('Error fetching transactions', 'balance-calculation', { groupId, error: error.message });
+      throw error;
+    }
 
   const { data: members } = await supabase
     .from('group_members')
@@ -96,7 +97,11 @@ async function calculateGroupBalances(
     const totalAmount = typeof tx.amount === 'string' ? parseFloat(tx.amount) : tx.amount;
     
     if (isNaN(totalAmount) || totalAmount <= 0) {
-      console.warn(`Invalid transaction amount: ${tx.amount} for transaction ${tx.id}`);
+      log.warn('Invalid transaction amount', 'balance-calculation', {
+        transactionId: tx.id,
+        amount: tx.amount,
+        groupId,
+      });
       continue;
     }
 
@@ -107,7 +112,12 @@ async function calculateGroupBalances(
         .map((s: TransactionSplit) => {
           const amount = typeof s.amount === 'string' ? parseFloat(s.amount) : s.amount;
           if (isNaN(amount) || amount <= 0) {
-            console.warn(`Invalid split amount: ${s.amount} for user ${s.user_id} in transaction ${tx.id}`);
+            log.warn('Invalid split amount', 'balance-calculation', {
+              transactionId: tx.id,
+              userId: s.user_id,
+              amount: s.amount,
+              groupId,
+            });
             return null;
           }
           return {
@@ -283,8 +293,6 @@ Deno.serve(async (req: Request) => {
       }))
       .filter((b) => Math.abs(b.amount) > 0.01);
 
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const allUserIds = new Set<string>();
     
     for (const gb of groupBalances) {
@@ -296,44 +304,9 @@ Deno.serve(async (req: Request) => {
       allUserIds.add(b.user_id);
     }
 
-    if (serviceRoleKey && supabaseUrl && allUserIds.size > 0) {
+    if (allUserIds.size > 0) {
       const userIdsArray = Array.from(allUserIds);
-      
-      const emailPromises: Promise<EmailFetchResult>[] = userIdsArray.map(async (userId): Promise<EmailFetchResult> => {
-        if (userId === currentUserId && currentUserEmail) {
-          return { userId, email: currentUserEmail };
-        }
-
-        try {
-          const userResponse = await fetch(
-            `${supabaseUrl}/auth/v1/admin/users/${userId}`,
-            {
-              headers: {
-                'Authorization': `Bearer ${serviceRoleKey}`,
-                'apikey': serviceRoleKey,
-              },
-            }
-          );
-          
-          if (userResponse.ok) {
-            const userData = await userResponse.json() as UserResponse;
-            const email = userData.user?.email || userData.email || null;
-            return { userId, email };
-          }
-        } catch (err) {
-          console.error(`Error fetching email for user ${userId}:`, err);
-        }
-        return { userId, email: null };
-      });
-
-      const emailResults = await Promise.allSettled(emailPromises);
-      const emailMap = new Map<string, string>();
-      
-      for (const result of emailResults) {
-        if (result.status === 'fulfilled' && result.value.email) {
-          emailMap.set(result.value.userId, result.value.email);
-        }
-      }
+      const emailMap = await fetchUserEmails(userIdsArray, currentUserId, currentUserEmail);
 
       for (const gb of groupBalances) {
         for (const b of gb.balances) {
@@ -342,19 +315,6 @@ Deno.serve(async (req: Request) => {
       }
       for (const b of overallBalances) {
         b.email = emailMap.get(b.user_id);
-      }
-    } else {
-      for (const gb of groupBalances) {
-        for (const b of gb.balances) {
-          if (b.user_id === currentUserId && currentUserEmail) {
-            b.email = currentUserEmail;
-          }
-        }
-      }
-      for (const b of overallBalances) {
-        if (b.user_id === currentUserId && currentUserEmail) {
-          b.email = currentUserEmail;
-        }
       }
     }
 

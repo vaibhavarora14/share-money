@@ -1,4 +1,5 @@
 import { getCorsHeaders } from './cors.ts';
+import { log } from './logger.ts';
 
 /**
  * Sanitizes error messages to remove sensitive information before logging
@@ -113,11 +114,16 @@ export function handleError(error: unknown, context?: string): Response {
     }
 
     // Server errors
-    console.error(`Error in ${context || 'handler'}:`, error);
+    log.error('Error in handler', context || 'unknown', {
+      error: error.message,
+      stack: error.stack,
+    });
     return createErrorResponse(500, 'Internal server error', 'INTERNAL_ERROR', error.message);
   }
 
   // Unknown error
-  console.error(`Unknown error in ${context || 'handler'}:`, error);
+  log.error('Unknown error in handler', context || 'unknown', {
+    error: String(error),
+  });
   return createErrorResponse(500, 'Internal server error', 'UNKNOWN_ERROR');
 }

@@ -3,6 +3,22 @@ import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
 import { isValidUUID, validateBodySize, validateTransactionData } from '../_shared/validation.ts';
 import { formatCurrency } from '../_shared/currency.ts';
+import { log } from '../_shared/logger.ts';
+
+/**
+ * Transactions Edge Function
+ * 
+ * Handles CRUD operations for transactions:
+ * - GET /transactions?group_id=xxx - Fetch transactions (optionally filtered by group)
+ * - POST /transactions - Create new transaction
+ * - PUT /transactions - Update existing transaction
+ * - DELETE /transactions?id=xxx - Delete transaction
+ * 
+ * Supports expense splitting with automatic calculation of equal splits.
+ * 
+ * @route /functions/v1/transactions
+ * @requires Authentication
+ */
 
 interface Transaction {
   id: number;
@@ -139,7 +155,7 @@ Deno.serve(async (req: Request) => {
         .limit(100);
 
       if (error && (error.message?.includes('relation') || error.message?.includes('does not exist') || error.code === '42P01')) {
-        let fallbackQuery = supabase.from('transactions').select('*');
+        let fallbackQuery = supabase.from('transactions').select('id, amount, description, date, type, category, user_id, group_id, currency, paid_by, split_among, created_at, updated_at');
         if (groupId) {
           fallbackQuery = fallbackQuery.eq('group_id', groupId);
         }
@@ -281,15 +297,36 @@ Deno.serve(async (req: Request) => {
 
         const splitValidation = validateSplitSum(splits, transaction.amount, transaction.currency || 'USD');
         if (!splitValidation.valid) {
-          // Log but don't fail
+          log.error('Split validation failed', 'transaction-creation', {
+            transactionId: transaction.id,
+            error: splitValidation.error,
+            splits,
+            amount: transaction.amount,
+            currency: transaction.currency || 'USD',
+          });
+          // Note: Transaction is already created, split_among column has the data
+          // Consider monitoring/alerting for data integrity issues
         }
 
         const { error: splitsError } = await supabase
           .from('transaction_splits')
           .insert(splits);
 
-        if (splitsError && !(splitsError.message?.includes('relation') || splitsError.message?.includes('does not exist') || splitsError.code === '42P01')) {
-          // Log but don't fail
+        if (splitsError) {
+          // If table doesn't exist, that's okay - split_among column has the data
+          if (splitsError.message?.includes('relation') || splitsError.message?.includes('does not exist') || splitsError.code === '42P01') {
+            log.warn('transaction_splits table does not exist, using split_among column', 'transaction-creation', {
+              transactionId: transaction.id,
+            });
+          } else {
+            log.error('Failed to create transaction_splits', 'transaction-creation', {
+              transactionId: transaction.id,
+              error: splitsError.message,
+              code: splitsError.code,
+            });
+            // Transaction is already created, but splits weren't saved
+            // Consider monitoring/alerting for data consistency issues
+          }
         }
       }
 
@@ -317,7 +354,10 @@ Deno.serve(async (req: Request) => {
           }
         }
       } catch (e) {
-        console.warn('Could not fetch transaction with splits, using basic transaction:', e);
+        log.warn('Could not fetch transaction with splits, using basic transaction', 'transaction-creation', {
+          transactionId: transaction.id,
+          error: e instanceof Error ? e.message : String(e),
+        });
       }
 
       if (responseTransaction && responseTransaction.split_among) {
@@ -469,7 +509,13 @@ Deno.serve(async (req: Request) => {
 
           const validation = validateSplitSum(splits, totalAmount, transaction.currency || transactionData.currency || 'USD');
           if (!validation.valid) {
-            console.error('Split validation failed:', validation.error);
+            log.error('Split validation failed during update', 'transaction-update', {
+              transactionId: transaction.id,
+              error: validation.error,
+              splits,
+              amount: totalAmount,
+              currency: transaction.currency || transactionData.currency || 'USD',
+            });
           }
 
           const { error: splitsError } = await supabase
@@ -477,7 +523,11 @@ Deno.serve(async (req: Request) => {
             .insert(splits);
 
           if (splitsError) {
-            console.error('Failed to update transaction_splits:', splitsError);
+            log.error('Failed to update transaction_splits', 'transaction-update', {
+              transactionId: transaction.id,
+              error: splitsError.message,
+              code: splitsError.code,
+            });
           }
         }
       } else if (transactionData.amount !== undefined) {
@@ -495,7 +545,13 @@ Deno.serve(async (req: Request) => {
 
           const validation = validateSplitSum(newSplits, newAmount, transaction.currency || transactionData.currency || 'USD');
           if (!validation.valid) {
-            console.error('Split validation failed:', validation.error);
+            log.error('Split validation failed during amount recalculation', 'transaction-update', {
+              transactionId: transaction.id,
+              error: validation.error,
+              splits: newSplits,
+              amount: newAmount,
+              currency: transaction.currency || transactionData.currency || 'USD',
+            });
           }
 
           await supabase
@@ -503,13 +559,17 @@ Deno.serve(async (req: Request) => {
             .delete()
             .eq('transaction_id', transactionData.id);
 
-          const { error: insertError } = await supabase
-            .from('transaction_splits')
-            .insert(newSplits);
+            const { error: insertError } = await supabase
+              .from('transaction_splits')
+              .insert(newSplits);
 
-          if (insertError) {
-            console.error('Failed to insert recalculated splits:', insertError);
-          }
+            if (insertError) {
+              log.error('Failed to insert recalculated splits', 'transaction-update', {
+                transactionId: transaction.id,
+                error: insertError.message,
+                code: insertError.code,
+              });
+            }
         }
       }
 

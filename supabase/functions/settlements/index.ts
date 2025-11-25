@@ -3,6 +3,20 @@ import { verifyAuth } from '../_shared/auth.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { createSuccessResponse, createEmptyResponse } from '../_shared/response.ts';
 import { isValidUUID, validateBodySize, validateSettlementData } from '../_shared/validation.ts';
+import { fetchUserEmails } from '../_shared/user-email.ts';
+
+/**
+ * Settlements Edge Function
+ * 
+ * Handles CRUD operations for settlements (payments between users):
+ * - GET /settlements?group_id=xxx - List settlements (optionally filtered by group)
+ * - POST /settlements - Create new settlement
+ * - PUT /settlements - Update existing settlement
+ * - DELETE /settlements?id=xxx - Delete settlement
+ * 
+ * @route /functions/v1/settlements
+ * @requires Authentication
+ */
 
 interface Settlement {
   id: string;
@@ -27,23 +41,12 @@ interface CreateSettlementRequest {
   notes?: string;
 }
 
-interface UserResponse {
-  id: string;
-  email?: string;
-  user?: {
-    email?: string;
-  };
-}
-
 async function enrichSettlementsWithEmails(
-  supabase: SupabaseClient,
-  supabaseUrl: string,
-  serviceRoleKey: string | undefined,
   settlements: Settlement[],
   currentUserId: string,
   currentUserEmail: string | null
 ): Promise<void> {
-  if (!serviceRoleKey || settlements.length === 0) {
+  if (settlements.length === 0) {
     return;
   }
 
@@ -54,42 +57,7 @@ async function enrichSettlementsWithEmails(
   });
 
   const userIdsArray = Array.from(userIds);
-  
-  const emailPromises = userIdsArray.map(async (userId): Promise<{ userId: string; email: string | null }> => {
-    if (userId === currentUserId && currentUserEmail) {
-      return { userId, email: currentUserEmail };
-    }
-
-    try {
-      const userResponse = await fetch(
-        `${supabaseUrl}/auth/v1/admin/users/${userId}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${serviceRoleKey}`,
-            'apikey': serviceRoleKey,
-          },
-        }
-      );
-      
-      if (userResponse.ok) {
-        const userData = await userResponse.json() as UserResponse;
-        const email = userData.user?.email || userData.email || null;
-        return { userId, email };
-      }
-    } catch (err) {
-      // Log error but continue - email enrichment is optional
-    }
-    return { userId, email: null };
-  });
-
-  const emailResults = await Promise.allSettled(emailPromises);
-  const emailMap = new Map<string, string>();
-  
-  for (const result of emailResults) {
-    if (result.status === 'fulfilled' && result.value.email) {
-      emailMap.set(result.value.userId, result.value.email);
-    }
-  }
+  const emailMap = await fetchUserEmails(userIdsArray, currentUserId, currentUserEmail);
 
   settlements.forEach(s => {
     s.from_user_email = emailMap.get(s.from_user_id);
@@ -119,7 +87,6 @@ Deno.serve(async (req: Request) => {
     const { user, supabase } = authResult;
     const currentUserId = user.id;
     const currentUserEmail = user.email;
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
 
     if (req.method === 'GET') {
       const url = new URL(req.url);
@@ -131,7 +98,7 @@ Deno.serve(async (req: Request) => {
 
       let query = supabase
         .from('settlements')
-        .select('*')
+        .select('id, group_id, from_user_id, to_user_id, amount, currency, notes, created_by, created_at')
         .order('created_at', { ascending: false });
 
       if (groupId) {
@@ -157,12 +124,8 @@ Deno.serve(async (req: Request) => {
         return handleError(error, 'fetching settlements');
       }
 
-      const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
       const enrichedSettlements = (settlements || []) as Settlement[];
       await enrichSettlementsWithEmails(
-        supabase,
-        supabaseUrl,
-        serviceRoleKey,
         enrichedSettlements,
         currentUserId,
         currentUserEmail
@@ -240,12 +203,8 @@ Deno.serve(async (req: Request) => {
         return handleError(error, 'creating settlement');
       }
 
-      const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
       const enrichedSettlement = settlement as Settlement;
       await enrichSettlementsWithEmails(
-        supabase,
-        supabaseUrl,
-        serviceRoleKey,
         [enrichedSettlement],
         currentUserId,
         currentUserEmail
@@ -319,12 +278,8 @@ Deno.serve(async (req: Request) => {
         return handleError(updateError, 'updating settlement');
       }
 
-      const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
       const enrichedSettlement = updatedSettlement as Settlement;
       await enrichSettlementsWithEmails(
-        supabase,
-        supabaseUrl,
-        serviceRoleKey,
         [enrichedSettlement],
         currentUserId,
         currentUserEmail

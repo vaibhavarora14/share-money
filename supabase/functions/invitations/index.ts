@@ -2,6 +2,21 @@ import { verifyAuth } from '../_shared/auth.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { createSuccessResponse } from '../_shared/response.ts';
 import { validateBodySize, isValidUUID, isValidEmail } from '../_shared/validation.ts';
+import { parsePath } from '../_shared/path-parser.ts';
+import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from '../_shared/env.ts';
+
+/**
+ * Invitations Edge Function
+ * 
+ * Handles group invitation operations:
+ * - GET /invitations?group_id=xxx - List invitations (optionally filtered by group or email)
+ * - POST /invitations - Create new invitation
+ * - POST /invitations/:id/accept - Accept invitation
+ * - DELETE /invitations/:id - Cancel invitation (owners only)
+ * 
+ * @route /functions/v1/invitations
+ * @requires Authentication
+ */
 
 interface GroupInvitation {
   id: string;
@@ -49,17 +64,11 @@ Deno.serve(async (req: Request) => {
     }
 
     const { user: currentUser, supabase } = authResult;
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
     const httpMethod = req.method;
     const url = new URL(req.url);
-    const pathParts = url.pathname.split('/').filter(Boolean);
-    const invitationsIndex = pathParts.indexOf('invitations');
-    const invitationId = invitationsIndex >= 0 && pathParts.length > invitationsIndex + 1
-      ? pathParts[invitationsIndex + 1]
-      : null;
-    const action = invitationsIndex >= 0 && pathParts.length > invitationsIndex + 2
-      ? pathParts[invitationsIndex + 2]
-      : null;
+    const parsedPath = parsePath(url.pathname);
+    const invitationId = parsedPath.resource === 'invitations' ? parsedPath.id : null;
+    const action = parsedPath.resource === 'invitations' ? parsedPath.action : null;
 
     // Handle POST /invitations - Create invitation
     if (httpMethod === 'POST' && !invitationId) {
@@ -95,14 +104,13 @@ Deno.serve(async (req: Request) => {
         return createErrorResponse(403, 'Only group owners can create invitations', 'PERMISSION_DENIED');
       }
 
-      const adminKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-      if (adminKey) {
+      if (SUPABASE_SERVICE_ROLE_KEY) {
         const findUserResponse = await fetch(
-          `${supabaseUrl}/auth/v1/admin/users?email=${encodeURIComponent(normalizedEmail)}`,
+          `${SUPABASE_URL}/auth/v1/admin/users?email=${encodeURIComponent(normalizedEmail)}`,
           {
             headers: {
-              'Authorization': `Bearer ${adminKey}`,
-              'apikey': adminKey,
+              'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+              'apikey': SUPABASE_SERVICE_ROLE_KEY,
             },
           }
         );
@@ -174,7 +182,7 @@ Deno.serve(async (req: Request) => {
 
       let query = supabase
         .from('group_invitations')
-        .select('*')
+        .select('id, group_id, email, invited_by, status, token, expires_at, created_at, accepted_at')
         .order('created_at', { ascending: false });
 
       if (groupId) {

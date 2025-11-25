@@ -2,6 +2,18 @@ import { verifyAuth } from '../_shared/auth.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { createSuccessResponse } from '../_shared/response.ts';
 import { validateBodySize, isValidUUID, isValidEmail } from '../_shared/validation.ts';
+import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from '../_shared/env.ts';
+
+/**
+ * Group Members Edge Function
+ * 
+ * Handles group member management:
+ * - POST /group-members - Add member to group (creates invitation if user doesn't exist)
+ * - DELETE /group-members?group_id=xxx&user_id=xxx - Remove member from group
+ * 
+ * @route /functions/v1/group-members
+ * @requires Authentication
+ */
 
 interface AddMemberRequest {
   group_id: string;
@@ -83,7 +95,6 @@ Deno.serve(async (req: Request) => {
     }
 
     const { user: currentUser, supabase } = authResult;
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
     const httpMethod = req.method;
 
     if (httpMethod === 'POST') {
@@ -119,9 +130,7 @@ Deno.serve(async (req: Request) => {
         return createErrorResponse(400, 'Invalid email address format', 'VALIDATION_ERROR');
       }
 
-      const adminKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-      
-      if (!adminKey) {
+      if (!SUPABASE_SERVICE_ROLE_KEY) {
         return createErrorResponse(
           500,
           'Server configuration error: Service role key not configured. This is required for user lookup by email. Please configure SUPABASE_SERVICE_ROLE_KEY in your environment variables.',
@@ -130,11 +139,11 @@ Deno.serve(async (req: Request) => {
       }
       
       const findUserResponse = await fetch(
-        `${supabaseUrl}/auth/v1/admin/users?email=${encodeURIComponent(normalizedEmail)}`,
+        `${SUPABASE_URL}/auth/v1/admin/users?email=${encodeURIComponent(normalizedEmail)}`,
         {
           headers: {
-            'Authorization': `Bearer ${adminKey}`,
-            'apikey': adminKey,
+            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            'apikey': SUPABASE_SERVICE_ROLE_KEY,
           },
         }
       );
@@ -244,7 +253,7 @@ Deno.serve(async (req: Request) => {
         if (!acceptError) {
           const { data: member } = await supabase
             .from('group_members')
-            .select('*')
+            .select('id, group_id, user_id, role, joined_at')
             .eq('group_id', requestData.group_id)
             .eq('user_id', targetUser.id)
             .single();

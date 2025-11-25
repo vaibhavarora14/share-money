@@ -1,8 +1,22 @@
-import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { verifyAuth } from '../_shared/auth.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { validateGroupData, isValidUUID, validateBodySize } from '../_shared/validation.ts';
 import { createSuccessResponse, createEmptyResponse } from '../_shared/response.ts';
+import { parsePath } from '../_shared/path-parser.ts';
+import { fetchUserEmails } from '../_shared/user-email.ts';
+
+/**
+ * Groups Edge Function
+ * 
+ * Handles CRUD operations for expense groups:
+ * - GET /groups - List all groups user belongs to
+ * - GET /groups/:id - Get group details with members
+ * - POST /groups - Create new group
+ * - DELETE /groups/:id - Delete group (owners only)
+ * 
+ * @route /functions/v1/groups
+ * @requires Authentication
+ */
 
 interface Group {
   id: string;
@@ -52,16 +66,14 @@ Deno.serve(async (req: Request) => {
 
     const httpMethod = req.method;
     const url = new URL(req.url);
-    const pathParts = url.pathname.split('/').filter(Boolean);
-    const groupId = pathParts[pathParts.length - 1] !== 'groups' 
-      ? pathParts[pathParts.length - 1] 
-      : null;
+    const parsedPath = parsePath(url.pathname);
+    const groupId = parsedPath.resource === 'groups' ? parsedPath.id : null;
 
     // Handle GET /groups - List all groups user belongs to
     if (httpMethod === 'GET' && !groupId) {
       const { data: groups, error } = await supabase
         .from('groups')
-        .select('*')
+        .select('id, name, description, created_by, created_at, updated_at')
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -81,7 +93,7 @@ Deno.serve(async (req: Request) => {
       // Get group details
       const { data: group, error: groupError } = await supabase
         .from('groups')
-        .select('*')
+        .select('id, name, description, created_by, created_at, updated_at')
         .eq('id', groupId)
         .single();
 
@@ -92,7 +104,7 @@ Deno.serve(async (req: Request) => {
       // Get group members
       const { data: members, error: membersError } = await supabase
         .from('group_members')
-        .select('*')
+        .select('id, group_id, user_id, role, joined_at')
         .eq('group_id', groupId)
         .order('joined_at', { ascending: true });
 
@@ -100,67 +112,14 @@ Deno.serve(async (req: Request) => {
         return handleError(membersError, 'fetching group members');
       }
 
-      // Try to get user emails using admin API if service role key is available
-      // Also include current user's email if they're a member
-      const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-      const supabaseUrl = Deno.env.get('SUPABASE_URL');
-      let membersWithEmails = members || [];
-
-      if (serviceRoleKey && supabaseUrl) {
-        try {
-          membersWithEmails = await Promise.all(
-            (members || []).map(async (member) => {
-              // If this is the current user, use their email directly
-              if (member.user_id === user.id && currentUserEmail) {
-                return {
-                  ...member,
-                  email: currentUserEmail,
-                };
-              }
-
-              // Otherwise, fetch from Admin API
-              try {
-                const userResponse = await fetch(
-                  `${supabaseUrl}/auth/v1/admin/users/${member.user_id}`,
-                  {
-                    headers: {
-                      'Authorization': `Bearer ${serviceRoleKey}`,
-                      'apikey': serviceRoleKey,
-                    },
-                  }
-                );
-                if (userResponse.ok) {
-                  const userData = await userResponse.json();
-                  const email = userData.user?.email || userData.email || userData?.email || null;
-                  return {
-                    ...member,
-                    email: email,
-                  };
-                } else {
-                  const errorText = await userResponse.text();
-                  console.error(`Failed to fetch user ${member.user_id}: ${userResponse.status} - ${errorText}`);
-                }
-              } catch (err) {
-                console.error(`Error fetching user ${member.user_id}:`, err);
-              }
-              return member;
-            })
-          );
-        } catch (err) {
-          console.error('Error fetching member emails:', err);
-        }
-      } else {
-        // If no service role key, at least set current user's email
-        membersWithEmails = (members || []).map(member => {
-          if (member.user_id === user.id && currentUserEmail) {
-            return {
-              ...member,
-              email: currentUserEmail,
-            };
-          }
-          return member;
-        });
-      }
+      // Enrich members with email addresses using shared utility
+      const userIds = (members || []).map(m => m.user_id);
+      const emailMap = await fetchUserEmails(userIds, user.id, currentUserEmail);
+      
+      const membersWithEmails = (members || []).map(member => ({
+        ...member,
+        email: emailMap.get(member.user_id),
+      }));
 
       const groupWithMembers: GroupWithMembers = {
         ...group,
@@ -204,7 +163,7 @@ Deno.serve(async (req: Request) => {
       // Fetch the created group to return full details
       const { data: group, error: fetchError } = await supabase
         .from('groups')
-        .select('*')
+        .select('id, name, description, created_by, created_at, updated_at')
         .eq('id', groupResult)
         .single();
 
