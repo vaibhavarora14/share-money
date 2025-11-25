@@ -105,15 +105,20 @@ export function formatValue(field: string, value: unknown, currencyCode?: string
   }
   
   if (field === 'amount') {
+    // Ensure currency code is properly formatted
+    const finalCurrencyCode = (currencyCode && typeof currencyCode === 'string' && currencyCode.trim() !== '') 
+      ? currencyCode.toUpperCase() 
+      : 'USD';
+    
     // Type guard for number - safer than type assertion
     if (typeof value === 'number') {
-      return formatCurrency(value, currencyCode || 'USD');
+      return formatCurrency(value, finalCurrencyCode);
     }
     // Try to parse string to number
     if (typeof value === 'string') {
       const num = parseFloat(value);
       if (!isNaN(num)) {
-        return formatCurrency(num, currencyCode || 'USD');
+        return formatCurrency(num, finalCurrencyCode);
       }
     }
     return String(value);
@@ -236,7 +241,10 @@ function getUserName(userId: string, emailMap?: Map<string, string>): string {
  */
 function generateTransactionCreatedDescription(transaction: TransactionSnapshot): string {
   const amount = transaction.amount || 0;
-  const currency = transaction.currency || 'USD';
+  // Ensure currency is properly extracted from JSONB (handle null/undefined/empty string)
+  const currency = (transaction.currency && typeof transaction.currency === 'string' && transaction.currency.trim() !== '') 
+    ? transaction.currency.toUpperCase() 
+    : 'USD';
   const description = transaction.description || 'transaction';
   const descriptionGlimpse = description.length > 30 
     ? description.substring(0, 30) + '...' 
@@ -264,7 +272,10 @@ function generateTransactionUpdatedDescription(
     return 'Updated transaction';
   }
 
-  const currency = transaction?.currency || 'USD';
+  // Ensure currency is properly extracted from JSONB (handle null/undefined/empty string)
+  const currency = (transaction?.currency && typeof transaction.currency === 'string' && transaction.currency.trim() !== '') 
+    ? transaction.currency.toUpperCase() 
+    : 'USD';
   const descriptionGlimpse = transaction?.description 
     ? (transaction.description.length > 25 
         ? transaction.description.substring(0, 25) + '...' 
@@ -302,7 +313,10 @@ function generateTransactionUpdatedDescription(
  */
 function generateTransactionDeletedDescription(transaction: TransactionSnapshot): string {
   const amount = transaction.amount || 0;
-  const currency = transaction.currency || 'USD';
+  // Ensure currency is properly extracted from JSONB (handle null/undefined/empty string)
+  const currency = (transaction.currency && typeof transaction.currency === 'string' && transaction.currency.trim() !== '') 
+    ? transaction.currency.toUpperCase() 
+    : 'USD';
   const description = transaction.description || 'transaction';
   const descriptionGlimpse = description.length > 30 
     ? description.substring(0, 30) + '...' 
@@ -321,7 +335,10 @@ function generateSettlementCreatedDescription(
   emailMap?: Map<string, string>
 ): string {
   const amount = settlement.amount || 0;
-  const currency = settlement.currency || 'USD';
+  // Ensure currency is properly extracted from JSONB (handle null/undefined/empty string)
+  const currency = (settlement.currency && typeof settlement.currency === 'string' && settlement.currency.trim() !== '') 
+    ? settlement.currency.toUpperCase() 
+    : 'USD';
   const fromUserId = settlement.from_user_id;
   const toUserId = settlement.to_user_id;
   const notes = settlement.notes;
@@ -358,7 +375,10 @@ function generateSettlementUpdatedDescription(
   }
   
   const amount = settlement?.amount || 0;
-  const currency = settlement?.currency || 'USD';
+  // Ensure currency is properly extracted from JSONB (handle null/undefined/empty string)
+  const currency = (settlement?.currency && typeof settlement.currency === 'string' && settlement.currency.trim() !== '') 
+    ? settlement.currency.toUpperCase() 
+    : 'USD';
   const fromUserId = settlement?.from_user_id;
   const toUserId = settlement?.to_user_id;
   
@@ -396,7 +416,10 @@ function generateSettlementDeletedDescription(
   emailMap?: Map<string, string>
 ): string {
   const amount = settlement.amount || 0;
-  const currency = settlement.currency || 'USD';
+  // Ensure currency is properly extracted from JSONB (handle null/undefined/empty string)
+  const currency = (settlement.currency && typeof settlement.currency === 'string' && settlement.currency.trim() !== '') 
+    ? settlement.currency.toUpperCase() 
+    : 'USD';
   const fromUserId = settlement.from_user_id;
   const toUserId = settlement.to_user_id;
   
