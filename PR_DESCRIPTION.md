@@ -43,7 +43,6 @@ This PR implements a comprehensive versioning system for the ShareMoney mobile a
 - `.github/workflows/README.md` - Workflow documentation
 - `.github/workflows/validate-workflow.sh` - Validation script
 - `mobile/VERSIONING.md` - User documentation
-- `VERSIONING_PLAN.md` - Technical implementation plan
 
 #### Modified Files
 - `mobile/app.config.js` - Reads from version.json
@@ -85,7 +84,6 @@ This PR implements a comprehensive versioning system for the ShareMoney mobile a
 ### 📚 Documentation
 
 - **User Guide**: `mobile/VERSIONING.md` - How to use versioning
-- **Technical Plan**: `VERSIONING_PLAN.md` - Implementation details
 - **Workflow Docs**: `.github/workflows/README.md` - CI/CD documentation
 
 ### 🎯 Usage Examples
