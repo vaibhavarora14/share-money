@@ -1,4 +1,5 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env.ts';
 
 export interface UserInfo {
   id: string;
@@ -10,12 +11,6 @@ export interface UserInfo {
  * Throws an error if authentication fails
  */
 export async function verifyAuth(request: Request): Promise<{ user: UserInfo; supabase: ReturnType<typeof createClient> }> {
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY');
-
-  if (!supabaseUrl || !supabaseKey) {
-    throw new Error('Missing Supabase credentials');
-  }
 
   // Get authorization header
   const authHeader = request.headers.get('authorization') || request.headers.get('Authorization');
@@ -25,7 +20,7 @@ export async function verifyAuth(request: Request): Promise<{ user: UserInfo; su
   }
 
   // Create Supabase client with auth header
-  const supabase = createClient(supabaseUrl, supabaseKey, {
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: {
       headers: {
         Authorization: authHeader,
