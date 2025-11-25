@@ -374,15 +374,32 @@ function transformHistoryToActivity(
       settlement = history.changes.settlement as SettlementSnapshot;
     }
     
-    // Enrich currency from actual settlement record if snapshot doesn't have it
+    // Enrich currency: prioritize snapshot (historical accuracy), then fallback to current record
     if (settlement && history.settlement_id) {
-      const actualCurrency = currencyMap?.get(history.settlement_id);
-      if (actualCurrency) {
-        settlement.currency = actualCurrency;
-      } else if (!settlement.currency || settlement.currency === null || settlement.currency === '') {
-        // Fallback: default to USD
-        settlement.currency = 'USD';
+      // First, try to get currency from snapshot (preserves historical state)
+      let currency = settlement.currency;
+      
+      // If snapshot doesn't have currency, try changes.settlement
+      if (!currency || currency === null || currency === '') {
+        const changesSettlement = history.changes?.settlement as SettlementSnapshot | undefined;
+        if (changesSettlement?.currency) {
+          currency = changesSettlement.currency;
+        }
       }
+      
+      // Only fallback to current record if snapshot/changes don't have it
+      // This ensures historical accuracy - if currency was changed later, old activities still show old currency
+      if (!currency || currency === null || currency === '') {
+        const currentCurrency = currencyMap?.get(history.settlement_id);
+        if (currentCurrency) {
+          currency = currentCurrency;
+        } else {
+          // Last resort: default to USD
+          currency = 'USD';
+        }
+      }
+      
+      settlement.currency = currency.toUpperCase();
     }
     
     if (settlement) {
@@ -399,21 +416,32 @@ function transformHistoryToActivity(
       transaction = history.changes.transaction as TransactionSnapshot;
     }
     
-    // Enrich currency from actual transaction record if snapshot doesn't have it
+    // Enrich currency: prioritize snapshot (historical accuracy), then fallback to current record
     if (transaction && history.transaction_id) {
-      const actualCurrency = currencyMap?.get(history.transaction_id);
-      if (actualCurrency) {
-        transaction.currency = actualCurrency;
-      } else if (!transaction.currency || transaction.currency === null || transaction.currency === '') {
-        // Fallback: try to get from changes if available
+      // First, try to get currency from snapshot (preserves historical state)
+      let currency = transaction.currency;
+      
+      // If snapshot doesn't have currency, try changes.transaction
+      if (!currency || currency === null || currency === '') {
         const changesTransaction = history.changes?.transaction as TransactionSnapshot | undefined;
         if (changesTransaction?.currency) {
-          transaction.currency = changesTransaction.currency;
-        } else {
-          // Last resort: default to USD
-          transaction.currency = 'USD';
+          currency = changesTransaction.currency;
         }
       }
+      
+      // Only fallback to current record if snapshot/changes don't have it
+      // This ensures historical accuracy - if currency was changed later, old activities still show old currency
+      if (!currency || currency === null || currency === '') {
+        const currentCurrency = currencyMap?.get(history.transaction_id);
+        if (currentCurrency) {
+          currency = currentCurrency;
+        } else {
+          // Last resort: default to USD
+          currency = 'USD';
+        }
+      }
+      
+      transaction.currency = currency.toUpperCase();
     }
     
     if (transaction) {
