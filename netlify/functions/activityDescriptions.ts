@@ -51,10 +51,18 @@ interface HistoryChanges {
   settlement_id?: string;
 }
 
-interface HistorySnapshot {
-  transaction?: TransactionSnapshot;
-  settlement?: SettlementSnapshot;
-}
+/**
+ * Snapshot structure stored in history
+ * 
+ * For 'created' and 'deleted' actions: snapshot is wrapped as { transaction?: TransactionSnapshot, settlement?: SettlementSnapshot }
+ * For 'updated' actions: snapshot IS the TransactionSnapshot or SettlementSnapshot directly (to_jsonb(NEW) from trigger)
+ * 
+ * This is a union type to handle both structures
+ */
+type HistorySnapshot = 
+  | { transaction?: TransactionSnapshot; settlement?: SettlementSnapshot }  // For created/deleted
+  | TransactionSnapshot  // For updated transactions
+  | SettlementSnapshot;   // For updated settlements
 
 interface TransactionHistory {
   id: string;
@@ -67,6 +75,13 @@ interface TransactionHistory {
   changed_at: string;
   changes: HistoryChanges;
   snapshot: HistorySnapshot | null;
+}
+
+interface ActivityItemDetails {
+  action: 'created' | 'updated' | 'deleted';
+  changes?: ChangesDiff;
+  transaction?: TransactionSnapshot;
+  settlement?: SettlementSnapshot;
 }
 
 /**
@@ -287,9 +302,14 @@ function generateTransactionUpdatedDescription(
   }
 
   // Ensure currency is properly extracted from JSONB (handle null/undefined/empty string)
-  const currency = (transaction?.currency && typeof transaction.currency === 'string' && transaction.currency.trim() !== '') 
-    ? transaction.currency.toUpperCase() 
-    : 'USD';
+  // The transaction should already have currency enriched from transformHistoryToActivity
+  let currency = 'USD'; // Default fallback
+  if (transaction?.currency) {
+    const currencyStr = String(transaction.currency).trim();
+    if (currencyStr !== '' && currencyStr !== 'null' && currencyStr !== 'undefined') {
+      currency = currencyStr.toUpperCase();
+    }
+  }
   const descriptionGlimpse = transaction?.description 
     ? (transaction.description.length > 25 
         ? transaction.description.substring(0, 25) + '...' 
@@ -447,27 +467,41 @@ function generateSettlementDeletedDescription(
  * Generates human-readable description for an activity item
  * @param history - Transaction history record from database
  * @param emailMap - Map of user IDs to email addresses for name resolution
+ * @param enrichedDetails - Optional enriched details with currency from currencyMap (takes precedence over history.snapshot)
  * @returns User-friendly description string
  */
 export function generateActivityDescription(
   history: TransactionHistory,
-  emailMap?: Map<string, string>
+  emailMap?: Map<string, string>,
+  enrichedDetails?: ActivityItemDetails
 ): string {
   const action = history.action;
   const changes = history.changes;
   const snapshot = history.snapshot;
   const activityType = history.activity_type || 'transaction';
   
+  // Use enriched details if available (has currency from currencyMap), otherwise fall back to history
+  const useEnriched = enrichedDetails && (
+    (activityType === 'transaction' && enrichedDetails.transaction) ||
+    (activityType === 'settlement' && enrichedDetails.settlement)
+  );
+  
   switch (action) {
     case 'created': {
       if (activityType === 'settlement') {
-        const settlement = snapshot?.settlement || changes?.settlement;
+        // Prefer enriched details (with currency) over raw snapshot
+        const settlement = useEnriched 
+          ? enrichedDetails!.settlement 
+          : (snapshot?.settlement || changes?.settlement);
         if (settlement) {
           return generateSettlementCreatedDescription(settlement, emailMap);
         }
         return 'Created settlement';
       } else {
-        const transaction = snapshot?.transaction || changes?.transaction;
+        // Prefer enriched details (with currency) over raw snapshot
+        const transaction = useEnriched
+          ? enrichedDetails!.transaction
+          : (snapshot?.transaction || changes?.transaction);
         if (transaction) {
           return generateTransactionCreatedDescription(transaction);
         }
@@ -478,24 +512,74 @@ export function generateActivityDescription(
     case 'updated': {
       if (activityType === 'settlement') {
         const diff = changes?.diff || {};
-        const settlement = snapshot?.settlement || changes?.settlement;
+        // Prefer enriched details (with currency) over raw snapshot
+        let settlement: SettlementSnapshot | undefined = undefined;
+        
+        if (useEnriched && enrichedDetails!.settlement) {
+          settlement = enrichedDetails!.settlement;
+        } else {
+          // For updates, snapshot IS the settlement (not snapshot.settlement)
+          // For created/deleted, snapshot.settlement contains the settlement
+          if (snapshot) {
+            if (snapshot.settlement) {
+              settlement = snapshot.settlement;
+            } else if ('id' in snapshot && 'amount' in snapshot) {
+              // For updates, snapshot is the settlement directly
+              settlement = snapshot as unknown as SettlementSnapshot;
+            }
+          }
+          
+          // Fallback to changes.settlement
+          if (!settlement && changes?.settlement) {
+            settlement = changes.settlement;
+          }
+        }
+        
         return generateSettlementUpdatedDescription(settlement, diff, emailMap);
       } else {
         const diff = changes?.diff || {};
-        const transaction = snapshot?.transaction || changes?.transaction;
+        // Prefer enriched details (with currency) over raw snapshot
+        let transaction: TransactionSnapshot | undefined = undefined;
+        
+        if (useEnriched && enrichedDetails!.transaction) {
+          transaction = enrichedDetails!.transaction;
+        } else {
+          // For updates, snapshot IS the transaction (not snapshot.transaction)
+          // For created/deleted, snapshot.transaction contains the transaction
+          if (snapshot) {
+            if (snapshot.transaction) {
+              transaction = snapshot.transaction;
+            } else if ('id' in snapshot && 'amount' in snapshot) {
+              // For updates, snapshot is the transaction directly
+              transaction = snapshot as unknown as TransactionSnapshot;
+            }
+          }
+          
+          // Fallback to changes.transaction
+          if (!transaction && changes?.transaction) {
+            transaction = changes.transaction;
+          }
+        }
+        
         return generateTransactionUpdatedDescription(transaction, diff, emailMap);
       }
     }
 
     case 'deleted': {
       if (activityType === 'settlement') {
-        const settlement = snapshot?.settlement || changes?.settlement;
+        // Prefer enriched details (with currency) over raw snapshot
+        const settlement = useEnriched
+          ? enrichedDetails!.settlement
+          : (snapshot?.settlement || changes?.settlement);
         if (settlement) {
           return generateSettlementDeletedDescription(settlement, emailMap);
         }
         return 'Deleted settlement';
       } else {
-        const transaction = snapshot?.transaction || changes?.transaction;
+        // Prefer enriched details (with currency) over raw snapshot
+        const transaction = useEnriched
+          ? enrichedDetails!.transaction
+          : (snapshot?.transaction || changes?.transaction);
         if (transaction) {
           return generateTransactionDeletedDescription(transaction);
         }
