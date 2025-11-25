@@ -268,6 +268,11 @@ export const handler: Handler = async (event, context) => {
         }
       }
 
+      // Currency is mandatory - validate it's provided
+      if (!settlementData.currency || typeof settlementData.currency !== 'string' || settlementData.currency.trim() === '') {
+        return createErrorResponse(400, 'Currency is required', 'VALIDATION_ERROR');
+      }
+      
       // Create settlement
       const { data: settlement, error } = await supabase
         .from('settlements')
@@ -276,7 +281,7 @@ export const handler: Handler = async (event, context) => {
           from_user_id: settlementData.from_user_id,
           to_user_id: settlementData.to_user_id,
           amount: settlementData.amount,
-          currency: settlementData.currency || 'USD',
+          currency: settlementData.currency.toUpperCase(),
           notes: settlementData.notes || null,
           created_by: currentUserId,
         })
@@ -376,7 +381,14 @@ export const handler: Handler = async (event, context) => {
         updateFields.amount = updateData.amount;
       }
       if (updateData.currency !== undefined) {
-        updateFields.currency = updateData.currency;
+        // Currency is mandatory - validate it's not empty if provided
+        if (updateData.currency === null || updateData.currency === '' || 
+            (typeof updateData.currency === 'string' && updateData.currency.trim() === '')) {
+          return createErrorResponse(400, 'Currency cannot be empty', 'VALIDATION_ERROR');
+        }
+        updateFields.currency = typeof updateData.currency === 'string' 
+          ? updateData.currency.toUpperCase() 
+          : updateData.currency;
       }
       if (updateData.notes !== undefined) {
         updateFields.notes = updateData.notes || null;

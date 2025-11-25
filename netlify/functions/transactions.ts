@@ -89,8 +89,14 @@ function calculateEqualSplits(
 function validateSplitSum(
   splits: Array<{ amount: number }>,
   transactionAmount: number,
-  currencyCode: string = 'USD'
+  currencyCode: string
 ): { valid: boolean; error?: string } {
+  if (!currencyCode || typeof currencyCode !== 'string' || currencyCode.trim() === '') {
+    return {
+      valid: false,
+      error: 'Currency code is required for split validation',
+    };
+  }
   const sum = splits.reduce((acc, split) => acc + split.amount, 0);
   const difference = Math.abs(sum - transactionAmount);
   const tolerance = 0.01; // Allow 1 cent tolerance for rounding
@@ -312,10 +318,12 @@ export const handler: Handler = async (event, context) => {
       }
 
       // Set user_id from authenticated user (RLS will also enforce this)
-      // Ensure currency is provided (default to 'USD' if not specified)
-      const currency = transactionData.currency && typeof transactionData.currency === 'string' && transactionData.currency.trim() !== ''
-        ? transactionData.currency.toUpperCase()
-        : 'USD';
+      // Currency is mandatory - validate it's provided
+      if (!transactionData.currency || typeof transactionData.currency !== 'string' || transactionData.currency.trim() === '') {
+        return createErrorResponse(400, 'Currency is required', 'VALIDATION_ERROR');
+      }
+      
+      const currency = transactionData.currency.toUpperCase();
       
       const { data: transaction, error } = await supabase
         .from('transactions')
@@ -355,7 +363,7 @@ export const handler: Handler = async (event, context) => {
         });
 
         // Validate that splits sum equals transaction amount
-        const splitValidation = validateSplitSum(splits, transaction.amount, transaction.currency || 'USD');
+        const splitValidation = validateSplitSum(splits, transaction.amount, transaction.currency);
         if (!splitValidation.valid) {
           // This should not happen with calculateEqualSplits, but log for debugging
           // Don't fail the transaction as split_among column has the data
@@ -380,7 +388,7 @@ export const handler: Handler = async (event, context) => {
             .eq('transaction_id', transaction.id);
 
           if (!verifyError && createdSplits) {
-            const verifyValidation = validateSplitSum(createdSplits, transaction.amount, transaction.currency || 'USD');
+            const verifyValidation = validateSplitSum(createdSplits, transaction.amount, transaction.currency);
             if (!verifyValidation.valid) {
               // Log but don't fail - data integrity issue but transaction exists
             }
@@ -553,7 +561,16 @@ export const handler: Handler = async (event, context) => {
       if (transactionData.date !== undefined) updateData.date = transactionData.date;
       if (transactionData.type !== undefined) updateData.type = transactionData.type;
       if (transactionData.category !== undefined) updateData.category = transactionData.category || undefined;
-      if (transactionData.currency !== undefined) updateData.currency = transactionData.currency;
+      if (transactionData.currency !== undefined) {
+        // Currency is mandatory - validate it's not empty if provided
+        if (transactionData.currency === null || transactionData.currency === '' || 
+            (typeof transactionData.currency === 'string' && transactionData.currency.trim() === '')) {
+          return createErrorResponse(400, 'Currency cannot be empty', 'VALIDATION_ERROR');
+        }
+        updateData.currency = typeof transactionData.currency === 'string' 
+          ? transactionData.currency.toUpperCase() 
+          : transactionData.currency;
+      }
       if (transactionData.paid_by !== undefined) updateData.paid_by = transactionData.paid_by || undefined;
       if (transactionData.split_among !== undefined) {
         // Remove duplicates before storing
@@ -606,10 +623,16 @@ export const handler: Handler = async (event, context) => {
           });
 
           // Validate that splits sum equals transaction amount
-          const validation = validateSplitSum(splits, totalAmount, transaction.currency || transactionData.currency || 'USD');
-          if (!validation.valid) {
-            console.error('Split validation failed:', validation.error);
-            // Log error but don't fail - transaction is already updated
+          // Currency is mandatory - use updated currency or existing currency
+          const currencyForValidation = transaction.currency || transactionData.currency;
+          if (!currencyForValidation) {
+            console.error('Missing currency for split validation in transaction update');
+          } else {
+            const validation = validateSplitSum(splits, totalAmount, currencyForValidation);
+            if (!validation.valid) {
+              console.error('Split validation failed:', validation.error);
+              // Log error but don't fail - transaction is already updated
+            }
           }
 
           const { error: splitsError } = await supabase
@@ -645,10 +668,16 @@ export const handler: Handler = async (event, context) => {
           });
 
           // Validate that splits sum equals transaction amount
-          const validation = validateSplitSum(newSplits, newAmount, transaction.currency || transactionData.currency || 'USD');
-          if (!validation.valid) {
-            console.error('Split validation failed:', validation.error);
-            // Log error but continue
+          // Currency is mandatory - use updated currency or existing currency
+          const currencyForValidation = transaction.currency || transactionData.currency;
+          if (!currencyForValidation) {
+            console.error('Missing currency for split validation in transaction update');
+          } else {
+            const validation = validateSplitSum(newSplits, newAmount, currencyForValidation);
+            if (!validation.valid) {
+              console.error('Split validation failed:', validation.error);
+              // Log error but continue
+            }
           }
 
           // Delete existing splits and recreate with new amounts
@@ -678,9 +707,15 @@ export const handler: Handler = async (event, context) => {
                 .eq('transaction_id', transactionData.id);
 
               if (!verifyError && updatedSplits) {
-                const verifyValidation = validateSplitSum(updatedSplits, newAmount, transaction.currency || transactionData.currency || 'USD');
-                if (!verifyValidation.valid) {
-                  console.error('Split verification failed after amount update:', verifyValidation.error);
+                // Currency is mandatory - use updated currency or existing currency
+                const currencyForValidation = transaction.currency || transactionData.currency;
+                if (!currencyForValidation) {
+                  console.error('Missing currency for split verification in transaction update');
+                } else {
+                  const verifyValidation = validateSplitSum(updatedSplits, newAmount, currencyForValidation);
+                  if (!verifyValidation.valid) {
+                    console.error('Split verification failed after amount update:', verifyValidation.error);
+                  }
                 }
               }
             }

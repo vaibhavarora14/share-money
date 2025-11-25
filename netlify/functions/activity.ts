@@ -11,11 +11,6 @@ import { ACTIVITY_FEED_CONFIG } from './constants';
 export type { ChangesDiff, HistoryChanges, HistorySnapshot, SettlementSnapshot, TransactionHistory, TransactionSnapshot };
 
 /**
- * Default currency code
- */
-const DEFAULT_CURRENCY = 'USD';
-
-/**
  * Type guard to check if snapshot is a wrapped structure (for created/deleted)
  */
 function isWrappedSnapshot(snapshot: HistorySnapshot | null): snapshot is { transaction?: TransactionSnapshot; settlement?: SettlementSnapshot } {
@@ -102,14 +97,15 @@ function extractCurrency(value: unknown): string | undefined {
 
 /**
  * Enriches currency for a transaction/settlement snapshot
- * Priority: snapshot currency → changes currency → current record currency → default
+ * Priority: snapshot currency → changes currency → current record currency
+ * Returns undefined if currency cannot be determined (currency is mandatory)
  */
 function enrichCurrency<T extends { currency?: string }>(
   snapshot: T | undefined,
   changesSnapshot: T | undefined,
   recordId: string | number | null | undefined,
   currencyMap?: Map<string | number, string>
-): string {
+): string | undefined {
   // Try snapshot currency first (preserves historical accuracy)
   let currency = snapshot ? extractCurrency(snapshot.currency) : undefined;
   
@@ -123,8 +119,8 @@ function enrichCurrency<T extends { currency?: string }>(
     currency = currencyMap.get(recordId);
   }
   
-  // Default fallback
-  return (currency || DEFAULT_CURRENCY).toUpperCase();
+  // Return uppercase currency or undefined if not found (currency is mandatory)
+  return currency ? currency.toUpperCase() : undefined;
 }
 
 /**
@@ -491,12 +487,20 @@ function transformHistoryToActivity(
     
     if (settlement) {
       // Enrich currency: prioritize snapshot (historical accuracy), then fallback to current record
-      settlement.currency = enrichCurrency(
+      const enrichedCurrency = enrichCurrency(
         settlement,
         changesSettlement,
         history.settlement_id,
         currencyMap
       );
+      
+      // Currency is mandatory - if not found, log error but continue (should not happen in practice)
+      if (!enrichedCurrency) {
+        console.error('Missing currency for settlement:', history.settlement_id || 'unknown');
+      } else {
+        settlement.currency = enrichedCurrency;
+      }
+      
       details.settlement = settlement;
     }
   } else {
@@ -505,12 +509,20 @@ function transformHistoryToActivity(
     
     if (transaction) {
       // Enrich currency: prioritize snapshot (historical accuracy), then fallback to current record
-      transaction.currency = enrichCurrency(
+      const enrichedCurrency = enrichCurrency(
         transaction,
         changesTransaction,
         history.transaction_id,
         currencyMap
       );
+      
+      // Currency is mandatory - if not found, log error but continue (should not happen in practice)
+      if (!enrichedCurrency) {
+        console.error('Missing currency for transaction:', history.transaction_id || 'unknown');
+      } else {
+        transaction.currency = enrichedCurrency;
+      }
+      
       details.transaction = transaction;
     }
   }
