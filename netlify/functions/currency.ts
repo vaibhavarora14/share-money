@@ -22,15 +22,35 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
  * @param amount - Amount to format (number or string)
  * @param currencyCode - Currency code (e.g., 'USD', 'INR'). Required, no default.
  * @returns Formatted currency string (e.g., "$50.00" or "₹50.00")
- * @throws Error if currencyCode is not provided or invalid
+ *         Returns formatted amount without symbol if currencyCode is invalid (safe fallback)
  */
 export function formatCurrency(amount: number | string, currencyCode: string): string {
+  // Safe fallback: if currency is invalid, return formatted amount without symbol
   if (!currencyCode || typeof currencyCode !== 'string' || currencyCode.trim() === '') {
-    throw new Error('Currency code is required');
+    const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+    if (isNaN(num)) {
+      return '0.00';
+    }
+    return Math.abs(num).toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
   }
   
   const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-  const normalizedCode = currencyCode.toUpperCase();
+  const normalizedCode = currencyCode.trim().toUpperCase();
+  
+  // Validate ISO 4217 format (3 uppercase letters)
+  if (!/^[A-Z]{3}$/.test(normalizedCode)) {
+    // Invalid format - return formatted amount without symbol as fallback
+    if (isNaN(num)) {
+      return '0.00';
+    }
+    return Math.abs(num).toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  }
   
   if (isNaN(num)) {
     const symbol = CURRENCY_SYMBOLS[normalizedCode] || normalizedCode;

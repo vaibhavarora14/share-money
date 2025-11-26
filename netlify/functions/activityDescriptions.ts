@@ -187,23 +187,20 @@ export function formatValue(field: string, value: unknown, currencyCode?: string
   }
   
   if (field === 'amount') {
-    // Currency is mandatory - validate before formatting
+    // Currency is mandatory - formatCurrency now handles missing currency safely
+    // But log if currency is missing for debugging
     if (!currencyCode || typeof currencyCode !== 'string' || currencyCode.trim() === '') {
-      console.error('Missing currency code for amount field');
-      // Return raw amount if currency missing (should not happen)
-      if (typeof value === 'number') {
-        return String(value);
-      }
-      if (typeof value === 'string') {
-        const num = parseFloat(value);
-        return isNaN(num) ? String(value) : String(num);
-      }
-      return String(value);
+      console.error('Missing currency code for amount field', {
+        field,
+        value,
+        valueType: typeof value,
+      });
     }
     
-    const finalCurrencyCode = currencyCode.toUpperCase();
+    const finalCurrencyCode = currencyCode || '';
     
     // Type guard for number - safer than type assertion
+    // formatCurrency now returns safe fallback if currency is invalid
     if (typeof value === 'number') {
       return formatCurrency(value, finalCurrencyCode);
     }
@@ -337,17 +334,22 @@ function generateTransactionCreatedDescription(transaction: TransactionSnapshot)
   // Currency is mandatory - extract and validate
   const currency = transaction.currency && typeof transaction.currency === 'string' && transaction.currency.trim() !== ''
     ? transaction.currency.toUpperCase()
-    : null;
+    : '';
   
+  // Log if currency is missing for debugging (formatCurrency handles it safely)
   if (!currency) {
-    console.error('Missing currency in transaction snapshot:', transaction.id);
-    return `Amount: ${amount} - ${transaction.description || 'transaction'}`;
+    console.error('Missing currency in transaction snapshot', {
+      transaction_id: transaction.id,
+      has_currency_field: 'currency' in transaction,
+      currency_value: transaction.currency,
+    });
   }
   
   const description = transaction.description || 'transaction';
   const descriptionGlimpse = description.length > 30 
     ? description.substring(0, 30) + '...' 
     : description;
+  // formatCurrency now returns safe fallback if currency is invalid
   return `${formatCurrency(amount, currency)} - ${descriptionGlimpse}`;
 }
 
@@ -374,10 +376,16 @@ function generateTransactionUpdatedDescription(
   // Currency is mandatory - extract and validate
   const currency = transaction?.currency && typeof transaction.currency === 'string' && transaction.currency.trim() !== ''
     ? transaction.currency.toUpperCase()
-    : null;
+    : '';
   
+  // Log if currency is missing for debugging (formatCurrency handles it safely)
   if (!currency) {
-    console.error('Missing currency in transaction snapshot for update');
+    console.error('Missing currency in transaction snapshot for update', {
+      transaction_id: transaction?.id,
+      has_transaction: !!transaction,
+      has_currency_field: transaction && 'currency' in transaction,
+      currency_value: transaction?.currency,
+    });
   }
   const descriptionGlimpse = transaction?.description 
     ? (transaction.description.length > 25 
@@ -396,14 +404,10 @@ function generateTransactionUpdatedDescription(
       const newSplits = Array.isArray(newVal) ? newVal : [];
       fieldChanges.push(formatSplitChanges(oldSplits, newSplits, emailMap));
     } else {
-      // Pass currency code for amount fields (currency is mandatory)
+      // Pass currency code for amount fields (formatCurrency handles missing currency safely)
       if (field === 'amount') {
-        if (currency) {
-          fieldChanges.push(`${fieldDisplayName}: ${formatValue(field, oldVal, currency)} → ${formatValue(field, newVal, currency)}`);
-        } else {
-          // Fallback if currency missing (should not happen)
-          fieldChanges.push(`${fieldDisplayName}: ${formatValue(field, oldVal)} → ${formatValue(field, newVal)}`);
-        }
+        // formatCurrency now returns safe fallback if currency is invalid
+        fieldChanges.push(`${fieldDisplayName}: ${formatValue(field, oldVal, currency)} → ${formatValue(field, newVal, currency)}`);
       } else {
         fieldChanges.push(`${fieldDisplayName}: ${formatValue(field, oldVal)} → ${formatValue(field, newVal)}`);
       }
@@ -427,21 +431,22 @@ function generateTransactionDeletedDescription(transaction: TransactionSnapshot)
   // Currency is mandatory - extract and validate
   const currency = transaction.currency && typeof transaction.currency === 'string' && transaction.currency.trim() !== ''
     ? transaction.currency.toUpperCase()
-    : null;
+    : '';
   
+  // Log if currency is missing for debugging (formatCurrency handles it safely)
   if (!currency) {
-    console.error('Missing currency in transaction snapshot:', transaction.id);
-    const description = transaction.description || 'transaction';
-    const descriptionGlimpse = description.length > 30 
-      ? description.substring(0, 30) + '...' 
-      : description;
-    return `Deleted: Amount: ${amount} - ${descriptionGlimpse}`;
+    console.error('Missing currency in transaction snapshot', {
+      transaction_id: transaction.id,
+      has_currency_field: 'currency' in transaction,
+      currency_value: transaction.currency,
+    });
   }
   
   const description = transaction.description || 'transaction';
   const descriptionGlimpse = description.length > 30 
     ? description.substring(0, 30) + '...' 
     : description;
+  // formatCurrency now returns safe fallback if currency is invalid
   return `Deleted: ${formatCurrency(amount, currency)} - ${descriptionGlimpse}`;
 }
 
@@ -459,13 +464,15 @@ function generateSettlementCreatedDescription(
   // Currency is mandatory - extract and validate
   const currency = settlement.currency && typeof settlement.currency === 'string' && settlement.currency.trim() !== ''
     ? settlement.currency.toUpperCase()
-    : null;
+    : '';
   
+  // Log if currency is missing for debugging (formatCurrency handles it safely)
   if (!currency) {
-    console.error('Missing currency in settlement snapshot:', settlement.id);
-    const fromName = getUserName(settlement.from_user_id, emailMap);
-    const toName = getUserName(settlement.to_user_id, emailMap);
-    return `${fromName} paid ${toName} Amount: ${amount}`;
+    console.error('Missing currency in settlement snapshot', {
+      settlement_id: settlement.id,
+      has_currency_field: 'currency' in settlement,
+      currency_value: settlement.currency,
+    });
   }
   const fromUserId = settlement.from_user_id;
   const toUserId = settlement.to_user_id;
@@ -506,10 +513,16 @@ function generateSettlementUpdatedDescription(
   // Currency is mandatory - extract and validate
   const currency = settlement?.currency && typeof settlement.currency === 'string' && settlement.currency.trim() !== ''
     ? settlement.currency.toUpperCase()
-    : null;
+    : '';
   
+  // Log if currency is missing for debugging (formatCurrency handles it safely)
   if (!currency) {
-    console.error('Missing currency in settlement snapshot for update');
+    console.error('Missing currency in settlement snapshot for update', {
+      settlement_id: settlement?.id,
+      has_settlement: !!settlement,
+      has_currency_field: settlement && 'currency' in settlement,
+      currency_value: settlement?.currency,
+    });
   }
   const fromUserId = settlement?.from_user_id;
   const toUserId = settlement?.to_user_id;
@@ -523,13 +536,9 @@ function generateSettlementUpdatedDescription(
     const fieldDisplayName = formatFieldName(field);
     
     if (field === 'amount') {
-      // Pass currency code for amount field (currency is mandatory)
-      if (currency) {
-        fieldChanges.push(`Amount: ${formatValue(field, oldVal, currency)} → ${formatValue(field, newVal, currency)}`);
-      } else {
-        // Fallback if currency missing (should not happen)
-        fieldChanges.push(`Amount: ${formatValue(field, oldVal)} → ${formatValue(field, newVal)}`);
-      }
+      // Pass currency code for amount field (formatCurrency handles missing currency safely)
+      // formatCurrency now returns safe fallback if currency is invalid
+      fieldChanges.push(`Amount: ${formatValue(field, oldVal, currency)} → ${formatValue(field, newVal, currency)}`);
     } else if (field === 'notes') {
       const oldNotes = oldVal || 'none';
       const newNotes = newVal || 'none';
@@ -539,11 +548,8 @@ function generateSettlementUpdatedDescription(
     }
   });
   
-  if (currency) {
-    return `${fromName} paid ${toName} ${formatCurrency(amount, currency)} - ${fieldChanges.join(', ')}`;
-  } else {
-    return `${fromName} paid ${toName} Amount: ${amount} - ${fieldChanges.join(', ')}`;
-  }
+  // formatCurrency now returns safe fallback if currency is invalid
+  return `${fromName} paid ${toName} ${formatCurrency(amount, currency)} - ${fieldChanges.join(', ')}`;
 }
 
 /**
@@ -560,13 +566,15 @@ function generateSettlementDeletedDescription(
   // Currency is mandatory - extract and validate
   const currency = settlement.currency && typeof settlement.currency === 'string' && settlement.currency.trim() !== ''
     ? settlement.currency.toUpperCase()
-    : null;
+    : '';
   
+  // Log if currency is missing for debugging (formatCurrency handles it safely)
   if (!currency) {
-    console.error('Missing currency in settlement snapshot:', settlement.id);
-    const fromName = getUserName(settlement.from_user_id, emailMap);
-    const toName = getUserName(settlement.to_user_id, emailMap);
-    return `Deleted settlement: ${fromName} paid ${toName} Amount: ${amount}`;
+    console.error('Missing currency in settlement snapshot', {
+      settlement_id: settlement.id,
+      has_currency_field: 'currency' in settlement,
+      currency_value: settlement.currency,
+    });
   }
   const fromUserId = settlement.from_user_id;
   const toUserId = settlement.to_user_id;
@@ -574,6 +582,7 @@ function generateSettlementDeletedDescription(
   const fromName = getUserName(fromUserId, emailMap);
   const toName = getUserName(toUserId, emailMap);
   
+  // formatCurrency now returns safe fallback if currency is invalid
   return `Deleted settlement: ${fromName} paid ${toName} ${formatCurrency(amount, currency)}`;
 }
 

@@ -494,9 +494,16 @@ function transformHistoryToActivity(
         currencyMap
       );
       
-      // Currency is mandatory - if not found, log error but continue (should not happen in practice)
+      // Currency is mandatory - if not found, log error with context but continue (should not happen in practice)
       if (!enrichedCurrency) {
-        console.error('Missing currency for settlement:', history.settlement_id || 'unknown');
+        console.error('Missing currency for settlement', {
+          settlement_id: history.settlement_id,
+          group_id: history.group_id,
+          action: history.action,
+          has_snapshot: !!history.snapshot,
+          has_changes: !!history.changes,
+          snapshot_has_currency: !!(history.snapshot && typeof history.snapshot === 'object' && 'currency' in history.snapshot),
+        });
       } else {
         settlement.currency = enrichedCurrency;
       }
@@ -516,9 +523,16 @@ function transformHistoryToActivity(
         currencyMap
       );
       
-      // Currency is mandatory - if not found, log error but continue (should not happen in practice)
+      // Currency is mandatory - if not found, log error with context but continue (should not happen in practice)
       if (!enrichedCurrency) {
-        console.error('Missing currency for transaction:', history.transaction_id || 'unknown');
+        console.error('Missing currency for transaction', {
+          transaction_id: history.transaction_id,
+          group_id: history.group_id,
+          action: history.action,
+          has_snapshot: !!history.snapshot,
+          has_changes: !!history.changes,
+          snapshot_has_currency: !!(history.snapshot && typeof history.snapshot === 'object' && 'currency' in history.snapshot),
+        });
       } else {
         transaction.currency = enrichedCurrency;
       }

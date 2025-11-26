@@ -3,7 +3,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { AuthResult, verifyAuth } from '../utils/auth';
 import { createErrorResponse, handleError } from '../utils/error-handler';
 import { createEmptyResponse, createSuccessResponse } from '../utils/response';
-import { isValidUUID, validateBodySize, validateSettlementData } from '../utils/validation';
+import { isValidUUID, validateBodySize, validateSettlementData, validateCurrency } from '../utils/validation';
 
 interface Settlement {
   id: string;
@@ -268,9 +268,10 @@ export const handler: Handler = async (event, context) => {
         }
       }
 
-      // Currency is mandatory - validate it's provided
-      if (!settlementData.currency || typeof settlementData.currency !== 'string' || settlementData.currency.trim() === '') {
-        return createErrorResponse(400, 'Currency is required', 'VALIDATION_ERROR');
+      // Currency is mandatory - validate it's provided and in correct format
+      const currencyValidation = validateCurrency(settlementData.currency);
+      if (!currencyValidation.valid) {
+        return createErrorResponse(400, currencyValidation.error || 'Currency is required', 'VALIDATION_ERROR');
       }
       
       // Create settlement
@@ -281,7 +282,7 @@ export const handler: Handler = async (event, context) => {
           from_user_id: settlementData.from_user_id,
           to_user_id: settlementData.to_user_id,
           amount: settlementData.amount,
-          currency: settlementData.currency.toUpperCase(),
+          currency: currencyValidation.normalized!,
           notes: settlementData.notes || null,
           created_by: currentUserId,
         })
@@ -381,14 +382,12 @@ export const handler: Handler = async (event, context) => {
         updateFields.amount = updateData.amount;
       }
       if (updateData.currency !== undefined) {
-        // Currency is mandatory - validate it's not empty if provided
-        if (updateData.currency === null || updateData.currency === '' || 
-            (typeof updateData.currency === 'string' && updateData.currency.trim() === '')) {
-          return createErrorResponse(400, 'Currency cannot be empty', 'VALIDATION_ERROR');
+        // Currency is mandatory - validate format if provided
+        const currencyValidation = validateCurrency(updateData.currency);
+        if (!currencyValidation.valid) {
+          return createErrorResponse(400, currencyValidation.error || 'Currency is required', 'VALIDATION_ERROR');
         }
-        updateFields.currency = typeof updateData.currency === 'string' 
-          ? updateData.currency.toUpperCase() 
-          : updateData.currency;
+        updateFields.currency = currencyValidation.normalized!;
       }
       if (updateData.notes !== undefined) {
         updateFields.notes = updateData.notes || null;

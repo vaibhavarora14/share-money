@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { AuthResult, verifyAuth } from '../utils/auth';
 import { createErrorResponse, handleError } from '../utils/error-handler';
 import { createEmptyResponse, createSuccessResponse } from '../utils/response';
-import { isValidUUID, validateBodySize, validateTransactionData } from '../utils/validation';
+import { isValidUUID, validateBodySize, validateTransactionData, validateCurrency } from '../utils/validation';
 import { formatCurrency } from './currency';
 
 interface Transaction {
@@ -318,12 +318,13 @@ export const handler: Handler = async (event, context) => {
       }
 
       // Set user_id from authenticated user (RLS will also enforce this)
-      // Currency is mandatory - validate it's provided
-      if (!transactionData.currency || typeof transactionData.currency !== 'string' || transactionData.currency.trim() === '') {
-        return createErrorResponse(400, 'Currency is required', 'VALIDATION_ERROR');
+      // Currency is mandatory - validate it's provided and in correct format
+      const currencyValidation = validateCurrency(transactionData.currency);
+      if (!currencyValidation.valid) {
+        return createErrorResponse(400, currencyValidation.error || 'Currency is required', 'VALIDATION_ERROR');
       }
       
-      const currency = transactionData.currency.toUpperCase();
+      const currency = currencyValidation.normalized!;
       
       const { data: transaction, error } = await supabase
         .from('transactions')
@@ -562,14 +563,12 @@ export const handler: Handler = async (event, context) => {
       if (transactionData.type !== undefined) updateData.type = transactionData.type;
       if (transactionData.category !== undefined) updateData.category = transactionData.category || undefined;
       if (transactionData.currency !== undefined) {
-        // Currency is mandatory - validate it's not empty if provided
-        if (transactionData.currency === null || transactionData.currency === '' || 
-            (typeof transactionData.currency === 'string' && transactionData.currency.trim() === '')) {
-          return createErrorResponse(400, 'Currency cannot be empty', 'VALIDATION_ERROR');
+        // Currency is mandatory - validate format if provided
+        const currencyValidation = validateCurrency(transactionData.currency);
+        if (!currencyValidation.valid) {
+          return createErrorResponse(400, currencyValidation.error || 'Currency is required', 'VALIDATION_ERROR');
         }
-        updateData.currency = typeof transactionData.currency === 'string' 
-          ? transactionData.currency.toUpperCase() 
-          : transactionData.currency;
+        updateData.currency = currencyValidation.normalized!;
       }
       if (transactionData.paid_by !== undefined) updateData.paid_by = transactionData.paid_by || undefined;
       if (transactionData.split_among !== undefined) {
@@ -626,7 +625,11 @@ export const handler: Handler = async (event, context) => {
           // Currency is mandatory - use updated currency or existing currency
           const currencyForValidation = transaction.currency || transactionData.currency;
           if (!currencyForValidation) {
-            console.error('Missing currency for split validation in transaction update');
+            console.error('Missing currency for split validation in transaction update', {
+              transaction_id: transaction.id,
+              has_transaction_currency: !!transaction.currency,
+              has_transactionData_currency: !!transactionData.currency,
+            });
           } else {
             const validation = validateSplitSum(splits, totalAmount, currencyForValidation);
             if (!validation.valid) {
@@ -671,7 +674,12 @@ export const handler: Handler = async (event, context) => {
           // Currency is mandatory - use updated currency or existing currency
           const currencyForValidation = transaction.currency || transactionData.currency;
           if (!currencyForValidation) {
-            console.error('Missing currency for split validation in transaction update');
+            console.error('Missing currency for split validation in transaction update', {
+              transaction_id: transaction.id,
+              has_transaction_currency: !!transaction.currency,
+              has_transactionData_currency: !!transactionData.currency,
+              amount_changed: transactionData.amount !== undefined,
+            });
           } else {
             const validation = validateSplitSum(newSplits, newAmount, currencyForValidation);
             if (!validation.valid) {
@@ -710,7 +718,12 @@ export const handler: Handler = async (event, context) => {
                 // Currency is mandatory - use updated currency or existing currency
                 const currencyForValidation = transaction.currency || transactionData.currency;
                 if (!currencyForValidation) {
-                  console.error('Missing currency for split verification in transaction update');
+                  console.error('Missing currency for split verification in transaction update', {
+                    transaction_id: transaction.id,
+                    has_transaction_currency: !!transaction.currency,
+                    has_transactionData_currency: !!transactionData.currency,
+                    new_amount: newAmount,
+                  });
                 } else {
                   const verifyValidation = validateSplitSum(updatedSplits, newAmount, currencyForValidation);
                   if (!verifyValidation.valid) {

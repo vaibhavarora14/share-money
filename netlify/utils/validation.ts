@@ -169,3 +169,35 @@ export function validateBodySize(body: string | null, maxSize: number = 1024 * 1
 
   return { valid: true };
 }
+
+/**
+ * Currency validation result
+ */
+export interface CurrencyValidationResult {
+  valid: boolean;
+  error?: string;
+  normalized?: string;
+}
+
+/**
+ * Validates currency code format (ISO 4217: 3-letter uppercase code)
+ * @param currency - Currency code to validate
+ * @returns Validation result with normalized currency code if valid
+ */
+export function validateCurrency(currency: unknown): CurrencyValidationResult {
+  if (!currency || typeof currency !== 'string' || currency.trim() === '') {
+    return { valid: false, error: 'Currency is required' };
+  }
+  
+  const normalized = currency.trim().toUpperCase();
+  
+  // Validate ISO 4217 format: exactly 3 uppercase letters
+  if (!/^[A-Z]{3}$/.test(normalized)) {
+    return { 
+      valid: false, 
+      error: 'Currency must be a valid 3-letter ISO code (e.g., USD, INR, EUR)' 
+    };
+  }
+  
+  return { valid: true, normalized };
+}
