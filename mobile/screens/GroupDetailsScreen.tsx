@@ -739,6 +739,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               onSettleUp={handleSettleUp}
               showOverallBalances={true}
               defaultCurrency={getDefaultCurrency()}
+              groupMembers={group.members || []} // Pass group members for email lookup fallback
             />
             {(balancesData?.overall_balances || []).filter((b) =>
               balanceModalType === "owe" ? b.amount < 0 : b.amount > 0
