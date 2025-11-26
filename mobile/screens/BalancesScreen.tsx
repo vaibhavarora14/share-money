@@ -46,16 +46,16 @@ export const BalancesScreen: React.FC<{
   youAreOwed.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
 
   const getUserDisplayName = (balance: Balance): string => {
-    // Use email from balance (enriched by API), extract username part
+    // Use email from balance (enriched by API)
     if (balance.email) {
-      return balance.email.split('@')[0];
+      return balance.email;
     }
     // Fallback to truncated user_id
     return `User ${balance.user_id.substring(0, 8)}...`;
   };
 
   const getInitials = (name: string) => {
-    // Handle email format: extract username part if it contains @
+    // Extract username from email for initials (part before @)
     const displayName = name.includes('@') ? name.split('@')[0] : name;
     // Get first 2 characters, handling edge cases
     if (displayName.length >= 2) {
