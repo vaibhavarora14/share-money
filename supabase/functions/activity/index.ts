@@ -1,11 +1,11 @@
-import { verifyAuth } from '../_shared/auth.ts';
-import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
-import { createSuccessResponse, createEmptyResponse } from '../_shared/response.ts';
-import { isValidUUID } from '../_shared/validation.ts';
-import { ACTIVITY_FEED_CONFIG } from '../_shared/constants.ts';
 import { generateActivityDescription } from '../_shared/activityDescriptions.ts';
+import { verifyAuth } from '../_shared/auth.ts';
+import { ACTIVITY_FEED_CONFIG } from '../_shared/constants.ts';
+import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { log } from '../_shared/logger.ts';
+import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
 import { fetchUserEmails } from '../_shared/user-email.ts';
+import { isValidUUID } from '../_shared/validation.ts';
 
 /**
  * Activity Edge Function
@@ -131,9 +131,8 @@ function collectUserIdsFromHistory(historyRecords: TransactionHistory[]): Set<st
   return userIds;
 }
 
-async function enrichActivitiesWithEmails(
+async function buildEmailMapForHistory(
   historyRecords: TransactionHistory[],
-  activities: ActivityItem[],
   currentUserId: string,
   currentUserEmail: string | null
 ): Promise<Map<string, string>> {
@@ -158,15 +157,6 @@ async function enrichActivitiesWithEmails(
 
   fetchedEmailMap.forEach((email, userId) => {
     emailMap.set(userId, email);
-  });
-
-  activities.forEach(a => {
-    const email = emailMap.get(a.changed_by.id);
-    if (email) {
-      a.changed_by.email = email;
-    } else {
-      a.changed_by.email = 'Unknown User';
-    }
   });
   
   return emailMap;
@@ -214,7 +204,7 @@ function transformHistoryToActivity(
     group_id: history.group_id,
     changed_by: {
       id: history.changed_by,
-      email: '',
+      email: emailMap?.get(history.changed_by) || 'Unknown User',
     },
     changed_at: history.changed_at,
     description: generateActivityDescription(history, emailMap),
@@ -280,15 +270,14 @@ Deno.serve(async (req: Request) => {
       return handleError(historyError, 'fetching transaction history');
     }
 
-    const activities: ActivityItem[] = (historyRecords || []).map((h: TransactionHistory) => 
-      transformHistoryToActivity(h)
-    );
-
-    const emailMap = await enrichActivitiesWithEmails(
+    const emailMap = await buildEmailMapForHistory(
       historyRecords || [],
-      activities,
       user.id,
       user.email || null
+    );
+
+    const activities: ActivityItem[] = (historyRecords || []).map((h: TransactionHistory) => 
+      transformHistoryToActivity(h, emailMap)
     );
 
     const countQuery = supabase
