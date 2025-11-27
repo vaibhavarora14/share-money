@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { AuthResult, verifyAuth } from '../utils/auth';
 import { createErrorResponse, handleError } from '../utils/error-handler';
 import { createEmptyResponse, createSuccessResponse } from '../utils/response';
-import { isValidUUID, validateBodySize, validateTransactionData } from '../utils/validation';
+import { isValidUUID, validateBodySize, validateTransactionData, validateCurrency } from '../utils/validation';
 import { formatCurrency } from './currency';
 
 interface Transaction {
@@ -89,8 +89,14 @@ function calculateEqualSplits(
 function validateSplitSum(
   splits: Array<{ amount: number }>,
   transactionAmount: number,
-  currencyCode: string = 'USD'
+  currencyCode: string
 ): { valid: boolean; error?: string } {
+  if (!currencyCode || typeof currencyCode !== 'string' || currencyCode.trim() === '') {
+    return {
+      valid: false,
+      error: 'Currency code is required for split validation',
+    };
+  }
   const sum = splits.reduce((acc, split) => acc + split.amount, 0);
   const difference = Math.abs(sum - transactionAmount);
   const tolerance = 0.01; // Allow 1 cent tolerance for rounding
@@ -268,20 +274,18 @@ export const handler: Handler = async (event, context) => {
       }
 
       // Validate paid_by and split_among for group expenses
-      // Note: Only actual group members (from group_members table) can be included.
-      // Pending invitations are excluded because they haven't accepted yet.
+      // Note: Both group members and invited users (pending invitations) can be included.
       if (transactionData.group_id && transactionData.type === 'expense') {
         if (transactionData.paid_by) {
-          // Verify that paid_by is a member of the group (not just invited)
-          const { data: paidByMember, error: paidByError } = await supabase
-            .from('group_members')
-            .select('id')
-            .eq('group_id', transactionData.group_id)
-            .eq('user_id', transactionData.paid_by)
-            .single();
+          // Verify that paid_by is a member of the group OR has a pending invitation
+          const { data: paidByCheck, error: paidByError } = await supabase
+            .rpc('is_user_member_or_invited', {
+              check_group_id: transactionData.group_id,
+              check_user_id: transactionData.paid_by
+            });
 
-          if (paidByError || !paidByMember) {
-            return createErrorResponse(400, 'paid_by must be a member of the group', 'VALIDATION_ERROR');
+          if (paidByError || !paidByCheck) {
+            return createErrorResponse(400, 'paid_by must be a member of the group or have a pending invitation', 'VALIDATION_ERROR');
           }
         }
 
@@ -289,30 +293,39 @@ export const handler: Handler = async (event, context) => {
           // Remove duplicates before validation
           const uniqueSplitAmong = [...new Set(transactionData.split_among)];
           
-          // Verify that all split_among users are actual members of the group
-          // (not just pending invitations - they must have accepted and joined)
+          // Verify that all split_among users are members OR have pending invitations
           if (uniqueSplitAmong.length > 0) {
-            const { data: splitMembers, error: splitError } = await supabase
-              .from('group_members')
-              .select('user_id')
-              .eq('group_id', transactionData.group_id)
-              .in('user_id', uniqueSplitAmong);
+            // Check each user individually using the helper function
+            const validationPromises = uniqueSplitAmong.map(async (userId) => {
+              const { data: isValid, error } = await supabase
+                .rpc('is_user_member_or_invited', {
+                  check_group_id: transactionData.group_id,
+                  check_user_id: userId
+                });
+              return { userId, isValid: isValid && !error };
+            });
 
-            if (splitError) {
-              return handleError(splitError, 'validating split_among members');
-            }
-
-            const validUserIds = splitMembers?.map(m => m.user_id) || [];
-            const invalidUserIds = uniqueSplitAmong.filter(id => !validUserIds.includes(id));
+            const validationResults = await Promise.all(validationPromises);
+            const invalidUserIds = validationResults
+              .filter(result => !result.isValid)
+              .map(result => result.userId);
             
             if (invalidUserIds.length > 0) {
-              return createErrorResponse(400, 'All split_among users must be members of the group', 'VALIDATION_ERROR');
+              return createErrorResponse(400, 'All split_among users must be members of the group or have pending invitations', 'VALIDATION_ERROR');
             }
           }
         }
       }
 
       // Set user_id from authenticated user (RLS will also enforce this)
+      // Currency is mandatory - validate it's provided and in correct format
+      const currencyValidation = validateCurrency(transactionData.currency);
+      if (!currencyValidation.valid) {
+        return createErrorResponse(400, currencyValidation.error || 'Currency is required', 'VALIDATION_ERROR');
+      }
+      
+      const currency = currencyValidation.normalized!;
+      
       const { data: transaction, error } = await supabase
         .from('transactions')
         .insert({
@@ -323,7 +336,7 @@ export const handler: Handler = async (event, context) => {
           type: transactionData.type,
           category: transactionData.category || null,
           group_id: transactionData.group_id || null,
-          currency: transactionData.currency,
+          currency: currency,
           paid_by: transactionData.paid_by || null,
           // Supabase automatically handles JSONB conversion - no need to stringify
           split_among: transactionData.split_among && Array.isArray(transactionData.split_among)
@@ -351,7 +364,7 @@ export const handler: Handler = async (event, context) => {
         });
 
         // Validate that splits sum equals transaction amount
-        const splitValidation = validateSplitSum(splits, transaction.amount, transaction.currency || 'USD');
+        const splitValidation = validateSplitSum(splits, transaction.amount, transaction.currency);
         if (!splitValidation.valid) {
           // This should not happen with calculateEqualSplits, but log for debugging
           // Don't fail the transaction as split_among column has the data
@@ -376,7 +389,7 @@ export const handler: Handler = async (event, context) => {
             .eq('transaction_id', transaction.id);
 
           if (!verifyError && createdSplits) {
-            const verifyValidation = validateSplitSum(createdSplits, transaction.amount, transaction.currency || 'USD');
+            const verifyValidation = validateSplitSum(createdSplits, transaction.amount, transaction.currency);
             if (!verifyValidation.valid) {
               // Log but don't fail - data integrity issue but transaction exists
             }
@@ -460,11 +473,12 @@ export const handler: Handler = async (event, context) => {
         return createErrorResponse(404, 'Transaction not found', 'NOT_FOUND');
       }
 
-      // Verify user can update: either owns it OR is a group member
-      let canUpdate = existingTransaction.user_id === user.id;
+      // Verify user can update: any group member can update any transaction in their group
+      // This allows all group members to modify any transaction, regardless of who created it
+      let canUpdate = false;
       
-      if (!canUpdate && existingTransaction.group_id) {
-        // Check if user is a group member
+      if (existingTransaction.group_id) {
+        // Check if user is a group member - if so, they can update any transaction in the group
         const { data: groupMember, error: memberError } = await supabase
           .from('group_members')
           .select('user_id')
@@ -473,6 +487,11 @@ export const handler: Handler = async (event, context) => {
           .single();
         
         canUpdate = !memberError && !!groupMember;
+      }
+      
+      // Also allow users to update their own transactions (even if not in a group)
+      if (!canUpdate && existingTransaction.user_id === user.id) {
+        canUpdate = true;
       }
 
       if (!canUpdate) {
@@ -488,22 +507,20 @@ export const handler: Handler = async (event, context) => {
         : existingTransaction.type;
 
       // Validate paid_by and split_among for group expenses
-      // Note: Only actual group members (from group_members table) can be included.
-      // Pending invitations are excluded because they haven't accepted yet.
+      // Note: Both group members and invited users (pending invitations) can be included.
       if (groupId && transactionType === 'expense') {
         // Validate paid_by if provided
         if (transactionData.paid_by !== undefined) {
           if (transactionData.paid_by) {
-            // Verify that paid_by is a member of the group (not just invited)
-            const { data: paidByMember, error: paidByError } = await supabase
-              .from('group_members')
-              .select('id')
-              .eq('group_id', groupId)
-              .eq('user_id', transactionData.paid_by)
-              .single();
+            // Verify that paid_by is a member of the group OR has a pending invitation
+            const { data: paidByCheck, error: paidByError } = await supabase
+              .rpc('is_user_member_or_invited', {
+                check_group_id: groupId,
+                check_user_id: transactionData.paid_by
+              });
 
-            if (paidByError || !paidByMember) {
-              return createErrorResponse(400, 'paid_by must be a member of the group', 'VALIDATION_ERROR');
+            if (paidByError || !paidByCheck) {
+              return createErrorResponse(400, 'paid_by must be a member of the group or have a pending invitation', 'VALIDATION_ERROR');
             }
           }
         }
@@ -515,23 +532,23 @@ export const handler: Handler = async (event, context) => {
             const uniqueSplitAmong = [...new Set(transactionData.split_among)];
             
             if (uniqueSplitAmong.length > 0) {
-              // Verify that all split_among users are actual members of the group
-              // (not just pending invitations - they must have accepted and joined)
-              const { data: splitMembers, error: splitError } = await supabase
-                .from('group_members')
-                .select('user_id')
-                .eq('group_id', groupId)
-                .in('user_id', uniqueSplitAmong);
+              // Verify that all split_among users are members OR have pending invitations
+              const validationPromises = uniqueSplitAmong.map(async (userId) => {
+                const { data: isValid, error } = await supabase
+                  .rpc('is_user_member_or_invited', {
+                    check_group_id: groupId,
+                    check_user_id: userId
+                  });
+                return { userId, isValid: isValid && !error };
+              });
 
-              if (splitError) {
-                return handleError(splitError, 'validating split_among members');
-              }
-
-              const validUserIds = splitMembers?.map(m => m.user_id) || [];
-              const invalidUserIds = uniqueSplitAmong.filter(id => !validUserIds.includes(id));
+              const validationResults = await Promise.all(validationPromises);
+              const invalidUserIds = validationResults
+                .filter(result => !result.isValid)
+                .map(result => result.userId);
               
               if (invalidUserIds.length > 0) {
-                return createErrorResponse(400, 'All split_among users must be members of the group', 'VALIDATION_ERROR');
+                return createErrorResponse(400, 'All split_among users must be members of the group or have pending invitations', 'VALIDATION_ERROR');
               }
             }
           }
@@ -545,7 +562,14 @@ export const handler: Handler = async (event, context) => {
       if (transactionData.date !== undefined) updateData.date = transactionData.date;
       if (transactionData.type !== undefined) updateData.type = transactionData.type;
       if (transactionData.category !== undefined) updateData.category = transactionData.category || undefined;
-      if (transactionData.currency !== undefined) updateData.currency = transactionData.currency;
+      if (transactionData.currency !== undefined) {
+        // Currency is mandatory - validate format if provided
+        const currencyValidation = validateCurrency(transactionData.currency);
+        if (!currencyValidation.valid) {
+          return createErrorResponse(400, currencyValidation.error || 'Currency is required', 'VALIDATION_ERROR');
+        }
+        updateData.currency = currencyValidation.normalized!;
+      }
       if (transactionData.paid_by !== undefined) updateData.paid_by = transactionData.paid_by || undefined;
       if (transactionData.split_among !== undefined) {
         // Remove duplicates before storing
@@ -598,10 +622,20 @@ export const handler: Handler = async (event, context) => {
           });
 
           // Validate that splits sum equals transaction amount
-          const validation = validateSplitSum(splits, totalAmount, transaction.currency || transactionData.currency || 'USD');
-          if (!validation.valid) {
-            console.error('Split validation failed:', validation.error);
-            // Log error but don't fail - transaction is already updated
+          // Currency is mandatory - use updated currency or existing currency
+          const currencyForValidation = transaction.currency || transactionData.currency;
+          if (!currencyForValidation) {
+            console.error('Missing currency for split validation in transaction update', {
+              transaction_id: transaction.id,
+              has_transaction_currency: !!transaction.currency,
+              has_transactionData_currency: !!transactionData.currency,
+            });
+          } else {
+            const validation = validateSplitSum(splits, totalAmount, currencyForValidation);
+            if (!validation.valid) {
+              console.error('Split validation failed:', validation.error);
+              // Log error but don't fail - transaction is already updated
+            }
           }
 
           const { error: splitsError } = await supabase
@@ -637,10 +671,21 @@ export const handler: Handler = async (event, context) => {
           });
 
           // Validate that splits sum equals transaction amount
-          const validation = validateSplitSum(newSplits, newAmount, transaction.currency || transactionData.currency || 'USD');
-          if (!validation.valid) {
-            console.error('Split validation failed:', validation.error);
-            // Log error but continue
+          // Currency is mandatory - use updated currency or existing currency
+          const currencyForValidation = transaction.currency || transactionData.currency;
+          if (!currencyForValidation) {
+            console.error('Missing currency for split validation in transaction update', {
+              transaction_id: transaction.id,
+              has_transaction_currency: !!transaction.currency,
+              has_transactionData_currency: !!transactionData.currency,
+              amount_changed: transactionData.amount !== undefined,
+            });
+          } else {
+            const validation = validateSplitSum(newSplits, newAmount, currencyForValidation);
+            if (!validation.valid) {
+              console.error('Split validation failed:', validation.error);
+              // Log error but continue
+            }
           }
 
           // Delete existing splits and recreate with new amounts
@@ -670,9 +715,20 @@ export const handler: Handler = async (event, context) => {
                 .eq('transaction_id', transactionData.id);
 
               if (!verifyError && updatedSplits) {
-                const verifyValidation = validateSplitSum(updatedSplits, newAmount, transaction.currency || transactionData.currency || 'USD');
-                if (!verifyValidation.valid) {
-                  console.error('Split verification failed after amount update:', verifyValidation.error);
+                // Currency is mandatory - use updated currency or existing currency
+                const currencyForValidation = transaction.currency || transactionData.currency;
+                if (!currencyForValidation) {
+                  console.error('Missing currency for split verification in transaction update', {
+                    transaction_id: transaction.id,
+                    has_transaction_currency: !!transaction.currency,
+                    has_transactionData_currency: !!transactionData.currency,
+                    new_amount: newAmount,
+                  });
+                } else {
+                  const verifyValidation = validateSplitSum(updatedSplits, newAmount, currencyForValidation);
+                  if (!verifyValidation.valid) {
+                    console.error('Split verification failed after amount update:', verifyValidation.error);
+                  }
                 }
               }
             }
@@ -742,11 +798,12 @@ export const handler: Handler = async (event, context) => {
         return createErrorResponse(404, 'Transaction not found', 'NOT_FOUND');
       }
 
-      // Verify user can delete: either owns it OR is a group member
-      let canDelete = transaction.user_id === user.id;
+      // Verify user can delete: any group member can delete any transaction in their group
+      // This allows all group members to delete any transaction, regardless of who created it
+      let canDelete = false;
       
-      if (!canDelete && transaction.group_id) {
-        // Check if user is a group member
+      if (transaction.group_id) {
+        // Check if user is a group member - if so, they can delete any transaction in the group
         const { data: groupMember, error: memberError } = await supabase
           .from('group_members')
           .select('user_id')
@@ -755,6 +812,11 @@ export const handler: Handler = async (event, context) => {
           .single();
         
         canDelete = !memberError && !!groupMember;
+      }
+      
+      // Also allow users to delete their own transactions (even if not in a group)
+      if (!canDelete && transaction.user_id === user.id) {
+        canDelete = true;
       }
 
       if (!canDelete) {

@@ -3,7 +3,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { AuthResult, verifyAuth } from '../utils/auth';
 import { createErrorResponse, handleError } from '../utils/error-handler';
 import { createEmptyResponse, createSuccessResponse } from '../utils/response';
-import { isValidUUID, validateBodySize, validateSettlementData } from '../utils/validation';
+import { isValidUUID, validateBodySize, validateSettlementData, validateCurrency } from '../utils/validation';
 
 interface Settlement {
   id: string;
@@ -244,18 +244,36 @@ export const handler: Handler = async (event, context) => {
         return createErrorResponse(403, 'Forbidden: Not a member of this group', 'PERMISSION_DENIED');
       }
 
-      // Verify to_user_id is also a member of the group
-      const { data: toUserMembership } = await supabase
-        .from('group_members')
-        .select('group_id')
-        .eq('group_id', settlementData.group_id)
-        .eq('user_id', settlementData.to_user_id)
-        .single();
+      // Verify to_user_id is also a member of the group OR has a pending invitation
+      const { data: toUserCheck, error: toUserError } = await supabase
+        .rpc('is_user_member_or_invited', {
+          check_group_id: settlementData.group_id,
+          check_user_id: settlementData.to_user_id
+        });
 
-      if (!toUserMembership) {
-        return createErrorResponse(400, 'to_user_id is not a member of this group', 'VALIDATION_ERROR');
+      if (toUserError || !toUserCheck) {
+        return createErrorResponse(400, 'to_user_id must be a member of this group or have a pending invitation', 'VALIDATION_ERROR');
       }
 
+      // Also verify from_user_id is a member or invited (if not the current user)
+      if (settlementData.from_user_id !== currentUserId) {
+        const { data: fromUserCheck, error: fromUserError } = await supabase
+          .rpc('is_user_member_or_invited', {
+            check_group_id: settlementData.group_id,
+            check_user_id: settlementData.from_user_id
+          });
+
+        if (fromUserError || !fromUserCheck) {
+          return createErrorResponse(400, 'from_user_id must be a member of this group or have a pending invitation', 'VALIDATION_ERROR');
+        }
+      }
+
+      // Currency is mandatory - validate it's provided and in correct format
+      const currencyValidation = validateCurrency(settlementData.currency);
+      if (!currencyValidation.valid) {
+        return createErrorResponse(400, currencyValidation.error || 'Currency is required', 'VALIDATION_ERROR');
+      }
+      
       // Create settlement
       const { data: settlement, error } = await supabase
         .from('settlements')
@@ -264,7 +282,7 @@ export const handler: Handler = async (event, context) => {
           from_user_id: settlementData.from_user_id,
           to_user_id: settlementData.to_user_id,
           amount: settlementData.amount,
-          currency: settlementData.currency || 'USD',
+          currency: currencyValidation.normalized!,
           notes: settlementData.notes || null,
           created_by: currentUserId,
         })
@@ -317,10 +335,10 @@ export const handler: Handler = async (event, context) => {
         return createErrorResponse(400, 'Amount must be greater than 0', 'VALIDATION_ERROR');
       }
 
-      // Fetch the settlement to verify ownership
+      // Fetch the settlement to get group_id
       const { data: existingSettlement, error: fetchError } = await supabase
         .from('settlements')
-        .select('id, created_by')
+        .select('id, group_id, created_by')
         .eq('id', updateData.id)
         .single();
 
@@ -328,9 +346,29 @@ export const handler: Handler = async (event, context) => {
         return createErrorResponse(404, 'Settlement not found', 'NOT_FOUND');
       }
 
-      // Only the creator can update the settlement
-      if (existingSettlement.created_by !== currentUserId) {
-        return createErrorResponse(403, 'Forbidden: You can only update settlements you created', 'PERMISSION_DENIED');
+      // Verify user can update: any group member can update any settlement in their group
+      // This allows all group members to modify any settlement, regardless of who created it
+      let canUpdate = false;
+      
+      if (existingSettlement.group_id) {
+        // Check if user is a group member - if so, they can update any settlement in the group
+        const { data: groupMember, error: memberError } = await supabase
+          .from('group_members')
+          .select('user_id')
+          .eq('group_id', existingSettlement.group_id)
+          .eq('user_id', currentUserId)
+          .single();
+        
+        canUpdate = !memberError && !!groupMember;
+      }
+      
+      // Also allow users to update settlements they created (even if not in a group)
+      if (!canUpdate && existingSettlement.created_by === currentUserId) {
+        canUpdate = true;
+      }
+
+      if (!canUpdate) {
+        return createErrorResponse(403, 'Forbidden: You can only update settlements you created or settlements in groups you belong to', 'PERMISSION_DENIED');
       }
 
       // Build update object (only include fields that are provided)
@@ -344,7 +382,12 @@ export const handler: Handler = async (event, context) => {
         updateFields.amount = updateData.amount;
       }
       if (updateData.currency !== undefined) {
-        updateFields.currency = updateData.currency;
+        // Currency is mandatory - validate format if provided
+        const currencyValidation = validateCurrency(updateData.currency);
+        if (!currencyValidation.valid) {
+          return createErrorResponse(400, currencyValidation.error || 'Currency is required', 'VALIDATION_ERROR');
+        }
+        updateFields.currency = currencyValidation.normalized!;
       }
       if (updateData.notes !== undefined) {
         updateFields.notes = updateData.notes || null;
@@ -390,10 +433,10 @@ export const handler: Handler = async (event, context) => {
         return createErrorResponse(400, 'Invalid settlement id format. Expected UUID.', 'VALIDATION_ERROR');
       }
 
-      // Fetch the settlement to verify ownership
+      // Fetch the settlement to get group_id
       const { data: existingSettlement, error: fetchError } = await supabase
         .from('settlements')
-        .select('id, created_by')
+        .select('id, group_id, created_by')
         .eq('id', settlementId)
         .single();
 
@@ -401,9 +444,29 @@ export const handler: Handler = async (event, context) => {
         return createErrorResponse(404, 'Settlement not found', 'NOT_FOUND');
       }
 
-      // Only the creator can delete the settlement
-      if (existingSettlement.created_by !== currentUserId) {
-        return createErrorResponse(403, 'Forbidden: You can only delete settlements you created', 'PERMISSION_DENIED');
+      // Verify user can delete: any group member can delete any settlement in their group
+      // This allows all group members to delete any settlement, regardless of who created it
+      let canDelete = false;
+      
+      if (existingSettlement.group_id) {
+        // Check if user is a group member - if so, they can delete any settlement in the group
+        const { data: groupMember, error: memberError } = await supabase
+          .from('group_members')
+          .select('user_id')
+          .eq('group_id', existingSettlement.group_id)
+          .eq('user_id', currentUserId)
+          .single();
+        
+        canDelete = !memberError && !!groupMember;
+      }
+      
+      // Also allow users to delete settlements they created (even if not in a group)
+      if (!canDelete && existingSettlement.created_by === currentUserId) {
+        canDelete = true;
+      }
+
+      if (!canDelete) {
+        return createErrorResponse(403, 'Forbidden: You can only delete settlements you created or settlements in groups you belong to', 'PERMISSION_DENIED');
       }
 
       // Delete settlement
