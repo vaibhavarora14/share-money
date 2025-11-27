@@ -6,8 +6,6 @@ import {
   Button,
   FAB,
   Menu,
-  Modal,
-  Portal,
   SegmentedButtons,
   Surface,
   Text,
@@ -15,7 +13,6 @@ import {
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ActivityFeed } from "../components/ActivityFeed";
-import { BalancesSection } from "../components/BalancesSection";
 import { GroupDashboard } from "../components/GroupDashboard";
 import { InvitationsList } from "../components/InvitationsList";
 import { MembersList } from "../components/MembersList";
@@ -49,6 +46,7 @@ import {
 } from "../types";
 import { formatCurrency, getDefaultCurrency } from "../utils/currency";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
+import { GroupStatsMode } from "./GroupStatsScreen";
 import { SettlementFormScreen } from "./SettlementFormScreen";
 
 interface GroupDetailsScreenProps {
@@ -62,6 +60,7 @@ interface GroupDetailsScreenProps {
   onEditTransaction: (transaction: Transaction) => void;
   refreshTrigger?: number; // When this changes, refresh invitations
   groupRefreshTrigger?: number; // When this changes, refresh group data
+  onStatsPress?: (mode: GroupStatsMode) => void;
 }
 
 export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
@@ -75,6 +74,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   onEditTransaction,
   refreshTrigger,
   groupRefreshTrigger,
+  onStatsPress,
 }) => {
   const [leaving, setLeaving] = useState<boolean>(false);
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
@@ -88,9 +88,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [listMode, setListMode] = useState<"transactions" | "activity">(
     "transactions"
   );
-  const [balanceModalType, setBalanceModalType] = useState<
-    "none" | "owe" | "owed"
-  >("none");
   // Fetch data with hooks
   const {
     data: groupData,
@@ -441,6 +438,12 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     );
   };
 
+  const handleStatNavigation = (mode: GroupStatsMode) => {
+    if (onStatsPress) {
+      onStatsPress(mode);
+    }
+  };
+
   if (groupLoading && !group.members) {
     return (
       <View
@@ -628,12 +631,10 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               currentUserId={session?.user?.id}
               loading={balancesLoading || txLoading}
               defaultCurrency={getDefaultCurrency()}
-              onOwePress={() => {
-                setBalanceModalType("owe");
-              }}
-              onOwedPress={() => {
-                setBalanceModalType("owed");
-              }}
+              onOwePress={() => handleStatNavigation("i-owe")}
+              onOwedPress={() => handleStatNavigation("im-owed")}
+              onMyCostsPress={() => handleStatNavigation("my-costs")}
+              onTotalCostsPress={() => handleStatNavigation("total-costs")}
             />
 
             <View
@@ -693,70 +694,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         />
       )}
 
-      {/* Balances Modal - placed at root level to prevent duplication */}
-      <Portal>
-        <Modal
-          visible={balanceModalType !== "none"}
-          onDismiss={() => {
-            setBalanceModalType("none");
-          }}
-          contentContainerStyle={{
-            backgroundColor: theme.colors.background,
-            margin: 20,
-            borderRadius: 8,
-            padding: 16,
-            maxHeight: "80%",
-          }}
-        >
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: 16,
-            }}
-          >
-            <Text variant="titleLarge" style={{ fontWeight: "bold" }}>
-              {balanceModalType === "owe"
-                ? "People you owe"
-                : "People who owe you"}
-            </Text>
-            <Button onPress={() => setBalanceModalType("none")}>Close</Button>
-          </View>
-
-          <ScrollView>
-            <BalancesSection
-              overallBalances={(balancesData?.overall_balances || []).filter(
-                (b) =>
-                  balanceModalType === "owe" ? b.amount < 0 : b.amount > 0
-              )}
-              groupBalances={[]} // Hide group breakdown to keep it focused
-              currentUserId={session?.user?.id}
-              loading={balancesLoading}
-              onSettleUp={handleSettleUp}
-              showOverallBalances={true}
-              defaultCurrency={getDefaultCurrency()}
-              groupMembers={group.members || []} // Pass group members for email lookup fallback
-            />
-            {(balancesData?.overall_balances || []).filter((b) =>
-              balanceModalType === "owe" ? b.amount < 0 : b.amount > 0
-            ).length === 0 && (
-              <Text
-                style={{
-                  textAlign: "center",
-                  marginTop: 20,
-                  color: theme.colors.onSurfaceVariant,
-                }}
-              >
-                {balanceModalType === "owe"
-                  ? "You don't owe anyone."
-                  : "No one owes you."}
-              </Text>
-            )}
-          </ScrollView>
-        </Modal>
-      </Portal>
-
+      {/* Settlement form modal */}
       <SettlementFormScreen
         visible={showSettlementForm}
         balance={settlingBalance}
@@ -775,7 +713,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             await handleSettlementSave({
               ...data,
               group_id: group.id,
-              from_user_id: session?.user?.id || "",
             });
           }
         }}
