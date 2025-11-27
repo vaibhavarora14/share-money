@@ -117,7 +117,7 @@ export async function fetchWithAuth(
       } else if (API_URL.includes("10.0.2.") && !API_URL.includes("10.0.2.2")) {
         userMessage = `Cannot connect to server. For Android emulator, use exactly 10.0.2.2 (found: ${API_URL.match(/10\.0\.2\.\d+/)?.[0] || 'unknown'})`;
       } else {
-        userMessage = "Cannot connect to server. Please check:\n- Server is running on port 8888\n- Correct API URL in mobile/.env (use 10.0.2.2 for Android emulator)\n- Network connection";
+        userMessage = "Cannot connect to server. Please check:\n- Supabase is running (supabase start)\n- Edge Functions server is running (npm run dev:server)\n- Correct API URL in mobile/.env (use 10.0.2.2:54321 for Android emulator)\n- Network connection";
       }
     } else if (errorMessage.includes("timeout") || errorName === "TimeoutError") {
       userMessage = "Request timed out. The server may be slow or unreachable.";

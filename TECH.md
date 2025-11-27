@@ -34,7 +34,7 @@ ShareMoney/
 This project uses **npm workspaces** for monorepo management. Install all dependencies from the root:
 
 ```bash
-# Install all dependencies (root, mobile, and netlify)
+# Install all dependencies (root and mobile workspaces)
 npm install
 ```
 
@@ -386,7 +386,7 @@ The workflow (`.github/workflows/deploy-edge-functions.yml`) automatically:
 ### Environment Variables
 
 - **Expo requirement**: All mobile env vars must use `EXPO_PUBLIC_` prefix
-- **Netlify**: Loads from root `.env` automatically in dev
+- **Supabase Edge Functions**: Environment variables are set in Supabase Dashboard > Edge Functions > Settings
 - **Mobile**: Loads from `mobile/.env` (Expo SDK 49+ native support)
 
 ## Debugging
