@@ -3,13 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "workspaces": [
-    "mobile",
-    "netlify"
+    "mobile"
   ],
   "scripts": {
     "bootstrap": "npm install --workspaces --include-workspace-root",
-    "dev:mobile": "npm run start --workspace=mobile",
-    "dev:server": "npm run dev --workspace=netlify"
+    "dev:mobile": "npm run start --workspace=mobile"
   },
   "devDependencies": {
     "imagemin": "^9.0.1",

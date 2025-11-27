@@ -122,7 +122,7 @@ export async function fetchWithAuth(
     } else if (errorMessage.includes("timeout") || errorName === "TimeoutError") {
       userMessage = "Request timed out. The server may be slow or unreachable.";
     } else if (errorMessage.includes("Failed to connect") || errorMessage.includes("ECONNREFUSED")) {
-      userMessage = "Connection refused. Is the Netlify server running on port 8888?";
+      userMessage = "Connection refused. Is the server running?";
     }
 
     throw new Error(userMessage);
