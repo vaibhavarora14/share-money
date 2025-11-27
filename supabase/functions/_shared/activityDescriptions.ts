@@ -53,6 +53,37 @@ interface HistorySnapshot {
   settlement?: SettlementSnapshot;
 }
 
+function normalizeCurrency(value: unknown): string | undefined {
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return value.trim().toUpperCase();
+  }
+  return undefined;
+}
+
+function resolveCurrencyCode(
+  snapshot?: TransactionSnapshot | SettlementSnapshot,
+  diff?: ChangesDiff,
+  fallback: string = 'USD'
+): string {
+  const diffCurrency = diff?.currency as { old?: unknown; new?: unknown } | undefined;
+  const newCurrency = normalizeCurrency(diffCurrency?.new);
+  if (newCurrency) {
+    return newCurrency;
+  }
+
+  const snapshotCurrency = normalizeCurrency(snapshot?.currency);
+  if (snapshotCurrency) {
+    return snapshotCurrency;
+  }
+
+  const oldCurrency = normalizeCurrency(diffCurrency?.old);
+  if (oldCurrency) {
+    return oldCurrency;
+  }
+
+  return fallback;
+}
+
 interface TransactionHistory {
   id: string;
   transaction_id: number | null;
@@ -220,7 +251,7 @@ function generateTransactionUpdatedDescription(
     return 'Updated transaction';
   }
 
-  const currency = transaction?.currency || 'USD';
+  const currency = resolveCurrencyCode(transaction, diff);
   const descriptionGlimpse = transaction?.description 
     ? (transaction.description.length > 25 
         ? transaction.description.substring(0, 25) + '...' 
@@ -295,7 +326,7 @@ function generateSettlementUpdatedDescription(
   }
   
   const amount = settlement?.amount || 0;
-  const currency = settlement?.currency || 'USD';
+  const currency = resolveCurrencyCode(settlement, diff);
   const fromUserId = settlement?.from_user_id;
   const toUserId = settlement?.to_user_id;
   
@@ -336,6 +367,37 @@ function generateSettlementDeletedDescription(
   return `Deleted settlement: ${fromName} paid ${toName} ${formatCurrency(amount, currency)}`;
 }
 
+function extractTransactionFromSnapshot(
+  snapshot: HistorySnapshot | null,
+  changes: HistoryChanges | undefined,
+  activityType: 'transaction' | 'settlement'
+): TransactionSnapshot | SettlementSnapshot | undefined {
+  if (!snapshot) {
+    return changes?.transaction || changes?.settlement;
+  }
+
+  // Check if snapshot has nested structure
+  if (activityType === 'settlement') {
+    if ((snapshot as any).settlement) {
+      return (snapshot as any).settlement;
+    }
+    // Check if snapshot itself is a settlement (flat structure)
+    if ('from_user_id' in snapshot && 'to_user_id' in snapshot) {
+      return snapshot as unknown as SettlementSnapshot;
+    }
+  } else {
+    if ((snapshot as any).transaction) {
+      return (snapshot as any).transaction;
+    }
+    // Check if snapshot itself is a transaction (flat structure)
+    if ('amount' in snapshot && 'currency' in snapshot && 'group_id' in snapshot) {
+      return snapshot as unknown as TransactionSnapshot;
+    }
+  }
+
+  return changes?.transaction || changes?.settlement;
+}
+
 export function generateActivityDescription(
   history: TransactionHistory,
   emailMap?: Map<string, string>
@@ -348,13 +410,13 @@ export function generateActivityDescription(
   switch (action) {
     case 'created': {
       if (activityType === 'settlement') {
-        const settlement = snapshot?.settlement || changes?.settlement;
+        const settlement = extractTransactionFromSnapshot(snapshot, changes, 'settlement') as SettlementSnapshot | undefined;
         if (settlement) {
           return generateSettlementCreatedDescription(settlement, emailMap);
         }
         return 'Created settlement';
       } else {
-        const transaction = snapshot?.transaction || changes?.transaction;
+        const transaction = extractTransactionFromSnapshot(snapshot, changes, 'transaction') as TransactionSnapshot | undefined;
         if (transaction) {
           return generateTransactionCreatedDescription(transaction);
         }
@@ -365,24 +427,24 @@ export function generateActivityDescription(
     case 'updated': {
       if (activityType === 'settlement') {
         const diff = changes?.diff || {};
-        const settlement = snapshot?.settlement || changes?.settlement;
+        const settlement = extractTransactionFromSnapshot(snapshot, changes, 'settlement') as SettlementSnapshot | undefined;
         return generateSettlementUpdatedDescription(settlement, diff, emailMap);
       } else {
         const diff = changes?.diff || {};
-        const transaction = snapshot?.transaction || changes?.transaction;
+        const transaction = extractTransactionFromSnapshot(snapshot, changes, 'transaction') as TransactionSnapshot | undefined;
         return generateTransactionUpdatedDescription(transaction, diff, emailMap);
       }
     }
 
     case 'deleted': {
       if (activityType === 'settlement') {
-        const settlement = snapshot?.settlement || changes?.settlement;
+        const settlement = extractTransactionFromSnapshot(snapshot, changes, 'settlement') as SettlementSnapshot | undefined;
         if (settlement) {
           return generateSettlementDeletedDescription(settlement, emailMap);
         }
         return 'Deleted settlement';
       } else {
-        const transaction = snapshot?.transaction || changes?.transaction;
+        const transaction = extractTransactionFromSnapshot(snapshot, changes, 'transaction') as TransactionSnapshot | undefined;
         if (transaction) {
           return generateTransactionDeletedDescription(transaction);
         }
