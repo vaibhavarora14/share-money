@@ -162,12 +162,40 @@ async function buildEmailMapForHistory(
   return emailMap;
 }
 
+function extractSnapshot(
+  history: TransactionHistory
+): { transaction?: TransactionSnapshot; settlement?: SettlementSnapshot } {
+  const snapshot = history.snapshot;
+  if (!snapshot) {
+    return {};
+  }
+
+  if (history.activity_type === 'settlement') {
+    if ((snapshot as any).settlement) {
+      return { settlement: (snapshot as any).settlement as SettlementSnapshot };
+    }
+    if ('from_user_id' in snapshot && 'to_user_id' in snapshot) {
+      return { settlement: snapshot as unknown as SettlementSnapshot };
+    }
+    return {};
+  }
+
+  if ((snapshot as any).transaction) {
+    return { transaction: (snapshot as any).transaction as TransactionSnapshot };
+  }
+
+  if ('amount' in snapshot && 'currency' in snapshot && 'group_id' in snapshot) {
+    return { transaction: snapshot as unknown as TransactionSnapshot };
+  }
+
+  return {};
+}
+
 function transformHistoryToActivity(
   history: TransactionHistory,
   emailMap?: Map<string, string>
 ): ActivityItem {
   const activityType = history.activity_type || 'transaction';
-  
   const typeMap: Record<string, ActivityItem['type']> = {
     'created': activityType === 'settlement' ? 'settlement_created' : 'transaction_created',
     'updated': activityType === 'settlement' ? 'settlement_updated' : 'transaction_updated',
@@ -182,15 +210,17 @@ function transformHistoryToActivity(
     details.changes = history.changes.diff;
   }
 
+  const snapshot = extractSnapshot(history);
+
   if (activityType === 'settlement') {
-    if (history.snapshot?.settlement) {
-      details.settlement = history.snapshot.settlement;
+    if (snapshot.settlement) {
+      details.settlement = snapshot.settlement;
     } else if (history.changes?.settlement) {
       details.settlement = history.changes.settlement;
     }
   } else {
-    if (history.snapshot?.transaction) {
-      details.transaction = history.snapshot.transaction;
+    if (snapshot.transaction) {
+      details.transaction = snapshot.transaction;
     } else if (history.changes?.transaction) {
       details.transaction = history.changes.transaction;
     }

@@ -1,14 +1,14 @@
-
 import React, { useMemo } from "react";
 import { View } from "react-native";
 import {
-    ActivityIndicator,
-    Avatar,
-    Button,
-    Divider,
-    Surface,
-    Text,
-    useTheme
+  ActivityIndicator,
+  Avatar,
+  Button,
+  Divider,
+  Surface,
+  Text,
+  TouchableRipple,
+  useTheme,
 } from "react-native-paper";
 import { Balance, GroupBalance } from "../types";
 import { formatCurrency } from "../utils/currency";
@@ -42,11 +42,11 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
     // Clone arrays before sorting to avoid mutating React Query cache
     const owe = [...overallBalances.filter((b) => b.amount < 0)];
     const owed = [...overallBalances.filter((b) => b.amount > 0)];
-    
+
     // Sort by absolute amount (largest first)
     owe.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
     owed.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
-    
+
     return { youOwe: owe, youAreOwed: owed };
   }, [overallBalances]);
 
@@ -55,28 +55,28 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
     if (balance.email) {
       return balance.email;
     }
-    
+
     // Fallback to groupMembers lookup
-    const member = groupMembers.find(m => m.user_id === balance.user_id);
+    const member = groupMembers.find((m) => m.user_id === balance.user_id);
     if (member?.email) {
       return member.email;
     }
-    
+
     // Last resort: truncated user_id
     return `User ${balance.user_id.substring(0, 8)}...`;
   };
 
   const getInitials = (name: string) => {
     // Extract username from email for initials (part before @)
-    const displayName = name.includes('@') ? name.split('@')[0] : name;
+    const displayName = name.includes("@") ? name.split("@")[0] : name;
     // Get first 2 characters, handling edge cases
     if (displayName.length >= 2) {
       return displayName.substring(0, 2).toUpperCase();
     }
     // If name is too short, use first char + first char
-    return displayName.length > 0 
+    return displayName.length > 0
       ? (displayName[0] + displayName[0]).toUpperCase()
-      : '??';
+      : "??";
   };
 
   return (
@@ -100,49 +100,65 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                   >
                     You are owed
                   </Text>
-                  <Surface elevation={0} style={{ backgroundColor: theme.colors.surface, borderRadius: 12, borderWidth: 1, borderColor: theme.colors.outlineVariant }}>
+                  <Surface
+                    elevation={0}
+                    style={{
+                      backgroundColor: theme.colors.surface,
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: theme.colors.outlineVariant,
+                    }}
+                  >
                     {youAreOwed.map((balance, index) => (
                       <React.Fragment key={balance.user_id}>
-                        <View style={styles.balanceContent}>
-                          <Avatar.Text 
-                            size={40} 
-                            label={getInitials(getUserDisplayName(balance))} 
-                            style={{ backgroundColor: theme.colors.primaryContainer, marginRight: 12 }}
-                            color={theme.colors.onPrimaryContainer}
-                          />
-                          <View style={styles.balanceLeft}>
-                            <Text
-                              variant="titleSmall"
-                              style={styles.balanceName}
-                            >
-                              {getUserDisplayName(balance)}
-                            </Text>
-                          </View>
-                          <View style={styles.balanceRight}>
-                            <Text
-                              variant="titleMedium"
-                              style={[
-                                styles.balanceAmount,
-                                { color: "#10b981" },
-                              ]}
-                            >
-                              {formatCurrency(
-                                Math.abs(balance.amount),
-                                defaultCurrency
-                              )}
-                            </Text>
-                            {onSettleUp && (
-                              <Button
-                                mode="text"
-                                onPress={() => onSettleUp(balance)}
-                                compact
-                                textColor={theme.colors.primary}
+                        <TouchableRipple
+                          onPress={() => onSettleUp?.(balance)}
+                          rippleColor={theme.colors.primary + "20"}
+                        >
+                          <View style={styles.balanceContent}>
+                            <Avatar.Text
+                              size={40}
+                              label={getInitials(getUserDisplayName(balance))}
+                              style={{
+                                backgroundColor: theme.colors.primaryContainer,
+                                marginRight: 12,
+                              }}
+                              color={theme.colors.onPrimaryContainer}
+                            />
+                            <View style={styles.balanceLeft}>
+                              <Text
+                                variant="titleSmall"
+                                style={styles.balanceName}
                               >
-                                Received
-                              </Button>
-                            )}
+                                {getUserDisplayName(balance)}
+                              </Text>
+                            </View>
+                            <View style={styles.balanceRight}>
+                              <Text
+                                variant="titleMedium"
+                                style={[
+                                  styles.balanceAmount,
+                                  { color: "#10b981" },
+                                ]}
+                              >
+                                {formatCurrency(
+                                  Math.abs(balance.amount),
+                                  defaultCurrency
+                                )}
+                              </Text>
+                              {onSettleUp && (
+                                <Button
+                                  mode="text"
+                                  onPress={() => onSettleUp(balance)}
+                                  compact
+                                  textColor={theme.colors.primary}
+                                >
+                                  Received
+                                </Button>
+                              )}
+                            </View>
                           </View>
-                        </View>
+                        </TouchableRipple>
                         {index < youAreOwed.length - 1 && <Divider />}
                       </React.Fragment>
                     ))}
@@ -162,49 +178,65 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                   >
                     You owe
                   </Text>
-                  <Surface elevation={0} style={{ backgroundColor: theme.colors.surface, borderRadius: 12, borderWidth: 1, borderColor: theme.colors.outlineVariant }}>
+                  <Surface
+                    elevation={0}
+                    style={{
+                      backgroundColor: theme.colors.surface,
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: theme.colors.outlineVariant,
+                    }}
+                  >
                     {youOwe.map((balance, index) => (
                       <React.Fragment key={balance.user_id}>
-                        <View style={styles.balanceContent}>
-                          <Avatar.Text 
-                            size={40} 
-                            label={getInitials(getUserDisplayName(balance))} 
-                            style={{ backgroundColor: theme.colors.errorContainer, marginRight: 12 }}
-                            color={theme.colors.onErrorContainer}
-                          />
-                          <View style={styles.balanceLeft}>
-                            <Text
-                              variant="titleSmall"
-                              style={styles.balanceName}
-                            >
-                              {getUserDisplayName(balance)}
-                            </Text>
-                          </View>
-                          <View style={styles.balanceRight}>
-                            <Text
-                              variant="titleMedium"
-                              style={[
-                                styles.balanceAmount,
-                                { color: "#ef4444" },
-                              ]}
-                            >
-                              {formatCurrency(
-                                Math.abs(balance.amount),
-                                defaultCurrency
-                              )}
-                            </Text>
-                            {onSettleUp && (
-                              <Button
-                                mode="text"
-                                onPress={() => onSettleUp(balance)}
-                                compact
-                                textColor={theme.colors.error}
+                        <TouchableRipple
+                          onPress={() => onSettleUp?.(balance)}
+                          rippleColor={theme.colors.error + "20"}
+                        >
+                          <View style={styles.balanceContent}>
+                            <Avatar.Text
+                              size={40}
+                              label={getInitials(getUserDisplayName(balance))}
+                              style={{
+                                backgroundColor: theme.colors.errorContainer,
+                                marginRight: 12,
+                              }}
+                              color={theme.colors.onErrorContainer}
+                            />
+                            <View style={styles.balanceLeft}>
+                              <Text
+                                variant="titleSmall"
+                                style={styles.balanceName}
                               >
-                                Pay
-                              </Button>
-                            )}
+                                {getUserDisplayName(balance)}
+                              </Text>
+                            </View>
+                            <View style={styles.balanceRight}>
+                              <Text
+                                variant="titleMedium"
+                                style={[
+                                  styles.balanceAmount,
+                                  { color: "#ef4444" },
+                                ]}
+                              >
+                                {formatCurrency(
+                                  Math.abs(balance.amount),
+                                  defaultCurrency
+                                )}
+                              </Text>
+                              {onSettleUp && (
+                                <Button
+                                  mode="text"
+                                  onPress={() => onSettleUp(balance)}
+                                  compact
+                                  textColor={theme.colors.error}
+                                >
+                                  Pay
+                                </Button>
+                              )}
+                            </View>
                           </View>
-                        </View>
+                        </TouchableRipple>
                         {index < youOwe.length - 1 && <Divider />}
                       </React.Fragment>
                     ))}
@@ -242,24 +274,41 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                   <React.Fragment key={groupBalance.group_id}>
                     <Text
                       variant="titleSmall"
-                      style={[styles.groupBalanceTitle, { marginTop: groupIndex > 0 ? 16 : 0 }]}
+                      style={[
+                        styles.groupBalanceTitle,
+                        { marginTop: groupIndex > 0 ? 16 : 0 },
+                      ]}
                     >
                       {groupBalance.group_name}
                     </Text>
-                    
-                    <Surface elevation={0} style={{ backgroundColor: theme.colors.surface, borderRadius: 12, borderWidth: 1, borderColor: theme.colors.outlineVariant }}>
+
+                    <Surface
+                      elevation={0}
+                      style={{
+                        backgroundColor: theme.colors.surface,
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: theme.colors.outlineVariant,
+                      }}
+                    >
                       {/* Group: You Are Owed */}
                       {groupYouAreOwed.map((balance, idx) => (
                         <React.Fragment key={balance.user_id}>
                           <View style={styles.balanceContent}>
-                            <Avatar.Text 
-                              size={40} 
-                              label={getInitials(getUserDisplayName(balance))} 
-                              style={{ backgroundColor: theme.colors.primaryContainer, marginRight: 12 }}
+                            <Avatar.Text
+                              size={40}
+                              label={getInitials(getUserDisplayName(balance))}
+                              style={{
+                                backgroundColor: theme.colors.primaryContainer,
+                                marginRight: 12,
+                              }}
                               color={theme.colors.onPrimaryContainer}
                             />
                             <View style={styles.balanceLeft}>
-                              <Text variant="bodyMedium" style={styles.balanceName}>
+                              <Text
+                                variant="bodyMedium"
+                                style={styles.balanceName}
+                              >
                                 {getUserDisplayName(balance)} owes you
                               </Text>
                             </View>
@@ -288,7 +337,8 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                               )}
                             </View>
                           </View>
-                          {(idx < groupYouAreOwed.length - 1 || groupYouOwe.length > 0) && <Divider />}
+                          {(idx < groupYouAreOwed.length - 1 ||
+                            groupYouOwe.length > 0) && <Divider />}
                         </React.Fragment>
                       ))}
 
@@ -296,14 +346,20 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                       {groupYouOwe.map((balance, idx) => (
                         <React.Fragment key={balance.user_id}>
                           <View style={styles.balanceContent}>
-                            <Avatar.Text 
-                              size={40} 
-                              label={getInitials(getUserDisplayName(balance))} 
-                              style={{ backgroundColor: theme.colors.errorContainer, marginRight: 12 }}
+                            <Avatar.Text
+                              size={40}
+                              label={getInitials(getUserDisplayName(balance))}
+                              style={{
+                                backgroundColor: theme.colors.errorContainer,
+                                marginRight: 12,
+                              }}
                               color={theme.colors.onErrorContainer}
                             />
                             <View style={styles.balanceLeft}>
-                              <Text variant="bodyMedium" style={styles.balanceName}>
+                              <Text
+                                variant="bodyMedium"
+                                style={styles.balanceName}
+                              >
                                 You owe {getUserDisplayName(balance)}
                               </Text>
                             </View>
@@ -350,7 +406,10 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
             <View style={styles.emptyStateContent}>
               <Text
                 variant="bodyMedium"
-                style={{ color: theme.colors.onSurfaceVariant, textAlign: "center" }}
+                style={{
+                  color: theme.colors.onSurfaceVariant,
+                  textAlign: "center",
+                }}
               >
                 No balances yet
               </Text>
