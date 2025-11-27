@@ -1,11 +1,22 @@
-import { Handler } from '@netlify/functions';
-import { createClient } from '@supabase/supabase-js';
-import { randomBytes } from 'crypto';
-import { getCorsHeaders } from '../utils/cors';
-import { verifyAuth, AuthResult } from '../utils/auth';
-import { handleError, createErrorResponse } from '../utils/error-handler';
-import { validateBodySize, isValidUUID, isValidEmail } from '../utils/validation';
-import { createSuccessResponse, createEmptyResponse } from '../utils/response';
+import { verifyAuth } from '../_shared/auth.ts';
+import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
+import { createSuccessResponse } from '../_shared/response.ts';
+import { validateBodySize, isValidUUID, isValidEmail } from '../_shared/validation.ts';
+import { parsePath } from '../_shared/path-parser.ts';
+import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from '../_shared/env.ts';
+
+/**
+ * Invitations Edge Function
+ * 
+ * Handles group invitation operations:
+ * - GET /invitations?group_id=xxx - List invitations (optionally filtered by group or email)
+ * - POST /invitations - Create new invitation
+ * - POST /invitations/:id/accept - Accept invitation
+ * - DELETE /invitations/:id - Cancel invitation (owners only)
+ * 
+ * @route /functions/v1/invitations
+ * @requires Authentication
+ */
 
 interface GroupInvitation {
   id: string;
@@ -33,81 +44,55 @@ interface UsersResponse {
   users: SupabaseUser[];
 }
 
-export const handler: Handler = async (event, context) => {
-  // Handle CORS preflight
-  if (event.httpMethod === 'OPTIONS') {
-    return createEmptyResponse(200);
+Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 200 });
   }
 
   try {
-    // Validate request body size
-    const bodySizeValidation = validateBodySize(event.body);
+    const body = await req.text().catch(() => null);
+    const bodySizeValidation = validateBodySize(body);
     if (!bodySizeValidation.valid) {
       return createErrorResponse(413, bodySizeValidation.error || 'Request body too large', 'VALIDATION_ERROR');
     }
 
-    // Verify authentication
-    let authResult: AuthResult;
+    let authResult;
     try {
-      authResult = await verifyAuth(event);
+      authResult = await verifyAuth(req);
     } catch (authError) {
       return handleError(authError, 'authentication');
     }
 
-    const { user: currentUser, supabaseUrl, supabaseKey, authHeader } = authResult;
-
-    // Create Supabase client
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      global: {
-        headers: {
-          Authorization: authHeader,
-        },
-      },
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: false,
-      },
-    });
-
-    const httpMethod = event.httpMethod;
-    const pathParts = event.path.split('/').filter(Boolean);
-    // Path can be: /invitations, /invitations/:id, or /invitations/:id/accept
-    const invitationsIndex = pathParts.indexOf('invitations');
-    const invitationId = invitationsIndex >= 0 && pathParts.length > invitationsIndex + 1
-      ? pathParts[invitationsIndex + 1]
-      : null;
-    const action = invitationsIndex >= 0 && pathParts.length > invitationsIndex + 2
-      ? pathParts[invitationsIndex + 2]
-      : null;
+    const { user: currentUser, supabase } = authResult;
+    const httpMethod = req.method;
+    const url = new URL(req.url);
+    const parsedPath = parsePath(url.pathname);
+    const invitationId = parsedPath.resource === 'invitations' ? parsedPath.id : null;
+    const action = parsedPath.resource === 'invitations' ? parsedPath.action : null;
 
     // Handle POST /invitations - Create invitation
     if (httpMethod === 'POST' && !invitationId) {
       let requestData: CreateInvitationRequest;
       try {
-        requestData = JSON.parse(event.body || '{}');
+        requestData = body ? JSON.parse(body) : {};
       } catch {
         return createErrorResponse(400, 'Invalid JSON in request body', 'VALIDATION_ERROR');
       }
 
-      // Validate required fields
       if (!requestData.group_id || !requestData.email) {
         return createErrorResponse(400, 'Missing required fields: group_id, email', 'VALIDATION_ERROR');
       }
 
-      // Validate group_id format
       if (!isValidUUID(requestData.group_id)) {
         return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR');
       }
 
-      // Validate and normalize email
       const normalizedEmail = requestData.email.toLowerCase().trim();
       
       if (!isValidEmail(normalizedEmail)) {
         return createErrorResponse(400, 'Invalid email address format', 'VALIDATION_ERROR');
       }
 
-      // Verify user is owner of the group
       const { data: membership, error: membershipError } = await supabase
         .from('group_members')
         .select('role')
@@ -119,15 +104,13 @@ export const handler: Handler = async (event, context) => {
         return createErrorResponse(403, 'Only group owners can create invitations', 'PERMISSION_DENIED');
       }
 
-      // Check if user is already a member
-      const adminKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-      if (adminKey) {
+      if (SUPABASE_SERVICE_ROLE_KEY) {
         const findUserResponse = await fetch(
-          `${supabaseUrl}/auth/v1/admin/users?email=${encodeURIComponent(normalizedEmail)}`,
+          `${SUPABASE_URL}/auth/v1/admin/users?email=${encodeURIComponent(normalizedEmail)}`,
           {
             headers: {
-              'Authorization': `Bearer ${adminKey}`,
-              'apikey': adminKey,
+              'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+              'apikey': SUPABASE_SERVICE_ROLE_KEY,
             },
           }
         );
@@ -139,7 +122,6 @@ export const handler: Handler = async (event, context) => {
             : usersData.users?.[0];
 
           if (targetUser && targetUser.id) {
-            // User exists - check if already a member
             const { data: existingMember } = await supabase
               .from('group_members')
               .select('id')
@@ -154,7 +136,6 @@ export const handler: Handler = async (event, context) => {
         }
       }
 
-      // Check if there's already a pending invitation
       const { data: existingInvitation } = await supabase
         .from('group_invitations')
         .select('id')
@@ -167,10 +148,13 @@ export const handler: Handler = async (event, context) => {
         return createErrorResponse(400, 'A pending invitation already exists for this email', 'VALIDATION_ERROR');
       }
 
-      // Generate a unique token for the invitation
-      const token = randomBytes(32).toString('hex');
+      // Generate a unique token for the invitation using Deno crypto
+      const tokenArray = new Uint8Array(32);
+      crypto.getRandomValues(tokenArray);
+      const token = Array.from(tokenArray)
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
 
-      // Create invitation
       const { data: invitation, error: createError } = await supabase
         .from('group_invitations')
         .insert({
@@ -192,16 +176,16 @@ export const handler: Handler = async (event, context) => {
 
     // Handle GET /invitations - List invitations
     if (httpMethod === 'GET' && !invitationId) {
-      const groupId = event.queryStringParameters?.group_id;
-      const email = event.queryStringParameters?.email;
+      const url = new URL(req.url);
+      const groupId = url.searchParams.get('group_id');
+      const email = url.searchParams.get('email');
 
       let query = supabase
         .from('group_invitations')
-        .select('*')
+        .select('id, group_id, email, invited_by, status, token, expires_at, created_at, accepted_at')
         .order('created_at', { ascending: false });
 
       if (groupId) {
-        // Verify user is a member of the group (any member can view invitations)
         const { data: membership, error: membershipError } = await supabase
           .from('group_members')
           .select('id')
@@ -223,14 +207,12 @@ export const handler: Handler = async (event, context) => {
 
         query = query.eq('group_id', groupId);
       } else if (email) {
-        // Users can view invitations sent to their email
         const userEmail = currentUser.email;
         if (!userEmail || userEmail.toLowerCase() !== email.toLowerCase()) {
           return createErrorResponse(403, 'You can only view invitations sent to your email', 'PERMISSION_DENIED');
         }
         query = query.eq('email', email.toLowerCase());
       }
-      // If no filter, RLS will handle filtering to show only relevant invitations
 
       const { data: invitations, error } = await query;
 
@@ -238,7 +220,7 @@ export const handler: Handler = async (event, context) => {
         return handleError(error, 'fetching invitations');
       }
 
-      return createSuccessResponse(invitations || [], 200, 0); // No caching - real-time data
+      return createSuccessResponse(invitations || [], 200, 0);
     }
 
     // Handle POST /invitations/:id/accept - Accept invitation
@@ -257,7 +239,6 @@ export const handler: Handler = async (event, context) => {
 
     // Handle DELETE /invitations/:id - Cancel invitation
     if (httpMethod === 'DELETE' && invitationId) {
-      // Get invitation to verify ownership
       const { data: invitation, error: fetchError } = await supabase
         .from('group_invitations')
         .select('group_id, status')
@@ -268,7 +249,6 @@ export const handler: Handler = async (event, context) => {
         return createErrorResponse(404, 'Invitation not found', 'NOT_FOUND');
       }
 
-      // Verify user is owner of the group
       const { data: membership } = await supabase
         .from('group_members')
         .select('role')
@@ -288,7 +268,6 @@ export const handler: Handler = async (event, context) => {
         return createErrorResponse(403, 'Only group owners can cancel invitations', 'PERMISSION_DENIED');
       }
 
-      // Update status to cancelled instead of deleting (for audit trail)
       const { error: updateError } = await supabase
         .from('group_invitations')
         .update({ status: 'cancelled' })
@@ -301,10 +280,8 @@ export const handler: Handler = async (event, context) => {
       return createSuccessResponse({ success: true, message: 'Invitation cancelled successfully' }, 200);
     }
 
-    // Method not allowed
     return createErrorResponse(405, 'Method not allowed', 'METHOD_NOT_ALLOWED');
   } catch (error: unknown) {
     return handleError(error, 'invitations handler');
   }
-};
-
+});

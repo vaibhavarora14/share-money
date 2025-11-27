@@ -1,15 +1,15 @@
-import { Handler } from '@netlify/functions';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { getCorsHeaders } from '../utils/cors';
-import { verifyAuth, AuthResult } from '../utils/auth';
-import { handleError, createErrorResponse } from '../utils/error-handler';
-import { isValidUUID } from '../utils/validation';
-import { createSuccessResponse, createEmptyResponse } from '../utils/response';
+import { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
+import { verifyAuth } from '../_shared/auth.ts';
+import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
+import { isValidUUID } from '../_shared/validation.ts';
+import { createSuccessResponse } from '../_shared/response.ts';
+import { fetchUserEmails } from '../_shared/user-email.ts';
+import { log } from '../_shared/logger.ts';
 
 interface Balance {
   user_id: string;
   email?: string;
-  amount: number; // Positive = they owe you, Negative = you owe them
+  amount: number;
 }
 
 interface GroupBalance {
@@ -23,7 +23,6 @@ interface BalancesResponse {
   overall_balances: Balance[];
 }
 
-// Database type interfaces
 interface GroupMember {
   user_id: string;
 }
@@ -35,43 +34,35 @@ interface Group {
 
 interface TransactionSplit {
   user_id: string;
-  amount: number | string; // Can be string from DB, parsed to number
+  amount: number | string;
 }
 
 interface TransactionWithSplits {
   id: number;
-  amount: number | string; // Can be string from DB, parsed to number
+  amount: number | string;
   paid_by: string | null;
   currency?: string;
   split_among?: string[] | null;
   transaction_splits?: TransactionSplit[];
 }
 
-interface UserResponse {
-  id: string;
-  email?: string;
-  user?: {
-    email?: string;
-  };
-}
-
-interface EmailFetchResult {
-  userId: string;
-  email: string | null;
-}
-
 /**
- * Calculates balances for a user in a specific group.
- * Returns an array of balances where:
- * - Positive amount = that user owes the current user
- * - Negative amount = current user owes that user
+ * Balances Edge Function
+ * 
+ * Calculates and returns balances between users in groups:
+ * - GET /balances?group_id=xxx - Get balances (optionally filtered by group)
+ * 
+ * Returns both per-group balances and overall balances across all groups.
+ * 
+ * @route /functions/v1/balances
+ * @requires Authentication
  */
+
 async function calculateGroupBalances(
   supabase: SupabaseClient,
   groupId: string,
   currentUserId: string
 ): Promise<Balance[]> {
-  // Fetch all expense transactions for this group
   const { data: transactions, error } = await supabase
     .from('transactions')
     .select(`
@@ -88,44 +79,45 @@ async function calculateGroupBalances(
     .eq('group_id', groupId)
     .eq('type', 'expense');
 
-  if (error) {
-    console.error('Error fetching transactions:', error);
-    throw error;
-  }
+    if (error) {
+      log.error('Error fetching transactions', 'balance-calculation', { groupId, error: error.message });
+      throw error;
+    }
 
-  // Get group members to map user IDs to emails
   const { data: members } = await supabase
     .from('group_members')
     .select('user_id')
     .eq('group_id', groupId);
 
   const memberIds = new Set((members || []).map((m: GroupMember) => m.user_id));
-
-  // Initialize balance map: user_id -> balance amount
   const balanceMap = new Map<string, number>();
 
-  // Process each transaction
   for (const tx of (transactions || []) as TransactionWithSplits[]) {
     const paidBy = tx.paid_by;
     const totalAmount = typeof tx.amount === 'string' ? parseFloat(tx.amount) : tx.amount;
     
-    // Validate amount is a valid positive number
     if (isNaN(totalAmount) || totalAmount <= 0) {
-      console.warn(`Invalid transaction amount: ${tx.amount} for transaction ${tx.id}`);
-      continue; // Skip invalid transaction
+      log.warn('Invalid transaction amount', 'balance-calculation', {
+        transactionId: tx.id,
+        amount: tx.amount,
+        groupId,
+      });
+      continue;
     }
 
-    // Determine who owes what
     let splits: Array<{ user_id: string; amount: number }> = [];
 
-    // Prefer transaction_splits (normalized data)
     if (tx.transaction_splits && Array.isArray(tx.transaction_splits) && tx.transaction_splits.length > 0) {
       splits = tx.transaction_splits
         .map((s: TransactionSplit) => {
           const amount = typeof s.amount === 'string' ? parseFloat(s.amount) : s.amount;
-          // Validate split amount
           if (isNaN(amount) || amount <= 0) {
-            console.warn(`Invalid split amount: ${s.amount} for user ${s.user_id} in transaction ${tx.id}`);
+            log.warn('Invalid split amount', 'balance-calculation', {
+              transactionId: tx.id,
+              userId: s.user_id,
+              amount: s.amount,
+              groupId,
+            });
             return null;
           }
           return {
@@ -135,18 +127,15 @@ async function calculateGroupBalances(
         })
         .filter((s): s is { user_id: string; amount: number } => s !== null);
     } else if (tx.split_among && Array.isArray(tx.split_among) && tx.split_among.length > 0) {
-      // Fallback to split_among for backward compatibility
-      // Calculate equal splits
       const splitCount = tx.split_among.length;
       if (splitCount === 0) {
-        continue; // Skip invalid transaction with no splits
+        continue;
       }
       const splitAmount = totalAmount / splitCount;
       splits = tx.split_among.map((userId: string) => ({
         user_id: userId,
         amount: Math.round((splitAmount) * 100) / 100,
       }));
-      // Adjust first split to account for rounding
       if (splits.length > 0) {
         const sum = splits.reduce((acc, s) => acc + s.amount, 0);
         const diff = totalAmount - sum;
@@ -156,41 +145,30 @@ async function calculateGroupBalances(
       }
     }
 
-    // If no splits or no paid_by, skip this transaction (invalid expense)
     if (splits.length === 0 || !paidBy || !memberIds.has(paidBy)) {
       continue;
     }
 
-    // Find current user's split
     const currentUserSplit = splits.find((s) => s.user_id === currentUserId);
     
     if (paidBy === currentUserId) {
-      // Current user paid the full amount
-      // They are owed money by everyone else in the splits
       for (const split of splits) {
         if (split.user_id !== currentUserId && memberIds.has(split.user_id)) {
-          // This person owes the current user their split amount
           const current = balanceMap.get(split.user_id) || 0;
           balanceMap.set(split.user_id, current + split.amount);
         }
       }
     } else if (currentUserSplit) {
-      // Someone else paid, and current user is in the splits
-      // Current user owes the payer their share
       const current = balanceMap.get(paidBy) || 0;
       balanceMap.set(paidBy, current - currentUserSplit.amount);
     }
   }
 
-  // Fetch settlements for this group to adjust balances
   const { data: settlements } = await supabase
     .from('settlements')
     .select('from_user_id, to_user_id, amount')
     .eq('group_id', groupId);
 
-  // Apply settlements to balance map
-  // Settlement: from_user_id pays to_user_id
-  // This reduces the debt from_user_id owes to_user_id
   for (const settlement of (settlements || [])) {
     const fromUserId = settlement.from_user_id;
     const toUserId = settlement.to_user_id;
@@ -199,77 +177,53 @@ async function calculateGroupBalances(
       : settlement.amount;
 
     if (isNaN(settlementAmount) || settlementAmount <= 0) {
-      continue; // Skip invalid settlement
+      continue;
     }
 
-    // If current user is the payer (from_user_id), they paid someone (to_user_id)
-    // This reduces what they owe to_user_id (increases balance, making it less negative)
     if (fromUserId === currentUserId && memberIds.has(toUserId)) {
       const current = balanceMap.get(toUserId) || 0;
       balanceMap.set(toUserId, current + settlementAmount);
-    }
-    // If current user is the receiver (to_user_id), someone paid them (from_user_id)
-    // This reduces what from_user_id owes them (decreases balance, making it less positive)
-    else if (toUserId === currentUserId && memberIds.has(fromUserId)) {
+    } else if (toUserId === currentUserId && memberIds.has(fromUserId)) {
       const current = balanceMap.get(fromUserId) || 0;
       balanceMap.set(fromUserId, current - settlementAmount);
     }
   }
 
-  // Convert map to array
   const balances: Balance[] = Array.from(balanceMap.entries())
-    .filter(([userId]) => userId !== currentUserId) // Exclude self
+    .filter(([userId]) => userId !== currentUserId)
     .map(([user_id, amount]) => ({
       user_id,
-      amount: Math.round(amount * 100) / 100, // Round to 2 decimals
+      amount: Math.round(amount * 100) / 100,
     }))
-    .filter((b) => Math.abs(b.amount) > 0.01); // Filter out near-zero balances
+    .filter((b) => Math.abs(b.amount) > 0.01);
 
   return balances;
 }
 
-export const handler: Handler = async (event, context) => {
-  // Handle CORS preflight
-  if (event.httpMethod === 'OPTIONS') {
-    return createEmptyResponse(200);
+Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 200 });
   }
 
   try {
-    // Verify authentication
-    let authResult: AuthResult;
+    let authResult;
     try {
-      authResult = await verifyAuth(event);
+      authResult = await verifyAuth(req);
     } catch (authError) {
       return handleError(authError, 'authentication');
     }
 
-    const { user, supabaseUrl, supabaseKey, authHeader } = authResult;
+    const { user, supabase } = authResult;
     const currentUserId = user.id;
     const currentUserEmail = user.email;
 
-    // Create Supabase client
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      global: {
-        headers: {
-          Authorization: authHeader,
-        },
-      },
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: false,
-      },
-    });
-
-    // Get group_id from query params (optional - if not provided, return all groups)
-    const groupId = event.queryStringParameters?.group_id;
+    const url = new URL(req.url);
+    const groupId = url.searchParams.get('group_id');
     
-    // Validate group_id format if provided (UUID format)
     if (groupId && !isValidUUID(groupId)) {
       return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR');
     }
 
-    // Get all groups the user belongs to
     const { data: memberships } = await supabase
       .from('group_members')
       .select('group_id')
@@ -280,7 +234,6 @@ export const handler: Handler = async (event, context) => {
     }
     const groupIds = (memberships || []).map((m: Membership) => m.group_id);
 
-    // If group_id is provided, filter to that group
     const targetGroupIds = groupId 
       ? (groupIds.includes(groupId) ? [groupId] : [])
       : groupIds;
@@ -289,10 +242,9 @@ export const handler: Handler = async (event, context) => {
       return createSuccessResponse({
         group_balances: [],
         overall_balances: [],
-      }, 200, 0); // No caching - real-time data
+      }, 200, 0);
     }
 
-    // Get group details
     const { data: groups } = await supabase
       .from('groups')
       .select('id, name')
@@ -300,7 +252,6 @@ export const handler: Handler = async (event, context) => {
 
     const groupMap = new Map((groups || []).map((g: Group) => [g.id, g.name]));
 
-    // Calculate balances for each group in parallel for better performance
     const balancePromises = targetGroupIds.map(async (gId) => {
       try {
         const balances = await calculateGroupBalances(supabase, gId, currentUserId);
@@ -311,7 +262,6 @@ export const handler: Handler = async (event, context) => {
           balances,
         };
       } catch (error) {
-        // Log error but return empty result to continue with other groups
         return {
           group_id: gId,
           group_name: groupMap.get(gId) || 'Unknown Group',
@@ -324,22 +274,18 @@ export const handler: Handler = async (event, context) => {
     const groupBalances: GroupBalance[] = [];
     const overallBalanceMap = new Map<string, number>();
 
-    // Process results
     for (const result of balanceResults) {
       if (result.status === 'fulfilled') {
         const groupBalance = result.value;
         groupBalances.push(groupBalance);
 
-        // Aggregate into overall balances
         for (const balance of groupBalance.balances) {
           const current = overallBalanceMap.get(balance.user_id) || 0;
           overallBalanceMap.set(balance.user_id, current + balance.amount);
         }
       }
-      // If rejected, the promise already handled the error and returned empty balances
     }
 
-    // Convert overall balance map to array
     const overallBalances: Balance[] = Array.from(overallBalanceMap.entries())
       .map(([user_id, amount]) => ({
         user_id,
@@ -347,11 +293,8 @@ export const handler: Handler = async (event, context) => {
       }))
       .filter((b) => Math.abs(b.amount) > 0.01);
 
-    // Try to enrich balances with email addresses
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     const allUserIds = new Set<string>();
     
-    // Collect all user IDs
     for (const gb of groupBalances) {
       for (const b of gb.balances) {
         allUserIds.add(b.user_id);
@@ -361,50 +304,10 @@ export const handler: Handler = async (event, context) => {
       allUserIds.add(b.user_id);
     }
 
-    // Enrich with emails
-    if (serviceRoleKey && allUserIds.size > 0) {
+    if (allUserIds.size > 0) {
       const userIdsArray = Array.from(allUserIds);
-      
-      // Fetch emails in parallel for better performance
-      const emailPromises: Promise<EmailFetchResult>[] = userIdsArray.map(async (userId): Promise<EmailFetchResult> => {
-        // If this is the current user, use their email directly
-        if (userId === currentUserId && currentUserEmail) {
-          return { userId, email: currentUserEmail };
-        }
+      const emailMap = await fetchUserEmails(userIdsArray, currentUserId, currentUserEmail);
 
-        try {
-          const userResponse = await fetch(
-            `${supabaseUrl}/auth/v1/admin/users/${userId}`,
-            {
-              headers: {
-                'Authorization': `Bearer ${serviceRoleKey}`,
-                'apikey': serviceRoleKey,
-              },
-            }
-          );
-          
-          if (userResponse.ok) {
-            const userData = await userResponse.json() as UserResponse;
-            const email = userData.user?.email || userData.email || null;
-            return { userId, email };
-          }
-        } catch (err) {
-          console.error(`Error fetching email for user ${userId}:`, err);
-        }
-        return { userId, email: null };
-      });
-
-      // Wait for all email fetches to complete (in parallel)
-      const emailResults = await Promise.allSettled(emailPromises);
-      const emailMap = new Map<string, string>();
-      
-      for (const result of emailResults) {
-        if (result.status === 'fulfilled' && result.value.email) {
-          emailMap.set(result.value.userId, result.value.email);
-        }
-      }
-
-      // Add emails to balances
       for (const gb of groupBalances) {
         for (const b of gb.balances) {
           b.email = emailMap.get(b.user_id);
@@ -413,20 +316,6 @@ export const handler: Handler = async (event, context) => {
       for (const b of overallBalances) {
         b.email = emailMap.get(b.user_id);
       }
-    } else {
-      // At least set current user's email if available
-      for (const gb of groupBalances) {
-        for (const b of gb.balances) {
-          if (b.user_id === currentUserId && currentUserEmail) {
-            b.email = currentUserEmail;
-          }
-        }
-      }
-      for (const b of overallBalances) {
-        if (b.user_id === currentUserId && currentUserEmail) {
-          b.email = currentUserEmail;
-        }
-      }
     }
 
     const response: BalancesResponse = {
@@ -434,8 +323,8 @@ export const handler: Handler = async (event, context) => {
       overall_balances: overallBalances,
     };
 
-    return createSuccessResponse(response, 200, 0); // No caching - real-time data
+    return createSuccessResponse(response, 200, 0);
   } catch (error: unknown) {
     return handleError(error, 'balances handler');
   }
-};
+});
