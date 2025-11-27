@@ -3,7 +3,7 @@
 ## Tech Stack
 
 - **Frontend**: React Native (Expo), TypeScript, React Native Paper
-- **Backend**: Netlify Functions (Node.js/TypeScript)
+- **Backend**: Supabase Edge Functions (Deno/TypeScript)
 - **Database**: Supabase (PostgreSQL)
 - **Auth**: Supabase Auth (Email/Password + Google OAuth)
 
@@ -11,9 +11,8 @@
 
 ```
 ShareMoney/
-├── netlify/              # Netlify Functions backend
-│   ├── functions/        # Netlify Functions
-├── supabase/             # Supabase migrations
+├── supabase/             # Supabase configuration
+│   ├── functions/        # Supabase Edge Functions
 │   └── migrations/       # Database migrations
 ├── scripts/              # Utility scripts
 └── mobile/               # React Native Expo app
@@ -24,10 +23,9 @@ ShareMoney/
 - Node.js (v18+)
 - npm/yarn
 - Supabase account
-- Netlify account
 - Expo CLI (via npx or global)
 - Docker (for local Supabase development)
-- Supabase CLI (for local development)
+- Supabase CLI (for local development and deployment)
 
 ## Development Setup
 
@@ -36,14 +34,13 @@ ShareMoney/
 This project uses **npm workspaces** for monorepo management. Install all dependencies from the root:
 
 ```bash
-# Install all dependencies (root, mobile, and netlify)
+# Install all dependencies (root and mobile workspaces)
 npm install
 ```
 
 This will automatically install dependencies for:
 - Root workspace
 - `mobile/` workspace
-- `netlify/` workspace
 
 **Note:** All dependencies are installed in a single `node_modules` at the root, with workspace-specific dependencies hoisted appropriately.
 
@@ -95,9 +92,9 @@ Open in browser: **http://127.0.0.1:54323**
 
 ### 3. Environment Variables
 
-#### Root `.env` (for Netlify Functions)
+#### Root `.env` (for local development)
 
-Create `.env` in the root directory:
+Create `.env` in the root directory (optional, mainly for scripts):
 
 ```env
 # For Local Development
@@ -146,26 +143,24 @@ ip addr show | grep "inet "
 
 ### 4. Run Locally
 
-**Option 1: Run from root (using workspaces):**
+**Run from root (using workspaces):**
 ```bash
-# Terminal 1 - Backend
-npm run dev:server
-
-# Terminal 2 - Mobile
+# Terminal 1 - Mobile
 npm run dev:mobile
+
+# Terminal 2 - Local Supabase (if needed)
+supabase start
 ```
 
-**Option 2: Run from individual directories:**
+**Run from individual directories:**
 ```bash
-# Terminal 1 - Backend
-cd netlify
-npm run dev
-# Available at http://localhost:8888/api
-
-# Terminal 2 - Mobile
+# Terminal 1 - Mobile
 cd mobile
 npm start
 # Press 'i' for iOS, 'a' for Android, or scan QR code
+
+# Terminal 2 - Local Supabase (if needed)
+supabase start
 ```
 
 ### 5. Expo Go vs Development Builds
@@ -210,19 +205,6 @@ npm start
 
 ## Deployment
 
-### Netlify (Backend)
-
-1. Set environment variables in Netlify dashboard:
-   - `SUPABASE_URL`
-   - `SUPABASE_ANON_KEY`
-   - `SUPABASE_SERVICE_ROLE_KEY`
-
-2. Deploy:
-   ```bash
-   cd netlify
-   netlify deploy --prod
-   ```
-
 ### Mobile (Expo)
 
 See `mobile/EXPO_PUBLISH.md` for detailed EAS build and OTA update instructions.
@@ -239,7 +221,29 @@ eas build --platform ios
 eas build --platform android
 ```
 
+### Supabase Edge Functions
+
+Edge Functions are automatically deployed via GitHub Actions when code is pushed to `main`. See `.github/workflows/deploy-edge-functions.yml` for details.
+
+**Manual deployment:**
+```bash
+# Link to your project (first time only)
+supabase link --project-ref your-project-id
+
+# Deploy all functions
+supabase functions deploy
+
+# Deploy specific function
+supabase functions deploy function-name
+```
+
+**Required secrets:**
+- `SUPABASE_ACCESS_TOKEN` - Get from https://supabase.com/dashboard/account/tokens
+- `SUPABASE_PROJECT_ID` - Your project reference ID from Settings > General
+
 ### GitHub Actions (CI/CD)
+
+#### Database Migrations
 
 Automatic Supabase migrations are configured via GitHub Actions. When code is merged to the `main` branch, any new migration files in `supabase/migrations/` are automatically applied to the production database.
 
@@ -309,11 +313,57 @@ You can also manually trigger the workflow:
 - Use least-privilege access tokens when possible
 - Review migration files before merging to `main`
 
+#### Edge Functions Deployment
+
+Automatic Edge Functions deployment is configured via GitHub Actions. When code is merged to `main` and files in `supabase/functions/` change, all Edge Functions are automatically deployed to production.
+
+**Setup Instructions:**
+
+1. **Get Supabase Access Token:**
+   - Go to https://supabase.com/dashboard/account/tokens
+   - Click "Generate new token"
+   - Copy the token (save it securely - you won't see it again!)
+
+2. **Get Project ID:**
+   - Go to your Supabase project dashboard
+   - Navigate to Settings > General
+   - Copy your "Reference ID" (this is your Project ID)
+
+3. **Configure GitHub Secrets:**
+   - Go to your GitHub repository
+   - Navigate to Settings > Secrets and variables > Actions
+   - Click "New repository secret"
+   - Add the following secrets:
+     - `SUPABASE_ACCESS_TOKEN` - Your Supabase access token
+     - `SUPABASE_PROJECT_ID` - Your Supabase project reference ID
+
+**How It Works:**
+
+The workflow (`.github/workflows/deploy-edge-functions.yml`) automatically:
+
+1. **Triggers** on push to `main` branch when Edge Function files change
+2. **Installs** Supabase CLI
+3. **Links** to your Supabase project
+4. **Deploys** all Edge Functions using `supabase functions deploy`
+5. **Reports** deployment status and summary
+
+**Manual Triggering:**
+
+- Go to Actions tab in GitHub
+- Select "Deploy Supabase Edge Functions" workflow
+- Click "Run workflow"
+
+**Free Tier Limits:**
+
+- Up to 25 Edge Functions per project
+- 500,000 invocations per month
+- Functions are deployed globally via Supabase's CDN
+
 ## Architecture
 
 - **Database**: Supabase PostgreSQL with Row Level Security (RLS)
 - **Auth**: Supabase Auth (JWT tokens, AsyncStorage persistence)
-- **API**: Netlify Functions with CORS and auth validation
+- **API**: Supabase Edge Functions with CORS and auth validation
 - **Mobile**: Expo with React Native Paper UI
 
 ## Key Implementation Details
@@ -323,7 +373,7 @@ You can also manually trigger the workflow:
 1. User signs in via Supabase Auth (email/password or Google OAuth)
 2. JWT token stored in AsyncStorage
 3. Token sent in `Authorization: Bearer <token>` header to API
-4. Netlify Function validates token with Supabase
+4. Supabase Edge Function validates token with Supabase
 5. RLS policies filter data by `user_id`
 
 ### Google OAuth Setup
@@ -336,7 +386,7 @@ You can also manually trigger the workflow:
 ### Environment Variables
 
 - **Expo requirement**: All mobile env vars must use `EXPO_PUBLIC_` prefix
-- **Netlify**: Loads from root `.env` automatically in dev
+- **Supabase Edge Functions**: Environment variables are set in Supabase Dashboard > Edge Functions > Settings
 - **Mobile**: Loads from `mobile/.env` (Expo SDK 49+ native support)
 
 ## Debugging
