@@ -1,5 +1,5 @@
-import { getCorsHeaders } from './cors';
-import { NetlifyResponse } from './response';
+import { getCorsHeaders } from './cors.ts';
+import { log } from './logger.ts';
 
 /**
  * Sanitizes error messages to remove sensitive information before logging
@@ -36,59 +36,6 @@ function sanitizeErrorMessage(message: string): string {
 }
 
 /**
- * Sanitizes data for logging to remove sensitive information
- */
-function sanitizeForLogging(data: any): any {
-  if (data === null || data === undefined) {
-    return data;
-  }
-
-  if (typeof data !== 'object') {
-    return data;
-  }
-
-  if (data instanceof Error) {
-    return {
-      name: data.name,
-      message: data.message,
-      stack: data.stack,
-      ...Object.fromEntries(Object.entries(data))
-    };
-  }
-
-  const sensitiveFields = [
-    'password',
-    'token',
-    'access_token',
-    'refresh_token',
-    'authorization',
-    'apikey',
-    'secret',
-    'key',
-  ];
-
-  if (Array.isArray(data)) {
-    return data.map(item => sanitizeForLogging(item));
-  }
-
-  const sanitized: Record<string, any> = {};
-  for (const [key, value] of Object.entries(data)) {
-    const lowerKey = key.toLowerCase();
-    const isSensitive = sensitiveFields.some(field => lowerKey.includes(field));
-    
-    if (isSensitive) {
-      sanitized[key] = '[REDACTED]';
-    } else if (typeof value === 'object' && value !== null) {
-      sanitized[key] = sanitizeForLogging(value);
-    } else {
-      sanitized[key] = value;
-    }
-  }
-
-  return sanitized;
-}
-
-/**
  * Standardized error response interface
  */
 export interface ErrorResponse {
@@ -106,7 +53,7 @@ export function createErrorResponse(
   error: string,
   code?: string,
   details?: string
-): NetlifyResponse {
+): Response {
   const errorResponse: ErrorResponse = {
     error,
     timestamp: new Date().toISOString(),
@@ -120,32 +67,23 @@ export function createErrorResponse(
     errorResponse.details = sanitizeErrorMessage(details);
   }
 
-  return {
-    statusCode,
-    headers: { 
-      ...getCorsHeaders(), 
+  return new Response(JSON.stringify(errorResponse), {
+    status: statusCode,
+    headers: {
+      ...getCorsHeaders(),
       'Content-Type': 'application/json',
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Pragma': 'no-cache',
       'Expires': '0',
     },
-    body: JSON.stringify(errorResponse),
-  };
+  });
 }
 
 /**
  * Handles errors and returns standardized error response
  * Logs sanitized error information
  */
-export function handleError(error: unknown, context?: string): NetlifyResponse {
-  // Sanitize error for logging
-  const sanitizedError = sanitizeForLogging(error);
-  const logMessage = context 
-    ? `Error in ${context}: ${JSON.stringify(sanitizedError)}`
-    : `Error: ${JSON.stringify(sanitizedError)}`;
-  
-  console.error(logMessage);
-
+export function handleError(error: unknown, context?: string): Response {
   // Determine error type and create appropriate response
   if (error instanceof Error) {
     const message = error.message.toLowerCase();
@@ -176,9 +114,16 @@ export function handleError(error: unknown, context?: string): NetlifyResponse {
     }
 
     // Server errors
+    log.error('Error in handler', context || 'unknown', {
+      error: error.message,
+      stack: error.stack,
+    });
     return createErrorResponse(500, 'Internal server error', 'INTERNAL_ERROR', error.message);
   }
 
   // Unknown error
+  log.error('Unknown error in handler', context || 'unknown', {
+    error: String(error),
+  });
   return createErrorResponse(500, 'Internal server error', 'UNKNOWN_ERROR');
 }

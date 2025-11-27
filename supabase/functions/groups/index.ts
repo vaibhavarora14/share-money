@@ -1,10 +1,22 @@
-import { Handler } from '@netlify/functions';
-import { createClient } from '@supabase/supabase-js';
-import { getCorsHeaders } from '../utils/cors';
-import { verifyAuth, AuthResult } from '../utils/auth';
-import { handleError, createErrorResponse } from '../utils/error-handler';
-import { validateGroupData, validateBodySize, isValidUUID } from '../utils/validation';
-import { createSuccessResponse, createEmptyResponse } from '../utils/response';
+import { verifyAuth } from '../_shared/auth.ts';
+import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
+import { validateGroupData, isValidUUID, validateBodySize } from '../_shared/validation.ts';
+import { createSuccessResponse, createEmptyResponse } from '../_shared/response.ts';
+import { parsePath } from '../_shared/path-parser.ts';
+import { fetchUserEmails } from '../_shared/user-email.ts';
+
+/**
+ * Groups Edge Function
+ * 
+ * Handles CRUD operations for expense groups:
+ * - GET /groups - List all groups user belongs to
+ * - GET /groups/:id - Get group details with members
+ * - POST /groups - Create new group
+ * - DELETE /groups/:id - Delete group (owners only)
+ * 
+ * @route /functions/v1/groups
+ * @requires Authentication
+ */
 
 interface Group {
   id: string;
@@ -27,55 +39,41 @@ interface GroupWithMembers extends Group {
   members?: Array<GroupMember & { email?: string }>;
 }
 
-export const handler: Handler = async (event, context) => {
+Deno.serve(async (req: Request) => {
   // Handle CORS preflight
-  if (event.httpMethod === 'OPTIONS') {
+  if (req.method === 'OPTIONS') {
     return createEmptyResponse(200);
   }
 
   try {
     // Validate request body size
-    const bodySizeValidation = validateBodySize(event.body);
+    const body = await req.text().catch(() => null);
+    const bodySizeValidation = validateBodySize(body);
     if (!bodySizeValidation.valid) {
       return createErrorResponse(413, bodySizeValidation.error || 'Request body too large', 'VALIDATION_ERROR');
     }
 
     // Verify authentication
-    let authResult: AuthResult;
+    let authResult;
     try {
-      authResult = await verifyAuth(event);
+      authResult = await verifyAuth(req);
     } catch (authError) {
       return handleError(authError, 'authentication');
     }
 
-    const { user, supabaseUrl, supabaseKey, authHeader } = authResult;
+    const { user, supabase } = authResult;
     const currentUserEmail = user.email;
 
-    // Create Supabase client
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      global: {
-        headers: {
-          Authorization: authHeader,
-        },
-      },
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: false,
-      },
-    });
-
-    const httpMethod = event.httpMethod;
-    const pathParts = event.path.split('/').filter(Boolean);
-    const groupId = pathParts[pathParts.length - 1] !== 'groups' 
-      ? pathParts[pathParts.length - 1] 
-      : null;
+    const httpMethod = req.method;
+    const url = new URL(req.url);
+    const parsedPath = parsePath(url.pathname);
+    const groupId = parsedPath.resource === 'groups' ? parsedPath.id : null;
 
     // Handle GET /groups - List all groups user belongs to
     if (httpMethod === 'GET' && !groupId) {
       const { data: groups, error } = await supabase
         .from('groups')
-        .select('*')
+        .select('id, name, description, created_by, created_at, updated_at')
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -95,7 +93,7 @@ export const handler: Handler = async (event, context) => {
       // Get group details
       const { data: group, error: groupError } = await supabase
         .from('groups')
-        .select('*')
+        .select('id, name, description, created_by, created_at, updated_at')
         .eq('id', groupId)
         .single();
 
@@ -106,7 +104,7 @@ export const handler: Handler = async (event, context) => {
       // Get group members
       const { data: members, error: membersError } = await supabase
         .from('group_members')
-        .select('*')
+        .select('id, group_id, user_id, role, joined_at')
         .eq('group_id', groupId)
         .order('joined_at', { ascending: true });
 
@@ -114,67 +112,14 @@ export const handler: Handler = async (event, context) => {
         return handleError(membersError, 'fetching group members');
       }
 
-
-      // Try to get user emails using admin API if service role key is available
-      // Also include current user's email if they're a member
-      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-      let membersWithEmails = members || [];
-
-      if (serviceRoleKey) {
-        try {
-          membersWithEmails = await Promise.all(
-            (members || []).map(async (member) => {
-              // If this is the current user, use their email directly
-              if (member.user_id === user.id && currentUserEmail) {
-                return {
-                  ...member,
-                  email: currentUserEmail,
-                };
-              }
-
-              // Otherwise, fetch from Admin API
-              try {
-                const userResponse = await fetch(
-                  `${supabaseUrl}/auth/v1/admin/users/${member.user_id}`,
-                  {
-                    headers: {
-                      'Authorization': `Bearer ${serviceRoleKey}`,
-                      'apikey': serviceRoleKey,
-                    },
-                  }
-                );
-                if (userResponse.ok) {
-                  const userData = await userResponse.json();
-                  const email = userData.user?.email || userData.email || userData?.email || null;
-                  return {
-                    ...member,
-                    email: email,
-                  };
-                } else {
-                  const errorText = await userResponse.text();
-                  console.error(`Failed to fetch user ${member.user_id}: ${userResponse.status} - ${errorText}`);
-                }
-              } catch (err) {
-                console.error(`Error fetching user ${member.user_id}:`, err);
-              }
-              return member;
-            })
-          );
-        } catch (err) {
-          console.error('Error fetching member emails:', err);
-        }
-      } else {
-        // If no service role key, at least set current user's email
-        membersWithEmails = (members || []).map(member => {
-          if (member.user_id === user.id && currentUserEmail) {
-            return {
-              ...member,
-              email: currentUserEmail,
-            };
-          }
-          return member;
-        });
-      }
+      // Enrich members with email addresses using shared utility
+      const userIds = (members || []).map(m => m.user_id);
+      const emailMap = await fetchUserEmails(userIds, user.id, currentUserEmail);
+      
+      const membersWithEmails = (members || []).map(member => ({
+        ...member,
+        email: emailMap.get(member.user_id),
+      }));
 
       const groupWithMembers: GroupWithMembers = {
         ...group,
@@ -188,7 +133,7 @@ export const handler: Handler = async (event, context) => {
     if (httpMethod === 'POST') {
       let groupData: Partial<Group>;
       try {
-        groupData = JSON.parse(event.body || '{}');
+        groupData = body ? JSON.parse(body) : {};
       } catch {
         return createErrorResponse(400, 'Invalid JSON in request body', 'VALIDATION_ERROR');
       }
@@ -218,7 +163,7 @@ export const handler: Handler = async (event, context) => {
       // Fetch the created group to return full details
       const { data: group, error: fetchError } = await supabase
         .from('groups')
-        .select('*')
+        .select('id, name, description, created_by, created_at, updated_at')
         .eq('id', groupResult)
         .single();
 
@@ -263,4 +208,4 @@ export const handler: Handler = async (event, context) => {
   } catch (error: unknown) {
     return handleError(error, 'groups handler');
   }
-};
+});

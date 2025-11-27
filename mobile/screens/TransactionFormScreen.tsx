@@ -596,6 +596,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                   disabled={loading}
                   error={!!paidByError}
                   style={styles.input}
+                  showSoftInputOnFocus={false}
                   left={<TextInput.Icon icon="account" />}
                   right={
                     <TextInput.Icon

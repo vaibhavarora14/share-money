@@ -51,14 +51,32 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
   }, [overallBalances]);
 
   const getUserDisplayName = (balance: Balance): string => {
-    // Find the member by user_id
+    // Priority: balance.email (from API) → groupMembers email → fallback to truncated user_id
+    if (balance.email) {
+      return balance.email;
+    }
+    
+    // Fallback to groupMembers lookup
     const member = groupMembers.find(m => m.user_id === balance.user_id);
-    // Prioritize email if available, otherwise use a truncated user_id
-    return member?.email || `User ${balance.user_id.substring(0, 8)}...`;
+    if (member?.email) {
+      return member.email;
+    }
+    
+    // Last resort: truncated user_id
+    return `User ${balance.user_id.substring(0, 8)}...`;
   };
 
   const getInitials = (name: string) => {
-    return name.substring(0, 2).toUpperCase();
+    // Extract username from email for initials (part before @)
+    const displayName = name.includes('@') ? name.split('@')[0] : name;
+    // Get first 2 characters, handling edge cases
+    if (displayName.length >= 2) {
+      return displayName.substring(0, 2).toUpperCase();
+    }
+    // If name is too short, use first char + first char
+    return displayName.length > 0 
+      ? (displayName[0] + displayName[0]).toUpperCase()
+      : '??';
   };
 
   return (

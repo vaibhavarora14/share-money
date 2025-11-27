@@ -8,7 +8,7 @@ ShareMoney (also known as Split Money) is an app to track balances for money use
    ```bash
    npm install
    ```
-   This project uses npm workspaces, so a single `npm install` installs dependencies for all workspaces (root, mobile, and netlify).
+   This project uses npm workspaces, so a single `npm install` installs dependencies for all workspaces (root and mobile).
 
 2. **Set up environment variables:**
    - Create `.env` in root (see [TECH.md](./TECH.md) for details)
@@ -21,12 +21,15 @@ ShareMoney (also known as Split Money) is an app to track balances for money use
 
 4. **Run the app:**
    ```bash
-   # Terminal 1 - Backend
+   # Terminal 1 - Supabase Edge Functions (local)
    npm run dev:server
+   # Functions available at http://localhost:54321/functions/v1/
    
    # Terminal 2 - Mobile
    npm run dev:mobile
    ```
+   
+   **Note:** Make sure local Supabase is running (`supabase start`) before starting the Edge Functions server.
 
 ## Test Database Seed
 

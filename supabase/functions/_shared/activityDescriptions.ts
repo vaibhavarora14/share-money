@@ -1,12 +1,9 @@
 /**
  * Activity description generation functions
- * Split from main activity.ts for better maintainability
  */
 
-import { formatCurrency } from './currency';
+import { formatCurrency } from './currency.ts';
 
-// Define types locally to avoid circular dependencies
-// These match the interfaces in activity.ts
 interface TransactionSnapshot {
   id: number;
   amount: number;
@@ -69,11 +66,6 @@ interface TransactionHistory {
   snapshot: HistorySnapshot | null;
 }
 
-/**
- * Formats field names for display (user-friendly)
- * @param field - Database field name
- * @returns User-friendly field name
- */
 export function formatFieldName(field: string): string {
   const fieldMap: Record<string, string> = {
     'amount': 'Amount',
@@ -91,25 +83,15 @@ export function formatFieldName(field: string): string {
   return fieldMap[field] || field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' ');
 }
 
-/**
- * Formats a value for display based on field type
- * Uses type guards for type safety instead of type assertions
- * @param field - Field name (e.g., 'amount', 'date', 'split_among')
- * @param value - Value to format (unknown type for type safety)
- * @param currencyCode - Optional currency code for amount fields
- * @returns Formatted string representation
- */
 export function formatValue(field: string, value: unknown, currencyCode?: string): string {
   if (value === null || value === undefined) {
     return 'none';
   }
   
   if (field === 'amount') {
-    // Type guard for number - safer than type assertion
     if (typeof value === 'number') {
       return formatCurrency(value, currencyCode || 'USD');
     }
-    // Try to parse string to number
     if (typeof value === 'string') {
       const num = parseFloat(value);
       if (!isNaN(num)) {
@@ -125,7 +107,7 @@ export function formatValue(field: string, value: unknown, currencyCode?: string
         return new Date(value).toLocaleDateString();
       }
     } catch {
-      // Fall through to String conversion
+      // Fall through
     }
   }
   
@@ -141,7 +123,6 @@ export function formatValue(field: string, value: unknown, currencyCode?: string
     return `${value.length} item${value.length !== 1 ? 's' : ''}`;
   }
   
-  // Truncate long strings
   const str = String(value);
   if (str.length > 25) {
     return str.substring(0, 25) + '...';
@@ -150,13 +131,6 @@ export function formatValue(field: string, value: unknown, currencyCode?: string
   return str;
 }
 
-/**
- * Formats split changes for display
- * @param oldSplits - Previous split user IDs
- * @param newSplits - New split user IDs
- * @param emailMap - Map of user IDs to emails
- * @returns Formatted string describing split changes
- */
 function formatSplitChanges(
   oldSplits: string[],
   newSplits: string[],
@@ -213,12 +187,6 @@ function formatSplitChanges(
   return changes.join(', ');
 }
 
-/**
- * Gets user display name from email map
- * @param userId - User ID
- * @param emailMap - Map of user IDs to emails
- * @returns Username part of email or fallback
- */
 function getUserName(userId: string, emailMap?: Map<string, string>): string {
   if (emailMap) {
     const email = emailMap.get(userId);
@@ -229,11 +197,6 @@ function getUserName(userId: string, emailMap?: Map<string, string>): string {
   return 'User';
 }
 
-/**
- * Generates description for transaction created action
- * @param transaction - Transaction snapshot
- * @returns Description string
- */
 function generateTransactionCreatedDescription(transaction: TransactionSnapshot): string {
   const amount = transaction.amount || 0;
   const currency = transaction.currency || 'USD';
@@ -244,13 +207,6 @@ function generateTransactionCreatedDescription(transaction: TransactionSnapshot)
   return `${formatCurrency(amount, currency)} - ${descriptionGlimpse}`;
 }
 
-/**
- * Generates description for transaction updated action
- * @param transaction - Transaction snapshot
- * @param diff - Changes diff
- * @param emailMap - Map of user IDs to emails
- * @returns Description string
- */
 function generateTransactionUpdatedDescription(
   transaction: TransactionSnapshot | undefined,
   diff: ChangesDiff,
@@ -282,7 +238,6 @@ function generateTransactionUpdatedDescription(
       const newSplits = Array.isArray(newVal) ? newVal : [];
       fieldChanges.push(formatSplitChanges(oldSplits, newSplits, emailMap));
     } else {
-      // Pass currency code for amount fields
       const currencyCode = field === 'amount' ? currency : undefined;
       fieldChanges.push(`${fieldDisplayName}: ${formatValue(field, oldVal, currencyCode)} → ${formatValue(field, newVal, currencyCode)}`);
     }
@@ -295,11 +250,6 @@ function generateTransactionUpdatedDescription(
   }
 }
 
-/**
- * Generates description for transaction deleted action
- * @param transaction - Transaction snapshot
- * @returns Description string
- */
 function generateTransactionDeletedDescription(transaction: TransactionSnapshot): string {
   const amount = transaction.amount || 0;
   const currency = transaction.currency || 'USD';
@@ -310,12 +260,6 @@ function generateTransactionDeletedDescription(transaction: TransactionSnapshot)
   return `Deleted: ${formatCurrency(amount, currency)} - ${descriptionGlimpse}`;
 }
 
-/**
- * Generates description for settlement created action
- * @param settlement - Settlement snapshot
- * @param emailMap - Map of user IDs to emails
- * @returns Description string
- */
 function generateSettlementCreatedDescription(
   settlement: SettlementSnapshot,
   emailMap?: Map<string, string>
@@ -337,13 +281,6 @@ function generateSettlementCreatedDescription(
   return description;
 }
 
-/**
- * Generates description for settlement updated action
- * @param settlement - Settlement snapshot
- * @param diff - Changes diff
- * @param emailMap - Map of user IDs to emails
- * @returns Description string
- */
 function generateSettlementUpdatedDescription(
   settlement: SettlementSnapshot | undefined,
   diff: ChangesDiff,
@@ -371,7 +308,6 @@ function generateSettlementUpdatedDescription(
     const fieldDisplayName = formatFieldName(field);
     
     if (field === 'amount') {
-      // Pass currency code for amount field
       fieldChanges.push(`Amount: ${formatValue(field, oldVal, currency)} → ${formatValue(field, newVal, currency)}`);
     } else if (field === 'notes') {
       const oldNotes = oldVal || 'none';
@@ -385,12 +321,6 @@ function generateSettlementUpdatedDescription(
   return `${fromName} paid ${toName} ${formatCurrency(amount, currency)} - ${fieldChanges.join(', ')}`;
 }
 
-/**
- * Generates description for settlement deleted action
- * @param settlement - Settlement snapshot
- * @param emailMap - Map of user IDs to emails
- * @returns Description string
- */
 function generateSettlementDeletedDescription(
   settlement: SettlementSnapshot,
   emailMap?: Map<string, string>
@@ -406,12 +336,6 @@ function generateSettlementDeletedDescription(
   return `Deleted settlement: ${fromName} paid ${toName} ${formatCurrency(amount, currency)}`;
 }
 
-/**
- * Generates human-readable description for an activity item
- * @param history - Transaction history record from database
- * @param emailMap - Map of user IDs to email addresses for name resolution
- * @returns User-friendly description string
- */
 export function generateActivityDescription(
   history: TransactionHistory,
   emailMap?: Map<string, string>

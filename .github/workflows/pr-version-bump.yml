@@ -1,0 +1,105 @@
+name: PR Version Sync
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  guard-version:
+    name: Ensure version.json matches PR type
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR title
+        id: title
+        run: |
+          TITLE="${{ github.event.pull_request.title }}"
+          if [[ ! "$TITLE" =~ ^(feat|fix|chore|docs|refactor)(\(.+\))?: ]]; then
+            echo "::error::PR title must start with feat|fix|chore|docs|refactor (optionally with scope). Current title: '$TITLE'"
+            exit 1
+          fi
+          if [[ "$TITLE" =~ ^feat ]]; then
+            echo "bump=minor" >> $GITHUB_OUTPUT
+          else
+            echo "bump=patch" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Detect fork
+        id: repo
+        run: |
+          if [ "${{ github.event.pull_request.head.repo.full_name }}" = "${{ github.repository }}" ]; then
+            echo "can_push=true" >> $GITHUB_OUTPUT
+          else
+            echo "can_push=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Fetch main
+        run: git fetch origin main
+
+      - name: Recalculate version
+        id: bump
+        env:
+          BUMP_TYPE: ${{ steps.title.outputs.bump }}
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const { execSync } = require('child_process');
+          const bumpType = process.env.BUMP_TYPE || 'patch';
+          const mainJson = execSync('git show origin/main:mobile/version.json', { encoding: 'utf8' });
+          const mainData = JSON.parse(mainJson);
+          const currentData = JSON.parse(fs.readFileSync('mobile/version.json', 'utf8'));
+
+          function bumpVersion(version, type) {
+            const parts = version.split('.').map(Number);
+            while (parts.length < 3) parts.push(0);
+            const [major, minor, patch] = parts;
+            if (type === 'minor') {
+              return `${major}.${minor + 1}.0`;
+            }
+            return `${major}.${minor}.${patch + 1}`;
+          }
+
+          const newVersion = bumpVersion(mainData.version, bumpType);
+          const newBuild = (mainData.buildNumber || 0) + 1;
+          const output = {
+            version: newVersion,
+            buildNumber: newBuild,
+          };
+          fs.writeFileSync('mobile/version.json', JSON.stringify(output, null, 2) + '\n');
+          console.log(`Computed version ${newVersion} (build ${newBuild}) from ${mainData.version}`);
+          console.log(`Previous file on branch was ${currentData.version} (build ${currentData.buildNumber})`);
+          NODE
+
+      - name: Check diff
+        id: diff
+        run: |
+          if git diff --quiet -- mobile/version.json; then
+            echo "::error::mobile/version.json did not change after recomputing version. Please ensure repository history is intact."
+            exit 1
+          fi
+
+      - name: Commit and push updated version
+        if: steps.repo.outputs.can_push == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "share-money-version-bot"
+          git config user.email "version-bot@users.noreply.github.com"
+          git add mobile/version.json
+          git commit -m "chore: auto-sync version with PR title [skip ci]"
+          git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }} HEAD:${{ github.head_ref }}
+
+      - name: Fail for forks without maintainer access
+        if: steps.repo.outputs.can_push != 'true'
+        run: |
+          echo "::error::This workflow cannot push to forked repositories. Please run 'npm run version:build' locally and commit the updated mobile/version.json."
+          exit 1

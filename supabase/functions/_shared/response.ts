@@ -1,19 +1,13 @@
-import { getCorsHeaders } from './cors';
-
-export type NetlifyResponse = {
-  statusCode: number;
-  headers: Record<string, string>;
-  body: string;
-};
+import { getCorsHeaders } from './cors.ts';
 
 /**
  * Creates a successful JSON response with optional caching
  */
 export function createSuccessResponse(
-  data: any,
+  data: unknown,
   statusCode: number = 200,
   cacheMaxAge: number = 0
-): NetlifyResponse {
+): Response {
   const headers: Record<string, string> = {
     ...getCorsHeaders(),
     'Content-Type': 'application/json',
@@ -28,25 +22,23 @@ export function createSuccessResponse(
     headers['Expires'] = '0';
   }
 
-  return {
-    statusCode,
+  return new Response(JSON.stringify(data), {
+    status: statusCode,
     headers,
-    body: JSON.stringify(data),
-  };
+  });
 }
 
 /**
  * Creates an empty response (for DELETE, etc.)
  */
-export function createEmptyResponse(statusCode: number = 204): NetlifyResponse {
-  return {
-    statusCode,
+export function createEmptyResponse(statusCode: number = 204): Response {
+  return new Response(null, {
+    status: statusCode,
     headers: {
       ...getCorsHeaders(),
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Pragma': 'no-cache',
       'Expires': '0',
     },
-    body: '',
-  };
+  });
 }
