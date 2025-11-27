@@ -1,9 +1,9 @@
 import { verifyAuth } from '../_shared/auth.ts';
+import { formatCurrency } from '../_shared/currency.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
+import { log } from '../_shared/logger.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
 import { isValidUUID, validateBodySize, validateTransactionData } from '../_shared/validation.ts';
-import { formatCurrency } from '../_shared/currency.ts';
-import { log } from '../_shared/logger.ts';
 
 /**
  * Transactions Edge Function
@@ -319,13 +319,26 @@ Deno.serve(async (req: Request) => {
               transactionId: transaction.id,
             });
           } else {
-            log.error('Failed to create transaction_splits', 'transaction-creation', {
+            log.error('Failed to create transaction_splits, rolling back transaction', 'transaction-creation', {
               transactionId: transaction.id,
               error: splitsError.message,
               code: splitsError.code,
             });
-            // Transaction is already created, but splits weren't saved
-            // Consider monitoring/alerting for data consistency issues
+
+            const { error: rollbackError } = await supabase
+              .from('transactions')
+              .delete()
+              .eq('id', transaction.id);
+
+            if (rollbackError) {
+              log.error('Failed to rollback transaction after split insert failure', 'transaction-creation', {
+                transactionId: transaction.id,
+                error: rollbackError.message,
+                code: rollbackError.code,
+              });
+            }
+
+            return createErrorResponse(500, 'Failed to create transaction splits', 'TRANSACTION_SPLIT_ERROR');
           }
         }
       }
