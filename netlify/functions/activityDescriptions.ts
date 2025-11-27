@@ -51,10 +51,18 @@ interface HistoryChanges {
   settlement_id?: string;
 }
 
-interface HistorySnapshot {
-  transaction?: TransactionSnapshot;
-  settlement?: SettlementSnapshot;
-}
+/**
+ * Snapshot structure stored in history
+ * 
+ * For 'created' and 'deleted' actions: snapshot is wrapped as { transaction?: TransactionSnapshot, settlement?: SettlementSnapshot }
+ * For 'updated' actions: snapshot IS the TransactionSnapshot or SettlementSnapshot directly (to_jsonb(NEW) from trigger)
+ * 
+ * This is a union type to handle both structures
+ */
+type HistorySnapshot = 
+  | { transaction?: TransactionSnapshot; settlement?: SettlementSnapshot }  // For created/deleted
+  | TransactionSnapshot  // For updated transactions
+  | SettlementSnapshot;   // For updated settlements
 
 interface TransactionHistory {
   id: string;
@@ -67,6 +75,80 @@ interface TransactionHistory {
   changed_at: string;
   changes: HistoryChanges;
   snapshot: HistorySnapshot | null;
+}
+
+interface ActivityItemDetails {
+  action: 'created' | 'updated' | 'deleted';
+  changes?: ChangesDiff;
+  transaction?: TransactionSnapshot;
+  settlement?: SettlementSnapshot;
+}
+
+/**
+ * Type guard to check if snapshot is a wrapped structure (for created/deleted)
+ */
+function isWrappedSnapshot(snapshot: HistorySnapshot | null): snapshot is { transaction?: TransactionSnapshot; settlement?: SettlementSnapshot } {
+  return snapshot !== null && typeof snapshot === 'object' && ('transaction' in snapshot || 'settlement' in snapshot);
+}
+
+/**
+ * Type guard to check if snapshot is a transaction (for updated actions)
+ */
+function isTransactionSnapshot(snapshot: HistorySnapshot | null): snapshot is TransactionSnapshot {
+  if (!snapshot || typeof snapshot !== 'object') return false;
+  return 'id' in snapshot && 'amount' in snapshot && 'description' in snapshot && 'type' in snapshot;
+}
+
+/**
+ * Type guard to check if snapshot is a settlement (for updated actions)
+ */
+function isSettlementSnapshot(snapshot: HistorySnapshot | null): snapshot is SettlementSnapshot {
+  if (!snapshot || typeof snapshot !== 'object') return false;
+  return 'id' in snapshot && 'amount' in snapshot && 'from_user_id' in snapshot && 'to_user_id' in snapshot;
+}
+
+/**
+ * Extracts transaction from history snapshot/changes, handling both wrapped and direct structures
+ */
+function extractTransactionFromSnapshot(
+  snapshot: HistorySnapshot | null,
+  changes: HistoryChanges | undefined,
+  action: 'created' | 'updated' | 'deleted'
+): TransactionSnapshot | undefined {
+  // Try wrapped structure first (created/deleted)
+  if (isWrappedSnapshot(snapshot) && snapshot.transaction) {
+    return snapshot.transaction;
+  }
+  
+  // Try direct structure (updated)
+  if (action === 'updated' && isTransactionSnapshot(snapshot)) {
+    return snapshot;
+  }
+  
+  // Fallback to changes
+  return changes?.transaction;
+}
+
+/**
+ * Extracts settlement from history snapshot/changes, handling both wrapped and direct structures
+ */
+function extractSettlementFromSnapshot(
+  snapshot: HistorySnapshot | null,
+  changes: HistoryChanges | undefined,
+  action: 'created' | 'updated' | 'deleted'
+): SettlementSnapshot | undefined {
+  // Try wrapped structure first (created/deleted)
+  if (isWrappedSnapshot(snapshot) && snapshot.settlement) {
+    return snapshot.settlement;
+  }
+  
+  // Try direct structure (updated)
+  if (action === 'updated' && isSettlementSnapshot(snapshot)) {
+    return snapshot;
+  }
+  
+  // Fallback to changes
+  return changes?.settlement;
 }
 
 /**
@@ -105,15 +187,28 @@ export function formatValue(field: string, value: unknown, currencyCode?: string
   }
   
   if (field === 'amount') {
+    // Currency is mandatory - formatCurrency now handles missing currency safely
+    // But log if currency is missing for debugging
+    if (!currencyCode || typeof currencyCode !== 'string' || currencyCode.trim() === '') {
+      console.error('Missing currency code for amount field', {
+        field,
+        value,
+        valueType: typeof value,
+      });
+    }
+    
+    const finalCurrencyCode = currencyCode || '';
+    
     // Type guard for number - safer than type assertion
+    // formatCurrency now returns safe fallback if currency is invalid
     if (typeof value === 'number') {
-      return formatCurrency(value, currencyCode || 'USD');
+      return formatCurrency(value, finalCurrencyCode);
     }
     // Try to parse string to number
     if (typeof value === 'string') {
       const num = parseFloat(value);
       if (!isNaN(num)) {
-        return formatCurrency(num, currencyCode || 'USD');
+        return formatCurrency(num, finalCurrencyCode);
       }
     }
     return String(value);
@@ -236,11 +331,25 @@ function getUserName(userId: string, emailMap?: Map<string, string>): string {
  */
 function generateTransactionCreatedDescription(transaction: TransactionSnapshot): string {
   const amount = transaction.amount || 0;
-  const currency = transaction.currency || 'USD';
+  // Currency is mandatory - extract and validate
+  const currency = transaction.currency && typeof transaction.currency === 'string' && transaction.currency.trim() !== ''
+    ? transaction.currency.toUpperCase()
+    : '';
+  
+  // Log if currency is missing for debugging (formatCurrency handles it safely)
+  if (!currency) {
+    console.error('Missing currency in transaction snapshot', {
+      transaction_id: transaction.id,
+      has_currency_field: 'currency' in transaction,
+      currency_value: transaction.currency,
+    });
+  }
+  
   const description = transaction.description || 'transaction';
   const descriptionGlimpse = description.length > 30 
     ? description.substring(0, 30) + '...' 
     : description;
+  // formatCurrency now returns safe fallback if currency is invalid
   return `${formatCurrency(amount, currency)} - ${descriptionGlimpse}`;
 }
 
@@ -264,7 +373,20 @@ function generateTransactionUpdatedDescription(
     return 'Updated transaction';
   }
 
-  const currency = transaction?.currency || 'USD';
+  // Currency is mandatory - extract and validate
+  const currency = transaction?.currency && typeof transaction.currency === 'string' && transaction.currency.trim() !== ''
+    ? transaction.currency.toUpperCase()
+    : '';
+  
+  // Log if currency is missing for debugging (formatCurrency handles it safely)
+  if (!currency) {
+    console.error('Missing currency in transaction snapshot for update', {
+      transaction_id: transaction?.id,
+      has_transaction: !!transaction,
+      has_currency_field: transaction && 'currency' in transaction,
+      currency_value: transaction?.currency,
+    });
+  }
   const descriptionGlimpse = transaction?.description 
     ? (transaction.description.length > 25 
         ? transaction.description.substring(0, 25) + '...' 
@@ -282,9 +404,13 @@ function generateTransactionUpdatedDescription(
       const newSplits = Array.isArray(newVal) ? newVal : [];
       fieldChanges.push(formatSplitChanges(oldSplits, newSplits, emailMap));
     } else {
-      // Pass currency code for amount fields
-      const currencyCode = field === 'amount' ? currency : undefined;
-      fieldChanges.push(`${fieldDisplayName}: ${formatValue(field, oldVal, currencyCode)} → ${formatValue(field, newVal, currencyCode)}`);
+      // Pass currency code for amount fields (formatCurrency handles missing currency safely)
+      if (field === 'amount') {
+        // formatCurrency now returns safe fallback if currency is invalid
+        fieldChanges.push(`${fieldDisplayName}: ${formatValue(field, oldVal, currency)} → ${formatValue(field, newVal, currency)}`);
+      } else {
+        fieldChanges.push(`${fieldDisplayName}: ${formatValue(field, oldVal)} → ${formatValue(field, newVal)}`);
+      }
     }
   });
 
@@ -302,11 +428,25 @@ function generateTransactionUpdatedDescription(
  */
 function generateTransactionDeletedDescription(transaction: TransactionSnapshot): string {
   const amount = transaction.amount || 0;
-  const currency = transaction.currency || 'USD';
+  // Currency is mandatory - extract and validate
+  const currency = transaction.currency && typeof transaction.currency === 'string' && transaction.currency.trim() !== ''
+    ? transaction.currency.toUpperCase()
+    : '';
+  
+  // Log if currency is missing for debugging (formatCurrency handles it safely)
+  if (!currency) {
+    console.error('Missing currency in transaction snapshot', {
+      transaction_id: transaction.id,
+      has_currency_field: 'currency' in transaction,
+      currency_value: transaction.currency,
+    });
+  }
+  
   const description = transaction.description || 'transaction';
   const descriptionGlimpse = description.length > 30 
     ? description.substring(0, 30) + '...' 
     : description;
+  // formatCurrency now returns safe fallback if currency is invalid
   return `Deleted: ${formatCurrency(amount, currency)} - ${descriptionGlimpse}`;
 }
 
@@ -321,7 +461,19 @@ function generateSettlementCreatedDescription(
   emailMap?: Map<string, string>
 ): string {
   const amount = settlement.amount || 0;
-  const currency = settlement.currency || 'USD';
+  // Currency is mandatory - extract and validate
+  const currency = settlement.currency && typeof settlement.currency === 'string' && settlement.currency.trim() !== ''
+    ? settlement.currency.toUpperCase()
+    : '';
+  
+  // Log if currency is missing for debugging (formatCurrency handles it safely)
+  if (!currency) {
+    console.error('Missing currency in settlement snapshot', {
+      settlement_id: settlement.id,
+      has_currency_field: 'currency' in settlement,
+      currency_value: settlement.currency,
+    });
+  }
   const fromUserId = settlement.from_user_id;
   const toUserId = settlement.to_user_id;
   const notes = settlement.notes;
@@ -358,7 +510,20 @@ function generateSettlementUpdatedDescription(
   }
   
   const amount = settlement?.amount || 0;
-  const currency = settlement?.currency || 'USD';
+  // Currency is mandatory - extract and validate
+  const currency = settlement?.currency && typeof settlement.currency === 'string' && settlement.currency.trim() !== ''
+    ? settlement.currency.toUpperCase()
+    : '';
+  
+  // Log if currency is missing for debugging (formatCurrency handles it safely)
+  if (!currency) {
+    console.error('Missing currency in settlement snapshot for update', {
+      settlement_id: settlement?.id,
+      has_settlement: !!settlement,
+      has_currency_field: settlement && 'currency' in settlement,
+      currency_value: settlement?.currency,
+    });
+  }
   const fromUserId = settlement?.from_user_id;
   const toUserId = settlement?.to_user_id;
   
@@ -371,7 +536,8 @@ function generateSettlementUpdatedDescription(
     const fieldDisplayName = formatFieldName(field);
     
     if (field === 'amount') {
-      // Pass currency code for amount field
+      // Pass currency code for amount field (formatCurrency handles missing currency safely)
+      // formatCurrency now returns safe fallback if currency is invalid
       fieldChanges.push(`Amount: ${formatValue(field, oldVal, currency)} → ${formatValue(field, newVal, currency)}`);
     } else if (field === 'notes') {
       const oldNotes = oldVal || 'none';
@@ -382,6 +548,7 @@ function generateSettlementUpdatedDescription(
     }
   });
   
+  // formatCurrency now returns safe fallback if currency is invalid
   return `${fromName} paid ${toName} ${formatCurrency(amount, currency)} - ${fieldChanges.join(', ')}`;
 }
 
@@ -396,13 +563,26 @@ function generateSettlementDeletedDescription(
   emailMap?: Map<string, string>
 ): string {
   const amount = settlement.amount || 0;
-  const currency = settlement.currency || 'USD';
+  // Currency is mandatory - extract and validate
+  const currency = settlement.currency && typeof settlement.currency === 'string' && settlement.currency.trim() !== ''
+    ? settlement.currency.toUpperCase()
+    : '';
+  
+  // Log if currency is missing for debugging (formatCurrency handles it safely)
+  if (!currency) {
+    console.error('Missing currency in settlement snapshot', {
+      settlement_id: settlement.id,
+      has_currency_field: 'currency' in settlement,
+      currency_value: settlement.currency,
+    });
+  }
   const fromUserId = settlement.from_user_id;
   const toUserId = settlement.to_user_id;
   
   const fromName = getUserName(fromUserId, emailMap);
   const toName = getUserName(toUserId, emailMap);
   
+  // formatCurrency now returns safe fallback if currency is invalid
   return `Deleted settlement: ${fromName} paid ${toName} ${formatCurrency(amount, currency)}`;
 }
 
@@ -410,27 +590,39 @@ function generateSettlementDeletedDescription(
  * Generates human-readable description for an activity item
  * @param history - Transaction history record from database
  * @param emailMap - Map of user IDs to email addresses for name resolution
+ * @param enrichedDetails - Optional enriched details with currency from currencyMap (takes precedence over history.snapshot)
  * @returns User-friendly description string
  */
 export function generateActivityDescription(
   history: TransactionHistory,
-  emailMap?: Map<string, string>
+  emailMap?: Map<string, string>,
+  enrichedDetails?: ActivityItemDetails
 ): string {
   const action = history.action;
   const changes = history.changes;
   const snapshot = history.snapshot;
   const activityType = history.activity_type || 'transaction';
   
+  // Use enriched details if available (has currency from currencyMap), otherwise fall back to history
+  const useEnriched = enrichedDetails && (
+    (activityType === 'transaction' && enrichedDetails.transaction) ||
+    (activityType === 'settlement' && enrichedDetails.settlement)
+  );
+  
   switch (action) {
     case 'created': {
       if (activityType === 'settlement') {
-        const settlement = snapshot?.settlement || changes?.settlement;
+        const settlement = useEnriched 
+          ? enrichedDetails!.settlement 
+          : extractSettlementFromSnapshot(snapshot, changes, action);
         if (settlement) {
           return generateSettlementCreatedDescription(settlement, emailMap);
         }
         return 'Created settlement';
       } else {
-        const transaction = snapshot?.transaction || changes?.transaction;
+        const transaction = useEnriched
+          ? enrichedDetails!.transaction
+          : extractTransactionFromSnapshot(snapshot, changes, action);
         if (transaction) {
           return generateTransactionCreatedDescription(transaction);
         }
@@ -439,26 +631,34 @@ export function generateActivityDescription(
     }
 
     case 'updated': {
+      const diff = changes?.diff || {};
+      
       if (activityType === 'settlement') {
-        const diff = changes?.diff || {};
-        const settlement = snapshot?.settlement || changes?.settlement;
+        const settlement = useEnriched && enrichedDetails!.settlement
+          ? enrichedDetails!.settlement
+          : extractSettlementFromSnapshot(snapshot, changes, action);
         return generateSettlementUpdatedDescription(settlement, diff, emailMap);
       } else {
-        const diff = changes?.diff || {};
-        const transaction = snapshot?.transaction || changes?.transaction;
+        const transaction = useEnriched && enrichedDetails!.transaction
+          ? enrichedDetails!.transaction
+          : extractTransactionFromSnapshot(snapshot, changes, action);
         return generateTransactionUpdatedDescription(transaction, diff, emailMap);
       }
     }
 
     case 'deleted': {
       if (activityType === 'settlement') {
-        const settlement = snapshot?.settlement || changes?.settlement;
+        const settlement = useEnriched
+          ? enrichedDetails!.settlement
+          : extractSettlementFromSnapshot(snapshot, changes, action);
         if (settlement) {
           return generateSettlementDeletedDescription(settlement, emailMap);
         }
         return 'Deleted settlement';
       } else {
-        const transaction = snapshot?.transaction || changes?.transaction;
+        const transaction = useEnriched
+          ? enrichedDetails!.transaction
+          : extractTransactionFromSnapshot(snapshot, changes, action);
         if (transaction) {
           return generateTransactionDeletedDescription(transaction);
         }
