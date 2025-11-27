@@ -775,7 +775,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             await handleSettlementSave({
               ...data,
               group_id: group.id,
-              from_user_id: session?.user?.id || "",
             });
           }
         }}
