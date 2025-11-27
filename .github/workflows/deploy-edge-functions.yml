@@ -16,7 +16,7 @@ jobs:
     environment: Production
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
     
     steps:
       - name: Checkout repository
@@ -39,8 +39,8 @@ jobs:
             echo "Please add it in: Settings > Secrets and variables > Actions"
             exit 1
           fi
-          if [ -z "$SUPABASE_PROJECT_ID" ]; then
-            echo "❌ SUPABASE_PROJECT_ID secret is not set"
+          if [ -z "$SUPABASE_PROJECT_REF" ]; then
+            echo "❌ SUPABASE_PROJECT_REF secret is not set"
             echo "Please add it in: Settings > Secrets and variables > Actions"
             echo "You can find your Project ID in your Supabase project settings"
             exit 1
@@ -49,21 +49,21 @@ jobs:
 
       - name: Link to Supabase project
         run: |
-          supabase link --project-ref $SUPABASE_PROJECT_ID
+          supabase link --project-ref $SUPABASE_PROJECT_REF
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
       - name: Deploy all Edge Functions
         run: |
           echo "🚀 Deploying Supabase Edge Functions..."
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID
+          supabase functions deploy --project-ref $SUPABASE_PROJECT_REF
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
       - name: List deployed functions
         run: |
           echo "📋 Deployed Edge Functions:"
-          supabase functions list --project-ref $SUPABASE_PROJECT_ID || echo "Note: Function listing may require additional permissions"
+          supabase functions list --project-ref $SUPABASE_PROJECT_REF || echo "Note: Function listing may require additional permissions"
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         continue-on-error: true
@@ -83,6 +83,6 @@ jobs:
           echo "- settlements" >> $GITHUB_STEP_SUMMARY
           echo "- transactions" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Project ID:** \`$SUPABASE_PROJECT_ID\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Project ID:** \`$SUPABASE_PROJECT_REF\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Functions are now live and accessible via your Supabase project URL." >> $GITHUB_STEP_SUMMARY
