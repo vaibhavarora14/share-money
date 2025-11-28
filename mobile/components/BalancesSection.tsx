@@ -1,14 +1,14 @@
 import React, { useMemo } from "react";
 import { View } from "react-native";
 import {
-  ActivityIndicator,
-  Avatar,
-  Button,
-  Divider,
-  Surface,
-  Text,
-  TouchableRipple,
-  useTheme,
+    ActivityIndicator,
+    Avatar,
+    Button,
+    Divider,
+    Surface,
+    Text,
+    TouchableRipple,
+    useTheme,
 } from "react-native-paper";
 import { Balance, GroupBalance } from "../types";
 import { formatCurrency } from "../utils/currency";
@@ -110,7 +110,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                     }}
                   >
                     {youAreOwed.map((balance, index) => (
-                      <React.Fragment key={balance.user_id}>
+                      <React.Fragment key={`${balance.user_id}-${balance.currency}`}>
                         <TouchableRipple
                           onPress={() => onSettleUp?.(balance)}
                           rippleColor={theme.colors.primary + "20"}
@@ -143,7 +143,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                               >
                                 {formatCurrency(
                                   Math.abs(balance.amount),
-                                  defaultCurrency
+                                  balance.currency
                                 )}
                               </Text>
                               {onSettleUp && (
@@ -188,7 +188,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                     }}
                   >
                     {youOwe.map((balance, index) => (
-                      <React.Fragment key={balance.user_id}>
+                      <React.Fragment key={`${balance.user_id}-${balance.currency}`}>
                         <TouchableRipple
                           onPress={() => onSettleUp?.(balance)}
                           rippleColor={theme.colors.error + "20"}
@@ -221,7 +221,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                               >
                                 {formatCurrency(
                                   Math.abs(balance.amount),
-                                  defaultCurrency
+                                  balance.currency
                                 )}
                               </Text>
                               {onSettleUp && (
@@ -293,7 +293,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                     >
                       {/* Group: You Are Owed */}
                       {groupYouAreOwed.map((balance, idx) => (
-                        <React.Fragment key={balance.user_id}>
+                        <React.Fragment key={`${balance.user_id}-${balance.currency}`}>
                           <View style={styles.balanceContent}>
                             <Avatar.Text
                               size={40}
@@ -322,7 +322,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                               >
                                 {formatCurrency(
                                   Math.abs(balance.amount),
-                                  defaultCurrency
+                                  balance.currency
                                 )}
                               </Text>
                               {onSettleUp && (
@@ -344,7 +344,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
 
                       {/* Group: You Owe */}
                       {groupYouOwe.map((balance, idx) => (
-                        <React.Fragment key={balance.user_id}>
+                        <React.Fragment key={`${balance.user_id}-${balance.currency}`}>
                           <View style={styles.balanceContent}>
                             <Avatar.Text
                               size={40}
@@ -373,7 +373,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                               >
                                 {formatCurrency(
                                   Math.abs(balance.amount),
-                                  defaultCurrency
+                                  balance.currency
                                 )}
                               </Text>
                               {onSettleUp && (

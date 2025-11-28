@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import { BackHandler, ScrollView, StyleSheet, View } from "react-native";
 import {
     ActivityIndicator,
@@ -37,13 +37,14 @@ export const BalancesScreen: React.FC<{
   const overallBalances = balancesData?.overall_balances || [];
   const defaultCurrency = getDefaultCurrency();
 
-  // Separate balances into "you owe" and "you are owed"
-  const youOwe = overallBalances.filter((b) => b.amount < 0);
-  const youAreOwed = overallBalances.filter((b) => b.amount > 0);
-
-  // Sort by absolute amount (largest first)
-  youOwe.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
-  youAreOwed.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+  // Separate balances into "you owe" and "you are owed" and sort them
+  const { youOwe, youAreOwed } = useMemo(() => {
+    const owe = [...overallBalances.filter((b) => b.amount < 0)];
+    const owed = [...overallBalances.filter((b) => b.amount > 0)];
+    owe.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+    owed.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+    return { youOwe: owe, youAreOwed: owed };
+  }, [overallBalances]);
 
   const getUserDisplayName = (balance: Balance): string => {
     // Use email from balance (enriched by API)
@@ -131,7 +132,7 @@ export const BalancesScreen: React.FC<{
                   You are owed
                 </Text>
                 {youAreOwed.map((balance, index) => (
-                  <Surface key={balance.user_id} style={styles.balanceItem} elevation={0}>
+                  <Surface key={`${balance.user_id}-${balance.currency}`} style={styles.balanceItem} elevation={0}>
                     <View style={styles.balanceContent}>
                       <Avatar.Text 
                         size={40} 
@@ -157,7 +158,7 @@ export const BalancesScreen: React.FC<{
                         >
                           {formatCurrency(
                             Math.abs(balance.amount),
-                            defaultCurrency
+                            balance.currency
                           )}
                         </Text>
                       </View>
@@ -180,7 +181,7 @@ export const BalancesScreen: React.FC<{
                   You owe
                 </Text>
                 {youOwe.map((balance, index) => (
-                  <Surface key={balance.user_id} style={styles.balanceItem} elevation={0}>
+                  <Surface key={`${balance.user_id}-${balance.currency}`} style={styles.balanceItem} elevation={0}>
                     <View style={styles.balanceContent}>
                       <Avatar.Text 
                         size={40} 
@@ -206,7 +207,7 @@ export const BalancesScreen: React.FC<{
                         >
                           {formatCurrency(
                             Math.abs(balance.amount),
-                            defaultCurrency
+                            balance.currency
                           )}
                         </Text>
                       </View>
