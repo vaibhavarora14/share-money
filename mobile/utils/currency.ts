@@ -62,7 +62,11 @@ export function getCurrencySymbol(currencyCode: string = getDefaultCurrency()): 
  * @returns Formatted currency string (e.g., "$1,000.00" or "₹1,000.00")
  */
 export function formatCurrency(amount: number, currencyCode: string = getDefaultCurrency()): string {
-  const normalizedCode = currencyCode.toUpperCase();
+  let normalizedCode = currencyCode.toUpperCase();
+  // Validate currency code
+  if (!CURRENCY_SYMBOLS[normalizedCode]) {
+    normalizedCode = getDefaultCurrency();
+  }
   const symbol = getCurrencySymbol(normalizedCode);
   // For currencies like JPY that don't use decimals
   const decimals = ['JPY', 'KRW'].includes(normalizedCode) ? 0 : 2;
@@ -72,3 +76,12 @@ export function formatCurrency(amount: number, currencyCode: string = getDefault
   });
   return `${symbol}${formattedAmount}`;
 }
+export const formatTotals = (
+  totals: Map<string, number>,
+  defaultCurrency: string = getDefaultCurrency()
+): string => {
+  if (totals.size === 0) return formatCurrency(0, defaultCurrency);
+  return Array.from(totals.entries())
+    .map(([currency, amount]) => formatCurrency(amount, currency))
+    .join(" + ");
+};

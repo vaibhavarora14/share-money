@@ -84,12 +84,14 @@ jobs:
         id: diff
         run: |
           if git diff --quiet -- mobile/version.json; then
-            echo "::error::mobile/version.json did not change after recomputing version. Please ensure repository history is intact."
-            exit 1
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "Version is already up to date."
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
           fi
 
       - name: Commit and push updated version
-        if: steps.repo.outputs.can_push == 'true'
+        if: steps.repo.outputs.can_push == 'true' && steps.diff.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
