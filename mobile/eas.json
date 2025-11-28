@@ -25,6 +25,9 @@
       "channel": "production",
       "env": {
         "EAS_BUILD": "true"
+      },
+      "android": {
+        "buildType": "apk"
       }
     }
   },
