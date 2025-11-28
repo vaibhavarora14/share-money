@@ -17,7 +17,7 @@ This PR implements multi-currency support across balances and statistics. The im
 10. **✅ FIXED**: `CurrencyCode` type added for better type safety
 11. **✅ FIXED**: Backend currency fallback removed (NOT NULL constraint enforced)
 
-## ✅ Fixed Issues (Latest Commit 0ef3116)
+## ✅ Fixed Issues (All Commits)
 
 ### 1. **Array Mutation in BalancesScreen.tsx** ✅ FIXED
 **Status**: Fixed in commit 0ef3116
@@ -60,19 +60,20 @@ This PR implements multi-currency support across balances and statistics. The im
 - Note: Balance interface still uses `string` for flexibility, but type is available
 
 ### 8. **Backend Currency Default** ✅ FIXED
-**Status**: Fixed in commits 2619b9a and migration 20251128143316
+**Status**: Fixed in commits 2619b9a, 6dd9be8, and 4173ec9
 - Removed currency fallback for transactions (NOT NULL constraint enforced)
 - Removed currency fallback for settlements (NOT NULL constraint enforced via migration)
 - Both transactions and settlements now require currency at database level
+- Proper error handling added for missing currency (commit 6dd9be8)
+- Migration created to enforce NOT NULL constraint (commit 4173ec9)
 
-## ⚠️ Remaining Minor Issues
+### 9. **Performance: Memoization in GroupDashboard** ✅ FIXED
+**Status**: Fixed in commit 863d4f2
+- Added memoization for formatted totals using `useMemo`
+- Prevents unnecessary re-formatting on every render
+- Improves performance, especially with multiple currency totals
 
-### 9. **Settlement Currency Fallback** ✅ FIXED
-**Status**: Fixed
-- Created migration to make `settlements.currency` NOT NULL (similar to transactions)
-- Removed outdated comments in the code
-- Code already had proper error handling for missing currency (added in commit 6dd9be8)
-- Migration ensures database-level enforcement of currency requirement
+## ✅ Additional Notes
 
 ### 10. **Settlement Currency Logic** ✅ NOT AN ISSUE
 **Status**: Correctly implemented
@@ -100,11 +101,11 @@ This PR implements multi-currency support across balances and statistics. The im
 
 ## 🎯 Summary
 
-**Overall Assessment**: ✅ **Excellent implementation - All critical and most important issues addressed**
+**Overall Assessment**: ✅ **Excellent implementation - All issues addressed and additional improvements made**
 
 ### Status Update (After Latest Commits)
 
-**✅ Fixed Issues** (Commits 0ef3116, 2619b9a, ad7c4e0, 721cb50):
+**✅ Fixed Issues** (All commits: 0ef3116, 2619b9a, ad7c4e0, 721cb50, 6dd9be8, 863d4f2, 4173ec9):
 - ✅ Array mutation in BalancesScreen.tsx
 - ✅ Misleading percentage calculation (now hides when mixed currencies)
 - ✅ Commented-out code removed
@@ -113,6 +114,8 @@ This PR implements multi-currency support across balances and statistics. The im
 - ✅ Percentage calculation comments simplified
 - ✅ CurrencyCode type added for type safety
 - ✅ Backend currency fallback removed for transactions (NOT NULL constraint)
+- ✅ Backend currency fallback removed for settlements (NOT NULL constraint + migration)
+- ✅ Performance: Memoized formatted totals in GroupDashboard
 
 **⚠️ Remaining Minor Issues**:
 - None - All issues have been addressed!
@@ -127,4 +130,4 @@ This PR implements multi-currency support across balances and statistics. The im
 
 **Reviewed by**: Senior Engineer Review  
 **Initial Review Date**: 2025-01-21  
-**Last Updated**: After commits 0ef3116, 2619b9a, ad7c4e0, 721cb50 (2025-11-28)
+**Last Updated**: After all fixes (commits through 4173ec9) - 2025-11-28
