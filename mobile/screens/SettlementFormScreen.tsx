@@ -58,7 +58,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   onDismiss,
 }) => {
   const isEditing = !!settlement;
-  const effectiveDefaultCurrency = defaultCurrency || getDefaultCurrency();
+  const effectiveDefaultCurrency = settlement?.currency || balance?.currency || defaultCurrency || getDefaultCurrency();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
 

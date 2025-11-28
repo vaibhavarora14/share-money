@@ -131,7 +131,7 @@ export const BalancesScreen: React.FC<{
                   You are owed
                 </Text>
                 {youAreOwed.map((balance, index) => (
-                  <Surface key={balance.user_id} style={styles.balanceItem} elevation={0}>
+                  <Surface key={`${balance.user_id}-${balance.currency}`} style={styles.balanceItem} elevation={0}>
                     <View style={styles.balanceContent}>
                       <Avatar.Text 
                         size={40} 
@@ -157,7 +157,7 @@ export const BalancesScreen: React.FC<{
                         >
                           {formatCurrency(
                             Math.abs(balance.amount),
-                            defaultCurrency
+                            balance.currency
                           )}
                         </Text>
                       </View>
@@ -180,7 +180,7 @@ export const BalancesScreen: React.FC<{
                   You owe
                 </Text>
                 {youOwe.map((balance, index) => (
-                  <Surface key={balance.user_id} style={styles.balanceItem} elevation={0}>
+                  <Surface key={`${balance.user_id}-${balance.currency}`} style={styles.balanceItem} elevation={0}>
                     <View style={styles.balanceContent}>
                       <Avatar.Text 
                         size={40} 
@@ -206,7 +206,7 @@ export const BalancesScreen: React.FC<{
                         >
                           {formatCurrency(
                             Math.abs(balance.amount),
-                            defaultCurrency
+                            balance.currency
                           )}
                         </Text>
                       </View>

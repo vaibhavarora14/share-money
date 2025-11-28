@@ -1,11 +1,11 @@
 import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import {
-  Icon,
-  Surface,
-  Text,
-  TouchableRipple,
-  useTheme,
+    Icon,
+    Surface,
+    Text,
+    TouchableRipple,
+    useTheme,
 } from "react-native-paper";
 import { Balance, Transaction } from "../types";
 import { formatCurrency } from "../utils/currency";
@@ -36,40 +36,80 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   const theme = useTheme();
 
   const { youOwe, youAreOwed } = useMemo(() => {
-    let owe = 0;
-    let owed = 0;
+    const owe = new Map<string, number>();
+    const owed = new Map<string, number>();
+    
     balances.forEach((b) => {
-      if (b.amount < 0) owe += Math.abs(b.amount);
-      else owed += b.amount;
+      if (b.amount < 0) {
+        const current = owe.get(b.currency) || 0;
+        owe.set(b.currency, current + Math.abs(b.amount));
+      } else {
+        const current = owed.get(b.currency) || 0;
+        owed.set(b.currency, current + b.amount);
+      }
     });
     return { youOwe: owe, youAreOwed: owed };
   }, [balances]);
 
   const { myCost, totalGroupCost } = useMemo(() => {
-    let total = 0;
-    let myTotal = 0;
+    const total = new Map<string, number>();
+    const myTotal = new Map<string, number>();
 
     transactions.forEach((t) => {
-      total += t.amount;
+      const currency = t.currency || defaultCurrency;
+      
+      // Total Group Cost
+      const currentTotal = total.get(currency) || 0;
+      total.set(currency, currentTotal + t.amount);
 
+      // My Cost
+      let myShare = 0;
       if (t.splits && t.splits.length > 0) {
         const mySplit = t.splits.find((s) => s.user_id === currentUserId);
         if (mySplit) {
-          myTotal += mySplit.amount;
+          myShare = mySplit.amount;
         }
       } else if (t.split_among && t.split_among.length > 0) {
         if (t.split_among.includes(currentUserId || "")) {
-          myTotal += t.amount / t.split_among.length;
+          myShare = t.amount / t.split_among.length;
         }
+      } else if (t.paid_by === currentUserId) {
+          // If I paid and no splits defined, assuming I paid for myself? 
+          // Or should we ignore? The logic in GroupStatsScreen was:
+          // Fallback: attribute to payer or creator
+          // But here we are calculating "My Cost" (what I consumed).
+          // If I paid $100 and no splits, usually means I paid for group? Or just me?
+          // Existing logic was:
+          /*
+            } else if (t.split_among && t.split_among.length > 0) {
+                if (t.split_among.includes(currentUserId || "")) {
+                myTotal += t.amount / t.split_among.length;
+                }
+            }
+          */
+          // It didn't have a fallback for "paid_by". So if no splits and no split_among, it didn't add to myTotal.
+          // I will keep it consistent with previous logic.
+      }
+      
+      if (myShare > 0) {
+        const currentMyTotal = myTotal.get(currency) || 0;
+        myTotal.set(currency, currentMyTotal + myShare);
       }
     });
 
     return { myCost: myTotal, totalGroupCost: total };
-  }, [transactions, currentUserId]);
+  }, [transactions, currentUserId, defaultCurrency]);
+
+  const formatTotals = (totals: Map<string, number>) => {
+    if (totals.size === 0) return formatCurrency(0, defaultCurrency);
+    return Array.from(totals.entries())
+      .map(([currency, amount]) => formatCurrency(amount, currency))
+      .join(" + ");
+  };
 
   const renderCard = (
     title: string,
-    amount: number,
+    amounts: Map<string, number>,
     backgroundColor: string,
     textColor: string,
     icon: string,
@@ -96,8 +136,10 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
           <Text
             variant="headlineSmall"
             style={{ color: textColor, fontWeight: "bold", marginTop: 8 }}
+            numberOfLines={2}
+            adjustsFontSizeToFit
           >
-            {loadingState ? "..." : formatCurrency(amount, defaultCurrency)}
+            {loadingState ? "..." : formatTotals(amounts)}
           </Text>
         </View>
       </TouchableRipple>
@@ -178,6 +220,7 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 20,
     overflow: "hidden",
+    flex: 1,
   },
   cardContent: {
     padding: 16,

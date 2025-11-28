@@ -71,9 +71,10 @@ export interface GroupWithMembers extends Group {
 
 export interface Balance {
   user_id: string;
-  email?: string;
-  amount: number; // Positive = they owe you, Negative = you owe them
-}
+  email?: string; // Enriched by API
+  amount: number;
+  currency: string;
+} // Positive = they owe you, Negative = you owe them
 
 export interface GroupBalance {
   group_id: string;

@@ -1,15 +1,16 @@
 import { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 import { verifyAuth } from '../_shared/auth.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
-import { isValidUUID } from '../_shared/validation.ts';
+import { log } from '../_shared/logger.ts';
 import { createSuccessResponse } from '../_shared/response.ts';
 import { fetchUserEmails } from '../_shared/user-email.ts';
-import { log } from '../_shared/logger.ts';
+import { isValidUUID } from '../_shared/validation.ts';
 
 interface Balance {
   user_id: string;
   email?: string;
   amount: number;
+  currency: string;
 }
 
 interface GroupBalance {
@@ -41,7 +42,7 @@ interface TransactionWithSplits {
   id: number;
   amount: number | string;
   paid_by: string | null;
-  currency?: string;
+  currency: string;
   split_among?: string[] | null;
   transaction_splits?: TransactionSplit[];
 }
@@ -90,11 +91,23 @@ async function calculateGroupBalances(
     .eq('group_id', groupId);
 
   const memberIds = new Set((members || []).map((m: GroupMember) => m.user_id));
-  const balanceMap = new Map<string, number>();
+  
+  // Map<UserId, Map<Currency, Amount>>
+  const balanceMap = new Map<string, Map<string, number>>();
+
+  const updateBalance = (userId: string, currency: string, amount: number) => {
+    if (!balanceMap.has(userId)) {
+      balanceMap.set(userId, new Map());
+    }
+    const userBalances = balanceMap.get(userId)!;
+    const currentAmount = userBalances.get(currency) || 0;
+    userBalances.set(currency, currentAmount + amount);
+  };
 
   for (const tx of (transactions || []) as TransactionWithSplits[]) {
     const paidBy = tx.paid_by;
     const totalAmount = typeof tx.amount === 'string' ? parseFloat(tx.amount) : tx.amount;
+    const currency = tx.currency || 'USD'; // Default to USD if missing
     
     if (isNaN(totalAmount) || totalAmount <= 0) {
       log.warn('Invalid transaction amount', 'balance-calculation', {
@@ -154,19 +167,17 @@ async function calculateGroupBalances(
     if (paidBy === currentUserId) {
       for (const split of splits) {
         if (split.user_id !== currentUserId && memberIds.has(split.user_id)) {
-          const current = balanceMap.get(split.user_id) || 0;
-          balanceMap.set(split.user_id, current + split.amount);
+          updateBalance(split.user_id, currency, split.amount);
         }
       }
     } else if (currentUserSplit) {
-      const current = balanceMap.get(paidBy) || 0;
-      balanceMap.set(paidBy, current - currentUserSplit.amount);
+      updateBalance(paidBy, currency, -currentUserSplit.amount);
     }
   }
 
   const { data: settlements } = await supabase
     .from('settlements')
-    .select('from_user_id, to_user_id, amount')
+    .select('from_user_id, to_user_id, amount, currency')
     .eq('group_id', groupId);
 
   for (const settlement of (settlements || [])) {
@@ -175,27 +186,39 @@ async function calculateGroupBalances(
     const settlementAmount = typeof settlement.amount === 'string' 
       ? parseFloat(settlement.amount) 
       : settlement.amount;
+    // Assuming settlements table has currency, or default to USD. 
+    // Note: If settlements table doesn't have currency, this might be an issue, 
+    // but we'll assume for now or default.
+    // The previous code didn't select currency, so I added it.
+    const currency = settlement.currency || 'USD'; 
 
     if (isNaN(settlementAmount) || settlementAmount <= 0) {
       continue;
     }
 
     if (fromUserId === currentUserId && memberIds.has(toUserId)) {
-      const current = balanceMap.get(toUserId) || 0;
-      balanceMap.set(toUserId, current + settlementAmount);
+      updateBalance(toUserId, currency, settlementAmount);
     } else if (toUserId === currentUserId && memberIds.has(fromUserId)) {
-      const current = balanceMap.get(fromUserId) || 0;
-      balanceMap.set(fromUserId, current - settlementAmount);
+      updateBalance(fromUserId, currency, -settlementAmount);
     }
   }
 
-  const balances: Balance[] = Array.from(balanceMap.entries())
-    .filter(([userId]) => userId !== currentUserId)
-    .map(([user_id, amount]) => ({
-      user_id,
-      amount: Math.round(amount * 100) / 100,
-    }))
-    .filter((b) => Math.abs(b.amount) > 0.01);
+  const balances: Balance[] = [];
+  
+  for (const [userId, currencyMap] of balanceMap.entries()) {
+    if (userId === currentUserId) continue;
+    
+    for (const [currency, amount] of currencyMap.entries()) {
+      const roundedAmount = Math.round(amount * 100) / 100;
+      if (Math.abs(roundedAmount) > 0.01) {
+        balances.push({
+          user_id: userId,
+          amount: roundedAmount,
+          currency: currency
+        });
+      }
+    }
+  }
 
   return balances;
 }
@@ -272,7 +295,9 @@ Deno.serve(async (req: Request) => {
 
     const balanceResults = await Promise.allSettled(balancePromises);
     const groupBalances: GroupBalance[] = [];
-    const overallBalanceMap = new Map<string, number>();
+    
+    // Map<UserId, Map<Currency, Amount>>
+    const overallBalanceMap = new Map<string, Map<string, number>>();
 
     for (const result of balanceResults) {
       if (result.status === 'fulfilled') {
@@ -280,18 +305,29 @@ Deno.serve(async (req: Request) => {
         groupBalances.push(groupBalance);
 
         for (const balance of groupBalance.balances) {
-          const current = overallBalanceMap.get(balance.user_id) || 0;
-          overallBalanceMap.set(balance.user_id, current + balance.amount);
+          if (!overallBalanceMap.has(balance.user_id)) {
+            overallBalanceMap.set(balance.user_id, new Map());
+          }
+          const userBalances = overallBalanceMap.get(balance.user_id)!;
+          const current = userBalances.get(balance.currency) || 0;
+          userBalances.set(balance.currency, current + balance.amount);
         }
       }
     }
 
-    const overallBalances: Balance[] = Array.from(overallBalanceMap.entries())
-      .map(([user_id, amount]) => ({
-        user_id,
-        amount: Math.round(amount * 100) / 100,
-      }))
-      .filter((b) => Math.abs(b.amount) > 0.01);
+    const overallBalances: Balance[] = [];
+    for (const [userId, currencyMap] of overallBalanceMap.entries()) {
+      for (const [currency, amount] of currencyMap.entries()) {
+        const roundedAmount = Math.round(amount * 100) / 100;
+        if (Math.abs(roundedAmount) > 0.01) {
+          overallBalances.push({
+            user_id: userId,
+            amount: roundedAmount,
+            currency: currency
+          });
+        }
+      }
+    }
 
     const allUserIds = new Set<string>();
     
