@@ -65,7 +65,7 @@ This PR implements multi-currency support across balances and statistics. The im
 - Transactions now require currency, eliminating inconsistency
 - **Note**: Settlements still have fallback to 'USD' (line 193) - may need NOT NULL constraint
 
-## ⚠️ Remaining Issues
+## ⚠️ Remaining Minor Issues
 
 ### 9. **Settlement Currency Fallback** (balances/index.ts, Line 193)
 **Status**: Minor issue
@@ -80,16 +80,9 @@ const currency = settlement.currency || 'USD';
 - If yes, remove the fallback: `const currency = settlement.currency;`
 - If no, consider adding the constraint via migration for consistency
 
-### 10. **Settlement Currency Logic** (SettlementFormScreen.tsx, Line 61)
-```typescript
-const effectiveDefaultCurrency = settlement?.currency || balance?.currency || defaultCurrency || getDefaultCurrency();
-```
-
-**Issue**: If a user settles a balance in a different currency than the balance currency, this could create accounting inconsistencies. The form should either:
-- Lock the currency to the balance currency when settling a specific balance
-- Or warn the user if they change the currency
-
-**Recommendation**: When `balance` is provided, lock the currency field to `balance.currency` and disable currency selection.
+### 10. **Settlement Currency Logic** ✅ NOT AN ISSUE
+**Status**: Correctly implemented
+**Note**: The settlement form does NOT allow users to change currency - it's automatically determined from `settlement?.currency || balance?.currency || defaultCurrency || getDefaultCurrency()`. The comment on line 62 confirms: "The form currently does not allow changing currency, so it is effectively locked." This is the correct behavior - when settling a specific balance, the currency is automatically locked to the balance currency, preventing accounting inconsistencies.
 
 ## 💡 Minor Suggestions
 
@@ -129,7 +122,6 @@ const effectiveDefaultCurrency = settlement?.currency || balance?.currency || de
 
 **⚠️ Remaining Minor Issues**:
 - **Nice to Have**: Settlement currency fallback could be removed if NOT NULL constraint exists (#9)
-- **Nice to Have**: Settlement currency locking UI improvement (#10) - form doesn't show currency picker, but could add visual indication
 
 **Recommendation**: 
 - ✅ **Approve** - All critical and important issues have been addressed
