@@ -58,6 +58,8 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   onDismiss,
 }) => {
   const isEditing = !!settlement;
+  // If settling a specific balance, use that currency. Otherwise use default.
+  // Note: The form currently does not allow changing currency, so it is effectively locked.
   const effectiveDefaultCurrency = settlement?.currency || balance?.currency || defaultCurrency || getDefaultCurrency();
   const theme = useTheme();
   const insets = useSafeAreaInsets();

@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import { BackHandler, ScrollView, StyleSheet, View } from "react-native";
 import {
     ActivityIndicator,
@@ -37,13 +37,14 @@ export const BalancesScreen: React.FC<{
   const overallBalances = balancesData?.overall_balances || [];
   const defaultCurrency = getDefaultCurrency();
 
-  // Separate balances into "you owe" and "you are owed"
-  const youOwe = overallBalances.filter((b) => b.amount < 0);
-  const youAreOwed = overallBalances.filter((b) => b.amount > 0);
-
-  // Sort by absolute amount (largest first)
-  youOwe.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
-  youAreOwed.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+  // Separate balances into "you owe" and "you are owed" and sort them
+  const { youOwe, youAreOwed } = useMemo(() => {
+    const owe = [...overallBalances.filter((b) => b.amount < 0)];
+    const owed = [...overallBalances.filter((b) => b.amount > 0)];
+    owe.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+    owed.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+    return { youOwe: owe, youAreOwed: owed };
+  }, [overallBalances]);
 
   const getUserDisplayName = (balance: Balance): string => {
     // Use email from balance (enriched by API)

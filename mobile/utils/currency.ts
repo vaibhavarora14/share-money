@@ -72,3 +72,12 @@ export function formatCurrency(amount: number, currencyCode: string = getDefault
   });
   return `${symbol}${formattedAmount}`;
 }
+export const formatTotals = (
+  totals: Map<string, number>,
+  defaultCurrency: string = getDefaultCurrency()
+): string => {
+  if (totals.size === 0) return formatCurrency(0, defaultCurrency);
+  return Array.from(totals.entries())
+    .map(([currency, amount]) => formatCurrency(amount, currency))
+    .join(" + ");
+};

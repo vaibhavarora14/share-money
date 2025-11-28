@@ -15,7 +15,7 @@ import { useGroupDetails } from "../hooks/useGroups";
 import { useCreateSettlement } from "../hooks/useSettlements";
 import { useTransactions } from "../hooks/useTransactions";
 import { Balance, GroupMember, Transaction } from "../types";
-import { formatCurrency, getDefaultCurrency } from "../utils/currency";
+import { formatCurrency, formatTotals, getDefaultCurrency } from "../utils/currency";
 import { SettlementFormScreen } from "./SettlementFormScreen";
 
 export type GroupStatsMode = "my-costs" | "total-costs" | "i-owe" | "im-owed";
@@ -266,13 +266,6 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
     return totals;
   }, [filteredBalances]);
 
-  const formatTotals = (totals: Map<string, number>) => {
-    if (totals.size === 0) return formatCurrency(0, defaultCurrency);
-    return Array.from(totals.entries())
-      .map(([currency, amount]) => formatCurrency(amount, currency))
-      .join(" + ");
-  };
-
   const resolveUserLabel = (userId: string, fallback?: string) => {
     const memberEmail = memberLookup.get(userId)?.email;
     if (memberEmail) return memberEmail;
@@ -294,10 +287,23 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
     }
 
     return costBreakdown.map((entry, index) => {
-      // Percentage is tricky with mixed currencies. We'll use the simplified totalValue for now.
-      const totalValue = Array.from(totalCosts.values()).reduce((a, b) => a + b, 0);
-      const percentage = totalValue === 0 ? 0 : (entry.totalValue / totalValue) * 100;
+      // Percentage is tricky with mixed currencies.
+      // Only show percentage if there is a single currency involved in the total costs.
+      const isMixedCurrency = totalCosts.size > 1;
+      let percentage = 0;
       
+      if (!isMixedCurrency && totalCosts.size === 1) {
+         const totalValue = Array.from(totalCosts.values())[0];
+         // We need to match the currency of the entry with the single currency in totalCosts
+         // But wait, entry.amounts is also a Map.
+         // If totalCosts has 1 currency, then entry.amounts should ideally also have that currency (or be empty).
+         // Let's simplify: if totalCosts has > 1 currency, hide percentage.
+         // If totalCosts has 1 currency, calculate percentage based on that currency's total.
+         const currency = Array.from(totalCosts.keys())[0];
+         const entryAmount = entry.amounts.get(currency) || 0;
+         percentage = totalValue === 0 ? 0 : (entryAmount / totalValue) * 100;
+      }
+
       return (
         <Surface
           key={entry.userId}
@@ -313,9 +319,16 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
               <Text variant="titleSmall" style={{ fontWeight: "600" }}>
                 {resolveUserLabel(entry.userId, entry.email)}
               </Text>
-              <Text style={[styles.entrySubtext, colorStyles.entrySubtext]}>
-                {percentage.toFixed(1)}% of group costs
-              </Text>
+              {!isMixedCurrency && (
+                <Text style={[styles.entrySubtext, colorStyles.entrySubtext]}>
+                  {percentage.toFixed(1)}% of group costs
+                </Text>
+              )}
+              {isMixedCurrency && (
+                 <Text style={[styles.entrySubtext, colorStyles.entrySubtext]}>
+                   Multiple currencies
+                 </Text>
+              )}
             </View>
             <Text variant="titleMedium" style={{ fontWeight: "bold" }}>
               {formatTotals(entry.amounts)}

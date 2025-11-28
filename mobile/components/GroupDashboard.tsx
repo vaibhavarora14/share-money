@@ -8,7 +8,7 @@ import {
     useTheme,
 } from "react-native-paper";
 import { Balance, Transaction } from "../types";
-import { formatCurrency } from "../utils/currency";
+import { formatTotals } from "../utils/currency";
 
 interface GroupDashboardProps {
   balances: Balance[];
@@ -74,21 +74,8 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
           myShare = t.amount / t.split_among.length;
         }
       } else if (t.paid_by === currentUserId) {
-          // If I paid and no splits defined, assuming I paid for myself? 
-          // Or should we ignore? The logic in GroupStatsScreen was:
-          // Fallback: attribute to payer or creator
-          // But here we are calculating "My Cost" (what I consumed).
-          // If I paid $100 and no splits, usually means I paid for group? Or just me?
-          // Existing logic was:
-          /*
-            } else if (t.split_among && t.split_among.length > 0) {
-                if (t.split_among.includes(currentUserId || "")) {
-                myTotal += t.amount / t.split_among.length;
-                }
-            }
-          */
-          // It didn't have a fallback for "paid_by". So if no splits and no split_among, it didn't add to myTotal.
-          // I will keep it consistent with previous logic.
+         // Note: Transactions without splits or split_among are not included in "My Cost"
+         // as we cannot determine the user's share without explicit split data.
       }
       
       if (myShare > 0) {
@@ -99,13 +86,6 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
 
     return { myCost: myTotal, totalGroupCost: total };
   }, [transactions, currentUserId, defaultCurrency]);
-
-  const formatTotals = (totals: Map<string, number>) => {
-    if (totals.size === 0) return formatCurrency(0, defaultCurrency);
-    return Array.from(totals.entries())
-      .map(([currency, amount]) => formatCurrency(amount, currency))
-      .join(" + ");
-  };
 
   const renderCard = (
     title: string,
