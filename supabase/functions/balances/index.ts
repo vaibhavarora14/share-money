@@ -107,7 +107,7 @@ async function calculateGroupBalances(
   for (const tx of (transactions || []) as TransactionWithSplits[]) {
     const paidBy = tx.paid_by;
     const totalAmount = typeof tx.amount === 'string' ? parseFloat(tx.amount) : tx.amount;
-    const currency = tx.currency || 'USD'; // Default to USD if missing
+    const currency = tx.currency;
     
     if (isNaN(totalAmount) || totalAmount <= 0) {
       log.warn('Invalid transaction amount', 'balance-calculation', {
