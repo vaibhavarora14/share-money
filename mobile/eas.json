@@ -25,13 +25,19 @@
       "channel": "production",
       "env": {
         "EAS_BUILD": "true"
-      },
-      "android": {
-        "buildType": "apk"
       }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "android": {
+        "track": "production"
+      }
+    },
+    "internal": {
+      "android": {
+        "track": "internal"
+      }
+    }
   }
 }
