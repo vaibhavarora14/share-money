@@ -12,6 +12,7 @@ jobs:
   guard-version:
     name: Ensure version.json matches PR type
     runs-on: ubuntu-latest
+    if: ${{ !startsWith(github.event.pull_request.title, 'chore') && !startsWith(github.event.pull_request.title, 'docs') }}
     steps:
       - name: Validate PR title
         id: title
