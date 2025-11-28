@@ -1,7 +1,7 @@
 # PR Review: Multi-currency Support for Balances and Stats
 
 ## Overview
-This PR implements multi-currency support across balances and statistics. The implementation correctly groups balances by currency and displays totals as currency breakdowns (e.g., "+ ₹500 + $100"). Overall, the changes are well-structured, but there are several areas that need attention.
+This PR implements multi-currency support across balances and statistics. The implementation correctly groups balances by currency and displays totals as currency breakdowns (e.g., "+ ₹500 + $100"). The latest commit (0ef3116) has addressed several critical issues identified in the initial review.
 
 ## ✅ Strengths
 
@@ -9,53 +9,33 @@ This PR implements multi-currency support across balances and statistics. The im
 2. **Proper Key Generation**: React keys now include currency (`${balance.user_id}-${balance.currency}`), preventing rendering issues with multi-currency balances.
 3. **Backend Currency Support**: The backend correctly handles currency in balance calculations and settlements.
 4. **Type Safety**: TypeScript types are properly updated to include `currency` field in `Balance` interface.
+5. **✅ FIXED**: Array mutation issue resolved with proper `useMemo` implementation
+6. **✅ FIXED**: Code duplication resolved - `formatTotals` extracted to shared utility
+7. **✅ FIXED**: Commented code removed and replaced with concise comment
 
-## 🔴 Critical Issues
+## ✅ Fixed Issues (Latest Commit 0ef3116)
 
-### 1. **Array Mutation in BalancesScreen.tsx** (Lines 45-46)
-```typescript
-youOwe.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
-youAreOwed.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
-```
+### 1. **Array Mutation in BalancesScreen.tsx** ✅ FIXED
+**Status**: Fixed in commit 0ef3116
+- Now properly uses `useMemo` to avoid mutations
+- Correctly creates new arrays before sorting
 
-**Issue**: While `.filter()` creates new arrays, directly mutating them with `.sort()` is a code smell and could cause issues if the data structure changes. More importantly, this logic should be memoized for performance.
+### 2. **Percentage Calculation** ✅ IMPROVED
+**Status**: Improved in commit 0ef3116
+- Now hides percentage when multiple currencies are present
+- Shows "Multiple currencies" label instead of misleading percentage
+- Only calculates percentage when single currency is involved
+- **Note**: The implementation has some nested comments that could be cleaned up, but the logic is correct
 
-**Recommendation**: 
-```typescript
-const { youOwe, youAreOwed } = useMemo(() => {
-  const owe = [...overallBalances.filter((b) => b.amount < 0)];
-  const owed = [...overallBalances.filter((b) => b.amount > 0)];
-  owe.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
-  owed.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
-  return { youOwe: owe, youAreOwed: owed };
-}, [overallBalances]);
-```
+### 3. **Commented-Out Code** ✅ FIXED
+**Status**: Fixed in commit 0ef3116
+- Removed large block of commented code
+- Replaced with concise, clear comment explaining the decision
 
-### 2. **Misleading Percentage Calculation** (GroupStatsScreen.tsx, Line 298)
-```typescript
-// Percentage is tricky with mixed currencies. We'll use the simplified totalValue for now.
-const totalValue = Array.from(totalCosts.values()).reduce((a, b) => a + b, 0);
-const percentage = totalValue === 0 ? 0 : (entry.totalValue / totalValue) * 100;
-```
-
-**Issue**: Adding different currencies together (e.g., $100 + ₹5000) is mathematically incorrect and will produce misleading percentages. This comment acknowledges the problem but doesn't solve it.
-
-**Recommendation**: 
-- Either show percentages per currency (e.g., "50% of USD costs, 30% of INR costs")
-- Or remove percentage display when multiple currencies are present
-- Or add a disclaimer: "Percentages calculated assuming 1:1 exchange rate (approximate)"
-
-### 3. **Commented-Out Code in GroupDashboard.tsx** (Lines 76-92)
-**Issue**: Large block of commented code explaining uncertainty about "My Cost" calculation logic. This should be:
-- Either implemented if the logic is needed
-- Or removed if not needed
-- Or converted to a TODO/issue if it's a known limitation
-
-**Recommendation**: Remove commented code and add a concise comment explaining the decision:
-```typescript
-// Note: Transactions without splits or split_among are not included in "My Cost"
-// as we cannot determine the user's share without explicit split data.
-```
+### 8. **Code Duplication: formatTotals** ✅ FIXED
+**Status**: Fixed in commit 0ef3116
+- Extracted `formatTotals` to `utils/currency.ts`
+- Now used consistently across components
 
 ## ⚠️ Important Issues
 
@@ -92,32 +72,41 @@ const effectiveDefaultCurrency = settlement?.currency || balance?.currency || de
 
 ## 💡 Suggestions & Improvements
 
-### 7. **Performance: Memoization in GroupDashboard**
-The `formatTotals` function is recreated on every render. Consider memoizing it:
+### 7. **Code Cleanup: Percentage Calculation Comments**
+**Location**: `GroupStatsScreen.tsx` (Lines 290-305)
+**Issue**: The percentage calculation logic has nested comments that could be simplified.
+
+**Current code**:
 ```typescript
-const formatTotals = useCallback((totals: Map<string, number>) => {
-  if (totals.size === 0) return formatCurrency(0, defaultCurrency);
-  return Array.from(totals.entries())
-    .map(([currency, amount]) => formatCurrency(amount, currency))
-    .join(" + ");
-}, [defaultCurrency]);
+// Percentage is tricky with mixed currencies.
+// Only show percentage if there is a single currency involved in the total costs.
+const isMixedCurrency = totalCosts.size > 1;
+let percentage = 0;
+
+if (!isMixedCurrency && totalCosts.size === 1) {
+   const totalValue = Array.from(totalCosts.values())[0];
+   // We need to match the currency of the entry with the single currency in totalCosts
+   // But wait, entry.amounts is also a Map.
+   // If totalCosts has 1 currency, then entry.amounts should ideally also have that currency (or be empty).
+   // Let's simplify: if totalCosts has > 1 currency, hide percentage.
+   // If totalCosts has 1 currency, calculate percentage based on that currency's total.
+   const currency = Array.from(totalCosts.keys())[0];
+   const entryAmount = entry.amounts.get(currency) || 0;
+   percentage = totalValue === 0 ? 0 : (entryAmount / totalValue) * 100;
+}
 ```
 
-### 8. **Code Duplication: formatTotals Function**
-The `formatTotals` function is duplicated in:
-- `GroupDashboard.tsx` (Line 103)
-- `GroupStatsScreen.tsx` (Line 269)
-
-**Recommendation**: Extract to `utils/currency.ts`:
+**Recommendation**: Simplify comments:
 ```typescript
-export function formatCurrencyTotals(
-  totals: Map<string, number>, 
-  defaultCurrency: string = getDefaultCurrency()
-): string {
-  if (totals.size === 0) return formatCurrency(0, defaultCurrency);
-  return Array.from(totals.entries())
-    .map(([currency, amount]) => formatCurrency(amount, currency))
-    .join(" + ");
+// Only calculate percentage when all costs are in a single currency
+const isMixedCurrency = totalCosts.size > 1;
+let percentage = 0;
+
+if (!isMixedCurrency && totalCosts.size === 1) {
+  const currency = Array.from(totalCosts.keys())[0];
+  const totalValue = totalCosts.get(currency)!;
+  const entryAmount = entry.amounts.get(currency) || 0;
+  percentage = totalValue === 0 ? 0 : (entryAmount / totalValue) * 100;
 }
 ```
 
@@ -158,16 +147,30 @@ export type CurrencyCode = 'USD' | 'INR' | 'EUR' | 'GBP' | 'JPY' | 'KRW' | 'CNY'
 
 ## 🎯 Summary
 
-**Overall Assessment**: ✅ **Good implementation with room for improvement**
+**Overall Assessment**: ✅ **Good implementation - Most critical issues addressed**
 
-The PR successfully implements multi-currency support, but has several issues that should be addressed:
-- **Must Fix**: Array mutation, misleading percentages, commented code
-- **Should Fix**: Currency default consistency, validation, settlement currency locking
-- **Nice to Have**: Code deduplication, type safety improvements
+### Status Update (After Latest Commit 0ef3116)
 
-**Recommendation**: Request changes to address critical issues (#1, #2, #3) before merging. Important issues (#4, #5, #6) should be addressed in a follow-up if not blocking.
+**✅ Fixed Issues**:
+- Array mutation in BalancesScreen.tsx
+- Misleading percentage calculation (now hides when mixed currencies)
+- Commented-out code removed
+- Code duplication resolved (formatTotals extracted)
+
+**⚠️ Remaining Issues**:
+- **Should Fix**: Currency default consistency between frontend/backend (#4)
+- **Should Fix**: Missing currency validation (#5)
+- **Nice to Have**: Settlement currency locking UI improvement (#6)
+- **Nice to Have**: Code cleanup for percentage calculation comments (#7)
+- **Nice to Have**: Type safety improvements (#11)
+
+**Recommendation**: 
+- ✅ **Approve with minor suggestions** - The critical issues have been addressed
+- The remaining issues (#4, #5, #6) are important but not blocking
+- Consider addressing them in a follow-up PR or as part of future improvements
 
 ---
 
-**Reviewed by**: Senior Engineer Review
-**Date**: 2025-01-21
+**Reviewed by**: Senior Engineer Review  
+**Initial Review Date**: 2025-01-21  
+**Updated After Commit**: 0ef3116 (2025-11-28)
