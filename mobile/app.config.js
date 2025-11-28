@@ -70,13 +70,13 @@ module.exports = ({ config }) => {
       },
       ios: {
         supportsTablet: true,
-        bundleIdentifier: "com.sharemoney.app",
-        scheme: "com.sharemoney.app",
+        bundleIdentifier: "com.vaibhavarora.sharemoney",
+        scheme: "com.vaibhavarora.sharemoney",
         buildNumber: versionConfig.buildNumber.toString()
       },
       android: {
-        package: "com.sharemoney.app",
-        scheme: "com.sharemoney.app",
+        package: "com.vaibhavarora.sharemoney",
+        scheme: "com.vaibhavarora.sharemoney",
         versionCode: versionConfig.buildNumber,
         adaptiveIcon: {
           foregroundImage: "./assets/adaptive-icon.png",
