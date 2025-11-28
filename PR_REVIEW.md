@@ -1,7 +1,7 @@
 # PR Review: Multi-currency Support for Balances and Stats
 
 ## Overview
-This PR implements multi-currency support across balances and statistics. The implementation correctly groups balances by currency and displays totals as currency breakdowns (e.g., "+ ₹500 + $100"). The latest commit (0ef3116) has addressed several critical issues identified in the initial review.
+This PR implements multi-currency support across balances and statistics. The implementation correctly groups balances by currency and displays totals as currency breakdowns (e.g., "+ ₹500 + $100"). Multiple commits have addressed all critical and most important issues identified in the initial review.
 
 ## ✅ Strengths
 
@@ -12,6 +12,10 @@ This PR implements multi-currency support across balances and statistics. The im
 5. **✅ FIXED**: Array mutation issue resolved with proper `useMemo` implementation
 6. **✅ FIXED**: Code duplication resolved - `formatTotals` extracted to shared utility
 7. **✅ FIXED**: Commented code removed and replaced with concise comment
+8. **✅ FIXED**: Currency validation added to `formatCurrency` function
+9. **✅ FIXED**: Percentage calculation comments simplified
+10. **✅ FIXED**: `CurrencyCode` type added for better type safety
+11. **✅ FIXED**: Backend currency fallback removed (NOT NULL constraint enforced)
 
 ## ✅ Fixed Issues (Latest Commit 0ef3116)
 
@@ -32,34 +36,51 @@ This PR implements multi-currency support across balances and statistics. The im
 - Removed large block of commented code
 - Replaced with concise, clear comment explaining the decision
 
-### 8. **Code Duplication: formatTotals** ✅ FIXED
+### 4. **Code Duplication: formatTotals** ✅ FIXED
 **Status**: Fixed in commit 0ef3116
 - Extracted `formatTotals` to `utils/currency.ts`
 - Now used consistently across components
 
-## ⚠️ Important Issues
+### 5. **Currency Validation** ✅ FIXED
+**Status**: Fixed in commit ad7c4e0
+- Added validation in `formatCurrency` function
+- Invalid currency codes now fall back to default currency instead of USD
+- Prevents misleading currency symbols from being displayed
 
-### 4. **Currency Default Handling Inconsistency**
-- **Backend** (`balances/index.ts`, Line 110): Defaults to `'USD'` if currency is missing
-- **Frontend** (`currency.ts`, Line 42): Defaults to `'INR'` via `getDefaultCurrency()`
+### 6. **Percentage Calculation Comments** ✅ FIXED
+**Status**: Fixed in commit 721cb50
+- Simplified nested comments in percentage calculation logic
+- Code is now cleaner and more maintainable
+- Logic remains correct: only calculates percentage for single currency
 
-**Issue**: This mismatch could cause confusion. If a transaction has no currency, backend stores/calculates in USD, but frontend displays in INR.
+### 7. **Type Safety: CurrencyCode** ✅ FIXED
+**Status**: Fixed in commit 721cb50
+- Added `CurrencyCode` type definition
+- Provides better type safety for currency codes
+- Note: Balance interface still uses `string` for flexibility, but type is available
 
-**Recommendation**: 
-- Ensure all transactions have a currency set (database constraint or migration)
-- Or align defaults between frontend and backend
-- Document this behavior clearly
+### 8. **Backend Currency Default** ✅ PARTIALLY FIXED
+**Status**: Improved in commit 2619b9a
+- Removed currency fallback for transactions (NOT NULL constraint enforced)
+- Transactions now require currency, eliminating inconsistency
+- **Note**: Settlements still have fallback to 'USD' (line 193) - may need NOT NULL constraint
 
-### 5. **Missing Currency Validation**
-**Issue**: No validation that `balance.currency` is a valid currency code before formatting. If an invalid currency is returned from the API, `formatCurrency()` will fall back to USD symbol, which could be misleading.
+## ⚠️ Remaining Issues
 
-**Recommendation**: Add validation:
+### 9. **Settlement Currency Fallback** (balances/index.ts, Line 193)
+**Status**: Minor issue
 ```typescript
-const validCurrency = CURRENCIES.find(c => c.code === balance.currency)?.code || defaultCurrency;
-formatCurrency(amount, validCurrency);
+const currency = settlement.currency || 'USD';
 ```
 
-### 6. **Settlement Currency Logic** (SettlementFormScreen.tsx, Line 61)
+**Issue**: Settlements still have a hardcoded 'USD' fallback. If settlements table has a NOT NULL constraint, this fallback is unnecessary.
+
+**Recommendation**: 
+- Verify if settlements table has NOT NULL constraint on currency
+- If yes, remove the fallback: `const currency = settlement.currency;`
+- If no, consider adding the constraint via migration for consistency
+
+### 10. **Settlement Currency Logic** (SettlementFormScreen.tsx, Line 61)
 ```typescript
 const effectiveDefaultCurrency = settlement?.currency || balance?.currency || defaultCurrency || getDefaultCurrency();
 ```
@@ -70,70 +91,15 @@ const effectiveDefaultCurrency = settlement?.currency || balance?.currency || de
 
 **Recommendation**: When `balance` is provided, lock the currency field to `balance.currency` and disable currency selection.
 
-## 💡 Suggestions & Improvements
+## 💡 Minor Suggestions
 
-### 7. **Code Cleanup: Percentage Calculation Comments**
-**Location**: `GroupStatsScreen.tsx` (Lines 290-305)
-**Issue**: The percentage calculation logic has nested comments that could be simplified.
+### 11. **Edge Case: Zero Balances with Different Currencies**
+**Status**: Already handled correctly
+**Note**: If a user has a $0.00 balance in USD and ₹0.00 in INR, both are correctly filtered out by the backend logic (`Math.abs(roundedAmount) > 0.01`). No action needed.
 
-**Current code**:
-```typescript
-// Percentage is tricky with mixed currencies.
-// Only show percentage if there is a single currency involved in the total costs.
-const isMixedCurrency = totalCosts.size > 1;
-let percentage = 0;
-
-if (!isMixedCurrency && totalCosts.size === 1) {
-   const totalValue = Array.from(totalCosts.values())[0];
-   // We need to match the currency of the entry with the single currency in totalCosts
-   // But wait, entry.amounts is also a Map.
-   // If totalCosts has 1 currency, then entry.amounts should ideally also have that currency (or be empty).
-   // Let's simplify: if totalCosts has > 1 currency, hide percentage.
-   // If totalCosts has 1 currency, calculate percentage based on that currency's total.
-   const currency = Array.from(totalCosts.keys())[0];
-   const entryAmount = entry.amounts.get(currency) || 0;
-   percentage = totalValue === 0 ? 0 : (entryAmount / totalValue) * 100;
-}
-```
-
-**Recommendation**: Simplify comments:
-```typescript
-// Only calculate percentage when all costs are in a single currency
-const isMixedCurrency = totalCosts.size > 1;
-let percentage = 0;
-
-if (!isMixedCurrency && totalCosts.size === 1) {
-  const currency = Array.from(totalCosts.keys())[0];
-  const totalValue = totalCosts.get(currency)!;
-  const entryAmount = entry.amounts.get(currency) || 0;
-  percentage = totalValue === 0 ? 0 : (entryAmount / totalValue) * 100;
-}
-```
-
-### 9. **Backend: Currency Default in Settlements** (balances/index.ts, Line 193)
-```typescript
-const currency = settlement.currency || 'USD';
-```
-
-**Issue**: Hardcoded 'USD' default. Should use a configurable default or ensure settlements always have currency.
-
-**Recommendation**: 
-- Check if settlements table has a NOT NULL constraint on currency
-- If not, consider adding it via migration
-- Or use a shared constant for default currency
-
-### 10. **Edge Case: Zero Balances with Different Currencies**
-**Issue**: If a user has a $0.00 balance in USD and ₹0.00 in INR, both might be filtered out, but the logic should handle this consistently.
-
-**Current behavior**: Backend filters out balances with `Math.abs(roundedAmount) > 0.01`, which is correct.
-
-### 11. **Type Safety: Currency Code**
-**Issue**: `currency` is typed as `string`, but should ideally be a union type or validated enum.
-
-**Recommendation**: Consider creating a type:
-```typescript
-export type CurrencyCode = 'USD' | 'INR' | 'EUR' | 'GBP' | 'JPY' | 'KRW' | 'CNY' | 'AUD' | 'CAD';
-```
+### 12. **Optional: Use CurrencyCode Type More Broadly**
+**Status**: Nice to have
+**Note**: `CurrencyCode` type has been added, but `Balance.currency` still uses `string` for flexibility. Consider gradually migrating to use `CurrencyCode` where appropriate for better type safety.
 
 ## 📝 Testing Considerations
 
@@ -147,30 +113,32 @@ export type CurrencyCode = 'USD' | 'INR' | 'EUR' | 'GBP' | 'JPY' | 'KRW' | 'CNY'
 
 ## 🎯 Summary
 
-**Overall Assessment**: ✅ **Good implementation - Most critical issues addressed**
+**Overall Assessment**: ✅ **Excellent implementation - All critical and most important issues addressed**
 
-### Status Update (After Latest Commit 0ef3116)
+### Status Update (After Latest Commits)
 
-**✅ Fixed Issues**:
-- Array mutation in BalancesScreen.tsx
-- Misleading percentage calculation (now hides when mixed currencies)
-- Commented-out code removed
-- Code duplication resolved (formatTotals extracted)
+**✅ Fixed Issues** (Commits 0ef3116, 2619b9a, ad7c4e0, 721cb50):
+- ✅ Array mutation in BalancesScreen.tsx
+- ✅ Misleading percentage calculation (now hides when mixed currencies)
+- ✅ Commented-out code removed
+- ✅ Code duplication resolved (formatTotals extracted)
+- ✅ Currency validation added
+- ✅ Percentage calculation comments simplified
+- ✅ CurrencyCode type added for type safety
+- ✅ Backend currency fallback removed for transactions (NOT NULL constraint)
 
-**⚠️ Remaining Issues**:
-- **Should Fix**: Currency default consistency between frontend/backend (#4)
-- **Should Fix**: Missing currency validation (#5)
-- **Nice to Have**: Settlement currency locking UI improvement (#6)
-- **Nice to Have**: Code cleanup for percentage calculation comments (#7)
-- **Nice to Have**: Type safety improvements (#11)
+**⚠️ Remaining Minor Issues**:
+- **Nice to Have**: Settlement currency fallback could be removed if NOT NULL constraint exists (#9)
+- **Nice to Have**: Settlement currency locking UI improvement (#10) - form doesn't show currency picker, but could add visual indication
 
 **Recommendation**: 
-- ✅ **Approve with minor suggestions** - The critical issues have been addressed
-- The remaining issues (#4, #5, #6) are important but not blocking
-- Consider addressing them in a follow-up PR or as part of future improvements
+- ✅ **Approve** - All critical and important issues have been addressed
+- The remaining issues are minor and non-blocking
+- Excellent responsiveness to review feedback
+- Code quality is high and ready for merge
 
 ---
 
 **Reviewed by**: Senior Engineer Review  
 **Initial Review Date**: 2025-01-21  
-**Updated After Commit**: 0ef3116 (2025-11-28)
+**Last Updated**: After commits 0ef3116, 2619b9a, ad7c4e0, 721cb50 (2025-11-28)
