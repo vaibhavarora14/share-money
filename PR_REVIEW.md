@@ -59,26 +59,20 @@ This PR implements multi-currency support across balances and statistics. The im
 - Provides better type safety for currency codes
 - Note: Balance interface still uses `string` for flexibility, but type is available
 
-### 8. **Backend Currency Default** ✅ PARTIALLY FIXED
-**Status**: Improved in commit 2619b9a
+### 8. **Backend Currency Default** ✅ FIXED
+**Status**: Fixed in commits 2619b9a and migration 20251128143316
 - Removed currency fallback for transactions (NOT NULL constraint enforced)
-- Transactions now require currency, eliminating inconsistency
-- **Note**: Settlements still have fallback to 'USD' (line 193) - may need NOT NULL constraint
+- Removed currency fallback for settlements (NOT NULL constraint enforced via migration)
+- Both transactions and settlements now require currency at database level
 
 ## ⚠️ Remaining Minor Issues
 
-### 9. **Settlement Currency Fallback** (balances/index.ts, Line 193)
-**Status**: Minor issue
-```typescript
-const currency = settlement.currency || 'USD';
-```
-
-**Issue**: Settlements still have a hardcoded 'USD' fallback. If settlements table has a NOT NULL constraint, this fallback is unnecessary.
-
-**Recommendation**: 
-- Verify if settlements table has NOT NULL constraint on currency
-- If yes, remove the fallback: `const currency = settlement.currency;`
-- If no, consider adding the constraint via migration for consistency
+### 9. **Settlement Currency Fallback** ✅ FIXED
+**Status**: Fixed
+- Created migration to make `settlements.currency` NOT NULL (similar to transactions)
+- Removed outdated comments in the code
+- Code already had proper error handling for missing currency (added in commit 6dd9be8)
+- Migration ensures database-level enforcement of currency requirement
 
 ### 10. **Settlement Currency Logic** ✅ NOT AN ISSUE
 **Status**: Correctly implemented
@@ -121,13 +115,13 @@ const currency = settlement.currency || 'USD';
 - ✅ Backend currency fallback removed for transactions (NOT NULL constraint)
 
 **⚠️ Remaining Minor Issues**:
-- **Nice to Have**: Settlement currency fallback could be removed if NOT NULL constraint exists (#9)
+- None - All issues have been addressed!
 
 **Recommendation**: 
-- ✅ **Approve** - All critical and important issues have been addressed
-- The remaining issues are minor and non-blocking
+- ✅ **Approve** - All critical, important, and minor issues have been addressed
 - Excellent responsiveness to review feedback
 - Code quality is high and ready for merge
+- All identified issues resolved
 
 ---
 

@@ -186,13 +186,10 @@ async function calculateGroupBalances(
     const settlementAmount = typeof settlement.amount === 'string' 
       ? parseFloat(settlement.amount) 
       : settlement.amount;
-    // Assuming settlements table has currency, or default to USD. 
-    // Note: If settlements table doesn't have currency, this might be an issue, 
-    // but we'll assume for now or default.
-    // The previous code didn't select currency, so I added it.
     const currency = settlement.currency;
 
     if (!currency) {
+      // This should not happen if NOT NULL constraint is enforced, but handle gracefully
       log.error('Settlement missing currency', 'balance-calculation', { settlementId: settlement.id });
       continue;
     }
