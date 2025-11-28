@@ -1,11 +1,11 @@
 import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import {
-    Icon,
-    Surface,
-    Text,
-    TouchableRipple,
-    useTheme,
+  Icon,
+  Surface,
+  Text,
+  TouchableRipple,
+  useTheme,
 } from "react-native-paper";
 import { Balance, Transaction } from "../types";
 import { formatTotals } from "../utils/currency";
@@ -87,9 +87,14 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
     return { myCost: myTotal, totalGroupCost: total };
   }, [transactions, currentUserId, defaultCurrency]);
 
+  const formattedYouAreOwed = useMemo(() => formatTotals(youAreOwed), [youAreOwed]);
+  const formattedYouOwe = useMemo(() => formatTotals(youOwe), [youOwe]);
+  const formattedMyCost = useMemo(() => formatTotals(myCost), [myCost]);
+  const formattedTotalCost = useMemo(() => formatTotals(totalGroupCost), [totalGroupCost]);
+
   const renderCard = (
     title: string,
-    amounts: Map<string, number>,
+    formattedAmount: string,
     backgroundColor: string,
     textColor: string,
     icon: string,
@@ -119,7 +124,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
             numberOfLines={2}
             adjustsFontSizeToFit
           >
-            {loadingState ? "..." : formatTotals(amounts)}
+            {loadingState ? "..." : formattedAmount}
           </Text>
         </View>
       </TouchableRipple>
@@ -133,7 +138,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
         <View style={styles.column}>
           {renderCard(
             "I'm owed",
-            youAreOwed,
+            formattedYouAreOwed,
             "#dcfce7", // Light green bg
             "#15803d", // Dark green text
             "arrow-bottom-left",
@@ -144,7 +149,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
         <View style={styles.column}>
           {renderCard(
             "I owe",
-            youOwe,
+            formattedYouOwe,
             "#fee2e2", // Light red bg
             "#b91c1c", // Dark red text
             "arrow-top-right",
@@ -159,7 +164,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
         <View style={styles.column}>
           {renderCard(
             "My costs",
-            myCost,
+            formattedMyCost,
             "#e0f2fe", // Light blue bg
             "#0369a1", // Dark blue text
             "account",
@@ -170,7 +175,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
         <View style={styles.column}>
           {renderCard(
             "Total costs",
-            totalGroupCost,
+            formattedTotalCost,
             "#f3e8ff", // Light purple bg
             "#7e22ce", // Dark purple text
             "chart-box",
