@@ -1,11 +1,11 @@
 import React, { useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import {
-    ActivityIndicator,
-    Appbar,
-    Surface,
-    Text,
-    useTheme,
+  ActivityIndicator,
+  Appbar,
+  Surface,
+  Text,
+  useTheme,
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BalancesSection } from "../components/BalancesSection";
@@ -287,19 +287,13 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
     }
 
     return costBreakdown.map((entry, index) => {
-      // Percentage is tricky with mixed currencies.
-      // Only show percentage if there is a single currency involved in the total costs.
+      // Only calculate percentage when all costs are in a single currency
       const isMixedCurrency = totalCosts.size > 1;
       let percentage = 0;
       
       if (!isMixedCurrency && totalCosts.size === 1) {
-         const totalValue = Array.from(totalCosts.values())[0];
-         // We need to match the currency of the entry with the single currency in totalCosts
-         // But wait, entry.amounts is also a Map.
-         // If totalCosts has 1 currency, then entry.amounts should ideally also have that currency (or be empty).
-         // Let's simplify: if totalCosts has > 1 currency, hide percentage.
-         // If totalCosts has 1 currency, calculate percentage based on that currency's total.
          const currency = Array.from(totalCosts.keys())[0];
+         const totalValue = totalCosts.get(currency)!;
          const entryAmount = entry.amounts.get(currency) || 0;
          percentage = totalValue === 0 ? 0 : (entryAmount / totalValue) * 100;
       }

@@ -69,11 +69,13 @@ export interface GroupWithMembers extends Group {
   invitations?: GroupInvitation[];
 }
 
+export type CurrencyCode = 'USD' | 'INR' | 'EUR' | 'GBP' | 'JPY' | 'KRW' | 'CNY' | 'AUD' | 'CAD';
+
 export interface Balance {
   user_id: string;
   email?: string; // Enriched by API
   amount: number;
-  currency: string;
+  currency: string; // Keeping as string for flexibility, but could be CurrencyCode
 } // Positive = they owe you, Negative = you owe them
 
 export interface GroupBalance {
