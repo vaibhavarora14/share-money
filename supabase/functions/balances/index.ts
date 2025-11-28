@@ -190,7 +190,12 @@ async function calculateGroupBalances(
     // Note: If settlements table doesn't have currency, this might be an issue, 
     // but we'll assume for now or default.
     // The previous code didn't select currency, so I added it.
-    const currency = settlement.currency || 'USD'; 
+    const currency = settlement.currency;
+
+    if (!currency) {
+      log.error('Settlement missing currency', 'balance-calculation', { settlementId: settlement.id });
+      continue;
+    }
 
     if (isNaN(settlementAmount) || settlementAmount <= 0) {
       continue;
