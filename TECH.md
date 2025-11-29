@@ -381,7 +381,7 @@ The workflow (`.github/workflows/deploy-edge-functions.yml`) automatically:
 1. Create OAuth credentials in Google Cloud Console (Web application type)
 2. Add redirect URI: `https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback`
 3. Configure in Supabase Dashboard > Authentication > Providers
-4. Add mobile redirect URL: `com.sharemoney.app://auth/callback` (in Supabase URL Configuration)
+4. Add mobile redirect URL: `com.vaibhavarora.sharemoney://auth/callback` (in Supabase URL Configuration)
 
 ### Environment Variables
 
@@ -404,7 +404,7 @@ adb logcat | grep -E "ReactNative|ShareMoney|com.sharemoney|ERROR|FATAL"
 adb logcat *:E
 
 # View logs for specific app
-adb logcat | grep "com.sharemoney.app"
+adb logcat | grep "com.vaibhavarora.sharemoney"
 ```
 
 ### Enable Remote Debugging
@@ -423,5 +423,5 @@ adb logcat -c
 adb logcat | grep -E "ReactNativeJS|ERROR|FATAL|Exception"
 
 # Clear app data
-adb shell pm clear com.sharemoney.app
+adb shell pm clear com.vaibhavarora.sharemoney
 ```
