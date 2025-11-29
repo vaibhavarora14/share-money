@@ -103,10 +103,19 @@ module.exports = ({ config }) => {
       },
       plugins: [
         [
+          "expo-build-properties",
+          {
+            "android": {
+              "enableMinifyInReleaseBuilds": true,
+              "enableShrinkResourcesInReleaseBuilds": true
+            }
+          }
+        ],  
+        [
           "expo-asset",
           {
             "assets": ["./assets"]
-          }
+          },
         ],
         "expo-font",
         "expo-web-browser",
