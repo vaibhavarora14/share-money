@@ -9,25 +9,31 @@ import { supabase } from "../supabase";
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 // Helper function to accept pending invitations for a user
-const acceptPendingInvitations = async (userEmail: string, accessToken: string): Promise<number> => {
+const acceptPendingInvitations = async (
+  userEmail: string,
+  accessToken: string
+): Promise<number> => {
   if (!API_URL || !userEmail) {
     return 0;
   }
 
   try {
     // Call the database function to accept all pending invitations for this email
-    const { data, error } = await supabase.rpc('accept_pending_invitations_for_user', {
-      user_email: userEmail,
-    });
+    const { data, error } = await supabase.rpc(
+      "accept_pending_invitations_for_user",
+      {
+        user_email: userEmail,
+      }
+    );
 
     if (error) {
-      console.error('Error accepting pending invitations:', error);
+      console.error("Error accepting pending invitations:", error);
       return 0;
     }
 
     return data || 0;
   } catch (error) {
-    console.error('Error in acceptPendingInvitations:', error);
+    console.error("Error in acceptPendingInvitations:", error);
     return 0;
   }
 };
@@ -80,14 +86,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       setLoading(false);
 
       // Auto-accept pending invitations when user signs in or signs up
-      if (session?.user?.email && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
+      if (
+        session?.user?.email &&
+        (event === "SIGNED_IN" || event === "TOKEN_REFRESHED")
+      ) {
         try {
           await acceptPendingInvitations(
             session.user.email,
             session.access_token
           );
         } catch (error) {
-          console.error('Error auto-accepting invitations:', error);
+          console.error("Error auto-accepting invitations:", error);
         }
       }
     });
@@ -155,7 +164,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
             data.session.access_token
           );
         } catch (err) {
-          console.error('Error auto-accepting invitations on sign in:', err);
+          console.error("Error auto-accepting invitations on sign in:", err);
         }
       }
 
@@ -228,7 +237,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
             data.session.access_token
           );
         } catch (err) {
-          console.error('Error auto-accepting invitations on sign up:', err);
+          console.error("Error auto-accepting invitations on sign up:", err);
         }
       }
 
@@ -255,7 +264,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         redirectTo = AuthSession.makeRedirectUri({ useProxy: true });
       } else {
         // Use custom scheme for development/production builds
-        redirectTo = "com.sharemoney.app://auth/callback";
+        redirectTo = "com.vaibhavarora.sharemoney://auth/callback";
       }
 
       // Get the OAuth URL from Supabase
@@ -333,7 +342,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
               verifySession.access_token
             );
           } catch (err) {
-            console.error('Error auto-accepting invitations on Google sign in:', err);
+            console.error(
+              "Error auto-accepting invitations on Google sign in:",
+              err
+            );
           }
         }
 
