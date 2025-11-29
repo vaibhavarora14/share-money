@@ -398,7 +398,7 @@ The workflow (`.github/workflows/deploy-edge-functions.yml`) automatically:
 adb devices
 
 # View filtered logs
-adb logcat | grep -E "ReactNative|ShareMoney|com.sharemoney|ERROR|FATAL"
+adb logcat | grep -E "ReactNative|ShareMoney|com.vaibhavarora.sharemoney|ERROR|FATAL"
 
 # View only errors
 adb logcat *:E
