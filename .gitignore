@@ -16,6 +16,8 @@ netlify/.env
 dist/
 build/
 *.log
+releases/
+*.apk
 
 # OS files
 .DS_Store

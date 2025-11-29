@@ -1,8 +1,14 @@
-import React, { useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { Icon, Surface, Text, TouchableRipple, useTheme } from 'react-native-paper';
-import { Balance, Transaction } from '../types';
-import { formatCurrency } from '../utils/currency';
+import React, { useMemo } from "react";
+import { StyleSheet, View } from "react-native";
+import {
+  Icon,
+  Surface,
+  Text,
+  TouchableRipple,
+  useTheme,
+} from "react-native-paper";
+import { Balance, Transaction } from "../types";
+import { formatTotals } from "../utils/currency";
 
 interface GroupDashboardProps {
   balances: Balance[];
@@ -12,6 +18,8 @@ interface GroupDashboardProps {
   defaultCurrency?: string;
   onOwePress?: () => void;
   onOwedPress?: () => void;
+  onMyCostsPress?: () => void;
+  onTotalCostsPress?: () => void;
 }
 
 export const GroupDashboard: React.FC<GroupDashboardProps> = ({
@@ -19,47 +27,74 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   transactions,
   currentUserId,
   loading,
-  defaultCurrency = 'USD',
+  defaultCurrency = "USD",
   onOwePress,
   onOwedPress,
+  onMyCostsPress,
+  onTotalCostsPress,
 }) => {
   const theme = useTheme();
 
   const { youOwe, youAreOwed } = useMemo(() => {
-    let owe = 0;
-    let owed = 0;
+    const owe = new Map<string, number>();
+    const owed = new Map<string, number>();
+    
     balances.forEach((b) => {
-      if (b.amount < 0) owe += Math.abs(b.amount);
-      else owed += b.amount;
+      if (b.amount < 0) {
+        const current = owe.get(b.currency) || 0;
+        owe.set(b.currency, current + Math.abs(b.amount));
+      } else {
+        const current = owed.get(b.currency) || 0;
+        owed.set(b.currency, current + b.amount);
+      }
     });
     return { youOwe: owe, youAreOwed: owed };
   }, [balances]);
 
   const { myCost, totalGroupCost } = useMemo(() => {
-    let total = 0;
-    let myTotal = 0;
+    const total = new Map<string, number>();
+    const myTotal = new Map<string, number>();
 
     transactions.forEach((t) => {
-      total += t.amount;
+      const currency = t.currency || defaultCurrency;
+      
+      // Total Group Cost
+      const currentTotal = total.get(currency) || 0;
+      total.set(currency, currentTotal + t.amount);
 
+      // My Cost
+      let myShare = 0;
       if (t.splits && t.splits.length > 0) {
         const mySplit = t.splits.find((s) => s.user_id === currentUserId);
         if (mySplit) {
-          myTotal += mySplit.amount;
+          myShare = mySplit.amount;
         }
       } else if (t.split_among && t.split_among.length > 0) {
-        if (t.split_among.includes(currentUserId || '')) {
-          myTotal += t.amount / t.split_among.length;
+        if (t.split_among.includes(currentUserId || "")) {
+          myShare = t.amount / t.split_among.length;
         }
+      } else if (t.paid_by === currentUserId) {
+         // Note: Transactions without splits or split_among are not included in "My Cost"
+         // as we cannot determine the user's share without explicit split data.
+      }
+      
+      if (myShare > 0) {
+        const currentMyTotal = myTotal.get(currency) || 0;
+        myTotal.set(currency, currentMyTotal + myShare);
       }
     });
 
     return { myCost: myTotal, totalGroupCost: total };
-  }, [transactions, currentUserId]);
+  }, [transactions, currentUserId, defaultCurrency]);
+
+  const formattedYouAreOwed = useMemo(() => formatTotals(youAreOwed), [youAreOwed]);
+  const formattedYouOwe = useMemo(() => formatTotals(youOwe), [youOwe]);
+  const formattedMyCost = useMemo(() => formatTotals(myCost), [myCost]);
+  const formattedTotalCost = useMemo(() => formatTotals(totalGroupCost), [totalGroupCost]);
 
   const renderCard = (
     title: string,
-    amount: number,
+    formattedAmount: string,
     backgroundColor: string,
     textColor: string,
     icon: string,
@@ -67,21 +102,29 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
     onPress?: () => void
   ) => (
     <Surface style={[styles.card, { backgroundColor }]} elevation={2}>
-      <TouchableRipple 
-        onPress={onPress} 
+      <TouchableRipple
+        onPress={onPress}
         disabled={!onPress}
         style={{ flex: 1 }}
-        rippleColor={textColor + '20'}
+        rippleColor={textColor + "20"}
       >
         <View style={styles.cardContent}>
           <View style={styles.cardHeader}>
-            <Text variant="labelMedium" style={{ color: textColor, opacity: 0.8, fontWeight: '600' }}>
+            <Text
+              variant="labelMedium"
+              style={{ color: textColor, opacity: 0.8, fontWeight: "600" }}
+            >
               {title}
             </Text>
             <Icon source={icon} size={20} color={textColor} />
           </View>
-          <Text variant="headlineSmall" style={{ color: textColor, fontWeight: 'bold', marginTop: 8 }}>
-            {loadingState ? '...' : formatCurrency(amount, defaultCurrency)}
+          <Text
+            variant="headlineSmall"
+            style={{ color: textColor, fontWeight: "bold", marginTop: 8 }}
+            numberOfLines={2}
+            adjustsFontSizeToFit
+          >
+            {loadingState ? "..." : formattedAmount}
           </Text>
         </View>
       </TouchableRipple>
@@ -94,22 +137,22 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
       <View style={styles.row}>
         <View style={styles.column}>
           {renderCard(
-            'I\'m owed',
-            youAreOwed,
-            '#dcfce7', // Light green bg
-            '#15803d', // Dark green text
-            'arrow-bottom-left',
+            "I'm owed",
+            formattedYouAreOwed,
+            "#dcfce7", // Light green bg
+            "#15803d", // Dark green text
+            "arrow-bottom-left",
             loading,
             onOwedPress
           )}
         </View>
         <View style={styles.column}>
           {renderCard(
-            'I owe',
-            youOwe,
-            '#fee2e2', // Light red bg
-            '#b91c1c', // Dark red text
-            'arrow-top-right',
+            "I owe",
+            formattedYouOwe,
+            "#fee2e2", // Light red bg
+            "#b91c1c", // Dark red text
+            "arrow-top-right",
             loading,
             onOwePress
           )}
@@ -120,22 +163,24 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
       <View style={styles.row}>
         <View style={styles.column}>
           {renderCard(
-            'My costs',
-            myCost,
-            '#e0f2fe', // Light blue bg
-            '#0369a1', // Dark blue text
-            'account',
-            loading
+            "My costs",
+            formattedMyCost,
+            "#e0f2fe", // Light blue bg
+            "#0369a1", // Dark blue text
+            "account",
+            loading,
+            onMyCostsPress
           )}
         </View>
         <View style={styles.column}>
           {renderCard(
-            'Total costs',
-            totalGroupCost,
-            '#f3e8ff', // Light purple bg
-            '#7e22ce', // Dark purple text
-            'chart-box',
-            loading
+            "Total costs",
+            formattedTotalCost,
+            "#f3e8ff", // Light purple bg
+            "#7e22ce", // Dark purple text
+            "chart-box",
+            loading,
+            onTotalCostsPress
           )}
         </View>
       </View>
@@ -151,7 +196,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   row: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 12,
   },
   column: {
@@ -159,16 +204,17 @@ const styles = StyleSheet.create({
   },
   card: {
     borderRadius: 20,
-    overflow: 'hidden',
+    overflow: "hidden",
+    flex: 1,
   },
   cardContent: {
     padding: 16,
     minHeight: 100,
-    justifyContent: 'space-between',
+    justifyContent: "space-between",
   },
   cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
   },
 });

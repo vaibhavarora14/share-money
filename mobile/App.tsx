@@ -2,17 +2,12 @@ import { Session } from "@supabase/supabase-js";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
-import {
-  Text as RNText,
-  StyleSheet,
-  useColorScheme,
-  View
-} from "react-native";
+import { Text as RNText, StyleSheet, useColorScheme, View } from "react-native";
 import {
   ActivityIndicator,
   Button,
   Provider as PaperProvider,
-  useTheme
+  useTheme,
 } from "react-native-paper";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BottomNavBar } from "./components/BottomNavBar";
@@ -24,11 +19,16 @@ import {
 } from "./hooks/useGroupMutations";
 import { useGroupDetails } from "./hooks/useGroups";
 import { useProfile } from "./hooks/useProfile";
-import { useCreateTransaction, useDeleteTransaction, useUpdateTransaction } from "./hooks/useTransactions";
+import {
+  useCreateTransaction,
+  useDeleteTransaction,
+  useUpdateTransaction,
+} from "./hooks/useTransactions";
 import { AddMemberScreen } from "./screens/AddMemberScreen";
 import { AuthScreen } from "./screens/AuthScreen";
 import { BalancesScreen } from "./screens/BalancesScreen";
 import { GroupDetailsScreen } from "./screens/GroupDetailsScreen";
+import { GroupStatsMode, GroupStatsScreen } from "./screens/GroupStatsScreen";
 import { GroupsListScreen } from "./screens/GroupsListScreen";
 import { ProfileSetupScreen } from "./screens/ProfileSetupScreen";
 import { TransactionFormScreen } from "./screens/TransactionFormScreen";
@@ -50,6 +50,10 @@ function AppContent() {
     useState<number>(0);
   const [groupRefreshTrigger, setGroupRefreshTrigger] = useState<number>(0);
   const [editingTransaction, setEditingTransaction] = useState<any>(null);
+  const [statsContext, setStatsContext] = useState<{
+    groupId: string;
+    mode: GroupStatsMode;
+  } | null>(null);
   const prevSessionRef = React.useRef<Session | null>(null);
   const groupsListRefetchRef = React.useRef<(() => void) | null>(null);
 
@@ -61,7 +65,7 @@ function AppContent() {
   const createGroupMutation = useCreateGroup(refetchSelectedGroup);
   const addMemberMutation = useAddMember(refetchSelectedGroup);
   const removeMemberMutation = useRemoveMember(refetchSelectedGroup);
-  
+
   // Transaction mutations
   const onTransactionSuccess = () => {
     setCurrentRoute("group-details");
@@ -134,14 +138,13 @@ function AppContent() {
   const handleGroupPress = (group: Group) => {
     setSelectedGroup(group);
     setCurrentRoute("group-details");
+    setStatsContext(null);
     // Group details will be fetched via useGroupDetails hook
   };
 
-  const handleSaveTransaction = async (
-    transactionData: any
-  ) => {
+  const handleSaveTransaction = async (transactionData: any) => {
     if (!selectedGroup) return;
-    
+
     if (editingTransaction) {
       await updateTx.mutate({
         ...transactionData,
@@ -159,7 +162,10 @@ function AppContent() {
 
   const handleDeleteTransaction = async () => {
     if (!editingTransaction || !selectedGroup) return;
-    await deleteTx.mutate({ id: editingTransaction.id, group_id: selectedGroup.id });
+    await deleteTx.mutate({
+      id: editingTransaction.id,
+      group_id: selectedGroup.id,
+    });
   };
 
   if (loading || (session && profileLoading)) {
@@ -248,6 +254,22 @@ function AppContent() {
     );
   }
 
+  if (currentRoute === "group-stats" && statsContext) {
+    return (
+      <>
+        <GroupStatsScreen
+          groupId={statsContext.groupId}
+          mode={statsContext.mode}
+          onBack={() => {
+            setStatsContext(null);
+            setCurrentRoute(selectedGroup ? "group-details" : "groups");
+          }}
+        />
+        <StatusBar style={theme.dark ? "light" : "dark"} />
+      </>
+    );
+  }
+
   // Show group details screen (with bottom nav)
   // Render as soon as a group is selected - the screen handles loading states internally
   if (currentRoute === "group-details" && selectedGroup) {
@@ -268,6 +290,7 @@ function AppContent() {
           onBack={() => {
             setSelectedGroup(null);
             setCurrentRoute("groups");
+            setStatsContext(null);
           }}
           onAddMember={() => setShowAddMember(true)}
           onRemoveMember={async (userId: string) => {
@@ -276,10 +299,12 @@ function AppContent() {
           onLeaveGroup={() => {
             setSelectedGroup(null);
             setCurrentRoute("groups");
+            setStatsContext(null);
           }}
           onDeleteGroup={() => {
             setSelectedGroup(null);
             setCurrentRoute("groups");
+            setStatsContext(null);
           }}
           onAddTransaction={() => {
             setEditingTransaction(null);
@@ -289,16 +314,23 @@ function AppContent() {
             setEditingTransaction(transaction);
             setCurrentRoute("transaction-form");
           }}
+          onStatsPress={(mode) => {
+            if (!groupToDisplay.id) return;
+            setStatsContext({ groupId: groupToDisplay.id, mode });
+            setCurrentRoute("group-stats");
+          }}
         />
         <BottomNavBar
           currentRoute={currentRoute}
           onGroupsPress={() => {
             setSelectedGroup(null);
             setCurrentRoute("groups");
+            setStatsContext(null);
           }}
           onBalancesPress={() => {
             setSelectedGroup(null);
             setCurrentRoute("balances");
+            setStatsContext(null);
           }}
           onLogoutPress={signOut}
         />
