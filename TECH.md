@@ -102,10 +102,15 @@ SUPABASE_URL=http://127.0.0.1:54321
 SUPABASE_ANON_KEY=sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
 SUPABASE_SERVICE_ROLE_KEY=sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz
 
+# CORS Configuration for Edge Functions (required)
+# For local development with Expo dev server
+ALLOWED_ORIGIN=http://localhost:19000
+
 # For Production (update with your cloud Supabase credentials)
 # SUPABASE_URL=https://your-project.supabase.co
 # SUPABASE_ANON_KEY=your_anon_key
 # SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+# ALLOWED_ORIGIN=https://your-app-domain.com
 ```
 
 #### Mobile `.env`
