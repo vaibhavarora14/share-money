@@ -196,6 +196,9 @@ function AppContent() {
 
 
 
+  // Check if profile is incomplete
+  const isProfileIncomplete = !profile || !profile.profile_completed || !profile.full_name;
+
   // Show balances screen (with bottom nav)
   if (currentRoute === "balances") {
     return (
@@ -213,6 +216,7 @@ function AppContent() {
             setCurrentRoute("profile");
           }}
           onLogoutPress={signOut}
+          isProfileIncomplete={isProfileIncomplete}
         />
         <StatusBar style={theme.dark ? "light" : "dark"} />
       </>
@@ -242,6 +246,7 @@ function AppContent() {
             setCurrentRoute("profile");
           }}
           onLogoutPress={signOut}
+          isProfileIncomplete={isProfileIncomplete}
         />
         <StatusBar style={theme.dark ? "light" : "dark"} />
       </>
@@ -349,6 +354,7 @@ function AppContent() {
           }}
           onLogoutPress={signOut}
           onProfilePress={() => setCurrentRoute("profile")}
+          isProfileIncomplete={isProfileIncomplete}
         />
         {showAddMember && selectedGroup && (
           <AddMemberScreen
@@ -385,6 +391,7 @@ function AppContent() {
         onBalancesPress={() => setCurrentRoute("balances")}
         onProfilePress={() => setCurrentRoute("profile")}
         onLogoutPress={signOut}
+        isProfileIncomplete={isProfileIncomplete}
       />
       <StatusBar style={theme.dark ? "light" : "dark"} />
     </>

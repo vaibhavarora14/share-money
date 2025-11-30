@@ -15,6 +15,7 @@ interface BottomNavBarProps {
   onLogoutPress: () => void;
   onProfilePress: () => void;
   currentRoute: string;
+  isProfileIncomplete?: boolean; // Show badge if profile needs completion
 }
 
 export const BottomNavBar: React.FC<BottomNavBarProps> = ({
@@ -23,6 +24,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
   onLogoutPress,
   onProfilePress,
   currentRoute,
+  isProfileIncomplete = false,
 }) => {
   const theme = useTheme();
   const isGroupsActive = currentRoute === "groups";
@@ -125,7 +127,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
                 },
               ]}
             >
-              <ProfileIcon onProfilePress={onProfilePress} />
+              <ProfileIcon showIncompleteBadge={isProfileIncomplete} />
             </View>
             <Text
               variant="labelMedium"

@@ -1,14 +1,15 @@
 import React from "react";
-import { StyleSheet, TouchableOpacity } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { Avatar, useTheme } from "react-native-paper";
 import { useAuth } from "../contexts/AuthContext";
 import { useProfile } from "../hooks/useProfile";
 
 interface ProfileIconProps {
-  onProfilePress: () => void;
+  // Removed onProfilePress - parent component handles touch events
+  showIncompleteBadge?: boolean; // Show badge if profile is incomplete
 }
 
-export const ProfileIcon: React.FC<ProfileIconProps> = ({ onProfilePress }) => {
+export const ProfileIcon: React.FC<ProfileIconProps> = ({ showIncompleteBadge = false }) => {
   const theme = useTheme();
   const { user } = useAuth();
   const { data: profile } = useProfile();
@@ -28,7 +29,7 @@ export const ProfileIcon: React.FC<ProfileIconProps> = ({ onProfilePress }) => {
   };
 
   return (
-    <TouchableOpacity onPress={onProfilePress}>
+    <View style={styles.container}>
       <Avatar.Text
         size={24}
         label={getInitials()}
@@ -37,12 +38,33 @@ export const ProfileIcon: React.FC<ProfileIconProps> = ({ onProfilePress }) => {
           { backgroundColor: theme.colors.primaryContainer },
         ]}
       />
-    </TouchableOpacity>
+      {showIncompleteBadge && (
+        <View
+          style={[
+            styles.badge,
+            { backgroundColor: theme.colors.error },
+          ]}
+        />
+      )}
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
+  container: {
+    position: "relative",
+  },
   avatar: {
     // Avatar styling handled by component
+  },
+  badge: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: "white",
   },
 });
