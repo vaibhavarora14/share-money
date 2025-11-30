@@ -4,25 +4,25 @@ import React, { useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { Text as RNText, StyleSheet, useColorScheme, View } from "react-native";
 import {
-  ActivityIndicator,
-  Button,
-  Provider as PaperProvider,
-  useTheme,
+    ActivityIndicator,
+    Button,
+    Provider as PaperProvider,
+    useTheme,
 } from "react-native-paper";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BottomNavBar } from "./components/BottomNavBar";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import {
-  useAddMember,
-  useCreateGroup,
-  useRemoveMember,
+    useAddMember,
+    useCreateGroup,
+    useRemoveMember,
 } from "./hooks/useGroupMutations";
 import { useGroupDetails } from "./hooks/useGroups";
 import { useProfile } from "./hooks/useProfile";
 import {
-  useCreateTransaction,
-  useDeleteTransaction,
-  useUpdateTransaction,
+    useCreateTransaction,
+    useDeleteTransaction,
+    useUpdateTransaction,
 } from "./hooks/useTransactions";
 import { AddMemberScreen } from "./screens/AddMemberScreen";
 import { AuthScreen } from "./screens/AuthScreen";
@@ -194,29 +194,41 @@ function AppContent() {
     );
   }
 
-  // Check if profile setup is needed
-  // Show setup screen if profile doesn't exist or is not completed
-  if (session && (!profile || !profile.profile_completed)) {
+
+
+  // Show balances screen (with bottom nav)
+  if (currentRoute === "balances") {
     return (
       <>
-        <ProfileSetupScreen
-          onComplete={() => {
-            refetchProfile();
+        <BalancesScreen />
+        <BottomNavBar
+          currentRoute={currentRoute}
+          onGroupsPress={() => {
+            setCurrentRoute("groups");
           }}
+          onBalancesPress={() => {
+            setCurrentRoute("balances");
+          }}
+          onProfilePress={() => {
+            setCurrentRoute("profile");
+          }}
+          onLogoutPress={signOut}
         />
         <StatusBar style={theme.dark ? "light" : "dark"} />
       </>
     );
   }
 
-  // Show balances screen (with bottom nav)
-  if (currentRoute === "balances") {
+  // Show profile screen
+  if (currentRoute === "profile") {
     return (
       <>
-        <BalancesScreen
-          onBack={() => {
+        <ProfileSetupScreen
+          onComplete={() => {
+            refetchProfile();
             setCurrentRoute("groups");
           }}
+          onBack={() => setCurrentRoute("groups")}
         />
         <BottomNavBar
           currentRoute={currentRoute}
@@ -225,6 +237,9 @@ function AppContent() {
           }}
           onBalancesPress={() => {
             setCurrentRoute("balances");
+          }}
+          onProfilePress={() => {
+            setCurrentRoute("profile");
           }}
           onLogoutPress={signOut}
         />
@@ -333,6 +348,7 @@ function AppContent() {
             setStatsContext(null);
           }}
           onLogoutPress={signOut}
+          onProfilePress={() => setCurrentRoute("profile")}
         />
         {showAddMember && selectedGroup && (
           <AddMemberScreen
@@ -367,6 +383,7 @@ function AppContent() {
         currentRoute={currentRoute}
         onGroupsPress={() => setCurrentRoute("groups")}
         onBalancesPress={() => setCurrentRoute("balances")}
+        onProfilePress={() => setCurrentRoute("profile")}
         onLogoutPress={signOut}
       />
       <StatusBar style={theme.dark ? "light" : "dark"} />

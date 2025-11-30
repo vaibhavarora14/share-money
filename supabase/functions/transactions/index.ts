@@ -3,6 +3,8 @@ import { formatCurrency } from '../_shared/currency.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { log } from '../_shared/logger.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
+import { fetchUserEmails } from '../_shared/user-email.ts';
+import { fetchUserProfiles } from '../_shared/user-profiles.ts';
 import { isValidUUID, validateBodySize, validateTransactionData } from '../_shared/validation.ts';
 
 /**
@@ -38,6 +40,9 @@ interface TransactionSplit {
   transaction_id: number;
   user_id: string;
   amount: number;
+  email?: string;
+  full_name?: string | null;
+  avatar_url?: string | null;
 }
 
 interface TransactionWithSplits extends Transaction {
@@ -169,9 +174,44 @@ Deno.serve(async (req: Request) => {
         return handleError(error, 'fetching transactions');
       }
 
+      // Collect all user IDs from splits to enrich with email and profile data
+      const allUserIds = new Set<string>();
+      (transactions || []).forEach((tx: TransactionWithSplits) => {
+        if (tx.transaction_splits) {
+          tx.transaction_splits.forEach((split) => {
+            allUserIds.add(split.user_id);
+          });
+        }
+        if (tx.paid_by) {
+          allUserIds.add(tx.paid_by);
+        }
+      });
+
+      // Enrich with email and profile data
+      let emailMap = new Map<string, string>();
+      let profileMap = new Map<string, { full_name: string | null; avatar_url: string | null }>();
+      
+      if (allUserIds.size > 0) {
+        const userIdsArray = Array.from(allUserIds);
+        const currentUserEmail = user.email || null;
+        [emailMap, profileMap] = await Promise.all([
+          fetchUserEmails(userIdsArray, user.id, currentUserEmail),
+          fetchUserProfiles(supabase, userIdsArray),
+        ]);
+      }
+
       const parsedTransactions = (transactions || []).map((tx: TransactionWithSplits) => {
         if (tx.transaction_splits) {
-          tx.splits = tx.transaction_splits;
+          // Enrich splits with email and profile data
+          tx.splits = tx.transaction_splits.map((split) => {
+            const profile = profileMap.get(split.user_id);
+            return {
+              ...split,
+              email: emailMap.get(split.user_id),
+              full_name: profile?.full_name || null,
+              avatar_url: profile?.avatar_url || null,
+            };
+          });
           delete tx.transaction_splits;
         }
 

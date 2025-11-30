@@ -1,0 +1,130 @@
+diff --git a/node_modules/react-native-paper/src/components/Menu/Menu.tsx b/node_modules/react-native-paper/src/components/Menu/Menu.tsx
+index 55922c1..c321141 100644
+--- a/node_modules/react-native-paper/src/components/Menu/Menu.tsx
++++ b/node_modules/react-native-paper/src/components/Menu/Menu.tsx
+@@ -6,22 +6,21 @@ import {
+   EmitterSubscription,
+   I18nManager,
+   Keyboard,
+-  KeyboardEvent as RNKeyboardEvent,
+   LayoutRectangle,
+   NativeEventSubscription,
+   Platform,
++  Pressable,
++  KeyboardEvent as RNKeyboardEvent,
+   ScrollView,
+   ScrollViewProps,
+   StyleProp,
+   StyleSheet,
+   View,
+   ViewStyle,
+-  Pressable,
+ } from 'react-native';
+ 
+ import { useSafeAreaInsets } from 'react-native-safe-area-context';
+ 
+-import MenuItem from './MenuItem';
+ import { useInternalTheme } from '../../core/theming';
+ import type { MD3Elevation, ThemeProp } from '../../types';
+ import { ElevationLevels } from '../../types';
+@@ -29,6 +28,7 @@ import { addEventListener } from '../../utils/addEventListener';
+ import { BackHandler } from '../../utils/BackHandler/BackHandler';
+ import Portal from '../Portal/Portal';
+ import Surface from '../Surface';
++import MenuItem from './MenuItem';
+ 
+ export type Props = {
+   /**
+@@ -303,6 +303,10 @@ const Menu = ({
+   );
+ 
+   const show = React.useCallback(async () => {
++    // Ensure animations start from initial values for consistent animation every time
++    opacityAnimationRef.current.setValue(0);
++    scaleAnimationRef.current.setValue({ x: 0, y: 0 });
++    
+     const windowLayoutResult = Dimensions.get('window');
+     const [menuLayoutResult, anchorLayoutResult] = await Promise.all([
+       measureMenuLayout(),
+@@ -379,32 +383,48 @@ const Menu = ({
+       useNativeDriver: true,
+     }).start(({ finished }) => {
+       if (finished) {
+-        setMenuLayout({ width: 0, height: 0 });
+-        setRendered(false);
+-        prevRendered.current = false;
+-        focusFirstDOMNode(anchorRef.current);
++        // Only hide if visible prop is still false
++        // This prevents race conditions where hide() completes after visible becomes true again
++        setRendered((currentRendered) => {
++          if (!visible && currentRendered) {
++            setMenuLayout({ width: 0, height: 0 });
++            prevRendered.current = false;
++            // Reset animations to initial values for next open
++            // This ensures the animation plays every time the menu opens
++            opacityAnimationRef.current.setValue(0);
++            scaleAnimationRef.current.setValue({ x: 0, y: 0 });
++            focusFirstDOMNode(anchorRef.current);
++            return false;
++          }
++          return currentRendered;
++        });
+       }
+     });
+-  }, [removeListeners, theme]);
++  }, [removeListeners, theme, visible]);
+ 
+   const updateVisibility = React.useCallback(
+     async (display: boolean) => {
+       // Menu is rendered in Portal, which updates items asynchronously
+       // We need to do the same here so that the ref is up-to-date
+       await Promise.resolve().then(() => {
+-        if (display && !prevRendered.current) {
++        // Double-check visible prop to prevent race conditions
++        // If visible prop changed while we were waiting, respect the new value
++        if (display && visible) {
++          // Reset prevRendered to ensure show() is called, even if it was previously true
++          // This handles cases where the menu was hidden but prevRendered wasn't reset
++          prevRendered.current = false;
+           show();
+           return;
+         }
+ 
+-        if (!display && prevRendered.current) {
++        if (!display && !visible && prevRendered.current) {
+           hide();
+         }
+ 
+         return;
+       });
+     },
+-    [hide, show]
++    [hide, show, visible]
+   );
+ 
+   React.useEffect(() => {
+@@ -431,9 +451,21 @@ const Menu = ({
+   React.useEffect(() => {
+     if (prevVisible.current !== visible) {
+       prevVisible.current = visible;
+-
+-      if (visible !== rendered) {
+-        setRendered(visible);
++      // Always sync rendered to visible when visible prop changes
++      setRendered(visible);
++      // Reset prevRendered when visible becomes false to ensure clean state for next open
++      if (!visible) {
++        prevRendered.current = false;
++      }
++    } else if (visible !== rendered) {
++      // Sync rendered to visible even if prevVisible hasn't changed
++      // This handles cases where rendered was set to false by hide() animation
++      // but visible prop is still true (e.g., rapid open/close)
++      setRendered(visible);
++      // Reset prevRendered when visible is true but rendered was false
++      // This ensures show() will be called when rendered syncs to true
++      if (!rendered && visible) {
++        prevRendered.current = false;
+       }
+     }
+   }, [visible, rendered]);

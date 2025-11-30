@@ -7,6 +7,7 @@ export interface Profile {
   full_name?: string;
   avatar_url?: string;
   phone?: string;
+  country_code?: string;
   profile_completed: boolean;
   created_at: string;
   updated_at: string;

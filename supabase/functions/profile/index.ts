@@ -1,6 +1,6 @@
 import { verifyAuth } from '../_shared/auth.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
-import { createSuccessResponse, createEmptyResponse } from '../_shared/response.ts';
+import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
 import { validateBodySize } from '../_shared/validation.ts';
 
 interface Profile {
@@ -8,12 +8,13 @@ interface Profile {
   full_name?: string | null;
   avatar_url?: string | null;
   phone?: string | null;
+  country_code?: string | null;
   profile_completed: boolean;
   created_at: string;
   updated_at: string;
 }
 
-type ProfileUpdates = Partial<Pick<Profile, 'full_name' | 'avatar_url' | 'phone' | 'profile_completed'>>;
+type ProfileUpdates = Partial<Pick<Profile, 'full_name' | 'avatar_url' | 'phone' | 'country_code' | 'profile_completed'>>;
 
 interface ValidationResult {
   valid: boolean;
@@ -73,6 +74,23 @@ function validateProfileUpdates(updates: ProfileUpdates): ValidationResult {
     const phoneRegex = /^\+?[\d\s\-()]{7,20}$/;
     if (trimmedPhone.length > 0 && !phoneRegex.test(trimmedPhone)) {
       return { valid: false, error: 'Invalid phone number format' };
+    }
+  }
+
+  if (updates.country_code !== undefined && updates.country_code !== null) {
+    if (typeof updates.country_code !== 'string') {
+      return { valid: false, error: 'Country code must be a string' };
+    }
+
+    const trimmedCode = updates.country_code.trim().toUpperCase();
+    // ISO 3166-1 alpha-2 country codes are exactly 2 characters
+    if (trimmedCode.length !== 2) {
+      return { valid: false, error: 'Country code must be a 2-character ISO code (e.g., US, CA, IN)' };
+    }
+
+    // Validate it's only letters
+    if (!/^[A-Z]{2}$/.test(trimmedCode)) {
+      return { valid: false, error: 'Country code must contain only letters' };
     }
   }
 
@@ -178,6 +196,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
         sanitizedUpdates.phone = trimmedPhone ?? null;
       }
 
+      if (updates.country_code !== undefined) {
+        const trimmedCode = updates.country_code
+          ? updates.country_code.trim().toUpperCase()
+          : undefined;
+        sanitizedUpdates.country_code = trimmedCode ?? null;
+      }
+
       if (updates.profile_completed !== undefined) {
         sanitizedUpdates.profile_completed = updates.profile_completed;
       }
@@ -198,6 +223,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
               full_name: sanitizedUpdates.full_name ?? null,
               avatar_url: sanitizedUpdates.avatar_url ?? null,
               phone: sanitizedUpdates.phone ?? null,
+              country_code: sanitizedUpdates.country_code ?? null,
               profile_completed: sanitizedUpdates.profile_completed ?? false,
             })
             .select('*')

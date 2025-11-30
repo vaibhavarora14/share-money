@@ -1,13 +1,19 @@
 import React from "react";
-import { Platform, StyleSheet, View } from "react-native";
-import { Icon, Surface, Text, TouchableRipple, useTheme } from "react-native-paper";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { StyleSheet, View } from "react-native";
+import {
+  Icon,
+  Surface,
+  Text,
+  TouchableRipple,
+  useTheme,
+} from "react-native-paper";
 import { ProfileIcon } from "./ProfileIcon";
 
 interface BottomNavBarProps {
   onGroupsPress: () => void;
   onBalancesPress: () => void;
   onLogoutPress: () => void;
+  onProfilePress: () => void;
   currentRoute: string;
 }
 
@@ -15,11 +21,13 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
   onGroupsPress,
   onBalancesPress,
   onLogoutPress,
+  onProfilePress,
   currentRoute,
 }) => {
   const theme = useTheme();
   const isGroupsActive = currentRoute === "groups";
   const isBalancesActive = currentRoute === "balances";
+  const isProfileActive = currentRoute === "profile";
 
   const renderItem = (
     label: string,
@@ -34,7 +42,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
       : isActive
       ? theme.colors.onSecondaryContainer
       : theme.colors.onSurfaceVariant;
-      
+
     const labelColor = isLogout
       ? theme.colors.error
       : isActive
@@ -46,13 +54,20 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
         onPress={onPress}
         style={styles.tab}
         borderless
-        rippleColor={isLogout ? theme.colors.errorContainer : theme.colors.secondaryContainer}
+        rippleColor={
+          isLogout
+            ? theme.colors.errorContainer
+            : theme.colors.secondaryContainer
+        }
       >
         <View style={styles.tabContent}>
           <View
             style={[
               styles.iconContainer,
-              isActive && !isLogout && { backgroundColor: theme.colors.secondaryContainer },
+              isActive &&
+                !isLogout && {
+                  backgroundColor: theme.colors.secondaryContainer,
+                },
             ]}
           >
             <Icon
@@ -63,7 +78,10 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
           </View>
           <Text
             variant="labelMedium"
-            style={[styles.label, { color: labelColor, fontWeight: isActive ? "bold" : "normal" }]}
+            style={[
+              styles.label,
+              { color: labelColor, fontWeight: isActive ? "bold" : "normal" },
+            ]}
           >
             {label}
           </Text>
@@ -73,38 +91,59 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
   };
 
   return (
-    <Surface elevation={2} style={[styles.container, { backgroundColor: theme.colors.surface }]}>
-      <SafeAreaView edges={["bottom"]} style={styles.safeArea}>
-        <View style={styles.content}>
-          {renderItem(
-            "Groups",
-            "account-group-outline",
-            "account-group",
-            isGroupsActive,
-            onGroupsPress
-          )}
-          {renderItem(
-            "Balances",
-            "wallet-outline",
-            "wallet",
-            isBalancesActive,
-            onBalancesPress
-          )}
-          <View style={styles.tab}>
-            <View style={styles.tabContent}>
-              <View style={styles.iconContainer}>
-                <ProfileIcon onLogout={onLogoutPress} />
-              </View>
-              <Text
-                variant="labelMedium"
-                style={[styles.label, { color: theme.colors.onSurfaceVariant }]}
-              >
-                Profile
-              </Text>
+    <Surface
+      elevation={2}
+      style={[styles.container, { backgroundColor: theme.colors.surface }]}
+    >
+      <View style={styles.content}>
+        {renderItem(
+          "Groups",
+          "account-group-outline",
+          "account-group",
+          isGroupsActive,
+          onGroupsPress
+        )}
+        {renderItem(
+          "Balances",
+          "wallet-outline",
+          "wallet",
+          isBalancesActive,
+          onBalancesPress
+        )}
+        <TouchableRipple
+          onPress={onProfilePress}
+          style={styles.tab}
+          borderless
+          rippleColor={theme.colors.secondaryContainer}
+        >
+          <View style={styles.tabContent}>
+            <View
+              style={[
+                styles.iconContainer,
+                isProfileActive && {
+                  backgroundColor: theme.colors.secondaryContainer,
+                },
+              ]}
+            >
+              <ProfileIcon onProfilePress={onProfilePress} />
             </View>
+            <Text
+              variant="labelMedium"
+              style={[
+                styles.label,
+                {
+                  color: isProfileActive
+                    ? theme.colors.onSurface
+                    : theme.colors.onSurfaceVariant,
+                  fontWeight: isProfileActive ? "bold" : "normal",
+                },
+              ]}
+            >
+              Profile
+            </Text>
           </View>
-        </View>
-      </SafeAreaView>
+        </TouchableRipple>
+      </View>
     </Surface>
   );
 };
@@ -114,13 +153,10 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 0,
     borderTopRightRadius: 0,
   },
-  safeArea: {
-    backgroundColor: "transparent",
-  },
   content: {
     flexDirection: "row",
     height: 80,
-    paddingBottom: Platform.OS === 'ios' ? 0 : 12,
+    paddingBottom: 0,
   },
   tab: {
     flex: 1,

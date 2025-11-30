@@ -1,15 +1,14 @@
-import React, { useState } from "react";
+import React from "react";
 import { StyleSheet, TouchableOpacity } from "react-native";
-import { Avatar, Menu, useTheme } from "react-native-paper";
+import { Avatar, useTheme } from "react-native-paper";
 import { useAuth } from "../contexts/AuthContext";
 import { useProfile } from "../hooks/useProfile";
 
 interface ProfileIconProps {
-  onLogout: () => void;
+  onProfilePress: () => void;
 }
 
-export const ProfileIcon: React.FC<ProfileIconProps> = ({ onLogout }) => {
-  const [menuVisible, setMenuVisible] = useState(false);
+export const ProfileIcon: React.FC<ProfileIconProps> = ({ onProfilePress }) => {
   const theme = useTheme();
   const { user } = useAuth();
   const { data: profile } = useProfile();
@@ -28,52 +27,17 @@ export const ProfileIcon: React.FC<ProfileIconProps> = ({ onLogout }) => {
     return "?";
   };
 
-  const getDisplayName = () => {
-    if (profile?.full_name) {
-      return profile.full_name;
-    }
-    if (user?.email) {
-      return user.email;
-    }
-    return "User";
-  };
-
   return (
-    <Menu
-      visible={menuVisible}
-      onDismiss={() => setMenuVisible(false)}
-      anchor={
-        <TouchableOpacity onPress={() => setMenuVisible(true)}>
-          <Avatar.Text
-            size={24}
-            label={getInitials()}
-            style={[
-              styles.avatar,
-              { backgroundColor: theme.colors.primaryContainer },
-            ]}
-          />
-        </TouchableOpacity>
-      }
-      contentStyle={[
-        styles.menuContent,
-        { backgroundColor: theme.colors.surface },
-      ]}
-    >
-      <Menu.Item
-        title={getDisplayName()}
-        titleStyle={styles.menuTitle}
-        disabled
+    <TouchableOpacity onPress={onProfilePress}>
+      <Avatar.Text
+        size={24}
+        label={getInitials()}
+        style={[
+          styles.avatar,
+          { backgroundColor: theme.colors.primaryContainer },
+        ]}
       />
-      <Menu.Item
-        leadingIcon="logout"
-        onPress={() => {
-          setMenuVisible(false);
-          onLogout();
-        }}
-        title="Logout"
-        titleStyle={{ color: theme.colors.error }}
-      />
-    </Menu>
+    </TouchableOpacity>
   );
 };
 
@@ -81,11 +45,4 @@ const styles = StyleSheet.create({
   avatar: {
     // Avatar styling handled by component
   },
-  menuContent: {
-    minWidth: 200,
-  },
-  menuTitle: {
-    fontWeight: "bold",
-  },
 });
-
