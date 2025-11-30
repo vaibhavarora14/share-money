@@ -5,6 +5,7 @@ import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { log } from '../_shared/logger.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
 import { fetchUserEmails } from '../_shared/user-email.ts';
+import { fetchUserProfiles } from '../_shared/user-profiles.ts';
 import { isValidUUID } from '../_shared/validation.ts';
 
 /**
@@ -134,32 +135,37 @@ function collectUserIdsFromHistory(historyRecords: TransactionHistory[]): Set<st
 async function buildEmailMapForHistory(
   historyRecords: TransactionHistory[],
   currentUserId: string,
-  currentUserEmail: string | null
-): Promise<Map<string, string>> {
+  currentUserEmail: string | null,
+  supabase: any
+): Promise<{ emailMap: Map<string, string>; profileMap: Map<string, { full_name: string | null; avatar_url: string | null }> }> {
   const emailMap = new Map<string, string>();
+  const profileMap = new Map<string, { full_name: string | null; avatar_url: string | null }>();
   
   if (historyRecords.length === 0) {
-    return emailMap;
+    return { emailMap, profileMap };
   }
 
   const userIds = collectUserIdsFromHistory(historyRecords);
   const userIdsArray = Array.from(userIds);
   
   if (userIdsArray.length === 0) {
-    return emailMap;
+    return { emailMap, profileMap };
   }
 
-  const fetchedEmailMap = await fetchUserEmails(
-    userIdsArray,
-    currentUserId,
-    currentUserEmail
-  );
+  const [fetchedEmailMap, fetchedProfileMap] = await Promise.all([
+    fetchUserEmails(userIdsArray, currentUserId, currentUserEmail),
+    fetchUserProfiles(supabase, userIdsArray),
+  ]);
 
   fetchedEmailMap.forEach((email, userId) => {
     emailMap.set(userId, email);
   });
   
-  return emailMap;
+  fetchedProfileMap.forEach((profile, userId) => {
+    profileMap.set(userId, profile);
+  });
+  
+  return { emailMap, profileMap };
 }
 
 function extractSnapshot(
@@ -193,7 +199,8 @@ function extractSnapshot(
 
 function transformHistoryToActivity(
   history: TransactionHistory,
-  emailMap?: Map<string, string>
+  emailMap?: Map<string, string>,
+  profileMap?: Map<string, { full_name: string | null; avatar_url: string | null }>
 ): ActivityItem {
   const activityType = history.activity_type || 'transaction';
   const typeMap: Record<string, ActivityItem['type']> = {
@@ -235,6 +242,8 @@ function transformHistoryToActivity(
     changed_by: {
       id: history.changed_by,
       email: emailMap?.get(history.changed_by) || 'Unknown User',
+      full_name: profileMap?.get(history.changed_by)?.full_name || null,
+      avatar_url: profileMap?.get(history.changed_by)?.avatar_url || null,
     },
     changed_at: history.changed_at,
     description: generateActivityDescription(history, emailMap),
@@ -300,14 +309,15 @@ Deno.serve(async (req: Request) => {
       return handleError(historyError, 'fetching transaction history');
     }
 
-    const emailMap = await buildEmailMapForHistory(
+    const { emailMap, profileMap } = await buildEmailMapForHistory(
       historyRecords || [],
       user.id,
-      user.email || null
+      user.email || null,
+      supabase
     );
 
     const activities: ActivityItem[] = (historyRecords || []).map((h: TransactionHistory) => 
-      transformHistoryToActivity(h, emailMap)
+      transformHistoryToActivity(h, emailMap, profileMap)
     );
 
     const countQuery = supabase

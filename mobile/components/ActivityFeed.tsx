@@ -103,7 +103,8 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                 const userDisplayName = getUserDisplayName(
                   activity.changed_by.id,
                   activity.changed_by.email,
-                  currentUserId
+                  currentUserId,
+                  activity.changed_by.full_name
                 );
                 const activityColor = getActivityColor(activity.type);
 
