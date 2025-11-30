@@ -67,7 +67,7 @@ echo "🚀 Starting EAS production build..."
 echo ""
 
 # Run the build with environment variables
-eas build --local --profile production
+eas build --local --platform android --profile production
 
 echo ""
 echo "🔍 Finding built APK..."
