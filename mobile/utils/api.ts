@@ -161,6 +161,13 @@ export async function fetchWithAuth(
       }
     }
 
+    // Sign out the user when session expires
+    try {
+      await supabase.auth.signOut();
+    } catch (signOutError) {
+      console.error("Error signing out on session expiration:", signOutError);
+    }
+
     throw new Error("Unauthorized");
   }
 

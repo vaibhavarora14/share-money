@@ -18,6 +18,7 @@ import {
   useRemoveMember,
 } from "./hooks/useGroupMutations";
 import { useGroupDetails } from "./hooks/useGroups";
+import { useProfile } from "./hooks/useProfile";
 import {
   useCreateTransaction,
   useDeleteTransaction,
@@ -29,6 +30,7 @@ import { BalancesScreen } from "./screens/BalancesScreen";
 import { GroupDetailsScreen } from "./screens/GroupDetailsScreen";
 import { GroupStatsMode, GroupStatsScreen } from "./screens/GroupStatsScreen";
 import { GroupsListScreen } from "./screens/GroupsListScreen";
+import { ProfileSetupScreen } from "./screens/ProfileSetupScreen";
 import { TransactionFormScreen } from "./screens/TransactionFormScreen";
 import { darkTheme, lightTheme } from "./theme";
 import { Group, GroupWithMembers } from "./types";
@@ -39,6 +41,7 @@ import { getDefaultCurrency } from "./utils/currency";
 function AppContent() {
   const { session, loading, signOut } = useAuth();
   const theme = useTheme();
+  const { data: profile, isLoading: profileLoading, refetch: refetchProfile } = useProfile();
   const [isSignUp, setIsSignUp] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [showAddMember, setShowAddMember] = useState(false);
@@ -165,7 +168,7 @@ function AppContent() {
     });
   };
 
-  if (loading) {
+  if (loading || (session && profileLoading)) {
     return (
       <View
         style={[
@@ -185,6 +188,21 @@ function AppContent() {
         <AuthScreen
           isSignUp={isSignUp}
           onToggleMode={() => setIsSignUp(!isSignUp)}
+        />
+        <StatusBar style={theme.dark ? "light" : "dark"} />
+      </>
+    );
+  }
+
+  // Check if profile setup is needed
+  // Show setup screen if profile doesn't exist or is not completed
+  if (session && (!profile || !profile.profile_completed)) {
+    return (
+      <>
+        <ProfileSetupScreen
+          onComplete={() => {
+            refetchProfile();
+          }}
         />
         <StatusBar style={theme.dark ? "light" : "dark"} />
       </>

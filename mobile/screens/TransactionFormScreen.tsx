@@ -212,8 +212,10 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
 
   // Handler to open Paid By picker
   const handleOpenPaidByPicker = useCallback(() => {
-    setShowPaidByPicker(true);
-  }, []);
+    if (!loading) {
+      setShowPaidByPicker(true);
+    }
+  }, [loading]);
 
   // Validation function that returns true if form is valid
   const validateForm = (): boolean => {
