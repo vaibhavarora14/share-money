@@ -1,5 +1,5 @@
 import { Alert } from "react-native";
-import { isSessionExpiredError, getUserFriendlyErrorMessage } from "./errorMessages";
+import { getUserFriendlyErrorMessage, isSessionExpiredError } from "./errorMessages";
 
 /**
  * Shows an error alert and automatically signs out if the error indicates session expiration
@@ -16,18 +16,16 @@ export function showErrorAlert(
   const isSessionExpired = isSessionExpiredError(error);
 
   if (isSessionExpired) {
+    // Sign out immediately for session expiration - don't wait for user interaction
+    signOut().catch((signOutError) => {
+      console.error("Error signing out on session expiration:", signOutError);
+    });
+
+    // Show alert to inform user (sign out already happened)
     Alert.alert(
       title,
       message,
-      [
-        {
-          text: "OK",
-          style: "default",
-          onPress: async () => {
-            await signOut();
-          },
-        },
-      ]
+      [{ text: "OK", style: "default" }]
     );
   } else {
     Alert.alert(title, message, [{ text: "OK", style: "default" }]);

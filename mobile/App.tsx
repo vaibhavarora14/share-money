@@ -4,25 +4,25 @@ import React, { useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { Text as RNText, StyleSheet, useColorScheme, View } from "react-native";
 import {
-    ActivityIndicator,
-    Button,
-    Provider as PaperProvider,
-    useTheme,
+  ActivityIndicator,
+  Button,
+  Provider as PaperProvider,
+  useTheme,
 } from "react-native-paper";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BottomNavBar } from "./components/BottomNavBar";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import {
-    useAddMember,
-    useCreateGroup,
-    useRemoveMember,
+  useAddMember,
+  useCreateGroup,
+  useRemoveMember,
 } from "./hooks/useGroupMutations";
 import { useGroupDetails } from "./hooks/useGroups";
 import { useProfile } from "./hooks/useProfile";
 import {
-    useCreateTransaction,
-    useDeleteTransaction,
-    useUpdateTransaction,
+  useCreateTransaction,
+  useDeleteTransaction,
+  useUpdateTransaction,
 } from "./hooks/useTransactions";
 import { AddMemberScreen } from "./screens/AddMemberScreen";
 import { AuthScreen } from "./screens/AuthScreen";
@@ -41,7 +41,11 @@ import { getDefaultCurrency } from "./utils/currency";
 function AppContent() {
   const { session, loading, signOut } = useAuth();
   const theme = useTheme();
-  const { data: profile, isLoading: profileLoading, refetch: refetchProfile } = useProfile();
+  const {
+    data: profile,
+    isLoading: profileLoading,
+    refetch: refetchProfile,
+  } = useProfile();
   const [isSignUp, setIsSignUp] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [showAddMember, setShowAddMember] = useState(false);
@@ -194,10 +198,9 @@ function AppContent() {
     );
   }
 
-
-
   // Check if profile is incomplete
-  const isProfileIncomplete = !profile || !profile.profile_completed || !profile.full_name;
+  const isProfileIncomplete =
+    !profile || !profile.profile_completed || !profile.full_name;
 
   // Show balances screen (with bottom nav)
   if (currentRoute === "balances") {
@@ -232,7 +235,6 @@ function AppContent() {
             refetchProfile();
             setCurrentRoute("groups");
           }}
-          onBack={() => setCurrentRoute("groups")}
         />
         <BottomNavBar
           currentRoute={currentRoute}

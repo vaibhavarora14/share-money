@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import {
   ActivityIndicator,
@@ -10,9 +10,14 @@ import {
   Text,
   useTheme,
 } from "react-native-paper";
+import { useAuth } from "../contexts/AuthContext";
 import { useGroups } from "../hooks/useGroups";
 import { Group } from "../types";
-import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
+import { showErrorAlert } from "../utils/errorHandling";
+import {
+  getUserFriendlyErrorMessage,
+  isSessionExpiredError,
+} from "../utils/errorMessages";
 import { CreateGroupScreen } from "./CreateGroupScreen";
 
 interface GroupsListScreenProps {
@@ -32,6 +37,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
 }) => {
   const [showCreateGroup, setShowCreateGroup] = useState<boolean>(false);
   const theme = useTheme();
+  const { signOut } = useAuth();
   const { data: groups, isLoading: loading, error, refetch } = useGroups();
 
   // Expose refetch function to parent component
@@ -40,6 +46,13 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
       onRefetchReady(refetch);
     }
   }, [onRefetchReady, refetch]);
+
+  // Auto sign-out on session expiration with alert
+  useEffect(() => {
+    if (error && isSessionExpiredError(error)) {
+      showErrorAlert(error, signOut, "Session Expired");
+    }
+  }, [error, signOut]);
 
   if (loading) {
     return (
@@ -58,6 +71,32 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   }
 
   if (error) {
+    // Don't show Retry button for session expiration - user will be signed out automatically
+    if (isSessionExpiredError(error)) {
+      return (
+        <View
+          style={[
+            styles.centerContainer,
+            { backgroundColor: theme.colors.background },
+          ]}
+        >
+          <Text
+            variant="headlineSmall"
+            style={{ color: theme.colors.error, marginBottom: 16 }}
+          >
+            Session Expired
+          </Text>
+          <Text
+            variant="bodyMedium"
+            style={{ marginBottom: 24, textAlign: "center" }}
+          >
+            {getUserFriendlyErrorMessage(error)}
+          </Text>
+          <ActivityIndicator size="small" />
+        </View>
+      );
+    }
+
     return (
       <View
         style={[

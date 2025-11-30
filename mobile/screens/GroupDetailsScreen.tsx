@@ -43,7 +43,11 @@ import {
   Transaction,
 } from "../types";
 import { formatCurrency, getDefaultCurrency } from "../utils/currency";
-import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
+import { showErrorAlert } from "../utils/errorHandling";
+import {
+  getUserFriendlyErrorMessage,
+  isSessionExpiredError,
+} from "../utils/errorMessages";
 import { GroupStatsMode } from "./GroupStatsScreen";
 import { SettlementFormScreen } from "./SettlementFormScreen";
 
@@ -108,6 +112,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       setMenuVisible(false);
     }
   }, [showMembers]);
+
   // Fetch data with hooks
   const {
     data: groupData,
@@ -145,6 +150,13 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   >(null);
   const { session, signOut } = useAuth();
   const theme = useTheme();
+
+  // Auto sign-out on session expiration with alert
+  useEffect(() => {
+    if (groupError && isSessionExpiredError(groupError)) {
+      showErrorAlert(groupError, signOut, "Session Expired");
+    }
+  }, [groupError, signOut]);
 
   // Handle Android hardware back button
   useEffect(() => {
@@ -481,6 +493,32 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   }
 
   if (groupError) {
+    // Don't show Retry button for session expiration - user will be signed out automatically
+    if (isSessionExpiredError(groupError)) {
+      return (
+        <View
+          style={[
+            styles.centerContainer,
+            { backgroundColor: theme.colors.background },
+          ]}
+        >
+          <Text
+            variant="headlineSmall"
+            style={{ color: theme.colors.error, marginBottom: 16 }}
+          >
+            Session Expired
+          </Text>
+          <Text
+            variant="bodyMedium"
+            style={{ marginBottom: 24, textAlign: "center" }}
+          >
+            {getUserFriendlyErrorMessage(groupError)}
+          </Text>
+          <ActivityIndicator size="small" />
+        </View>
+      );
+    }
+
     return (
       <View
         style={[

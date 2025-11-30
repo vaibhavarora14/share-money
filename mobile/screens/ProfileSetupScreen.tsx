@@ -185,7 +185,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
         { paddingBottom: insets.bottom },
       ]}
     >
-      <Appbar.Header style={{ backgroundColor: theme.colors.surface }} elevated>
+      <Appbar.Header style={{ backgroundColor: theme.colors.background }}>
         {onBack ? (
           <>
             <Appbar.BackAction onPress={onBack} />
