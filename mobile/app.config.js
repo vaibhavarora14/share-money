@@ -72,7 +72,10 @@ module.exports = ({ config }) => {
         supportsTablet: true,
         bundleIdentifier: "com.vaibhavarora.sharemoney",
         scheme: "com.vaibhavarora.sharemoney",
-        buildNumber: versionConfig.buildNumber.toString()
+        buildNumber: versionConfig.buildNumber.toString(),
+        infoPlist: {
+          ITSAppUsesNonExemptEncryption: false
+        }
       },
       android: {
         package: "com.vaibhavarora.sharemoney",

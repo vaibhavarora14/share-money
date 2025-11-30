@@ -13,6 +13,7 @@
     "test:e2e:signin": "maestro test .maestro/sign-in-success.yaml",
     "test:e2e:group-details": "maestro test .maestro/group-details.yaml",
     "ios": "expo run:ios",
+    "build:ios": "./build-release-ios.sh",
     "version:patch": "node scripts/version.js patch",
     "version:minor": "node scripts/version.js minor",
     "version:major": "node scripts/version.js major",
