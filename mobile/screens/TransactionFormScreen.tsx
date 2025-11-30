@@ -22,7 +22,10 @@ import {
   TextInput,
   useTheme,
 } from "react-native-paper";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { GroupMember, Transaction } from "../types";
 import {
   CURRENCIES,
@@ -122,20 +125,23 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   }, [effectiveDefaultCurrency, groupId, groupMembers.length, allMemberIds]);
 
   // Helper: Load transaction data into form
-  const loadTransactionData = useCallback((tx: Transaction) => {
-    setDescription(tx.description || "");
-    setAmount(tx.amount.toString());
-    const transactionDate = tx.date ? new Date(tx.date) : new Date();
-    setSelectedDate(transactionDate);
-    setDate(tx.date || "");
-    setType(tx.type || "expense");
-    setCategory(tx.category || "");
-    setCurrency(tx.currency || effectiveDefaultCurrency);
-    setPaidBy(tx.paid_by || "");
-    setSplitAmong(
-      Array.isArray(tx.split_among) ? [...new Set(tx.split_among)] : []
-    );
-  }, [effectiveDefaultCurrency]);
+  const loadTransactionData = useCallback(
+    (tx: Transaction) => {
+      setDescription(tx.description || "");
+      setAmount(tx.amount.toString());
+      const transactionDate = tx.date ? new Date(tx.date) : new Date();
+      setSelectedDate(transactionDate);
+      setDate(tx.date || "");
+      setType(tx.type || "expense");
+      setCategory(tx.category || "");
+      setCurrency(tx.currency || effectiveDefaultCurrency);
+      setPaidBy(tx.paid_by || "");
+      setSplitAmong(
+        Array.isArray(tx.split_among) ? [...new Set(tx.split_among)] : []
+      );
+    },
+    [effectiveDefaultCurrency]
+  );
 
   // Initialize form on mount
   useEffect(() => {
@@ -212,8 +218,10 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
 
   // Handler to open Paid By picker
   const handleOpenPaidByPicker = useCallback(() => {
-    setShowPaidByPicker(true);
-  }, []);
+    if (!loading) {
+      setShowPaidByPicker(true);
+    }
+  }, [loading]);
 
   // Validation function that returns true if form is valid
   const validateForm = (): boolean => {
@@ -265,7 +273,9 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
         isValid = false;
       }
       if (splitAmong.length === 0) {
-        setSplitAmongError("Please select at least one person to split the expense among");
+        setSplitAmongError(
+          "Please select at least one person to split the expense among"
+        );
         isValid = false;
       }
     }
@@ -297,10 +307,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       // Here we rely on the parent to navigate back.
     } catch (error) {
       // Show error in an alert for API errors (not validation errors)
-      Alert.alert(
-        "Error",
-        getUserFriendlyErrorMessage(error)
-      );
+      Alert.alert("Error", getUserFriendlyErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -325,10 +332,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
               await onDelete();
               // Parent handles navigation
             } catch (error) {
-              Alert.alert(
-                "Error",
-                getUserFriendlyErrorMessage(error)
-              );
+              Alert.alert("Error", getUserFriendlyErrorMessage(error));
             } finally {
               setLoading(false);
             }
@@ -356,12 +360,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
 
     onDismiss();
     return true;
-  }, [
-    onDismiss,
-    showCurrencyPicker,
-    showPaidByPicker,
-    showDatePicker,
-  ]);
+  }, [onDismiss, showCurrencyPicker, showPaidByPicker, showDatePicker]);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener(
@@ -373,12 +372,18 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   }, [handleHardwareBack]);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top', 'left', 'right']}>
-      <Appbar.Header style={[styles.header, { backgroundColor: theme.colors.surface }]} elevated>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      edges={["top", "left", "right"]}
+    >
+      <Appbar.Header
+        style={[styles.header, { backgroundColor: theme.colors.surface }]}
+        elevated
+      >
         <Appbar.BackAction onPress={onDismiss} />
         <Appbar.Content
           title={transaction ? "Edit Transaction" : "New Transaction"}
-          titleStyle={{ fontWeight: 'bold' }}
+          titleStyle={{ fontWeight: "bold" }}
         />
       </Appbar.Header>
       <KeyboardAvoidingView
@@ -523,10 +528,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
           <View style={styles.segmentedContainer}>
             <Text
               variant="labelLarge"
-              style={[
-                styles.label,
-                { color: theme.colors.onSurfaceVariant },
-              ]}
+              style={[styles.label, { color: theme.colors.onSurfaceVariant }]}
             >
               Type
             </Text>
@@ -585,8 +587,16 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                   label="Paid By"
                   value={
                     paidBy
-                      ? groupMembers.find((m) => m.user_id === paidBy)?.email ||
-                        `User ${paidBy.substring(0, 8)}...`
+                      ? (() => {
+                          const member = groupMembers.find(
+                            (m) => m.user_id === paidBy
+                          );
+                          return (
+                            member?.full_name ||
+                            member?.email ||
+                            `User ${paidBy.substring(0, 8)}...`
+                          );
+                        })()
                       : ""
                   }
                   mode="outlined"
@@ -624,19 +634,13 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                     disabled={loading}
                     style={styles.selectAllButton}
                   >
-
-                    {areAllMembersSelected
-                      ? "Deselect All"
-                      : "Select All"}
+                    {areAllMembersSelected ? "Deselect All" : "Select All"}
                   </Button>
                 </View>
                 {splitAmongError ? (
                   <Text
                     variant="bodySmall"
-                    style={[
-                      styles.errorText,
-                      { color: theme.colors.error },
-                    ]}
+                    style={[styles.errorText, { color: theme.colors.error }]}
                   >
                     {splitAmongError}
                   </Text>
@@ -666,29 +670,36 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                       >
                         <Checkbox
                           status={isSelected ? "checked" : "unchecked"}
-                          onPress={() => handleToggleSplitMember(member.user_id)}
+                          onPress={() =>
+                            handleToggleSplitMember(member.user_id)
+                          }
                           disabled={loading}
                         />
                         <Text
                           variant="bodyLarge"
                           style={styles.splitMemberText}
                         >
-                          {member.email || `User ${member.user_id.substring(0, 8)}...`}
+                          {member.full_name ||
+                            member.email ||
+                            `User ${member.user_id.substring(0, 8)}...`}
                         </Text>
-                        {isSelected && splitAmong.length > 0 && amount && parseFloat(amount) > 0 && (
-                          <Text
-                            variant="bodySmall"
-                            style={[
-                              styles.splitAmount,
-                              { color: theme.colors.onSurfaceVariant },
-                            ]}
-                          >
-                            {formatCurrency(
-                              parseFloat(amount) / splitAmong.length,
-                              currency
-                            )}
-                          </Text>
-                        )}
+                        {isSelected &&
+                          splitAmong.length > 0 &&
+                          amount &&
+                          parseFloat(amount) > 0 && (
+                            <Text
+                              variant="bodySmall"
+                              style={[
+                                styles.splitAmount,
+                                { color: theme.colors.onSurfaceVariant },
+                              ]}
+                            >
+                              {formatCurrency(
+                                parseFloat(amount) / splitAmong.length,
+                                currency
+                              )}
+                            </Text>
+                          )}
                       </TouchableOpacity>
                     );
                   })}
@@ -753,9 +764,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
               ]}
             >
               <Text variant="titleLarge">Select Who Paid</Text>
-              <Button onPress={() => setShowPaidByPicker(false)}>
-                Close
-              </Button>
+              <Button onPress={() => setShowPaidByPicker(false)}>Close</Button>
             </View>
             <FlatList
               data={groupMembers}
@@ -783,7 +792,9 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                       fontWeight: paidBy === item.user_id ? "bold" : "normal",
                     }}
                   >
-                    {item.email || `User ${item.user_id.substring(0, 8)}...`}
+                    {item.full_name ||
+                      item.email ||
+                      `User ${item.user_id.substring(0, 8)}...`}
                   </Text>
                   {paidBy === item.user_id && (
                     <Text

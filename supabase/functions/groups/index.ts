@@ -1,9 +1,10 @@
 import { verifyAuth } from '../_shared/auth.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
-import { validateGroupData, isValidUUID, validateBodySize } from '../_shared/validation.ts';
-import { createSuccessResponse, createEmptyResponse } from '../_shared/response.ts';
 import { parsePath } from '../_shared/path-parser.ts';
+import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
 import { fetchUserEmails } from '../_shared/user-email.ts';
+import { fetchUserProfiles } from '../_shared/user-profiles.ts';
+import { isValidUUID, validateBodySize, validateGroupData } from '../_shared/validation.ts';
 
 /**
  * Groups Edge Function
@@ -36,7 +37,7 @@ interface GroupMember {
 }
 
 interface GroupWithMembers extends Group {
-  members?: Array<GroupMember & { email?: string }>;
+  members?: Array<GroupMember & { email?: string; full_name?: string | null; avatar_url?: string | null }>;
 }
 
 Deno.serve(async (req: Request) => {
@@ -112,14 +113,22 @@ Deno.serve(async (req: Request) => {
         return handleError(membersError, 'fetching group members');
       }
 
-      // Enrich members with email addresses using shared utility
+      // Enrich members with email addresses and profile data using shared utilities
       const userIds = (members || []).map(m => m.user_id);
-      const emailMap = await fetchUserEmails(userIds, user.id, currentUserEmail);
+      const [emailMap, profileMap] = await Promise.all([
+        fetchUserEmails(userIds, user.id, currentUserEmail),
+        fetchUserProfiles(supabase, userIds),
+      ]);
       
-      const membersWithEmails = (members || []).map(member => ({
-        ...member,
-        email: emailMap.get(member.user_id),
-      }));
+      const membersWithEmails = (members || []).map(member => {
+        const profile = profileMap.get(member.user_id);
+        return {
+          ...member,
+          email: emailMap.get(member.user_id),
+          full_name: profile?.full_name || null,
+          avatar_url: profile?.avatar_url || null,
+        };
+      });
 
       const groupWithMembers: GroupWithMembers = {
         ...group,

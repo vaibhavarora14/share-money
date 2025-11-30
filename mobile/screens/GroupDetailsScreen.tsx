@@ -7,11 +7,9 @@ import {
   FAB,
   Menu,
   SegmentedButtons,
-  Surface,
   Text,
   useTheme,
 } from "react-native-paper";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { ActivityFeed } from "../components/ActivityFeed";
 import { GroupDashboard } from "../components/GroupDashboard";
 import { InvitationsList } from "../components/InvitationsList";
@@ -45,7 +43,11 @@ import {
   Transaction,
 } from "../types";
 import { formatCurrency, getDefaultCurrency } from "../utils/currency";
-import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
+import { showErrorAlert } from "../utils/errorHandling";
+import {
+  getUserFriendlyErrorMessage,
+  isSessionExpiredError,
+} from "../utils/errorMessages";
 import { GroupStatsMode } from "./GroupStatsScreen";
 import { SettlementFormScreen } from "./SettlementFormScreen";
 
@@ -88,6 +90,29 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [listMode, setListMode] = useState<"transactions" | "activity">(
     "transactions"
   );
+
+  // Stable handler for closing menu
+  const handleCloseMenu = () => {
+    setMenuVisible(false);
+  };
+
+  // Stable handler for opening menu
+  const handleOpenMenu = () => {
+    setMenuVisible(true);
+  };
+
+  // Reset menu visibility when showMembers changes
+  React.useEffect(() => {
+    if (showMembers) {
+      // Close menu when entering members view
+      setMenuVisible(false);
+    } else {
+      // Reset menu state when coming back from members view
+      // This ensures the menu can be opened again after returning
+      setMenuVisible(false);
+    }
+  }, [showMembers]);
+
   // Fetch data with hooks
   const {
     data: groupData,
@@ -125,6 +150,13 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   >(null);
   const { session, signOut } = useAuth();
   const theme = useTheme();
+
+  // Auto sign-out on session expiration with alert
+  useEffect(() => {
+    if (groupError && isSessionExpiredError(groupError)) {
+      showErrorAlert(groupError, signOut, "Session Expired");
+    }
+  }, [groupError, signOut]);
 
   // Handle Android hardware back button
   useEffect(() => {
@@ -461,6 +493,32 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   }
 
   if (groupError) {
+    // Don't show Retry button for session expiration - user will be signed out automatically
+    if (isSessionExpiredError(groupError)) {
+      return (
+        <View
+          style={[
+            styles.centerContainer,
+            { backgroundColor: theme.colors.background },
+          ]}
+        >
+          <Text
+            variant="headlineSmall"
+            style={{ color: theme.colors.error, marginBottom: 16 }}
+          >
+            Session Expired
+          </Text>
+          <Text
+            variant="bodyMedium"
+            style={{ marginBottom: 24, textAlign: "center" }}
+          >
+            {getUserFriendlyErrorMessage(groupError)}
+          </Text>
+          <ActivityIndicator size="small" />
+        </View>
+      );
+    }
+
     return (
       <View
         style={[
@@ -493,9 +551,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   }
 
   return (
-    <SafeAreaView
+    <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
-      edges={["top", "bottom"]}
     >
       <Appbar.Header style={{ backgroundColor: theme.colors.background }}>
         <Appbar.BackAction
@@ -514,31 +571,32 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           titleStyle={{ fontWeight: "bold" }}
         />
 
-        {!showMembers && (
-          <Appbar.Action
-            icon="information-outline"
-            onPress={() => setShowMembers(true)}
-            accessibilityLabel="View group members"
-            testID="info-icon-button"
-          />
-        )}
-
-        {/* Show Menu only if NOT in members view (or maybe keep it? let's keep it only in main view for now to avoid clutter) */}
-        {!showMembers && isMember && (
+        {/* Always render Menu when member to prevent unmounting - control visibility via visible prop */}
+        {isMember && (
           <Menu
-            visible={menuVisible}
-            onDismiss={() => setMenuVisible(false)}
+            visible={menuVisible && !showMembers}
+            onDismiss={handleCloseMenu}
             anchor={
-              <Appbar.Action
-                icon="dots-vertical"
-                onPress={() => setMenuVisible(true)}
-              />
+              !showMembers ? (
+                <Appbar.Action icon="dots-vertical" onPress={handleOpenMenu} />
+              ) : (
+                <View style={{ width: 0, height: 0 }} />
+              )
             }
+            contentStyle={{ minWidth: 200 }}
           >
+            <Menu.Item
+              onPress={() => {
+                handleCloseMenu();
+                setShowMembers(true);
+              }}
+              title="View Members"
+              leadingIcon="account-group"
+            />
             {isOwner && (
               <Menu.Item
                 onPress={() => {
-                  setMenuVisible(false);
+                  handleCloseMenu();
                   handleDeleteGroup();
                 }}
                 title="Delete Group"
@@ -550,7 +608,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             {!isOwner && (
               <Menu.Item
                 onPress={() => {
-                  setMenuVisible(false);
+                  handleCloseMenu();
                   handleLeaveGroup();
                 }}
                 title="Leave Group"
@@ -562,7 +620,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             {isOwner && (
               <Menu.Item
                 onPress={() => {
-                  setMenuVisible(false);
+                  handleCloseMenu();
                   handleLeaveGroup();
                 }}
                 title="Leave Group"
@@ -614,17 +672,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         ) : (
           // DASHBOARD & LIST VIEW
           <>
-            {group.description && (
-              <Surface style={styles.descriptionSurface} elevation={0}>
-                <Text
-                  variant="bodyMedium"
-                  style={{ color: theme.colors.onSurfaceVariant }}
-                >
-                  {group.description}
-                </Text>
-              </Surface>
-            )}
-
             <GroupDashboard
               balances={balancesData?.overall_balances || []}
               transactions={transactions || []}
@@ -722,7 +769,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           setEditingSettlement(null);
         }}
       />
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -741,12 +788,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-  },
-  descriptionSurface: {
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 16,
-    backgroundColor: "rgba(0,0,0,0.02)",
   },
   sectionSurface: {
     borderRadius: 16,

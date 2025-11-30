@@ -18,6 +18,7 @@ import {
   useRemoveMember,
 } from "./hooks/useGroupMutations";
 import { useGroupDetails } from "./hooks/useGroups";
+import { useProfile } from "./hooks/useProfile";
 import {
   useCreateTransaction,
   useDeleteTransaction,
@@ -29,6 +30,7 @@ import { BalancesScreen } from "./screens/BalancesScreen";
 import { GroupDetailsScreen } from "./screens/GroupDetailsScreen";
 import { GroupStatsMode, GroupStatsScreen } from "./screens/GroupStatsScreen";
 import { GroupsListScreen } from "./screens/GroupsListScreen";
+import { ProfileSetupScreen } from "./screens/ProfileSetupScreen";
 import { TransactionFormScreen } from "./screens/TransactionFormScreen";
 import { darkTheme, lightTheme } from "./theme";
 import { Group, GroupWithMembers } from "./types";
@@ -39,6 +41,11 @@ import { getDefaultCurrency } from "./utils/currency";
 function AppContent() {
   const { session, loading, signOut } = useAuth();
   const theme = useTheme();
+  const {
+    data: profile,
+    isLoading: profileLoading,
+    refetch: refetchProfile,
+  } = useProfile();
   const [isSignUp, setIsSignUp] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [showAddMember, setShowAddMember] = useState(false);
@@ -165,7 +172,7 @@ function AppContent() {
     });
   };
 
-  if (loading) {
+  if (loading || (session && profileLoading)) {
     return (
       <View
         style={[
@@ -191,12 +198,41 @@ function AppContent() {
     );
   }
 
+  // Check if profile is incomplete
+  const isProfileIncomplete =
+    !profile || !profile.profile_completed || !profile.full_name;
+
   // Show balances screen (with bottom nav)
   if (currentRoute === "balances") {
     return (
       <>
-        <BalancesScreen
-          onBack={() => {
+        <BalancesScreen />
+        <BottomNavBar
+          currentRoute={currentRoute}
+          onGroupsPress={() => {
+            setCurrentRoute("groups");
+          }}
+          onBalancesPress={() => {
+            setCurrentRoute("balances");
+          }}
+          onProfilePress={() => {
+            setCurrentRoute("profile");
+          }}
+          onLogoutPress={signOut}
+          isProfileIncomplete={isProfileIncomplete}
+        />
+        <StatusBar style={theme.dark ? "light" : "dark"} />
+      </>
+    );
+  }
+
+  // Show profile screen
+  if (currentRoute === "profile") {
+    return (
+      <>
+        <ProfileSetupScreen
+          onComplete={() => {
+            refetchProfile();
             setCurrentRoute("groups");
           }}
         />
@@ -208,7 +244,11 @@ function AppContent() {
           onBalancesPress={() => {
             setCurrentRoute("balances");
           }}
+          onProfilePress={() => {
+            setCurrentRoute("profile");
+          }}
           onLogoutPress={signOut}
+          isProfileIncomplete={isProfileIncomplete}
         />
         <StatusBar style={theme.dark ? "light" : "dark"} />
       </>
@@ -315,6 +355,8 @@ function AppContent() {
             setStatsContext(null);
           }}
           onLogoutPress={signOut}
+          onProfilePress={() => setCurrentRoute("profile")}
+          isProfileIncomplete={isProfileIncomplete}
         />
         {showAddMember && selectedGroup && (
           <AddMemberScreen
@@ -349,7 +391,9 @@ function AppContent() {
         currentRoute={currentRoute}
         onGroupsPress={() => setCurrentRoute("groups")}
         onBalancesPress={() => setCurrentRoute("balances")}
+        onProfilePress={() => setCurrentRoute("profile")}
         onLogoutPress={signOut}
+        isProfileIncomplete={isProfileIncomplete}
       />
       <StatusBar style={theme.dark ? "light" : "dark"} />
     </>

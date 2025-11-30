@@ -15,7 +15,11 @@ import { useGroupDetails } from "../hooks/useGroups";
 import { useCreateSettlement } from "../hooks/useSettlements";
 import { useTransactions } from "../hooks/useTransactions";
 import { Balance, GroupMember, Transaction } from "../types";
-import { formatCurrency, formatTotals, getDefaultCurrency } from "../utils/currency";
+import {
+  formatCurrency,
+  formatTotals,
+  getDefaultCurrency,
+} from "../utils/currency";
 import { SettlementFormScreen } from "./SettlementFormScreen";
 
 export type GroupStatsMode = "my-costs" | "total-costs" | "i-owe" | "im-owed";
@@ -120,21 +124,38 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
       return [];
     }
 
-    type Entry = { amounts: Map<string, number>; email?: string };
+    type Entry = {
+      amounts: Map<string, number>;
+      full_name?: string | null;
+      email?: string;
+    };
     const map = new Map<string, Entry>();
 
     const upsertEntry = (
       userId: string | undefined,
       amount: number,
       currency: string,
+      full_name?: string | null,
       email?: string
     ) => {
       if (!userId || !Number.isFinite(amount)) return;
-      const existing = map.get(userId) || { amounts: new Map<string, number>(), email };
-      
+      const existing = map.get(userId) || {
+        amounts: new Map<string, number>(),
+        full_name,
+        email,
+      };
+
+      // Preserve full_name if it exists
+      if (full_name) {
+        existing.full_name = full_name;
+      }
+      if (email && !existing.email) {
+        existing.email = email;
+      }
+
       const currentAmount = existing.amounts.get(currency) || 0;
       existing.amounts.set(currency, currentAmount + amount);
-      
+
       map.set(userId, existing);
     };
 
@@ -144,7 +165,13 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
         const currency = transaction.currency || defaultCurrency;
         if (transaction.splits && transaction.splits.length > 0) {
           transaction.splits.forEach((split) => {
-            upsertEntry(split.user_id, split.amount, currency, split.email);
+            upsertEntry(
+              split.user_id,
+              split.amount,
+              currency,
+              split.full_name,
+              split.email
+            );
           });
           return;
         }
@@ -166,13 +193,21 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
       });
 
     return Array.from(map.entries())
-      .map(([userId, entry]) => ({
-        userId,
-        amounts: entry.amounts,
-        email: entry.email,
-        // Calculate total value for sorting (simplified, assumes 1:1 for sorting only)
-        totalValue: Array.from(entry.amounts.values()).reduce((a, b) => a + b, 0)
-      }))
+      .map(([userId, entry]) => {
+        // Get full_name from member lookup if not in entry
+        const member = memberLookup.get(userId);
+        return {
+          userId,
+          amounts: entry.amounts,
+          full_name: entry.full_name || member?.full_name || null,
+          email: entry.email || member?.email,
+          // Calculate total value for sorting (simplified, assumes 1:1 for sorting only)
+          totalValue: Array.from(entry.amounts.values()).reduce(
+            (a, b) => a + b,
+            0
+          ),
+        };
+      })
       .sort((a, b) => b.totalValue - a.totalValue);
   }, [transactions, defaultCurrency]);
 
@@ -190,7 +225,8 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
   const myShare = useMemo(() => {
     if (!currentUserId) return new Map<string, number>();
     return (
-      costBreakdown.find((entry) => entry.userId === currentUserId)?.amounts || new Map<string, number>()
+      costBreakdown.find((entry) => entry.userId === currentUserId)?.amounts ||
+      new Map<string, number>()
     );
   }, [costBreakdown, currentUserId]);
 
@@ -267,8 +303,9 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
   }, [filteredBalances]);
 
   const resolveUserLabel = (userId: string, fallback?: string) => {
-    const memberEmail = memberLookup.get(userId)?.email;
-    if (memberEmail) return memberEmail;
+    const member = memberLookup.get(userId);
+    if (member?.full_name) return member.full_name;
+    if (member?.email) return member.email;
     if (fallback) return fallback;
     return `User ${userId.substring(0, 8)}...`;
   };
@@ -290,12 +327,12 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
       // Only calculate percentage when all costs are in a single currency
       const isMixedCurrency = totalCosts.size > 1;
       let percentage = 0;
-      
+
       if (!isMixedCurrency && totalCosts.size === 1) {
-         const currency = Array.from(totalCosts.keys())[0];
-         const totalValue = totalCosts.get(currency)!;
-         const entryAmount = entry.amounts.get(currency) || 0;
-         percentage = totalValue === 0 ? 0 : (entryAmount / totalValue) * 100;
+        const currency = Array.from(totalCosts.keys())[0];
+        const totalValue = totalCosts.get(currency)!;
+        const entryAmount = entry.amounts.get(currency) || 0;
+        percentage = totalValue === 0 ? 0 : (entryAmount / totalValue) * 100;
       }
 
       return (
@@ -311,7 +348,7 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
           <View style={styles.entryHeader}>
             <View>
               <Text variant="titleSmall" style={{ fontWeight: "600" }}>
-                {resolveUserLabel(entry.userId, entry.email)}
+                {entry.full_name || resolveUserLabel(entry.userId, entry.email)}
               </Text>
               {!isMixedCurrency && (
                 <Text style={[styles.entrySubtext, colorStyles.entrySubtext]}>
@@ -319,9 +356,9 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
                 </Text>
               )}
               {isMixedCurrency && (
-                 <Text style={[styles.entrySubtext, colorStyles.entrySubtext]}>
-                   Multiple currencies
-                 </Text>
+                <Text style={[styles.entrySubtext, colorStyles.entrySubtext]}>
+                  Multiple currencies
+                </Text>
               )}
             </View>
             <Text variant="titleMedium" style={{ fontWeight: "bold" }}>
@@ -409,12 +446,10 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
             {MODE_COPY[mode].summaryLabel}
           </Text>
           <Text
-            variant="headlineMedium"
+            variant="headlineSmall"
             style={[styles.summaryValue, colorStyles.summaryValue]}
           >
-            {transactionsLoading
-              ? "..."
-              : formatTotals(summaryValue)}
+            {transactionsLoading ? "..." : formatTotals(summaryValue)}
           </Text>
           <Text style={[styles.summaryHelpText, colorStyles.summaryHelpText]}>
             {MODE_COPY[mode].subtitle}
@@ -449,9 +484,7 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
           variant="headlineMedium"
           style={[styles.summaryValue, colorStyles.summaryValue]}
         >
-          {balancesLoading
-            ? "..."
-            : formatTotals(balanceTotals)}
+          {balancesLoading ? "..." : formatTotals(balanceTotals)}
         </Text>
         <Text style={[styles.summaryHelpText, colorStyles.summaryHelpText]}>
           {MODE_COPY[mode].subtitle}

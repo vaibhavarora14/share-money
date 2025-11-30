@@ -1,4 +1,21 @@
 /**
+ * Checks if an error indicates session expiration
+ */
+export function isSessionExpiredError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("unauthorized") ||
+    message.includes("not authenticated") ||
+    message.includes("session has expired") ||
+    message.includes("session expired")
+  );
+}
+
+/**
  * Maps server error messages to user-friendly messages
  * Centralizes error message handling for consistent UX
  */

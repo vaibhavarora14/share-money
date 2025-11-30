@@ -1,19 +1,22 @@
-import { formatDistanceToNow, format, parseISO, startOfDay, differenceInDays } from 'date-fns';
+import { differenceInDays, format, parseISO, startOfDay } from 'date-fns';
 import { ActivityItem } from '../types';
-import { formatCurrency } from './currency';
 
 /**
- * Gets a display name for a user (email or "You")
+ * Gets a display name for a user (full_name, email, or "You")
  */
 export function getUserDisplayName(
   userId: string,
   email: string,
-  currentUserId?: string
+  currentUserId?: string,
+  full_name?: string | null
 ): string {
   if (currentUserId && userId === currentUserId) {
     return 'You';
   }
-  // Return email username part (before @)
+  // Priority: full_name → email username part (before @)
+  if (full_name) {
+    return full_name;
+  }
   return email.split('@')[0] || email;
 }
 

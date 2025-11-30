@@ -5,6 +5,8 @@ export interface TransactionSplit {
   amount: number; // Individual split amount (for equal splits: transaction.amount / split_count)
   created_at?: string;
   email?: string; // Populated from API join with users
+  full_name?: string | null; // Populated from API join with profiles
+  avatar_url?: string | null; // Populated from API join with profiles
 }
 
 export interface Transaction {
@@ -50,6 +52,8 @@ export interface GroupMember {
   role: 'owner' | 'member';
   joined_at: string;
   email?: string;
+  full_name?: string | null;
+  avatar_url?: string | null;
 }
 
 export interface GroupInvitation {
@@ -74,6 +78,8 @@ export type CurrencyCode = 'USD' | 'INR' | 'EUR' | 'GBP' | 'JPY' | 'KRW' | 'CNY'
 export interface Balance {
   user_id: string;
   email?: string; // Enriched by API
+  full_name?: string | null; // Enriched by API
+  avatar_url?: string | null; // Enriched by API
   amount: number;
   currency: string; // Keeping as string for flexibility, but could be CurrencyCode
 } // Positive = they owe you, Negative = you owe them
@@ -116,6 +122,8 @@ export interface ActivityItem {
   changed_by: {
     id: string;
     email: string;
+    full_name?: string | null;
+    avatar_url?: string | null;
   };
   changed_at: string;
   description: string;
