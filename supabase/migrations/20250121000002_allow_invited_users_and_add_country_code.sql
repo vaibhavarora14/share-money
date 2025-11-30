@@ -1,11 +1,12 @@
--- Allow invited users in transactions and settlements
--- Created: 2025-01-21
+-- Allow invited users in transactions and settlements, and add country_code to profiles
+-- Created: 2025-01-21 (combined migration)
 --
 -- This migration:
 -- 1. Adds helper function to check if a user has a pending invitation to a group
 -- 2. Updates RLS policies to allow group members to modify transactions/settlements
 --    created by users who are not group members (uninvited users)
 -- 3. Enables invited users (pending invitations) to be included in transactions and settlements
+-- 4. Adds country_code column to profiles table for phone number country selection
 
 -- ============================================================================
 -- HELPER FUNCTION: Check if user has pending invitation to group
@@ -20,6 +21,7 @@ DECLARE
   user_email TEXT;
 BEGIN
   -- Get user's email from auth.users
+  -- Note: This requires SECURITY DEFINER to access auth.users table
   SELECT email INTO user_email
   FROM auth.users
   WHERE id = check_user_id;
@@ -30,6 +32,7 @@ BEGIN
   END IF;
   
   -- Check if there's a pending invitation for this email
+  -- Uses case-insensitive email matching and validates expiration
   RETURN EXISTS (
     SELECT 1 FROM group_invitations
     WHERE group_id = check_group_id
@@ -53,11 +56,8 @@ CREATE OR REPLACE FUNCTION is_user_member_or_invited(
 )
 RETURNS BOOLEAN AS $$
 BEGIN
-  -- Check if user is a member
-  IF EXISTS (
-    SELECT 1 FROM group_members
-    WHERE group_id = check_group_id AND user_id = check_user_id
-  ) THEN
+  -- Check if user is a member (reuse existing function for consistency)
+  IF is_user_group_member(check_group_id, check_user_id) THEN
     RETURN TRUE;
   END IF;
   
@@ -133,6 +133,7 @@ CREATE POLICY "Users can create settlements as payer or receiver"
 
 -- Create updated policies for updating/deleting settlements
 -- Allows group members to modify settlements in their groups (including those created by uninvited users)
+DROP POLICY IF EXISTS "Users can update settlements in their groups" ON settlements;
 CREATE POLICY "Users can update settlements in their groups"
   ON settlements
   FOR UPDATE
@@ -145,6 +146,7 @@ CREATE POLICY "Users can update settlements in their groups"
     (group_id IS NOT NULL AND is_user_group_member(group_id, auth.uid()))
   );
 
+DROP POLICY IF EXISTS "Users can delete settlements in their groups" ON settlements;
 CREATE POLICY "Users can delete settlements in their groups"
   ON settlements
   FOR DELETE
@@ -163,6 +165,7 @@ DROP POLICY IF EXISTS "Users can update splits for their transactions" ON transa
 DROP POLICY IF EXISTS "Users can delete splits for their transactions" ON transaction_splits;
 
 -- Create updated policies that allow group members to manage splits for group transactions
+DROP POLICY IF EXISTS "Users can create splits for group transactions" ON transaction_splits;
 CREATE POLICY "Users can create splits for group transactions"
   ON transaction_splits
   FOR INSERT
@@ -174,6 +177,7 @@ CREATE POLICY "Users can create splits for group transactions"
     )
   );
 
+DROP POLICY IF EXISTS "Users can update splits for group transactions" ON transaction_splits;
 CREATE POLICY "Users can update splits for group transactions"
   ON transaction_splits
   FOR UPDATE
@@ -185,6 +189,7 @@ CREATE POLICY "Users can update splits for group transactions"
     )
   );
 
+DROP POLICY IF EXISTS "Users can delete splits for group transactions" ON transaction_splits;
 CREATE POLICY "Users can delete splits for group transactions"
   ON transaction_splits
   FOR DELETE
@@ -195,3 +200,17 @@ CREATE POLICY "Users can delete splits for group transactions"
       OR (group_id IS NOT NULL AND is_user_group_member(group_id, auth.uid()))
     )
   );
+
+-- ============================================================================
+-- ADD COUNTRY_CODE COLUMN TO PROFILES
+-- ============================================================================
+
+-- Add country_code column to profiles table
+-- This field stores the ISO country code (e.g., 'US', 'CA', 'IN') for the phone number country selection.
+-- This helps distinguish between countries that share the same dial code (e.g., +1 for US and Canada).
+ALTER TABLE profiles
+ADD COLUMN IF NOT EXISTS country_code VARCHAR(2) 
+  CHECK (country_code IS NULL OR (LENGTH(country_code) = 2 AND country_code ~ '^[A-Z]{2}$'));
+
+-- Add comment
+COMMENT ON COLUMN profiles.country_code IS 'ISO 3166-1 alpha-2 country code (e.g., US, CA, IN) for phone number country selection. Must be exactly 2 uppercase letters if provided.';

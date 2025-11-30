@@ -4,11 +4,14 @@ import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { log } from '../_shared/logger.ts';
 import { createSuccessResponse } from '../_shared/response.ts';
 import { fetchUserEmails } from '../_shared/user-email.ts';
+import { fetchUserProfiles } from '../_shared/user-profiles.ts';
 import { isValidUUID } from '../_shared/validation.ts';
 
 interface Balance {
   user_id: string;
   email?: string;
+  full_name?: string | null;
+  avatar_url?: string | null;
   amount: number;
   currency: string;
 }
@@ -344,15 +347,24 @@ Deno.serve(async (req: Request) => {
 
     if (allUserIds.size > 0) {
       const userIdsArray = Array.from(allUserIds);
-      const emailMap = await fetchUserEmails(userIdsArray, currentUserId, currentUserEmail);
+      const [emailMap, profileMap] = await Promise.all([
+        fetchUserEmails(userIdsArray, currentUserId, currentUserEmail),
+        fetchUserProfiles(supabase, userIdsArray),
+      ]);
 
       for (const gb of groupBalances) {
         for (const b of gb.balances) {
+          const profile = profileMap.get(b.user_id);
           b.email = emailMap.get(b.user_id);
+          b.full_name = profile?.full_name || null;
+          b.avatar_url = profile?.avatar_url || null;
         }
       }
       for (const b of overallBalances) {
+        const profile = profileMap.get(b.user_id);
         b.email = emailMap.get(b.user_id);
+        b.full_name = profile?.full_name || null;
+        b.avatar_url = profile?.avatar_url || null;
       }
     }
 

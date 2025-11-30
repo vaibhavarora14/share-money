@@ -18,7 +18,8 @@ import {
   TextInput,
   useTheme,
 } from "react-native-paper";
-import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
+import { showErrorAlert } from "../utils/errorHandling";
+import { useAuth } from "../contexts/AuthContext";
 
 interface CreateGroupScreenProps {
   visible: boolean;
@@ -38,6 +39,7 @@ export const CreateGroupScreen: React.FC<CreateGroupScreenProps> = ({
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const screenHeight = Dimensions.get("window").height;
+  const { signOut } = useAuth();
 
   useEffect(() => {
     if (visible) {
@@ -79,10 +81,7 @@ export const CreateGroupScreen: React.FC<CreateGroupScreenProps> = ({
       setDescription("");
       onDismiss();
     } catch (error) {
-      Alert.alert(
-        "Error",
-        getUserFriendlyErrorMessage(error)
-      );
+      showErrorAlert(error, signOut, "Error");
     } finally {
       setLoading(false);
     }

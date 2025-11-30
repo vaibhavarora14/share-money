@@ -38,7 +38,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   const { youOwe, youAreOwed } = useMemo(() => {
     const owe = new Map<string, number>();
     const owed = new Map<string, number>();
-    
+
     balances.forEach((b) => {
       if (b.amount < 0) {
         const current = owe.get(b.currency) || 0;
@@ -57,7 +57,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
 
     transactions.forEach((t) => {
       const currency = t.currency || defaultCurrency;
-      
+
       // Total Group Cost
       const currentTotal = total.get(currency) || 0;
       total.set(currency, currentTotal + t.amount);
@@ -74,10 +74,10 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
           myShare = t.amount / t.split_among.length;
         }
       } else if (t.paid_by === currentUserId) {
-         // Note: Transactions without splits or split_among are not included in "My Cost"
-         // as we cannot determine the user's share without explicit split data.
+        // Note: Transactions without splits or split_among are not included in "My Cost"
+        // as we cannot determine the user's share without explicit split data.
       }
-      
+
       if (myShare > 0) {
         const currentMyTotal = myTotal.get(currency) || 0;
         myTotal.set(currency, currentMyTotal + myShare);
@@ -87,10 +87,16 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
     return { myCost: myTotal, totalGroupCost: total };
   }, [transactions, currentUserId, defaultCurrency]);
 
-  const formattedYouAreOwed = useMemo(() => formatTotals(youAreOwed), [youAreOwed]);
+  const formattedYouAreOwed = useMemo(
+    () => formatTotals(youAreOwed),
+    [youAreOwed]
+  );
   const formattedYouOwe = useMemo(() => formatTotals(youOwe), [youOwe]);
   const formattedMyCost = useMemo(() => formatTotals(myCost), [myCost]);
-  const formattedTotalCost = useMemo(() => formatTotals(totalGroupCost), [totalGroupCost]);
+  const formattedTotalCost = useMemo(
+    () => formatTotals(totalGroupCost),
+    [totalGroupCost]
+  );
 
   const renderCard = (
     title: string,
@@ -119,7 +125,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
             <Icon source={icon} size={20} color={textColor} />
           </View>
           <Text
-            variant="headlineSmall"
+            variant="titleLarge"
             style={{ color: textColor, fontWeight: "bold", marginTop: 8 }}
             numberOfLines={2}
             adjustsFontSizeToFit

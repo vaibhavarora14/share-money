@@ -1,19 +1,23 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import {
-    ActivityIndicator,
-    Appbar,
-    Button,
-    FAB,
-    IconButton,
-    Surface,
-    Text,
-    useTheme,
+  ActivityIndicator,
+  Appbar,
+  Button,
+  FAB,
+  IconButton,
+  Surface,
+  Text,
+  useTheme,
 } from "react-native-paper";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useAuth } from "../contexts/AuthContext";
 import { useGroups } from "../hooks/useGroups";
 import { Group } from "../types";
-import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
+import { showErrorAlert } from "../utils/errorHandling";
+import {
+  getUserFriendlyErrorMessage,
+  isSessionExpiredError,
+} from "../utils/errorMessages";
 import { CreateGroupScreen } from "./CreateGroupScreen";
 
 interface GroupsListScreenProps {
@@ -33,6 +37,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
 }) => {
   const [showCreateGroup, setShowCreateGroup] = useState<boolean>(false);
   const theme = useTheme();
+  const { signOut } = useAuth();
   const { data: groups, isLoading: loading, error, refetch } = useGroups();
 
   // Expose refetch function to parent component
@@ -42,6 +47,12 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
     }
   }, [onRefetchReady, refetch]);
 
+  // Auto sign-out on session expiration with alert
+  useEffect(() => {
+    if (error && isSessionExpiredError(error)) {
+      showErrorAlert(error, signOut, "Session Expired");
+    }
+  }, [error, signOut]);
 
   if (loading) {
     return (
@@ -60,6 +71,32 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   }
 
   if (error) {
+    // Don't show Retry button for session expiration - user will be signed out automatically
+    if (isSessionExpiredError(error)) {
+      return (
+        <View
+          style={[
+            styles.centerContainer,
+            { backgroundColor: theme.colors.background },
+          ]}
+        >
+          <Text
+            variant="headlineSmall"
+            style={{ color: theme.colors.error, marginBottom: 16 }}
+          >
+            Session Expired
+          </Text>
+          <Text
+            variant="bodyMedium"
+            style={{ marginBottom: 24, textAlign: "center" }}
+          >
+            {getUserFriendlyErrorMessage(error)}
+          </Text>
+          <ActivityIndicator size="small" />
+        </View>
+      );
+    }
+
     return (
       <View
         style={[
@@ -87,14 +124,13 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   }
 
   return (
-    <SafeAreaView
+    <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
-      edges={["top", "bottom"]}
     >
-      <Appbar.Header style={{ backgroundColor: theme.colors.background }} mode="center-aligned">
-        <Appbar.Content 
-          title="ShareMoney" 
-          titleStyle={{ fontWeight: 'bold', color: theme.colors.primary }}
+      <Appbar.Header style={{ backgroundColor: theme.colors.background }}>
+        <Appbar.Content
+          title="Your Groups"
+          titleStyle={{ fontWeight: "bold" }}
         />
       </Appbar.Header>
 
@@ -103,22 +139,30 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <Text variant="headlineMedium" style={styles.headerTitle}>
-          Your Groups
-        </Text>
-        
         {groups.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Surface style={styles.emptySurface} elevation={0}>
-              <IconButton icon="account-group-outline" size={48} iconColor={theme.colors.primary} />
-              <Text variant="titleLarge" style={{ marginBottom: 8, fontWeight: 'bold' }}>
+              <IconButton
+                icon="account-group-outline"
+                size={48}
+                iconColor={theme.colors.primary}
+              />
+              <Text
+                variant="titleLarge"
+                style={{ marginBottom: 8, fontWeight: "bold" }}
+              >
                 No groups yet
               </Text>
               <Text
                 variant="bodyMedium"
-                style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center', marginBottom: 24 }}
+                style={{
+                  color: theme.colors.onSurfaceVariant,
+                  textAlign: "center",
+                  marginBottom: 24,
+                }}
               >
-                Create a group to start sharing expenses with friends and family.
+                Create a group to start sharing expenses with friends and
+                family.
               </Text>
               <Button mode="contained" onPress={() => setShowCreateGroup(true)}>
                 Create your first group
@@ -129,7 +173,10 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
           groups.map((group) => (
             <Surface
               key={group.id}
-              style={[styles.groupItem, { backgroundColor: theme.colors.surface }]}
+              style={[
+                styles.groupItem,
+                { backgroundColor: theme.colors.surface },
+              ]}
               elevation={1}
             >
               <TouchableOpacity
@@ -138,15 +185,31 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                 activeOpacity={0.7}
               >
                 <View style={styles.groupIconContainer}>
-                  <Surface style={[styles.groupIcon, { backgroundColor: theme.colors.primaryContainer }]} elevation={0}>
-                    <Text style={{ fontSize: 20, fontWeight: 'bold', color: theme.colors.onPrimaryContainer }}>
+                  <Surface
+                    style={[
+                      styles.groupIcon,
+                      { backgroundColor: theme.colors.primaryContainer },
+                    ]}
+                    elevation={0}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 20,
+                        fontWeight: "bold",
+                        color: theme.colors.onPrimaryContainer,
+                      }}
+                    >
                       {group.name.charAt(0).toUpperCase()}
                     </Text>
                   </Surface>
                 </View>
-                
+
                 <View style={styles.groupContent}>
-                  <Text variant="titleMedium" style={styles.groupName} numberOfLines={1}>
+                  <Text
+                    variant="titleMedium"
+                    style={styles.groupName}
+                    numberOfLines={1}
+                  >
                     {group.name}
                   </Text>
                   {group.description ? (
@@ -158,7 +221,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                       {group.description}
                     </Text>
                   ) : (
-                     <Text
+                    <Text
                       variant="bodySmall"
                       style={{ color: theme.colors.onSurfaceVariant }}
                     >
@@ -166,13 +229,17 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                     </Text>
                   )}
                 </View>
-                
-                <IconButton icon="chevron-right" size={20} iconColor={theme.colors.onSurfaceVariant} />
+
+                <IconButton
+                  icon="chevron-right"
+                  size={20}
+                  iconColor={theme.colors.onSurfaceVariant}
+                />
               </TouchableOpacity>
             </Surface>
           ))
         )}
-        
+
         {/* Bottom padding for FAB */}
         <View style={{ height: 80 }} />
       </ScrollView>
@@ -193,7 +260,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
         }}
         onDismiss={() => setShowCreateGroup(false)}
       />
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -213,26 +280,21 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 16,
   },
-  headerTitle: {
-    fontWeight: 'bold',
-    marginBottom: 24,
-    marginTop: 8,
-  },
   emptyContainer: {
     paddingVertical: 40,
-    alignItems: 'center',
+    alignItems: "center",
   },
   emptySurface: {
     padding: 32,
-    alignItems: 'center',
+    alignItems: "center",
     borderRadius: 24,
-    width: '100%',
-    backgroundColor: 'transparent',
+    width: "100%",
+    backgroundColor: "transparent",
   },
   groupItem: {
     marginBottom: 12,
     borderRadius: 16,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   groupTouchable: {
     flexDirection: "row",
@@ -246,12 +308,12 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   groupContent: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: "center",
   },
   groupName: {
     fontWeight: "600",

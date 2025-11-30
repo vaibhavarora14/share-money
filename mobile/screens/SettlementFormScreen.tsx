@@ -1,23 +1,21 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    View,
+  Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  View,
 } from "react-native";
-import {
-    Appbar,
-    Button,
-    Text,
-    TextInput,
-    useTheme
-} from "react-native-paper";
+import { Appbar, Button, Text, TextInput, useTheme } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Balance, GroupMember, Settlement } from "../types";
-import { formatCurrency, getCurrencySymbol, getDefaultCurrency } from "../utils/currency";
+import {
+  formatCurrency,
+  getCurrencySymbol,
+  getDefaultCurrency,
+} from "../utils/currency";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 
 interface SettlementFormScreenProps {
@@ -60,7 +58,11 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   const isEditing = !!settlement;
   // If settling a specific balance, use that currency. Otherwise use default.
   // Note: The form currently does not allow changing currency, so it is effectively locked.
-  const effectiveDefaultCurrency = settlement?.currency || balance?.currency || defaultCurrency || getDefaultCurrency();
+  const effectiveDefaultCurrency =
+    settlement?.currency ||
+    balance?.currency ||
+    defaultCurrency ||
+    getDefaultCurrency();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
 
@@ -110,9 +112,10 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
       setAmount(settlement.amount.toString());
       setNotes(settlement.notes || "");
       // Determine which user is the "other" user
-      const otherUserId = settlement.from_user_id === currentUserId 
-        ? settlement.to_user_id 
-        : settlement.from_user_id;
+      const otherUserId =
+        settlement.from_user_id === currentUserId
+          ? settlement.to_user_id
+          : settlement.from_user_id;
       setSelectedToUserId(otherUserId);
     }
     // Pre-fill based on balance if provided
@@ -206,7 +209,9 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
 
   const getUserDisplayName = (userId: string): string => {
     const member = groupMembers.find((m) => m.user_id === userId);
-    return member?.email || `User ${userId.substring(0, 8)}...`;
+    return (
+      member?.full_name || member?.email || `User ${userId.substring(0, 8)}...`
+    );
   };
 
   const getBalanceDisplay = (): string => {
@@ -215,7 +220,10 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
     if (balance.amount < 0) {
       return `You owe ${formatCurrency(absAmount, effectiveDefaultCurrency)}`;
     } else {
-      return `You are owed ${formatCurrency(absAmount, effectiveDefaultCurrency)}`;
+      return `You are owed ${formatCurrency(
+        absAmount,
+        effectiveDefaultCurrency
+      )}`;
     }
   };
 
@@ -242,25 +250,62 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
           keyboardShouldPersistTaps="handled"
         >
           {!isEditing && balance && (
-            <View style={[styles.balanceInfo, { backgroundColor: theme.colors.secondaryContainer }]}>
-              <Text variant="titleMedium" style={[styles.balanceText, { color: theme.colors.onSecondaryContainer }]}>
+            <View
+              style={[
+                styles.balanceInfo,
+                { backgroundColor: theme.colors.secondaryContainer },
+              ]}
+            >
+              <Text
+                variant="titleMedium"
+                style={[
+                  styles.balanceText,
+                  { color: theme.colors.onSecondaryContainer },
+                ]}
+              >
                 {getUserDisplayName(balance.user_id)}
               </Text>
-              <Text variant="bodyMedium" style={[styles.balanceAmount, { color: theme.colors.onSecondaryContainer }]}>
+              <Text
+                variant="bodyMedium"
+                style={[
+                  styles.balanceAmount,
+                  { color: theme.colors.onSecondaryContainer },
+                ]}
+              >
                 {getBalanceDisplay()}
               </Text>
             </View>
           )}
 
           {isEditing && settlement && (
-            <View style={[styles.balanceInfo, { backgroundColor: theme.colors.secondaryContainer }]}>
-              <Text variant="titleMedium" style={[styles.balanceText, { color: theme.colors.onSecondaryContainer }]}>
+            <View
+              style={[
+                styles.balanceInfo,
+                { backgroundColor: theme.colors.secondaryContainer },
+              ]}
+            >
+              <Text
+                variant="titleMedium"
+                style={[
+                  styles.balanceText,
+                  { color: theme.colors.onSecondaryContainer },
+                ]}
+              >
                 {settlement.from_user_id === currentUserId
                   ? `You paid ${getUserDisplayName(settlement.to_user_id)}`
                   : `${getUserDisplayName(settlement.from_user_id)} paid you`}
               </Text>
-              <Text variant="bodyMedium" style={[styles.balanceAmount, { color: theme.colors.onSecondaryContainer }]}>
-                {formatCurrency(settlement.amount, settlement.currency || effectiveDefaultCurrency)}
+              <Text
+                variant="bodyMedium"
+                style={[
+                  styles.balanceAmount,
+                  { color: theme.colors.onSecondaryContainer },
+                ]}
+              >
+                {formatCurrency(
+                  settlement.amount,
+                  settlement.currency || effectiveDefaultCurrency
+                )}
               </Text>
             </View>
           )}
@@ -278,11 +323,17 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                 {availableUsers.map((member) => (
                   <Button
                     key={member.user_id}
-                    mode={selectedToUserId === member.user_id ? "contained" : "outlined"}
+                    mode={
+                      selectedToUserId === member.user_id
+                        ? "contained"
+                        : "outlined"
+                    }
                     onPress={() => setSelectedToUserId(member.user_id)}
                     style={styles.userButton}
                   >
-                    {member.email || `User ${member.user_id.substring(0, 8)}...`}
+                    {member.full_name ||
+                      member.email ||
+                      `User ${member.user_id.substring(0, 8)}...`}
                   </Button>
                 ))}
               </ScrollView>
@@ -294,12 +345,18 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
               <Text variant="labelLarge" style={styles.label}>
                 Settlement with
               </Text>
-              <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+              <Text
+                variant="bodyMedium"
+                style={{ color: theme.colors.onSurfaceVariant }}
+              >
                 {settlement.from_user_id === currentUserId
                   ? getUserDisplayName(settlement.to_user_id)
                   : getUserDisplayName(settlement.from_user_id)}
               </Text>
-              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 4 }}>
+              <Text
+                variant="bodySmall"
+                style={{ color: theme.colors.onSurfaceVariant, marginTop: 4 }}
+              >
                 (Cannot change settlement parties)
               </Text>
             </View>
@@ -319,10 +376,17 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
               keyboardType="decimal-pad"
               error={!!amountError}
               mode="outlined"
-              left={<TextInput.Affix text={getCurrencySymbol(effectiveDefaultCurrency)} />}
+              left={
+                <TextInput.Affix
+                  text={getCurrencySymbol(effectiveDefaultCurrency)}
+                />
+              }
             />
             {amountError ? (
-              <Text variant="bodySmall" style={[styles.errorText, { color: theme.colors.error }]}>
+              <Text
+                variant="bodySmall"
+                style={[styles.errorText, { color: theme.colors.error }]}
+              >
                 {amountError}
               </Text>
             ) : null}
@@ -351,9 +415,18 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
               disabled={loading || !amount || (!isEditing && !selectedToUserId)}
               style={styles.saveButton}
             >
-              {isEditing ? "Update Settlement" : isPaying ? "Mark as Paid" : "Mark as Received"}
+              {isEditing
+                ? "Update Settlement"
+                : isPaying
+                ? "Mark as Paid"
+                : "Mark as Received"}
             </Button>
-            <Button mode="outlined" onPress={onDismiss} disabled={loading} style={styles.cancelButton}>
+            <Button
+              mode="outlined"
+              onPress={onDismiss}
+              disabled={loading}
+              style={styles.cancelButton}
+            >
               Cancel
             </Button>
           </View>

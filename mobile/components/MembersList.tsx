@@ -45,21 +45,34 @@ export const MembersList: React.FC<MembersListProps> = ({
   }
 
   const getInitials = (name: string) => {
+    if (name.includes(" ")) {
+      const names = name.trim().split(" ");
+      if (names.length >= 2) {
+        return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
+      }
+    }
     return name.substring(0, 2).toUpperCase();
   };
 
   return (
-    <Surface elevation={0} style={{ backgroundColor: theme.colors.surface, borderRadius: 12 }}>
+    <Surface
+      elevation={0}
+      style={{ backgroundColor: theme.colors.surface, borderRadius: 12 }}
+    >
       {members.map((member, index) => {
+        // Priority: full_name → email → fallback to truncated user_id
         const memberName =
-          member.email || `User ${member.user_id.substring(0, 8)}...`;
+          member.full_name ||
+          member.email ||
+          `User ${member.user_id.substring(0, 8)}...`;
         const isCurrentUser = member.user_id === currentUserId;
         const ownerCount =
           members.filter((m) => m.role === "owner").length || 0;
         const canRemove =
           (isOwner &&
             (!isCurrentUser ||
-              (isCurrentUser && (ownerCount > 1 || member.role !== "owner")))) ||
+              (isCurrentUser &&
+                (ownerCount > 1 || member.role !== "owner")))) ||
           (!isOwner && isCurrentUser);
         const isRemoving = removingMemberId === member.user_id;
 
@@ -69,31 +82,40 @@ export const MembersList: React.FC<MembersListProps> = ({
               style={[
                 styles.memberContent,
                 isRemoving && styles.memberCardRemoving,
-                { paddingHorizontal: 16, paddingVertical: 12 }
+                { paddingHorizontal: 16, paddingVertical: 12 },
               ]}
             >
               <Avatar.Text
                 size={40}
                 label={getInitials(memberName)}
                 style={{
-                  backgroundColor: member.role === 'owner' ? theme.colors.primaryContainer : theme.colors.secondaryContainer,
-                  marginRight: 16
+                  backgroundColor:
+                    member.role === "owner"
+                      ? theme.colors.primaryContainer
+                      : theme.colors.secondaryContainer,
+                  marginRight: 16,
                 }}
-                color={member.role === 'owner' ? theme.colors.onPrimaryContainer : theme.colors.onSecondaryContainer}
+                color={
+                  member.role === "owner"
+                    ? theme.colors.onPrimaryContainer
+                    : theme.colors.onSecondaryContainer
+                }
               />
               <View style={styles.memberLeft}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
                   <Text
                     variant="titleMedium"
                     style={[
                       styles.memberName,
                       isRemoving && { opacity: 0.6 },
-                      { fontWeight: member.role === 'owner' ? 'bold' : 'normal' }
+                      {
+                        fontWeight: member.role === "owner" ? "bold" : "normal",
+                      },
                     ]}
                   >
                     {memberName} {isCurrentUser ? "(You)" : ""}
                   </Text>
-                  {member.role === 'owner' && (
+                  {member.role === "owner" && (
                     <IconButton
                       icon="crown"
                       size={16}

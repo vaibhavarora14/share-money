@@ -1,27 +1,32 @@
 import React, { useEffect, useMemo } from "react";
 import { BackHandler, ScrollView, StyleSheet, View } from "react-native";
 import {
-    ActivityIndicator,
-    Appbar,
-    Avatar,
-    Surface,
-    Text,
-    useTheme,
+  ActivityIndicator,
+  Appbar,
+  Avatar,
+  Surface,
+  Text,
+  useTheme,
 } from "react-native-paper";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useBalances } from "../hooks/useBalances";
 import { Balance } from "../types";
 import { formatCurrency, getDefaultCurrency } from "../utils/currency";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 
 export const BalancesScreen: React.FC<{
-  onBack: () => void;
+  onBack?: () => void;
 }> = ({ onBack }) => {
   const theme = useTheme();
-  const { data: balancesData, isLoading: balancesLoading, error: balancesError } = useBalances(null); // null = overall balances
+  const {
+    data: balancesData,
+    isLoading: balancesLoading,
+    error: balancesError,
+  } = useBalances(null); // null = overall balances
 
   // Handle Android hardware back button
   useEffect(() => {
+    if (!onBack) return;
+
     const handleHardwareBack = () => {
       onBack();
       return true;
@@ -47,7 +52,10 @@ export const BalancesScreen: React.FC<{
   }, [overallBalances]);
 
   const getUserDisplayName = (balance: Balance): string => {
-    // Use email from balance (enriched by API)
+    // Priority: full_name → email → fallback to truncated user_id
+    if (balance.full_name) {
+      return balance.full_name;
+    }
     if (balance.email) {
       return balance.email;
     }
@@ -57,26 +65,28 @@ export const BalancesScreen: React.FC<{
 
   const getInitials = (name: string) => {
     // Extract username from email for initials (part before @)
-    const displayName = name.includes('@') ? name.split('@')[0] : name;
+    const displayName = name.includes("@") ? name.split("@")[0] : name;
     // Get first 2 characters, handling edge cases
     if (displayName.length >= 2) {
       return displayName.substring(0, 2).toUpperCase();
     }
     // If name is too short, use first char + first char
-    return displayName.length > 0 
+    return displayName.length > 0
       ? (displayName[0] + displayName[0]).toUpperCase()
-      : '??';
+      : "??";
   };
 
   if (balancesError) {
     return (
-      <SafeAreaView
+      <View
         style={[styles.container, { backgroundColor: theme.colors.background }]}
-        edges={["top", "bottom"]}
       >
-        <Appbar.Header mode="center-aligned" elevated>
-          <Appbar.BackAction onPress={onBack} />
-          <Appbar.Content title="Balances" titleStyle={{ fontWeight: 'bold' }} />
+        <Appbar.Header style={{ backgroundColor: theme.colors.background }}>
+          {onBack && <Appbar.BackAction onPress={onBack} />}
+          <Appbar.Content
+            title="Balances"
+            titleStyle={{ fontWeight: "bold" }}
+          />
         </Appbar.Header>
         <View style={styles.centerContainer}>
           <Text
@@ -92,18 +102,17 @@ export const BalancesScreen: React.FC<{
             {getUserFriendlyErrorMessage(balancesError)}
           </Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView
+    <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
-      edges={["top", "bottom"]}
     >
-      <Appbar.Header mode="center-aligned" elevated>
-        <Appbar.BackAction onPress={onBack} />
-        <Appbar.Content title="Balances" titleStyle={{ fontWeight: 'bold' }} />
+      <Appbar.Header style={{ backgroundColor: theme.colors.background }}>
+        {onBack && <Appbar.BackAction onPress={onBack} />}
+        <Appbar.Content title="Balances" titleStyle={{ fontWeight: "bold" }} />
       </Appbar.Header>
 
       <ScrollView
@@ -132,29 +141,29 @@ export const BalancesScreen: React.FC<{
                   You are owed
                 </Text>
                 {youAreOwed.map((balance, index) => (
-                  <Surface key={`${balance.user_id}-${balance.currency}`} style={styles.balanceItem} elevation={0}>
+                  <Surface
+                    key={`${balance.user_id}-${balance.currency}`}
+                    style={styles.balanceItem}
+                    elevation={0}
+                  >
                     <View style={styles.balanceContent}>
-                      <Avatar.Text 
-                        size={40} 
-                        label={getInitials(getUserDisplayName(balance))} 
-                        style={{ backgroundColor: theme.colors.primaryContainer }}
+                      <Avatar.Text
+                        size={40}
+                        label={getInitials(getUserDisplayName(balance))}
+                        style={{
+                          backgroundColor: theme.colors.primaryContainer,
+                        }}
                         color={theme.colors.onPrimaryContainer}
                       />
                       <View style={styles.balanceLeft}>
-                        <Text
-                          variant="bodyLarge"
-                          style={styles.balanceName}
-                        >
+                        <Text variant="bodyLarge" style={styles.balanceName}>
                           {getUserDisplayName(balance)}
                         </Text>
                       </View>
                       <View style={styles.balanceRight}>
                         <Text
                           variant="titleMedium"
-                          style={[
-                            styles.balanceAmount,
-                            { color: "#10b981" },
-                          ]}
+                          style={[styles.balanceAmount, { color: "#10b981" }]}
                         >
                           {formatCurrency(
                             Math.abs(balance.amount),
@@ -181,29 +190,27 @@ export const BalancesScreen: React.FC<{
                   You owe
                 </Text>
                 {youOwe.map((balance, index) => (
-                  <Surface key={`${balance.user_id}-${balance.currency}`} style={styles.balanceItem} elevation={0}>
+                  <Surface
+                    key={`${balance.user_id}-${balance.currency}`}
+                    style={styles.balanceItem}
+                    elevation={0}
+                  >
                     <View style={styles.balanceContent}>
-                      <Avatar.Text 
-                        size={40} 
-                        label={getInitials(getUserDisplayName(balance))} 
+                      <Avatar.Text
+                        size={40}
+                        label={getInitials(getUserDisplayName(balance))}
                         style={{ backgroundColor: theme.colors.errorContainer }}
                         color={theme.colors.onErrorContainer}
                       />
                       <View style={styles.balanceLeft}>
-                        <Text
-                          variant="bodyLarge"
-                          style={styles.balanceName}
-                        >
+                        <Text variant="bodyLarge" style={styles.balanceName}>
                           {getUserDisplayName(balance)}
                         </Text>
                       </View>
                       <View style={styles.balanceRight}>
                         <Text
                           variant="titleMedium"
-                          style={[
-                            styles.balanceAmount,
-                            { color: "#ef4444" },
-                          ]}
+                          style={[styles.balanceAmount, { color: "#ef4444" }]}
                         >
                           {formatCurrency(
                             Math.abs(balance.amount),
@@ -220,12 +227,7 @@ export const BalancesScreen: React.FC<{
         ) : (
           <Surface style={styles.emptyStateCard} elevation={0}>
             <View style={styles.emptyStateContent}>
-              <Text
-                variant="displayMedium"
-                style={[
-                  styles.emptyStateIcon,
-                ]}
-              >
+              <Text variant="displayMedium" style={[styles.emptyStateIcon]}>
                 💸
               </Text>
               <Text
@@ -250,7 +252,7 @@ export const BalancesScreen: React.FC<{
           </Surface>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -269,9 +271,11 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
+    paddingBottom: 100, // Extra padding for bottom nav bar
   },
   balanceGroup: {
-    marginTop: 8,
+    marginTop: 0,
+    marginBottom: 24,
   },
   balanceGroupTitle: {
     fontWeight: "bold",
@@ -281,7 +285,7 @@ const styles = StyleSheet.create({
   balanceItem: {
     borderRadius: 12,
     marginBottom: 8,
-    backgroundColor: 'transparent',
+    backgroundColor: "transparent",
   },
   balanceContent: {
     flexDirection: "row",
@@ -305,10 +309,10 @@ const styles = StyleSheet.create({
   },
   emptyStateCard: {
     marginTop: 32,
-    backgroundColor: 'transparent',
-    borderStyle: 'dashed',
+    backgroundColor: "transparent",
+    borderStyle: "dashed",
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.1)',
+    borderColor: "rgba(0,0,0,0.1)",
     borderRadius: 16,
   },
   emptyStateContent: {
@@ -329,4 +333,3 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
 });
-
