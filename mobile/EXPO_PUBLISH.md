@@ -54,8 +54,8 @@ To build for production:
 - **Slug**: share-money
 - **Owner**: share-money
 - **Version**: 1.0.0
-- **Android Package**: com.sharemoney.app
-- **iOS Bundle ID**: com.sharemoney.app
+- **Android Package**: com.vaibhavarora.sharemoney
+- **iOS Bundle ID**: com.vaibhavarora.sharemoney
 - **EAS Project ID**: afddb7db-3d7d-46da-a1b5-0d6e4b4374ce
 
 ## View Your App
