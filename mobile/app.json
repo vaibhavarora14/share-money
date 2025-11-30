@@ -18,7 +18,11 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.vaibhavarora.sharemoney",
-      "scheme": "com.vaibhavarora.sharemoney"
+      "scheme": "com.vaibhavarora.sharemoney",
+      "buildNumber": "6",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.vaibhavarora.sharemoney",

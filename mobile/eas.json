@@ -32,12 +32,22 @@
     "production": {
       "android": {
         "track": "production"
+      },
+      "ios": {
+        "appleId": "varora1406@gmail.com",
+        "ascAppId": "6755923591",
+        "appleTeamId": "BQ8LZKL6TG"
       }
     },
     "internal": {
       "android": {
         "track": "internal",
         "releaseStatus": "draft"
+      },
+      "ios": {
+        "appleId": "varora1406@gmail.com",
+        "ascAppId": "6755923591",
+        "appleTeamId": "BQ8LZKL6TG"
       }
     }
   }
