@@ -98,9 +98,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
   // Stable handler for opening menu
   const handleOpenMenu = () => {
-    // Toggle menu visibility - this ensures proper state management
-    // The react-native-paper patch handles the internal menu state reset
-    setMenuVisible((prev) => !prev);
+    setMenuVisible(true);
   };
 
   // Reset menu visibility when showMembers changes
