@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'supabase/functions/**'
-      - '.github/workflows/deploy-edge-functions.yml'
   workflow_dispatch:
     # Allow manual triggering
 
