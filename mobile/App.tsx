@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/react-native";
 import { Session } from "@supabase/supabase-js";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
@@ -434,6 +435,33 @@ function ErrorFallback({
     </View>
   );
 }
+
+// Initialize Sentry once at app startup
+Sentry.init({
+  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+
+  // Errors & sessions
+  enableAutoSessionTracking: true,
+  enableNative: true,
+  enableNativeCrashHandling: true,
+
+  // Performance
+  tracesSampleRate: 0.1,
+  integrations: [
+    // Cast through `any` to avoid TypeScript issues with the
+    // experimental mobile replay API typings.
+    Sentry.mobileReplayIntegration({
+      // Consider turning these to true if you need stricter privacy
+      maskAllText: false,
+      maskAllImages: false,
+    }),
+  ],
+
+  // Session Replay
+  // Capture 10% of all sessions and 100% of sessions with an error
+  replaysSessionSampleRate: 0.1,
+  replaysOnErrorSampleRate: 1.0,
+});
 
 export default function App() {
   const colorScheme = useColorScheme();
