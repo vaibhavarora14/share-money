@@ -36,6 +36,7 @@ import { TransactionFormScreen } from "./screens/TransactionFormScreen";
 import { darkTheme, lightTheme } from "./theme";
 import { Group, GroupWithMembers } from "./types";
 import { getDefaultCurrency } from "./utils/currency";
+import { log } from "./utils/logger";
 
 // ... imports
 
@@ -61,6 +62,17 @@ function AppContent() {
   } | null>(null);
   const prevSessionRef = React.useRef<Session | null>(null);
   const groupsListRefetchRef = React.useRef<(() => void) | null>(null);
+
+  // Debug routing / loading state to track "stuck on spinner" issues
+  useEffect(() => {
+    log("[AppContent] State", {
+      currentRoute,
+      hasSession: !!session,
+      authLoading: loading,
+      profileLoading,
+      hasProfile: !!profile,
+    });
+  }, [currentRoute, session, loading, profileLoading, profile]);
 
   // Fetch selected group details via query when selectedGroup changes
   const { data: selectedGroupDetails, refetch: refetchSelectedGroup } =
@@ -439,6 +451,11 @@ function ErrorFallback({
 // Initialize Sentry once at app startup
 Sentry.init({
   dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+
+  // Explicit environment so dev vs prod are separated in Sentry
+  environment:
+    process.env.EXPO_PUBLIC_SENTRY_ENV ||
+    (__DEV__ ? "development" : "production"),
 
   // Errors & sessions
   enableAutoSessionTracking: true,

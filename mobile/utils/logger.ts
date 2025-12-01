@@ -11,10 +11,9 @@ export function log(
     // Keep console output in dev for easy debugging
     // eslint-disable-next-line no-console
     console.log(message, data || "");
-    return;
   }
 
-  // In production, send lightweight breadcrumbs to Sentry
+  // Always send lightweight breadcrumbs to Sentry (dev + prod)
   Sentry.addBreadcrumb({
     level,
     category: "app-log",
@@ -30,7 +29,6 @@ export function logError(
   if (__DEV__) {
     // eslint-disable-next-line no-console
     console.error(error, context || "");
-    return;
   }
 
   const err =
