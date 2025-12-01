@@ -7,8 +7,208 @@
 # 2. Finds and renames the APK with version info
 # 3. Creates a git tag
 # 4. Creates a GitHub release with the APK (if gh CLI is available)
+#
+# Usage:
+#   ./build-release-auto.sh          - Build and create release
+#   ./build-release-auto.sh preview  - Preview release notes without building
 
 set -e
+
+# Function to get commits for a release
+get_release_commits() {
+    local tag=$1
+    local ALL_TAGS=$(git tag --sort=-v:refname 2>/dev/null | head -10)
+    local PREVIOUS_TAG=""
+    local COMMITS=""
+    
+    if [ -z "$ALL_TAGS" ]; then
+        COMMITS=$(git log --oneline --no-merges --format="- %s" HEAD | head -20 | tr '\n' '|')
+        echo "(beginning of repo)|${COMMITS%|}"
+        return
+    fi
+    
+    # Find the previous tag (not the current one)
+    for tag_item in $ALL_TAGS; do
+        if [ "$tag_item" != "$tag" ]; then
+            PREVIOUS_TAG=$tag_item
+            break
+        fi
+    done
+    
+    if [ -z "$PREVIOUS_TAG" ]; then
+        COMMITS=$(git log --oneline --no-merges --format="- %s" HEAD | head -20 | tr '\n' '|')
+        echo "(beginning of repo)|${COMMITS%|}"
+    else
+        COMMITS=$(git log --oneline --no-merges --format="- %s" ${PREVIOUS_TAG}..HEAD | head -20 | tr '\n' '|')
+        echo "${PREVIOUS_TAG}|${COMMITS%|}"
+    fi
+}
+
+# Function to generate release notes from commits (returns formatted text)
+generate_release_notes() {
+    local version=$1
+    local build=$2
+    local tag="v${version}"
+    
+    # Get commits
+    local COMMIT_DATA=$(get_release_commits "$tag")
+    local PREVIOUS_TAG=$(echo "$COMMIT_DATA" | cut -d'|' -f1)
+    local COMMITS=$(echo "$COMMIT_DATA" | cut -d'|' -f2- | sed 's/|/\n/g')
+    
+    # If no commits found, use a default message
+    if [ -z "$COMMITS" ] || [ "$COMMITS" = "" ]; then
+        COMMITS="- No changes recorded"
+    fi
+    
+    # Return the formatted notes
+    cat <<EOF
+## ShareMoney ${version}
+
+Build Number: ${build}
+
+### Installation
+1. Download the APK file below
+2. Enable "Install from unknown sources" on your Android device
+3. Install the APK
+
+### Changes
+${COMMITS}
+EOF
+}
+
+# Function to preview release notes (with detailed output)
+preview_release_notes() {
+    local version=$1
+    local build=$2
+    local tag="v${version}"
+    
+    # Get commits
+    local COMMIT_DATA=$(get_release_commits "$tag")
+    local PREVIOUS_TAG=$(echo "$COMMIT_DATA" | cut -d'|' -f1)
+    local COMMITS=$(echo "$COMMIT_DATA" | cut -d'|' -f2- | sed 's/|/\n/g')
+    
+    # If no commits found, use a default message
+    if [ -z "$COMMITS" ] || [ "$COMMITS" = "" ]; then
+        COMMITS="- No changes recorded"
+    fi
+    
+    # Count commits (count lines that start with "-")
+    local COMMIT_COUNT=$(echo "$COMMITS" | grep -c "^-" || echo "0")
+    
+    if [ "$PREVIOUS_TAG" != "(beginning of repo)" ]; then
+        echo "ℹ️  Commits since ${PREVIOUS_TAG}:"
+    else
+        echo "ℹ️  No previous tags found. Showing last 20 commits:"
+    fi
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "📋 Release Notes Preview for ${tag}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "## ShareMoney ${version}"
+    echo ""
+    echo "Build Number: ${build}"
+    echo ""
+    echo "### Installation"
+    echo "1. Download the APK file below"
+    echo "2. Enable \"Install from unknown sources\" on your Android device"
+    echo "3. Install the APK"
+    echo ""
+    echo "### Changes (${COMMIT_COUNT} commits since ${PREVIOUS_TAG})"
+    echo "$COMMITS"
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+}
+
+# Function to show past release notes
+show_past_release() {
+    local tag=$1
+    
+    if ! git rev-parse "$tag" >/dev/null 2>&1; then
+        echo "❌ Tag ${tag} not found"
+        return 1
+    fi
+    
+    # Extract version from tag
+    local version=${tag#v}
+    
+    # Get the tag before this one
+    ALL_TAGS=$(git tag --sort=-v:refname 2>/dev/null)
+    PREVIOUS_TAG=""
+    FOUND_CURRENT=false
+    
+    for tag_item in $ALL_TAGS; do
+        if [ "$FOUND_CURRENT" = true ]; then
+            PREVIOUS_TAG=$tag_item
+            break
+        fi
+        if [ "$tag_item" = "$tag" ]; then
+            FOUND_CURRENT=true
+        fi
+    done
+    
+    if [ -z "$PREVIOUS_TAG" ]; then
+        echo "ℹ️  This was the first release. Showing all commits up to ${tag}:"
+        COMMITS=$(git log --oneline --no-merges --format="- %s" ${tag} | head -20)
+        PREVIOUS_TAG="(beginning of repo)"
+    else
+        echo "ℹ️  Commits in ${tag} (since ${PREVIOUS_TAG}):"
+        COMMITS=$(git log --oneline --no-merges --format="- %s" ${PREVIOUS_TAG}..${tag} | head -20)
+    fi
+    
+    COMMIT_COUNT=$(echo "$COMMITS" | grep -c "^-" || echo "0")
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "📋 Release Notes for ${tag}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "## ShareMoney ${version}"
+    echo ""
+    echo "### Changes (${COMMIT_COUNT} commits since ${PREVIOUS_TAG})"
+    echo "$COMMITS"
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+}
+
+# Check for preview mode
+if [ "$1" = "preview" ]; then
+    echo "🔍 Preview Mode - Release Notes Generator"
+    echo "=========================================="
+    echo ""
+    
+    # Read version from version.json
+    VERSION=$(node -p "require('./version.json').version")
+    BUILD=$(node -p "require('./version.json').buildNumber")
+    TAG="v${VERSION}"
+    
+    echo "Current version: ${VERSION} (Build ${BUILD})"
+    echo "Tag: ${TAG}"
+    echo ""
+    
+    # Show current version preview
+    preview_release_notes "$VERSION" "$BUILD"
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "📚 Past Releases:"
+    echo ""
+    
+    # Show past releases
+    PAST_TAGS=$(git tag --sort=-v:refname 2>/dev/null | head -5)
+    if [ -z "$PAST_TAGS" ]; then
+        echo "No previous releases found."
+    else
+        for past_tag in $PAST_TAGS; do
+            show_past_release "$past_tag"
+        done
+    fi
+    
+    exit 0
+fi
 
 echo "🔨 Building ShareMoney Android Production APK for Release"
 echo "=========================================================="
@@ -92,21 +292,9 @@ if command -v gh &> /dev/null; then
     echo "📦 Creating GitHub release..."
     echo ""
     
-    # Create release notes
-    RELEASE_NOTES=$(cat <<EOF
-## ShareMoney ${VERSION}
-
-Build Number: ${BUILD}
-
-### Installation
-1. Download the APK file below
-2. Enable "Install from unknown sources" on your Android device
-3. Install the APK
-
-### Changes
-See [CHANGELOG.md](../CHANGELOG.md) for details.
-EOF
-)
+    # Generate release notes using the function
+    echo "📝 Generating release notes from git commits..."
+    RELEASE_NOTES=$(generate_release_notes "$VERSION" "$BUILD" 2>/dev/null)
     
     # Create tag if it doesn't exist
     if ! git rev-parse "$TAG" >/dev/null 2>&1; then
