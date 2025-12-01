@@ -36,6 +36,44 @@ function sanitizeErrorMessage(message: string): string {
 }
 
 /**
+ * Best-effort stringification for unknown errors
+ */
+function stringifyUnknownError(error: unknown): string {
+  if (error === null || error === undefined) {
+    return String(error);
+  }
+
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  if (typeof error === 'object') {
+    try {
+      // Attempt to preserve common error shapes (e.g., PostgREST errors)
+      const maybeError = error as { message?: string; details?: string; code?: string; [key: string]: unknown };
+
+      if (maybeError.message || maybeError.details || maybeError.code) {
+        return JSON.stringify(
+          {
+            message: maybeError.message,
+            details: maybeError.details,
+            code: maybeError.code,
+          },
+          null,
+          2,
+        );
+      }
+
+      return JSON.stringify(error, null, 2);
+    } catch {
+      // Fall through to default String() below
+    }
+  }
+
+  return String(error);
+}
+
+/**
  * Standardized error response interface
  */
 export interface ErrorResponse {
@@ -121,9 +159,12 @@ export function handleError(error: unknown, context?: string): Response {
     return createErrorResponse(500, 'Internal server error', 'INTERNAL_ERROR', error.message);
   }
 
-  // Unknown error
+  // Unknown / non-Error (e.g. PostgREST error objects)
+  const stringified = stringifyUnknownError(error);
+
   log.error('Unknown error in handler', context || 'unknown', {
-    error: String(error),
+    error: stringified,
   });
-  return createErrorResponse(500, 'Internal server error', 'UNKNOWN_ERROR');
+
+  return createErrorResponse(500, 'Internal server error', 'UNKNOWN_ERROR', stringified);
 }
