@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Animated,
@@ -34,6 +34,8 @@ export const CreateGroupScreen: React.FC<CreateGroupScreenProps> = ({
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
   const [slideAnim] = useState(new Animated.Value(0));
+  const scrollViewRef = useRef<ScrollView>(null);
+  const nameInputRef = useRef<View>(null);
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const screenHeight = Dimensions.get("window").height;
@@ -128,6 +130,7 @@ export const CreateGroupScreen: React.FC<CreateGroupScreenProps> = ({
             <Appbar.Action icon="close" onPress={handleDismiss} />
           </Appbar.Header>
           <ScrollView
+            ref={scrollViewRef}
             style={styles.scrollView}
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
@@ -142,6 +145,12 @@ export const CreateGroupScreen: React.FC<CreateGroupScreenProps> = ({
               style={styles.input}
               left={<TextInput.Icon icon="account-group" />}
               placeholder="e.g., Weekend Trip, Roommates"
+              onFocus={() => {
+                // Scroll to top to ensure input is visible above keyboard
+                setTimeout(() => {
+                  scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+                }, 100);
+              }}
             />
 
               <TextInput
