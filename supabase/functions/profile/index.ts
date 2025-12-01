@@ -23,11 +23,6 @@ interface ValidationResult {
 
 const POSTGREST_NO_ROWS_CODE = 'PGRST116';
 
-// NOTE: This comment is a no-op change used to verify
-// that the GitHub Actions workflow for deploying Supabase
-// Edge Functions triggers correctly on changes under
-// `supabase/functions/**`.
-
 // Valid ISO 3166-1 alpha-2 country codes
 // This is a comprehensive list of all valid 2-letter country codes
 const VALID_COUNTRY_CODES = new Set([
