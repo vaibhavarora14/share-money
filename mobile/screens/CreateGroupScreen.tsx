@@ -130,9 +130,9 @@ export const CreateGroupScreen: React.FC<CreateGroupScreenProps> = ({
             <Appbar.Action icon="close" onPress={handleDismiss} />
           </Appbar.Header>
           <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
             style={styles.keyboardView}
-            keyboardVerticalOffset={0}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
           >
             <ScrollView
               style={styles.scrollView}

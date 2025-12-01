@@ -10,7 +10,7 @@ export function useTransactions(groupId?: string | null) {
   const [error, setError] = useState<Error | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!session) {
+    if (!session || !session.access_token) {
       setData([]);
       setIsLoading(false);
       return;
@@ -30,14 +30,22 @@ export function useTransactions(groupId?: string | null) {
       }
       const transactions: Transaction[] = await response.json();
       
-      setData(transactions);
+      // Sort transactions by date + time (full timestamp)
+      // Prefer created_at (full timestamp) over date (date only)
+      const sortedTransactions = transactions.sort((a, b) => {
+        const dateA = a.created_at ? new Date(a.created_at).getTime() : new Date(a.date).getTime();
+        const dateB = b.created_at ? new Date(b.created_at).getTime() : new Date(b.date).getTime();
+        return dateB - dateA; // Most recent first
+      });
+      
+      setData(sortedTransactions);
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Failed to fetch transactions'));
       setData([]);
     } finally {
       setIsLoading(false);
     }
-  }, [session, groupId]);
+  }, [session?.access_token, groupId]);
 
   useEffect(() => {
     fetchData();

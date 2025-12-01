@@ -10,7 +10,7 @@ export function useBalances(groupId?: string | null) {
   const [error, setError] = useState<Error | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!session) {
+    if (!session || !session.access_token) {
       setData({ group_balances: [], overall_balances: [] });
       setIsLoading(false);
       return;
@@ -37,7 +37,7 @@ export function useBalances(groupId?: string | null) {
     } finally {
       setIsLoading(false);
     }
-  }, [session, groupId]);
+  }, [session?.access_token, groupId]);
 
   useEffect(() => {
     fetchData();
