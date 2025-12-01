@@ -175,7 +175,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                                   compact
                                   textColor={theme.colors.primary}
                                 >
-                                  Received
+                                  Receive
                                 </Button>
                               )}
                             </View>
@@ -358,7 +358,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                                   compact
                                   textColor={theme.colors.primary}
                                 >
-                                  Received
+                                  Receive
                                 </Button>
                               )}
                             </View>

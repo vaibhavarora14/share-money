@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { BackHandler, ScrollView, StyleSheet, View } from "react-native";
 import {
   ActivityIndicator,
   Appbar,
@@ -107,6 +107,20 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
   const createSettlement = useCreateSettlement(async () => {
     await Promise.all([refetchBalances(), refetchTransactions()]);
   });
+
+  // Handle Android hardware back button
+  useEffect(() => {
+    const handleHardwareBack = () => {
+      onBack();
+      return true; // Prevent default back behavior (exiting app)
+    };
+
+    const subscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      handleHardwareBack
+    );
+    return () => subscription.remove();
+  }, [onBack]);
 
   const members = groupData?.members || [];
   const currentUserId = session?.user?.id;
