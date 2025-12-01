@@ -1,9 +1,11 @@
+import * as Sentry from "@sentry/react-native";
 import { Session, User } from "@supabase/supabase-js";
 import * as AuthSession from "expo-auth-session";
 import Constants from "expo-constants";
 import * as WebBrowser from "expo-web-browser";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "../supabase";
+import { log, logError } from "../utils/logger";
 
 // API URL - must be set via EXPO_PUBLIC_API_URL environment variable
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -60,19 +62,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
+  // Keep Sentry user in sync with Supabase session
+  const applyUserToSentry = (nextSession: Session | null) => {
+    const user = nextSession?.user;
+    if (user) {
+      Sentry.setUser({
+        id: user.id,
+        email: user.email ?? undefined,
+      });
+    } else {
+      Sentry.setUser(null);
+    }
+  };
+
   useEffect(() => {
     let mounted = true;
 
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
-      if (!mounted) return;
-      if (error) {
-        console.error("Error getting initial session:", error);
-      }
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+    log("[Auth] Initial getSession start");
+    supabase.auth
+      .getSession()
+      .then(({ data: { session }, error }) => {
+        if (!mounted) return;
+        if (error) {
+          logError(error, { context: "Initial getSession" });
+        }
+        log("[Auth] Initial getSession result", {
+          hasSession: !!session,
+          error: error ? String(error) : null,
+        });
+        setSession(session);
+        setUser(session?.user ?? null);
+        applyUserToSentry(session);
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (!mounted) return;
+        logError(err, { context: "Initial getSession catch" });
+        setLoading(false);
+      });
 
     // Listen for auth changes
     const {
@@ -80,9 +108,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
 
+      log("[Auth] onAuthStateChange", {
+        event,
+        hasSession: !!session,
+      });
+
       // Update state based on the session
       setSession(session);
       setUser(session?.user ?? null);
+      applyUserToSentry(session);
       setLoading(false);
 
       // Auto-accept pending invitations when user signs in or signs up
@@ -96,7 +130,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
             session.access_token
           );
         } catch (error) {
-          console.error("Error auto-accepting invitations:", error);
+          logError(error, { context: "acceptPendingInvitations", event });
         }
       }
     });
@@ -369,6 +403,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     // Immediately clear the session state
     setSession(null);
     setUser(null);
+    applyUserToSentry(null);
 
     // Clear the session from Supabase storage
     await supabase.auth.signOut();
