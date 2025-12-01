@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Animated,
   Dimensions,
-  KeyboardAvoidingView,
+  Keyboard,
   Modal,
   Platform,
   ScrollView,
@@ -36,6 +36,8 @@ export const CreateGroupScreen: React.FC<CreateGroupScreenProps> = ({
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
   const [slideAnim] = useState(new Animated.Value(0));
+  const scrollViewRef = useRef<ScrollView>(null);
+  const nameInputRef = useRef<any>(null);
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const screenHeight = Dimensions.get("window").height;
@@ -57,6 +59,26 @@ export const CreateGroupScreen: React.FC<CreateGroupScreenProps> = ({
       }).start();
     }
   }, [visible, slideAnim]);
+
+  // Handle keyboard to scroll input into view
+  useEffect(() => {
+    if (!visible) return;
+
+    const keyboardWillShow = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      (event) => {
+        // Scroll to the name input when keyboard appears
+        setTimeout(() => {
+          nameInputRef.current?.focus();
+          scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+        }, 100);
+      }
+    );
+
+    return () => {
+      keyboardWillShow.remove();
+    };
+  }, [visible]);
 
   const handleDismiss = () => {
     setName("");
@@ -129,27 +151,36 @@ export const CreateGroupScreen: React.FC<CreateGroupScreenProps> = ({
             <Appbar.Content title="Create New Group" />
             <Appbar.Action icon="close" onPress={handleDismiss} />
           </Appbar.Header>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : "padding"}
-            style={styles.keyboardView}
-            keyboardVerticalOffset={0}
+          <ScrollView
+            ref={scrollViewRef}
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            onFocus={() => {
+              // Scroll to top when input is focused to ensure it's visible
+              setTimeout(() => {
+                scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+              }, 100);
+            }}
           >
-            <ScrollView
-              style={styles.scrollView}
-              contentContainerStyle={styles.scrollContent}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              <TextInput
-                label="Group Name"
-                value={name}
-                onChangeText={setName}
-                mode="outlined"
-                disabled={loading}
-                style={styles.input}
-                left={<TextInput.Icon icon="account-group" />}
-                placeholder="e.g., Weekend Trip, Roommates"
-              />
+            <TextInput
+              ref={nameInputRef}
+              label="Group Name"
+              value={name}
+              onChangeText={setName}
+              mode="outlined"
+              disabled={loading}
+              style={styles.input}
+              left={<TextInput.Icon icon="account-group" />}
+              placeholder="e.g., Weekend Trip, Roommates"
+              onFocus={() => {
+                // Scroll to ensure input is visible when focused
+                setTimeout(() => {
+                  scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+                }, 100);
+              }}
+            />
 
               <TextInput
                 label="Description (Optional)"
@@ -164,17 +195,16 @@ export const CreateGroupScreen: React.FC<CreateGroupScreenProps> = ({
                 placeholder="Add a description for this group"
               />
 
-              <Button
-                mode="contained"
-                onPress={handleCreate}
-                disabled={loading}
-                loading={loading}
-                style={styles.createButton}
-              >
-                Create
-              </Button>
-            </ScrollView>
-          </KeyboardAvoidingView>
+            <Button
+              mode="contained"
+              onPress={handleCreate}
+              disabled={loading}
+              loading={loading}
+              style={styles.createButton}
+            >
+              Create
+            </Button>
+          </ScrollView>
         </Animated.View>
       </View>
     </Modal>
@@ -215,9 +245,6 @@ const styles = StyleSheet.create({
   header: {
     elevation: 0,
     backgroundColor: "transparent",
-  },
-  keyboardView: {
-    flex: 1,
   },
   scrollView: {
     flex: 1,
