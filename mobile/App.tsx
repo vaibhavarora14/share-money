@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/react-native";
 import { Session } from "@supabase/supabase-js";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
@@ -35,6 +36,7 @@ import { TransactionFormScreen } from "./screens/TransactionFormScreen";
 import { darkTheme, lightTheme } from "./theme";
 import { Group, GroupWithMembers } from "./types";
 import { getDefaultCurrency } from "./utils/currency";
+import { log, logError } from "./utils/logger";
 
 // ... imports
 
@@ -60,6 +62,28 @@ function AppContent() {
   } | null>(null);
   const prevSessionRef = React.useRef<Session | null>(null);
   const groupsListRefetchRef = React.useRef<(() => void) | null>(null);
+  const lastLoggedStateRef = React.useRef<string | null>(null);
+
+  // Debug routing / loading state to track "stuck on spinner" issues.
+  // To avoid noisy duplicate breadcrumbs, only log when the state snapshot changes.
+  useEffect(() => {
+    const snapshot = JSON.stringify({
+      currentRoute,
+      hasSession: !!session,
+      authLoading: loading,
+      profileLoading,
+      hasProfile: !!profile,
+    });
+
+    if (snapshot === lastLoggedStateRef.current) {
+      return;
+    }
+
+    lastLoggedStateRef.current = snapshot;
+
+    // Use debug level so these show up as low-priority breadcrumbs.
+    log("[AppContent] State", JSON.parse(snapshot), "debug");
+  }, [currentRoute, session, loading, profileLoading, profile]);
 
   // Fetch selected group details via query when selectedGroup changes
   const { data: selectedGroupDetails, refetch: refetchSelectedGroup } =
@@ -409,7 +433,11 @@ function ErrorFallback({
   resetErrorBoundary: () => void;
 }) {
   const theme = useTheme();
-  console.error("App Error:", error);
+
+  // Still log to console in dev via the centralized logger, and ensure
+  // the error is captured by Sentry in all environments.
+  logError(error, { source: "ErrorFallback" });
+
   return (
     <View
       style={[
@@ -435,6 +463,56 @@ function ErrorFallback({
   );
 }
 
+// Initialize Sentry once at app startup. Guard against missing DSN so we
+// fail safely in development and avoid noisy misconfiguration in production.
+if (!process.env.EXPO_PUBLIC_SENTRY_DSN) {
+  const env = __DEV__ ? "development" : "production";
+  // In dev, make it very obvious that Sentry is not configured.
+  // eslint-disable-next-line no-console
+  console.warn(
+    `[Sentry] EXPO_PUBLIC_SENTRY_DSN is not set; Sentry will not be initialized (env=${env}).`,
+  );
+} else {
+  Sentry.init({
+    dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
+
+    // Explicit environment so dev vs prod are separated in Sentry
+    environment:
+      process.env.EXPO_PUBLIC_SENTRY_ENV ||
+      (__DEV__ ? "development" : "production"),
+
+    // Errors & sessions
+    enableAutoSessionTracking: true,
+    enableNative: true,
+    enableNativeCrashHandling: true,
+
+    // Performance
+    tracesSampleRate: Number(
+      process.env.EXPO_PUBLIC_SENTRY_TRACES_SAMPLE_RATE ?? "0.1",
+    ),
+    integrations: [
+      // Cast through `any` to avoid TypeScript issues with the
+      // experimental mobile replay API typings.
+      Sentry.mobileReplayIntegration({
+        // NOTE: These are left as false initially while we test internally.
+        // Before broad production rollout, consider enabling them or
+        // masking specific sensitive screens/inputs.
+        maskAllText: false,
+        maskAllImages: false,
+      }) as any,
+    ],
+
+    // Session Replay
+    // Capture a portion of sessions and 100% of sessions with an error.
+    replaysSessionSampleRate: Number(
+      process.env.EXPO_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE ?? "0.1",
+    ),
+    replaysOnErrorSampleRate: Number(
+      process.env.EXPO_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE ?? "1.0",
+    ),
+  });
+}
+
 export default function App() {
   const colorScheme = useColorScheme();
   const theme = colorScheme === "dark" ? darkTheme : lightTheme;
@@ -443,8 +521,10 @@ export default function App() {
     <ErrorBoundary
       FallbackComponent={ErrorFallback}
       onError={(error, errorInfo) => {
-        console.error("ErrorBoundary caught error:", error);
-        console.error("Error info:", errorInfo);
+        logError(error, {
+          source: "ErrorBoundary",
+          info: errorInfo,
+        });
       }}
       onReset={() => {
         // Error boundary reset

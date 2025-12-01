@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { fetchWithAuth } from '../utils/api';
+import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "../contexts/AuthContext";
+import { fetchWithAuth } from "../utils/api";
+import { log, logError } from "../utils/logger";
 
 export interface Profile {
   id: string;
@@ -26,19 +27,32 @@ export function useProfile() {
       return;
     }
 
+    const startedAt = new Date().toISOString();
+    log("[Profile] Fetch start", { startedAt });
+
     try {
       setIsLoading(true);
       setError(null);
-      
-      const response = await fetchWithAuth('/profile');
+
+      const response = await fetchWithAuth("/profile");
       if (!response.ok) {
         throw new Error(`Failed to fetch profile: ${response.status}`);
       }
       const profile: Profile = await response.json();
-      
+
       setData(profile);
+      log("[Profile] Fetch success", {
+        startedAt,
+        finishedAt: new Date().toISOString(),
+      });
     } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to fetch profile');
+      const error =
+        err instanceof Error ? err : new Error("Failed to fetch profile");
+      logError(error, {
+        context: "Profile fetch",
+        startedAt,
+        finishedAt: new Date().toISOString(),
+      });
       setError(error);
       setData(null);
     } finally {
@@ -50,34 +64,44 @@ export function useProfile() {
     fetchData();
   }, [fetchData]);
 
-  const updateProfile = useCallback(async (updates: Partial<Profile>) => {
-    if (!session) {
-      throw new Error('Not authenticated');
-    }
-
-    try {
-      const response = await fetchWithAuth('/profile', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updates),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Failed to update profile: ${response.status}`);
+  const updateProfile = useCallback(
+    async (updates: Partial<Profile>) => {
+      if (!session) {
+        throw new Error("Not authenticated");
       }
 
-      const updatedProfile: Profile = await response.json();
-      setData(updatedProfile);
-      return updatedProfile;
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to update profile');
-      setError(error);
-      throw error;
-    }
-  }, [session]);
+      try {
+        const response = await fetchWithAuth("/profile", {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(updates),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(
+            errorData.message ||
+              `Failed to update profile: ${response.status}`
+          );
+        }
+
+        const updatedProfile: Profile = await response.json();
+        setData(updatedProfile);
+        return updatedProfile;
+      } catch (err) {
+        const error =
+          err instanceof Error
+            ? err
+            : new Error("Failed to update profile");
+        setError(error);
+        logError(error, { context: "Profile update", updates });
+        throw error;
+      }
+    },
+    [session]
+  );
 
   return {
     data,

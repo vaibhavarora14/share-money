@@ -63,6 +63,28 @@ export async function getAuthToken(): Promise<string | null> {
   return currentSession.access_token;
 }
 
+/**
+ * Wraps fetch in a timeout so we don't hang forever on bad connections.
+ */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit = {},
+  timeoutMs = 15000
+): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
 export async function fetchWithAuth(
   endpoint: string,
   options: RequestInit = {}
@@ -82,7 +104,7 @@ export async function fetchWithAuth(
 
   let response: Response;
   try {
-    response = await fetch(fullUrl, {
+    response = await fetchWithTimeout(fullUrl, {
       ...options,
       headers: {
         Authorization: `Bearer ${token}`,
@@ -119,7 +141,11 @@ export async function fetchWithAuth(
       } else {
         userMessage = "Cannot connect to server. Please check:\n- Supabase is running (supabase start)\n- Edge Functions server is running (npm run dev:server)\n- Correct API URL in mobile/.env (use 10.0.2.2:54321 for Android emulator)\n- Network connection";
       }
-    } else if (errorMessage.includes("timeout") || errorName === "TimeoutError") {
+    } else if (
+      errorMessage.includes("timeout") ||
+      errorName === "TimeoutError" ||
+      errorName === "AbortError"
+    ) {
       userMessage = "Request timed out. The server may be slow or unreachable.";
     } else if (errorMessage.includes("Failed to connect") || errorMessage.includes("ECONNREFUSED")) {
       userMessage = "Connection refused. Is the server running?";
