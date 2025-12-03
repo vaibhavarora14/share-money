@@ -115,6 +115,9 @@ function AppContent() {
       setSelectedGroup(null);
       setShowAddMember(false);
       setEditingTransaction(null);
+      if (!hasSession) {
+        setIsSignUp(false);
+      }
     }
 
     prevSessionRef.current = session;
@@ -132,6 +135,26 @@ function AppContent() {
       groupsListRefetchRef.current();
     }
   };
+
+  const handleGroupUpdated = React.useCallback(
+    (updatedGroup: GroupWithMembers) => {
+      setSelectedGroup((prev) => {
+        if (prev && prev.id === updatedGroup.id) {
+          return {
+            ...prev,
+            name: updatedGroup.name,
+            description: updatedGroup.description,
+          };
+        }
+        return prev;
+      });
+      if (groupsListRefetchRef.current) {
+        groupsListRefetchRef.current();
+      }
+      void refetchSelectedGroup();
+    },
+    [refetchSelectedGroup],
+  );
 
   const handleAddMember = async (email: string) => {
     if (!selectedGroup) {
@@ -343,15 +366,22 @@ function AppContent() {
             await handleRemoveMember(userId);
           }}
           onLeaveGroup={() => {
+            if (groupsListRefetchRef.current) {
+              groupsListRefetchRef.current();
+            }
             setSelectedGroup(null);
             setCurrentRoute("groups");
             setStatsContext(null);
           }}
           onDeleteGroup={() => {
+            if (groupsListRefetchRef.current) {
+              groupsListRefetchRef.current();
+            }
             setSelectedGroup(null);
             setCurrentRoute("groups");
             setStatsContext(null);
           }}
+          onGroupUpdated={handleGroupUpdated}
           onAddTransaction={() => {
             setEditingTransaction(null);
             setCurrentRoute("transaction-form");

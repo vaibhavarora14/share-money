@@ -20,6 +20,7 @@ interface GroupDashboardProps {
   onOwedPress?: () => void;
   onMyCostsPress?: () => void;
   onTotalCostsPress?: () => void;
+  memberCount?: number;
 }
 
 export const GroupDashboard: React.FC<GroupDashboardProps> = ({
@@ -32,8 +33,10 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   onOwedPress,
   onMyCostsPress,
   onTotalCostsPress,
+  memberCount = 0,
 }) => {
   const theme = useTheme();
+  const showIOweCard = memberCount > 1;
 
   const { youOwe, youAreOwed } = useMemo(() => {
     const owe = new Map<string, number>();
@@ -152,17 +155,19 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
             onOwedPress
           )}
         </View>
-        <View style={styles.column}>
-          {renderCard(
-            "I owe",
-            formattedYouOwe,
-            "#fee2e2", // Light red bg
-            "#b91c1c", // Dark red text
-            "arrow-top-right",
-            loading,
-            onOwePress
-          )}
-        </View>
+        {showIOweCard && (
+          <View style={styles.column}>
+            {renderCard(
+              "I owe",
+              formattedYouOwe,
+              "#fee2e2", // Light red bg
+              "#b91c1c", // Dark red text
+              "arrow-top-right",
+              loading,
+              onOwePress
+            )}
+          </View>
+        )}
       </View>
 
       {/* Row 2: Costs */}

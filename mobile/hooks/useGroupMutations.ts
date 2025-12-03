@@ -71,6 +71,59 @@ export function useDeleteGroup(onSuccess?: () => void) {
   return { mutate, isLoading, error };
 }
 
+export function useUpdateGroup(onSuccess?: () => void) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  const mutate = async (variables: {
+    groupId: string;
+    name?: string;
+    description?: string | null;
+  }) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const payload: Record<string, string | null> = {};
+
+      if (variables.name !== undefined) {
+        payload.name = variables.name;
+      }
+
+      if (variables.description !== undefined) {
+        payload.description =
+          variables.description === null ? null : variables.description;
+      }
+
+      if (Object.keys(payload).length === 0) {
+        throw new Error('Please provide a name or description to update');
+      }
+
+      const response = await fetchWithAuth(`/groups/${variables.groupId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json();
+
+      if (onSuccess) onSuccess();
+
+      return result;
+    } catch (err) {
+      const error =
+        err instanceof Error
+          ? err
+          : new Error('Failed to update group details');
+      setError(error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return { mutate, isLoading, error };
+}
+
 export function useAddMember(onSuccess?: () => void) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
