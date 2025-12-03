@@ -51,16 +51,16 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
       ? theme.colors.onSurface
       : theme.colors.onSurfaceVariant;
 
+    const rippleColor = isLogout
+      ? "rgba(244, 67, 54, 0.18)"
+      : "rgba(0, 0, 0, 0.08)";
+
     return (
       <TouchableRipple
         onPress={onPress}
         style={styles.tab}
         borderless
-        rippleColor={
-          isLogout
-            ? theme.colors.errorContainer
-            : theme.colors.secondaryContainer
-        }
+        rippleColor={rippleColor}
       >
         <View style={styles.tabContent}>
           <View
@@ -116,7 +116,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
           onPress={onProfilePress}
           style={styles.tab}
           borderless
-          rippleColor={theme.colors.secondaryContainer}
+        rippleColor="rgba(0, 0, 0, 0.08)"
         >
           <View style={styles.tabContent}>
             <View

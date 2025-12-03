@@ -183,8 +183,94 @@ Deno.serve(async (req: Request) => {
       return createSuccessResponse(group, 201);
     }
 
+    // Handle PATCH /groups/:id - Update group details
+    if (httpMethod === 'PATCH' && groupId) {
+      if (!isValidUUID(groupId)) {
+        return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR');
+      }
+
+      let requestData: Partial<Group>;
+      try {
+        requestData = body ? JSON.parse(body) : {};
+      } catch {
+        return createErrorResponse(400, 'Invalid JSON in request body', 'VALIDATION_ERROR');
+      }
+
+      const { name, description } = requestData;
+
+      if (name === undefined && description === undefined) {
+        return createErrorResponse(400, 'Provide at least one field to update', 'VALIDATION_ERROR');
+      }
+
+      const validation = validateGroupData({
+        name,
+        description,
+      });
+
+      if (!validation.valid) {
+        return createErrorResponse(400, validation.error || 'Invalid group data', 'VALIDATION_ERROR');
+      }
+
+      const { data: group, error: groupError } = await supabase
+        .from('groups')
+        .select('id, name, description, created_by, created_at, updated_at')
+        .eq('id', groupId)
+        .single();
+
+      if (groupError || !group) {
+        return createErrorResponse(404, 'Group not found', 'NOT_FOUND');
+      }
+
+      const { data: membership } = await supabase
+        .from('group_members')
+        .select('role')
+        .eq('group_id', groupId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      const isOwner = group.created_by === user.id || membership?.role === 'owner';
+      if (!isOwner) {
+        return createErrorResponse(403, 'Only group owners can update group details', 'PERMISSION_DENIED');
+      }
+
+      const updates: Partial<Group> = {};
+
+      if (name !== undefined && typeof name === 'string') {
+        updates.name = name.trim();
+      }
+
+      if (description !== undefined) {
+        const trimmedDescription =
+          description === null
+            ? null
+            : typeof description === 'string' && description.trim().length > 0
+            ? description.trim()
+            : null;
+        updates.description = trimmedDescription;
+      }
+
+      updates.updated_at = new Date().toISOString();
+
+      const { data: updatedGroup, error: updateError } = await supabase
+        .from('groups')
+        .update(updates)
+        .eq('id', groupId)
+        .select('id, name, description, created_by, created_at, updated_at')
+        .single();
+
+      if (updateError || !updatedGroup) {
+        return handleError(updateError || new Error('Group not found after update'), 'updating group');
+      }
+
+      return createSuccessResponse(updatedGroup, 200);
+    }
+
     // Handle DELETE /groups/:id - Delete group
     if (httpMethod === 'DELETE' && groupId) {
+      if (!isValidUUID(groupId)) {
+        return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR');
+      }
+
       // Verify user is the owner
       const { data: group, error: groupError } = await supabase
         .from('groups')
@@ -196,7 +282,15 @@ Deno.serve(async (req: Request) => {
         return createErrorResponse(404, 'Group not found', 'NOT_FOUND');
       }
 
-      if (group.created_by !== user.id) {
+      const { data: membership } = await supabase
+        .from('group_members')
+        .select('role')
+        .eq('group_id', groupId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      const isOwner = group.created_by === user.id || membership?.role === 'owner';
+      if (!isOwner) {
         return createErrorResponse(403, 'Only group owners can delete groups', 'PERMISSION_DENIED');
       }
 
