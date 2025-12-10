@@ -32,6 +32,8 @@ import { GroupDetailsScreen } from "./screens/GroupDetailsScreen";
 import { GroupStatsMode, GroupStatsScreen } from "./screens/GroupStatsScreen";
 import { GroupsListScreen } from "./screens/GroupsListScreen";
 import { ProfileSetupScreen } from "./screens/ProfileSetupScreen";
+import { RequestPasswordResetScreen } from "./screens/RequestPasswordResetScreen";
+import { ResetPasswordScreen } from "./screens/ResetPasswordScreen";
 import { TransactionFormScreen } from "./screens/TransactionFormScreen";
 import { darkTheme, lightTheme } from "./theme";
 import { Group, GroupWithMembers } from "./types";
@@ -60,6 +62,9 @@ function AppContent() {
     groupId: string;
     mode: GroupStatsMode;
   } | null>(null);
+  const [resetPasswordToken, setResetPasswordToken] = useState<string | null>(
+    null
+  );
   const prevSessionRef = React.useRef<Session | null>(null);
   const groupsListRefetchRef = React.useRef<(() => void) | null>(null);
   const lastLoggedStateRef = React.useRef<string | null>(null);
@@ -115,6 +120,7 @@ function AppContent() {
       setSelectedGroup(null);
       setShowAddMember(false);
       setEditingTransaction(null);
+      setResetPasswordToken(null);
     }
 
     prevSessionRef.current = session;
@@ -211,11 +217,58 @@ function AppContent() {
   }
 
   if (!session) {
+    // Show reset password screen
+    if (currentRoute === "reset-password") {
+      return (
+        <>
+          <ResetPasswordScreen
+            token={resetPasswordToken || undefined}
+            onBack={() => {
+              setResetPasswordToken(null);
+              setCurrentRoute("auth");
+            }}
+            onSuccess={() => {
+              setResetPasswordToken(null);
+              setCurrentRoute("auth");
+              setIsSignUp(false);
+            }}
+          />
+          <StatusBar style={theme.dark ? "light" : "dark"} />
+        </>
+      );
+    }
+
+    // Show request password reset screen
+    if (currentRoute === "request-password-reset") {
+      return (
+        <>
+          <RequestPasswordResetScreen
+            onBack={() => {
+              setCurrentRoute("auth");
+            }}
+            onSuccess={() => {
+              // After sending reset link, show option to enter token manually
+              // User can navigate to reset-password screen from here if needed
+              setCurrentRoute("auth");
+            }}
+            onEnterToken={() => {
+              setCurrentRoute("reset-password");
+            }}
+          />
+          <StatusBar style={theme.dark ? "light" : "dark"} />
+        </>
+      );
+    }
+
+    // Show auth screen
     return (
       <>
         <AuthScreen
           isSignUp={isSignUp}
           onToggleMode={() => setIsSignUp(!isSignUp)}
+          onForgotPassword={() => {
+            setCurrentRoute("request-password-reset");
+          }}
         />
         <StatusBar style={theme.dark ? "light" : "dark"} />
       </>
@@ -470,7 +523,7 @@ if (!process.env.EXPO_PUBLIC_SENTRY_DSN) {
   // In dev, make it very obvious that Sentry is not configured.
   // eslint-disable-next-line no-console
   console.warn(
-    `[Sentry] EXPO_PUBLIC_SENTRY_DSN is not set; Sentry will not be initialized (env=${env}).`,
+    `[Sentry] EXPO_PUBLIC_SENTRY_DSN is not set; Sentry will not be initialized (env=${env}).`
   );
 } else {
   Sentry.init({
@@ -488,7 +541,7 @@ if (!process.env.EXPO_PUBLIC_SENTRY_DSN) {
 
     // Performance
     tracesSampleRate: Number(
-      process.env.EXPO_PUBLIC_SENTRY_TRACES_SAMPLE_RATE ?? "0.1",
+      process.env.EXPO_PUBLIC_SENTRY_TRACES_SAMPLE_RATE ?? "0.1"
     ),
     integrations: [
       // Cast through `any` to avoid TypeScript issues with the
@@ -505,10 +558,10 @@ if (!process.env.EXPO_PUBLIC_SENTRY_DSN) {
     // Session Replay
     // Capture a portion of sessions and 100% of sessions with an error.
     replaysSessionSampleRate: Number(
-      process.env.EXPO_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE ?? "0.1",
+      process.env.EXPO_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE ?? "0.1"
     ),
     replaysOnErrorSampleRate: Number(
-      process.env.EXPO_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE ?? "1.0",
+      process.env.EXPO_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE ?? "1.0"
     ),
   });
 }

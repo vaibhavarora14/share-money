@@ -6,7 +6,7 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
-  View
+  View,
 } from "react-native";
 import {
   Button,
@@ -14,7 +14,7 @@ import {
   Surface,
   Text,
   TextInput,
-  useTheme
+  useTheme,
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
@@ -22,11 +22,13 @@ import { useAuth } from "../contexts/AuthContext";
 interface AuthScreenProps {
   onToggleMode: () => void;
   isSignUp: boolean;
+  onForgotPassword: () => void;
 }
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({
   onToggleMode,
   isSignUp,
+  onForgotPassword,
 }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -56,12 +58,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       if (result.error) {
         const errorMessage = result.error.message || "An error occurred";
         const errorTitle = isSignUp ? "Sign Up Failed" : "Sign In Failed";
-        
-        Alert.alert(
-          errorTitle,
-          errorMessage,
-          [{ text: "OK", style: "default" }]
-        );
+
+        Alert.alert(errorTitle, errorMessage, [
+          { text: "OK", style: "default" },
+        ]);
       }
     } catch (err) {
       console.error("Unexpected error in authentication:", err);
@@ -77,19 +77,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       const { error } = await signInWithGoogle();
       if (error) {
         const errorMessage = error.message || "Failed to sign in with Google";
-        Alert.alert(
-          "Google Sign In Failed",
-          errorMessage,
-          [{ text: "OK", style: "default" }]
-        );
+        Alert.alert("Google Sign In Failed", errorMessage, [
+          { text: "OK", style: "default" },
+        ]);
       }
     } catch (err) {
       console.error("Error in Google sign in:", err);
-      Alert.alert(
-        "Error",
-        "An unexpected error occurred. Please try again.",
-        [{ text: "OK", style: "default" }]
-      );
+      Alert.alert("Error", "An unexpected error occurred. Please try again.", [
+        { text: "OK", style: "default" },
+      ]);
     } finally {
       setGoogleLoading(false);
     }
@@ -109,9 +105,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.header}>
-            <View style={[styles.logoContainer, { backgroundColor: 'transparent' }]}>
-              <Image 
-                source={require('../assets/logo.png')} 
+            <View
+              style={[styles.logoContainer, { backgroundColor: "transparent" }]}
+            >
+              <Image
+                source={require("../assets/logo.png")}
                 style={styles.logoImage}
                 resizeMode="contain"
                 accessibilityLabel="ShareMoney app icon"
@@ -203,6 +201,17 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               Continue with Google
             </Button>
 
+            {!isSignUp && (
+              <Button
+                mode="text"
+                onPress={onForgotPassword}
+                disabled={loading || googleLoading}
+                style={styles.forgotPasswordButton}
+              >
+                Forgot Password?
+              </Button>
+            )}
+
             <Button
               mode="text"
               onPress={onToggleMode}
@@ -240,7 +249,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    overflow: 'hidden', // Ensure proper clipping of rounded corners
+    overflow: "hidden", // Ensure proper clipping of rounded corners
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 24,
@@ -259,7 +268,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   formContainer: {
-    backgroundColor: 'transparent',
+    backgroundColor: "transparent",
   },
   input: {
     marginBottom: 16,
@@ -284,6 +293,9 @@ const styles = StyleSheet.create({
   },
   googleButton: {
     marginBottom: 16,
+  },
+  forgotPasswordButton: {
+    marginTop: 8,
   },
   toggleButton: {
     marginTop: 8,
