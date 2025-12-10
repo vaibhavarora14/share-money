@@ -9,7 +9,7 @@
     "postinstall": "patch-package",
     "bootstrap": "npm install --workspaces --include-workspace-root",
     "dev:mobile": "npm run start --workspace=mobile",
-    "dev:server": "supabase functions serve --env-file .env"
+    "dev:server": "supabase functions serve --env-file supabase/.env"
   },
   "devDependencies": {
     "imagemin": "^9.0.1",
