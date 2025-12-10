@@ -1,0 +1,176 @@
+name: Auto Increment Build Number
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+      - '.github/workflows/**'
+
+permissions:
+  contents: write
+
+jobs:
+  increment-build:
+    name: Auto-increment build number
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check if version.json was manually updated
+        id: check_manual_update
+        run: |
+          # Get the last commit that modified version.json
+          LAST_VERSION_COMMIT=$(git log -1 --format="%H" -- mobile/version.json 2>/dev/null || echo "")
+          
+          if [ -z "$LAST_VERSION_COMMIT" ]; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "version_commit=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Check if the last commit that changed version.json is the current HEAD
+          CURRENT_HEAD="${{ github.sha }}"
+          if [ "$LAST_VERSION_COMMIT" = "$CURRENT_HEAD" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "version_commit=$LAST_VERSION_COMMIT" >> $GITHUB_OUTPUT
+            echo "Version.json was manually updated in this commit - skipping auto-increment"
+            exit 0
+          fi
+          
+          # Check commit message for skip flags
+          COMMIT_MSG=$(git log -1 --format="%B" "$CURRENT_HEAD")
+          if echo "$COMMIT_MSG" | grep -qiE "\[skip ci\]|\[skip build\]"; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "version_commit=" >> $GITHUB_OUTPUT
+            echo "Commit message contains [skip ci] or [skip build] - skipping auto-increment"
+            exit 0
+          fi
+          
+          echo "changed=false" >> $GITHUB_OUTPUT
+          echo "version_commit=$LAST_VERSION_COMMIT" >> $GITHUB_OUTPUT
+
+      - name: Skip if version.json was manually updated
+        if: steps.check_manual_update.outputs.changed == 'true'
+        run: |
+          echo "Version.json was manually updated in this commit. Skipping auto-increment."
+          exit 0
+
+      - name: Setup Node.js
+        if: steps.check_manual_update.outputs.changed != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Read current version
+        if: steps.check_manual_update.outputs.changed != 'true'
+        id: current_version
+        working-directory: ./mobile
+        run: |
+          if [ ! -f "version.json" ]; then
+            echo "::error::version.json not found"
+            exit 1
+          fi
+          
+          VERSION_DATA=$(cat version.json)
+          VERSION=$(echo "$VERSION_DATA" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+          BUILD=$(echo "$VERSION_DATA" | grep -o '"buildNumber"[[:space:]]*:[[:space:]]*[0-9]*' | grep -o '[0-9]*$')
+          
+          if [ -z "$VERSION" ] || [ -z "$BUILD" ]; then
+            echo "::error::Invalid version.json format"
+            exit 1
+          fi
+          
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "build=$BUILD" >> $GITHUB_OUTPUT
+          echo "Current version: $VERSION (build $BUILD)"
+
+      - name: Increment build number
+        if: steps.check_manual_update.outputs.changed != 'true'
+        working-directory: ./mobile
+        run: |
+          npm run version:build
+
+      - name: Read new version
+        if: steps.check_manual_update.outputs.changed != 'true'
+        id: new_version
+        working-directory: ./mobile
+        run: |
+          VERSION_DATA=$(cat version.json)
+          BUILD=$(echo "$VERSION_DATA" | grep -o '"buildNumber"[[:space:]]*:[[:space:]]*[0-9]*' | grep -o '[0-9]*$')
+          echo "build=$BUILD" >> $GITHUB_OUTPUT
+          echo "New build number: $BUILD"
+
+      - name: Configure git
+        if: steps.check_manual_update.outputs.changed != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit and push build increment
+        if: steps.check_manual_update.outputs.changed != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NEW_BUILD="${{ steps.new_version.outputs.build }}"
+          
+          git add mobile/version.json
+          git commit -m "ci: auto-increment build number to $NEW_BUILD [skip ci]"
+          
+          # Retry logic for push failures
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }} HEAD:main; then
+              echo "Successfully pushed build increment"
+              exit 0
+            else
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                echo "Push failed, retrying ($RETRY_COUNT/$MAX_RETRIES)..."
+                sleep 2
+                # Fetch latest changes before retry
+                git fetch origin main
+                git rebase origin/main || git pull --rebase origin main || {
+                  echo "Rebase failed, trying merge..."
+                  git pull origin main --no-edit
+                }
+                git add mobile/version.json
+                git commit -m "ci: auto-increment build number to $NEW_BUILD [skip ci]"
+              else
+                echo "::error::Failed to push after $MAX_RETRIES attempts"
+                exit 1
+              fi
+            fi
+          done
+
+      - name: Validate version format
+        if: steps.check_manual_update.outputs.changed != 'true'
+        working-directory: ./mobile
+        run: |
+          # Validate version.json format
+          node -e "
+            const fs = require('fs');
+            const data = JSON.parse(fs.readFileSync('version.json', 'utf8'));
+            
+            // Validate version format
+            if (!/^\d+\.\d+\.\d+$/.test(data.version)) {
+              console.error('Invalid version format:', data.version);
+              process.exit(1);
+            }
+            
+            // Validate build number
+            if (typeof data.buildNumber !== 'number' || data.buildNumber < 1) {
+              console.error('Invalid build number:', data.buildNumber);
+              process.exit(1);
+            }
+            
+            console.log('Version validation passed:', data.version, 'build', data.buildNumber);
+          "
