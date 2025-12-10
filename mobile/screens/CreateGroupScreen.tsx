@@ -1,27 +1,26 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   Alert,
-  Animated,
-  Dimensions,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
-  TouchableOpacity,
-  View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Appbar, Button, TextInput, useTheme } from "react-native-paper";
 import {
-  Appbar,
-  Button,
-  TextInput,
-  useTheme,
-} from "react-native-paper";
-import { showErrorAlert } from "../utils/errorHandling";
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
+import { showErrorAlert } from "../utils/errorHandling";
 
 interface CreateGroupScreenProps {
   visible: boolean;
-  onCreateGroup: (groupData: { name: string; description?: string }) => Promise<void>;
+  onCreateGroup: (groupData: {
+    name: string;
+    description?: string;
+  }) => Promise<void>;
   onDismiss: () => void;
 }
 
@@ -33,30 +32,10 @@ export const CreateGroupScreen: React.FC<CreateGroupScreenProps> = ({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
-  const [slideAnim] = useState(new Animated.Value(0));
   const scrollViewRef = useRef<ScrollView>(null);
-  const nameInputRef = useRef<View>(null);
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const screenHeight = Dimensions.get("window").height;
   const { signOut } = useAuth();
-
-  useEffect(() => {
-    if (visible) {
-      Animated.spring(slideAnim, {
-        toValue: 1,
-        useNativeDriver: true,
-        tension: 65,
-        friction: 11,
-      }).start();
-    } else {
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [visible, slideAnim]);
 
   const handleDismiss = () => {
     setName("");
@@ -87,54 +66,39 @@ export const CreateGroupScreen: React.FC<CreateGroupScreenProps> = ({
     }
   };
 
-  const bottomSheetHeight = screenHeight * 0.7;
-  const translateY = slideAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [bottomSheetHeight, 0],
-  });
-
   return (
     <Modal
       visible={visible}
-      transparent
-      animationType="none"
+      animationType="slide"
       onRequestClose={handleDismiss}
+      presentationStyle="fullScreen"
     >
-      <View style={styles.modalOverlay}>
-        <TouchableOpacity
-          style={styles.backdrop}
-          activeOpacity={1}
-          onPress={handleDismiss}
-        />
-        <Animated.View
-          style={[
-            styles.bottomSheet,
-            {
-              height: bottomSheetHeight,
-              transform: [{ translateY }],
-              paddingBottom: insets.bottom,
-              backgroundColor: theme.colors.surface,
-            },
-          ]}
+      <SafeAreaView
+        style={[styles.container, { backgroundColor: theme.colors.background }]}
+        edges={["top", "left", "right"]}
+      >
+        <Appbar.Header
+          style={[styles.header, { backgroundColor: theme.colors.surface }]}
+          elevated
         >
-          <View style={styles.handleContainer}>
-            <View
-              style={[
-                styles.handle,
-                { backgroundColor: theme.colors.outlineVariant },
-              ]}
-            />
-          </View>
-          <Appbar.Header style={styles.header}>
-            <Appbar.Content title="Create New Group" />
-            <Appbar.Action icon="close" onPress={handleDismiss} />
-          </Appbar.Header>
+          <Appbar.BackAction onPress={handleDismiss} />
+          <Appbar.Content
+            title="Create New Group"
+            titleStyle={{ fontWeight: "bold" }}
+          />
+        </Appbar.Header>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.keyboardView}
+          keyboardVerticalOffset={0}
+        >
           <ScrollView
             ref={scrollViewRef}
             style={styles.scrollView}
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
+            nestedScrollEnabled={true}
           >
             <TextInput
               label="Group Name"
@@ -145,26 +109,20 @@ export const CreateGroupScreen: React.FC<CreateGroupScreenProps> = ({
               style={styles.input}
               left={<TextInput.Icon icon="account-group" />}
               placeholder="e.g., Weekend Trip, Roommates"
-              onFocus={() => {
-                // Scroll to top to ensure input is visible above keyboard
-                setTimeout(() => {
-                  scrollViewRef.current?.scrollTo({ y: 0, animated: true });
-                }, 100);
-              }}
             />
 
-              <TextInput
-                label="Description (Optional)"
-                value={description}
-                onChangeText={setDescription}
-                mode="outlined"
-                disabled={loading}
-                style={styles.input}
-                multiline
-                numberOfLines={3}
-                left={<TextInput.Icon icon="text" />}
-                placeholder="Add a description for this group"
-              />
+            <TextInput
+              label="Description (Optional)"
+              value={description}
+              onChangeText={setDescription}
+              mode="outlined"
+              disabled={loading}
+              style={styles.input}
+              multiline
+              numberOfLines={3}
+              left={<TextInput.Icon icon="text" />}
+              placeholder="Add a description for this group"
+            />
 
             <Button
               mode="contained"
@@ -176,46 +134,21 @@ export const CreateGroupScreen: React.FC<CreateGroupScreenProps> = ({
               Create
             </Button>
           </ScrollView>
-        </Animated.View>
-      </View>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  modalOverlay: {
+  container: {
     flex: 1,
-    justifyContent: "flex-end",
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-  },
-  bottomSheet: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: -2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  handleContainer: {
-    alignItems: "center",
-    paddingTop: 8,
-    paddingBottom: 4,
-  },
-  handle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
   },
   header: {
     elevation: 0,
-    backgroundColor: "transparent",
+  },
+  keyboardView: {
+    flex: 1,
   },
   scrollView: {
     flex: 1,
