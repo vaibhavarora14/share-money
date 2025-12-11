@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
-import { fetchWithAuth } from '../utils/api';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { ActivityItem, ActivityFeedResponse } from '../types';
+import { ActivityFeedResponse, ActivityItem } from '../types';
+import { fetchWithAuth } from '../utils/api';
 
 export function useActivity(groupId?: string | null) {
-  const { session } = useAuth();
+  const { user } = useAuth();
   const [data, setData] = useState<ActivityItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -12,7 +12,7 @@ export function useActivity(groupId?: string | null) {
   const [hasMore, setHasMore] = useState(false);
 
   const fetchData = useCallback(async () => {
-    if (!session || !groupId) {
+    if (!user?.id || !groupId) {
       setData([]);
       setIsLoading(false);
       return;
@@ -39,7 +39,7 @@ export function useActivity(groupId?: string | null) {
     } finally {
       setIsLoading(false);
     }
-  }, [session, groupId]);
+  }, [user?.id, groupId]);
 
   useEffect(() => {
     fetchData();

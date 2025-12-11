@@ -1,16 +1,16 @@
-import { useState, useEffect, useCallback } from 'react';
-import { fetchWithAuth } from '../utils/api';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { BalancesResponse } from '../types';
+import { fetchWithAuth } from '../utils/api';
 
 export function useBalances(groupId?: string | null) {
-  const { session } = useAuth();
+  const { user } = useAuth();
   const [data, setData] = useState<BalancesResponse>({ group_balances: [], overall_balances: [] });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!session) {
+    if (!user?.id) {
       setData({ group_balances: [], overall_balances: [] });
       setIsLoading(false);
       return;
@@ -37,7 +37,7 @@ export function useBalances(groupId?: string | null) {
     } finally {
       setIsLoading(false);
     }
-  }, [session, groupId]);
+  }, [user?.id, groupId]);
 
   useEffect(() => {
     fetchData();

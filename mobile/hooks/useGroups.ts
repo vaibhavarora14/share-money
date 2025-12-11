@@ -4,13 +4,13 @@ import { Group, GroupWithMembers } from '../types';
 import { fetchWithAuth } from '../utils/api';
 
 export function useGroups() {
-  const { session } = useAuth();
+  const { user } = useAuth();
   const [data, setData] = useState<Group[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!session) {
+    if (!user?.id) {
       setData([]);
       setIsLoading(false);
       return;
@@ -34,7 +34,7 @@ export function useGroups() {
     } finally {
       setIsLoading(false);
     }
-  }, [session]);
+  }, [user?.id]);
 
   useEffect(() => {
     fetchData();
@@ -49,13 +49,13 @@ export function useGroups() {
 }
 
 export function useGroupDetails(groupId: string | null) {
-  const { session } = useAuth();
+  const { user } = useAuth();
   const [data, setData] = useState<GroupWithMembers | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!session || !groupId) {
+    if (!user?.id || !groupId) {
       setData(null);
       setIsLoading(false);
       return;
@@ -78,7 +78,7 @@ export function useGroupDetails(groupId: string | null) {
     } finally {
       setIsLoading(false);
     }
-  }, [session, groupId]);
+  }, [user?.id, groupId]);
 
   useEffect(() => {
     fetchData();
