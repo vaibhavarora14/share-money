@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import {
   ActivityIndicator,
   Appbar,
@@ -9,6 +9,7 @@ import {
   Surface,
   Text,
   useTheme,
+  TouchableRipple,
 } from "react-native-paper";
 import { useAuth } from "../contexts/AuthContext";
 import { useGroups } from "../hooks/useGroups";
@@ -179,63 +180,65 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
               ]}
               elevation={1}
             >
-              <TouchableOpacity
+              <TouchableRipple
                 style={styles.groupTouchable}
                 onPress={() => onGroupPress(group)}
-                activeOpacity={0.7}
+                rippleColor="rgba(0, 0, 0, 0.08)"
               >
-                <View style={styles.groupIconContainer}>
-                  <Surface
-                    style={[
-                      styles.groupIcon,
-                      { backgroundColor: theme.colors.primaryContainer },
-                    ]}
-                    elevation={0}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 20,
-                        fontWeight: "bold",
-                        color: theme.colors.onPrimaryContainer,
-                      }}
+                <View style={styles.groupTouchableContent}>
+                  <View style={styles.groupIconContainer}>
+                    <Surface
+                      style={[
+                        styles.groupIcon,
+                        { backgroundColor: theme.colors.primaryContainer },
+                      ]}
+                      elevation={0}
                     >
-                      {group.name.charAt(0).toUpperCase()}
-                    </Text>
-                  </Surface>
-                </View>
+                      <Text
+                        style={{
+                          fontSize: 20,
+                          fontWeight: "bold",
+                          color: theme.colors.onPrimaryContainer,
+                        }}
+                      >
+                        {group.name.charAt(0).toUpperCase()}
+                      </Text>
+                    </Surface>
+                  </View>
 
-                <View style={styles.groupContent}>
-                  <Text
-                    variant="titleMedium"
-                    style={styles.groupName}
-                    numberOfLines={1}
-                  >
-                    {group.name}
-                  </Text>
-                  {group.description ? (
+                  <View style={styles.groupContent}>
                     <Text
-                      variant="bodySmall"
-                      style={{ color: theme.colors.onSurfaceVariant }}
+                      variant="titleMedium"
+                      style={styles.groupName}
                       numberOfLines={1}
                     >
-                      {group.description}
+                      {group.name}
                     </Text>
-                  ) : (
-                    <Text
-                      variant="bodySmall"
-                      style={{ color: theme.colors.onSurfaceVariant }}
-                    >
-                      No description
-                    </Text>
-                  )}
-                </View>
+                    {group.description ? (
+                      <Text
+                        variant="bodySmall"
+                        style={{ color: theme.colors.onSurfaceVariant }}
+                        numberOfLines={1}
+                      >
+                        {group.description}
+                      </Text>
+                    ) : (
+                      <Text
+                        variant="bodySmall"
+                        style={{ color: theme.colors.onSurfaceVariant }}
+                      >
+                        No description
+                      </Text>
+                    )}
+                  </View>
 
-                <IconButton
-                  icon="chevron-right"
-                  size={20}
-                  iconColor={theme.colors.onSurfaceVariant}
-                />
-              </TouchableOpacity>
+                  <IconButton
+                    icon="chevron-right"
+                    size={20}
+                    iconColor={theme.colors.onSurfaceVariant}
+                  />
+                </View>
+              </TouchableRipple>
             </Surface>
           ))
         )}
@@ -279,6 +282,8 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
+    paddingBottom: 32,
+    flexGrow: 1,
   },
   emptyContainer: {
     paddingVertical: 40,
@@ -297,6 +302,9 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   groupTouchable: {
+    width: "100%",
+  },
+  groupTouchableContent: {
     flexDirection: "row",
     alignItems: "center",
     padding: 16,

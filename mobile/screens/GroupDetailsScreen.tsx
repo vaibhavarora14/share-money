@@ -4,10 +4,13 @@ import {
   ActivityIndicator,
   Appbar,
   Button,
+  Dialog,
   FAB,
   Menu,
+  Portal,
   SegmentedButtons,
   Text,
+  TextInput,
   useTheme,
 } from "react-native-paper";
 import { ActivityFeed } from "../components/ActivityFeed";
@@ -23,9 +26,9 @@ import {
   useGroupInvitations,
 } from "../hooks/useGroupInvitations";
 import {
-  useAddMember,
   useDeleteGroup,
   useRemoveMember,
+  useUpdateGroup,
 } from "../hooks/useGroupMutations";
 import { useGroupDetails } from "../hooks/useGroups";
 import {
@@ -58,6 +61,7 @@ interface GroupDetailsScreenProps {
   onRemoveMember?: (userId: string) => Promise<void>;
   onLeaveGroup?: () => void;
   onDeleteGroup?: () => void;
+  onGroupUpdated?: (group: GroupWithMembers) => void;
   onAddTransaction: () => void;
   onEditTransaction: (transaction: Transaction) => void;
   refreshTrigger?: number; // When this changes, refresh invitations
@@ -72,6 +76,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   onRemoveMember,
   onLeaveGroup,
   onDeleteGroup,
+  onGroupUpdated,
   onAddTransaction,
   onEditTransaction,
   refreshTrigger,
@@ -89,6 +94,13 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [showMembers, setShowMembers] = useState<boolean>(false);
   const [listMode, setListMode] = useState<"transactions" | "activity">(
     "transactions"
+  );
+  const [groupState, setGroupState] =
+    useState<GroupWithMembers>(initialGroup);
+  const [editDialogVisible, setEditDialogVisible] = useState(false);
+  const [editName, setEditName] = useState(initialGroup.name);
+  const [editDescription, setEditDescription] = useState(
+    initialGroup.description || ""
   );
 
   // Stable handler for closing menu
@@ -112,6 +124,23 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       setMenuVisible(false);
     }
   }, [showMembers]);
+
+  useEffect(() => {
+    setGroupState(initialGroup);
+  }, [initialGroup]);
+
+  useEffect(() => {
+    if (groupData) {
+      setGroupState(groupData);
+    }
+  }, [groupData]);
+
+  useEffect(() => {
+    if (!editDialogVisible) {
+      setEditName(groupState.name);
+      setEditDescription(groupState.description || "");
+    }
+  }, [groupState, editDialogVisible]);
 
   // Fetch data with hooks
   const {
@@ -188,21 +217,17 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   // Mutations
 
   const deleteGroupMutation = useDeleteGroup(refetchGroup);
-  const addMemberMutation = useAddMember(() => {
-    refetchGroup();
-    refetchInvites();
-  });
   const removeMemberMutation = useRemoveMember(() => {
     refetchGroup();
     refetchInvites();
   });
+  const updateGroupMutation = useUpdateGroup(refetchGroup);
   const cancelInvite = useCancelInvitation(refetchInvites);
   const createSettlement = useCreateSettlement(refetchAll);
   const updateSettlement = useUpdateSettlement(refetchAll);
   const deleteSettlement = useDeleteSettlement(refetchAll);
 
-  // Use groupData directly, fallback to initialGroup while loading
-  const group = groupData || initialGroup;
+  const group = groupState;
 
   // API already filters by group_id, so no need for client-side filtering
   const transactions = txData;
@@ -220,6 +245,40 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       refetchGroup();
     }
   }, [groupRefreshTrigger, refetchGroup]);
+
+  const handleOpenEditGroup = () => {
+    setEditName(group.name);
+    setEditDescription(group.description || "");
+    setEditDialogVisible(true);
+  };
+
+  const handleCloseEditGroup = () => {
+    setEditDialogVisible(false);
+  };
+
+  const handleSaveGroupDetails = async () => {
+    const trimmedName = editName.trim();
+    if (!trimmedName) {
+      Alert.alert("Validation", "Group name cannot be empty.");
+      return;
+    }
+
+    const normalizedDescription = editDescription.trim();
+
+    try {
+      const updatedGroup = await updateGroupMutation.mutate({
+        groupId: group.id,
+        name: trimmedName,
+        description: normalizedDescription.length > 0 ? normalizedDescription : null,
+      });
+      setEditDialogVisible(false);
+      setMenuVisible(false);
+      setGroupState(updatedGroup);
+      onGroupUpdated?.(updatedGroup);
+    } catch (err) {
+      Alert.alert("Error", getUserFriendlyErrorMessage(err));
+    }
+  };
 
   const handleDeleteGroup = async () => {
     Alert.alert(
@@ -597,6 +656,16 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               <Menu.Item
                 onPress={() => {
                   handleCloseMenu();
+                  handleOpenEditGroup();
+                }}
+                title="Edit Group Details"
+                leadingIcon="pencil"
+              />
+            )}
+            {isOwner && (
+              <Menu.Item
+                onPress={() => {
+                  handleCloseMenu();
                   handleDeleteGroup();
                 }}
                 title="Delete Group"
@@ -678,6 +747,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               currentUserId={session?.user?.id}
               loading={balancesLoading || txLoading}
               defaultCurrency={getDefaultCurrency()}
+              memberCount={group.members?.length ?? 0}
               onOwePress={() => handleStatNavigation("i-owe")}
               onOwedPress={() => handleStatNavigation("im-owed")}
               onMyCostsPress={() => handleStatNavigation("my-costs")}
@@ -769,6 +839,48 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           setEditingSettlement(null);
         }}
       />
+      <Portal>
+        <Dialog visible={editDialogVisible} onDismiss={handleCloseEditGroup}>
+          <Dialog.Title>Edit Group</Dialog.Title>
+          <Dialog.Content>
+            <TextInput
+              label="Group name"
+              value={editName}
+              onChangeText={setEditName}
+              mode="outlined"
+              disabled={updateGroupMutation.isLoading}
+              style={{ marginBottom: 16 }}
+              left={<TextInput.Icon icon="account-group" />}
+            />
+            <TextInput
+              label="Description (optional)"
+              value={editDescription}
+              onChangeText={setEditDescription}
+              mode="outlined"
+              disabled={updateGroupMutation.isLoading}
+              multiline
+              numberOfLines={3}
+              left={<TextInput.Icon icon="text" />}
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={handleCloseEditGroup}
+              disabled={updateGroupMutation.isLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              mode="contained"
+              onPress={handleSaveGroupDetails}
+              loading={updateGroupMutation.isLoading}
+              disabled={updateGroupMutation.isLoading}
+            >
+              Save
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </View>
   );
 };
@@ -788,6 +900,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
+    flexGrow: 1,
   },
   sectionSurface: {
     borderRadius: 16,
