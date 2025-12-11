@@ -41,7 +41,7 @@ import { log, logError } from "./utils/logger";
 // ... imports
 
 function AppContent() {
-  const { session, loading, signOut } = useAuth();
+  const { session, loading, signOut, user } = useAuth();
   const theme = useTheme();
   const {
     data: profile,
@@ -60,6 +60,7 @@ function AppContent() {
     groupId: string;
     mode: GroupStatsMode;
   } | null>(null);
+  const [showRetry, setShowRetry] = useState(false);
   const prevSessionRef = React.useRef<Session | null>(null);
   const groupsListRefetchRef = React.useRef<(() => void) | null>(null);
   const lastLoggedStateRef = React.useRef<string | null>(null);
@@ -84,6 +85,37 @@ function AppContent() {
     // Use debug level so these show up as low-priority breadcrumbs.
     log("[AppContent] State", JSON.parse(snapshot), "debug");
   }, [currentRoute, session, loading, profileLoading, profile]);
+
+  // Detect if auth is stuck in loading state for 15+ seconds
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (loading) {
+        Sentry.captureMessage("Auth stuck in loading state for 15+ seconds", {
+          level: "warning",
+          tags: {
+            issue: "auth_loading_stuck",
+          },
+          extra: {
+            hasSession: !!session,
+            hasUser: !!user,
+            profileLoading,
+            hasProfile: !!profile,
+          },
+        });
+      }
+    }, 15000);
+    return () => clearTimeout(timeout);
+  }, [loading, session, user, profileLoading, profile]);
+
+  // Show retry button after 8 seconds of loading
+  useEffect(() => {
+    if (loading || (session && profileLoading)) {
+      const timer = setTimeout(() => setShowRetry(true), 8000);
+      return () => clearTimeout(timer);
+    } else {
+      setShowRetry(false);
+    }
+  }, [loading, session, profileLoading]);
 
   // Fetch selected group details via query when selectedGroup changes
   const { data: selectedGroupDetails, refetch: refetchSelectedGroup } =
@@ -205,6 +237,31 @@ function AppContent() {
         ]}
       >
         <ActivityIndicator size="large" />
+        {showRetry && (
+          <>
+            <RNText
+              style={[
+                { marginTop: 20, color: theme.colors.onSurface },
+                styles.retryText,
+              ]}
+            >
+              Taking longer than expected...
+            </RNText>
+            <Button
+              mode="contained"
+              onPress={async () => {
+                Sentry.captureMessage("User clicked retry on stuck loading", {
+                  level: "info",
+                  tags: { user_action: "retry_loading" },
+                });
+                await signOut();
+              }}
+              style={{ marginTop: 16 }}
+            >
+              Tap to retry
+            </Button>
+          </>
+        )}
         <StatusBar style={theme.dark ? "light" : "dark"} />
       </View>
     );
@@ -470,7 +527,7 @@ if (!process.env.EXPO_PUBLIC_SENTRY_DSN) {
   // In dev, make it very obvious that Sentry is not configured.
   // eslint-disable-next-line no-console
   console.warn(
-    `[Sentry] EXPO_PUBLIC_SENTRY_DSN is not set; Sentry will not be initialized (env=${env}).`,
+    `[Sentry] EXPO_PUBLIC_SENTRY_DSN is not set; Sentry will not be initialized (env=${env}).`
   );
 } else {
   Sentry.init({
@@ -488,7 +545,7 @@ if (!process.env.EXPO_PUBLIC_SENTRY_DSN) {
 
     // Performance
     tracesSampleRate: Number(
-      process.env.EXPO_PUBLIC_SENTRY_TRACES_SAMPLE_RATE ?? "0.1",
+      process.env.EXPO_PUBLIC_SENTRY_TRACES_SAMPLE_RATE ?? "0.1"
     ),
     integrations: [
       // Cast through `any` to avoid TypeScript issues with the
@@ -505,10 +562,10 @@ if (!process.env.EXPO_PUBLIC_SENTRY_DSN) {
     // Session Replay
     // Capture a portion of sessions and 100% of sessions with an error.
     replaysSessionSampleRate: Number(
-      process.env.EXPO_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE ?? "0.1",
+      process.env.EXPO_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE ?? "0.1"
     ),
     replaysOnErrorSampleRate: Number(
-      process.env.EXPO_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE ?? "1.0",
+      process.env.EXPO_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE ?? "1.0"
     ),
   });
 }
@@ -656,6 +713,10 @@ const styles = StyleSheet.create({
   errorStack: {
     fontSize: 12,
     marginBottom: 20,
+    textAlign: "center",
+  },
+  retryText: {
+    fontSize: 14,
     textAlign: "center",
   },
 });

@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Sentry from "@sentry/react-native";
 import { createClient } from '@supabase/supabase-js';
 
 // Supabase configuration from environment variables
@@ -24,13 +25,60 @@ if (!SUPABASE_URL || SUPABASE_URL === 'YOUR_SUPABASE_URL' || !SUPABASE_ANON_KEY 
 // Supabase expects an object with getItem, setItem, removeItem methods
 const AsyncStorageAdapter = {
   getItem: async (key: string): Promise<string | null> => {
-    return await AsyncStorage.getItem(key);
+    try {
+      const value = await AsyncStorage.getItem(key);
+      Sentry.addBreadcrumb({
+        category: "storage",
+        message: `GET ${key}`,
+        level: "debug",
+        data: { found: value !== null },
+      });
+      return value;
+    } catch (err) {
+      Sentry.addBreadcrumb({
+        category: "storage",
+        message: `GET ${key} FAILED`,
+        level: "error",
+        data: { error: (err as Error)?.message },
+      });
+      throw err;
+    }
   },
   setItem: async (key: string, value: string): Promise<void> => {
-    await AsyncStorage.setItem(key, value);
+    try {
+      await AsyncStorage.setItem(key, value);
+      Sentry.addBreadcrumb({
+        category: "storage",
+        message: `SET ${key}`,
+        level: "debug",
+      });
+    } catch (err) {
+      Sentry.addBreadcrumb({
+        category: "storage",
+        message: `SET ${key} FAILED`,
+        level: "error",
+        data: { error: (err as Error)?.message },
+      });
+      throw err;
+    }
   },
   removeItem: async (key: string): Promise<void> => {
-    await AsyncStorage.removeItem(key);
+    try {
+      await AsyncStorage.removeItem(key);
+      Sentry.addBreadcrumb({
+        category: "storage",
+        message: `REMOVE ${key}`,
+        level: "debug",
+      });
+    } catch (err) {
+      Sentry.addBreadcrumb({
+        category: "storage",
+        message: `REMOVE ${key} FAILED`,
+        level: "error",
+        data: { error: (err as Error)?.message },
+      });
+      throw err;
+    }
   },
 };
 

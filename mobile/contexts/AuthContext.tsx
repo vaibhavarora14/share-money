@@ -4,6 +4,7 @@ import * as AuthSession from "expo-auth-session";
 import Constants from "expo-constants";
 import * as WebBrowser from "expo-web-browser";
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { AppState, AppStateStatus } from "react-native";
 import { supabase } from "../supabase";
 import { log, logError } from "../utils/logger";
 
@@ -77,13 +78,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   useEffect(() => {
     let mounted = true;
+    let resolved = false;
 
     // Get initial session
     log("[Auth] Initial getSession start");
+    Sentry.addBreadcrumb({
+      category: "auth",
+      message: "getSession started",
+      level: "info",
+    });
+
     supabase.auth
       .getSession()
       .then(({ data: { session }, error }) => {
-        if (!mounted) return;
+        resolved = true;
+        Sentry.addBreadcrumb({
+          category: "auth",
+          message: "getSession resolved",
+          level: "info",
+          data: {
+            hasSession: !!session,
+            hasError: !!error,
+            mounted,
+            expiresAt: session?.expires_at,
+          },
+        });
+        if (!mounted) {
+          Sentry.addBreadcrumb({
+            category: "auth",
+            message: "getSession resolved but component unmounted",
+            level: "warning",
+          });
+          return;
+        }
         if (error) {
           logError(error, { context: "Initial getSession" });
         }
@@ -95,18 +122,56 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         setUser(session?.user ?? null);
         applyUserToSentry(session);
         setLoading(false);
+        Sentry.addBreadcrumb({
+          category: "auth",
+          message: "Auth state updated, loading=false",
+          level: "info",
+        });
       })
       .catch((err) => {
+        resolved = true;
+        Sentry.addBreadcrumb({
+          category: "auth",
+          message: "getSession catch",
+          level: "error",
+          data: { error: err?.message, mounted },
+        });
         if (!mounted) return;
         logError(err, { context: "Initial getSession catch" });
         setLoading(false);
       });
+
+    // Fallback: If getSession doesn't resolve in 10s, force loading=false
+    const fallbackTimeout = setTimeout(() => {
+      if (!resolved && mounted) {
+        Sentry.captureMessage("getSession timeout - forcing loading=false", {
+          level: "warning",
+          tags: { issue: "auth_timeout" },
+        });
+        setLoading(false);
+        // Attempt recovery by refreshing session
+        supabase.auth.refreshSession().then(({ data }) => {
+          if (mounted && data.session) {
+            setSession(data.session);
+            setUser(data.session.user);
+            applyUserToSentry(data.session);
+          }
+        });
+      }
+    }, 10000);
 
     // Listen for auth changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
+
+      Sentry.addBreadcrumb({
+        category: "auth",
+        message: `onAuthStateChange: ${event}`,
+        level: "info",
+        data: { hasSession: !!session, mounted },
+      });
 
       log("[Auth] onAuthStateChange", {
         event,
@@ -135,9 +200,60 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     });
 
+    // Handle app state changes (app resume/foreground)
+    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+      if (nextAppState === "active") {
+        Sentry.addBreadcrumb({
+          category: "auth",
+          message: "App became active, checking session",
+          level: "info",
+        });
+        try {
+          const {
+            data: { session },
+            error,
+          } = await supabase.auth.getSession();
+          if (!mounted) return;
+          if (error) {
+            Sentry.addBreadcrumb({
+              category: "auth",
+              message: "Session check on resume failed",
+              level: "error",
+              data: { error: error.message },
+            });
+          }
+          setSession(session);
+          setUser(session?.user ?? null);
+          applyUserToSentry(session);
+          setLoading(false);
+        } catch (err) {
+          if (!mounted) return;
+          Sentry.addBreadcrumb({
+            category: "auth",
+            message: "AppState session check error",
+            level: "error",
+            data: { error: (err as Error)?.message },
+          });
+          setLoading(false);
+        }
+      }
+    };
+
+    const appStateSubscription = AppState.addEventListener(
+      "change",
+      handleAppStateChange
+    );
+
     return () => {
       mounted = false;
+      clearTimeout(fallbackTimeout);
       subscription.unsubscribe();
+      appStateSubscription.remove();
+      Sentry.addBreadcrumb({
+        category: "auth",
+        message: "Auth useEffect cleanup",
+        level: "info",
+      });
     };
   }, []);
 
