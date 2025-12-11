@@ -1,16 +1,16 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import { Transaction } from '../types';
 import { fetchWithAuth } from '../utils/api';
-import { useAuth } from '../contexts/AuthContext';
 
 export function useTransactions(groupId?: string | null) {
-  const { session } = useAuth();
+  const { user } = useAuth();
   const [data, setData] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!session) {
+    if (!user?.id) {
       setData([]);
       setIsLoading(false);
       return;
@@ -45,7 +45,7 @@ export function useTransactions(groupId?: string | null) {
     } finally {
       setIsLoading(false);
     }
-  }, [session, groupId]);
+  }, [user?.id, groupId]);
 
   useEffect(() => {
     fetchData();

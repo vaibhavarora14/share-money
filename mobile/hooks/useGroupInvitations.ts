@@ -1,16 +1,16 @@
-import { useState, useEffect, useCallback } from 'react';
-import { fetchWithAuth } from '../utils/api';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { GroupInvitation } from '../types';
+import { fetchWithAuth } from '../utils/api';
 
 export function useGroupInvitations(groupId: string | null) {
-  const { session } = useAuth();
+  const { user } = useAuth();
   const [data, setData] = useState<GroupInvitation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!session || !groupId) {
+    if (!user?.id || !groupId) {
       setData([]);
       setIsLoading(false);
       return;
@@ -33,7 +33,7 @@ export function useGroupInvitations(groupId: string | null) {
     } finally {
       setIsLoading(false);
     }
-  }, [session, groupId]);
+  }, [user?.id, groupId]);
 
   useEffect(() => {
     fetchData();
