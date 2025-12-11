@@ -27,14 +27,18 @@ const AsyncStorageAdapter = {
   getItem: async (key: string): Promise<string | null> => {
     try {
       const value = await AsyncStorage.getItem(key);
-      Sentry.addBreadcrumb({
-        category: "storage",
-        message: `GET ${key}`,
-        level: "debug",
-        data: { found: value !== null },
-      });
+      // Only log auth/session-related keys to reduce breadcrumb volume
+      if (key.includes('auth') || key.includes('session') || key.includes('supabase')) {
+        Sentry.addBreadcrumb({
+          category: "storage",
+          message: `GET ${key}`,
+          level: "debug",
+          data: { found: value !== null },
+        });
+      }
       return value;
     } catch (err) {
+      // Always log errors
       Sentry.addBreadcrumb({
         category: "storage",
         message: `GET ${key} FAILED`,
@@ -47,12 +51,16 @@ const AsyncStorageAdapter = {
   setItem: async (key: string, value: string): Promise<void> => {
     try {
       await AsyncStorage.setItem(key, value);
-      Sentry.addBreadcrumb({
-        category: "storage",
-        message: `SET ${key}`,
-        level: "debug",
-      });
+      // Only log auth/session-related keys to reduce breadcrumb volume
+      if (key.includes('auth') || key.includes('session') || key.includes('supabase')) {
+        Sentry.addBreadcrumb({
+          category: "storage",
+          message: `SET ${key}`,
+          level: "debug",
+        });
+      }
     } catch (err) {
+      // Always log errors
       Sentry.addBreadcrumb({
         category: "storage",
         message: `SET ${key} FAILED`,
@@ -65,12 +73,16 @@ const AsyncStorageAdapter = {
   removeItem: async (key: string): Promise<void> => {
     try {
       await AsyncStorage.removeItem(key);
-      Sentry.addBreadcrumb({
-        category: "storage",
-        message: `REMOVE ${key}`,
-        level: "debug",
-      });
+      // Only log auth/session-related keys to reduce breadcrumb volume
+      if (key.includes('auth') || key.includes('session') || key.includes('supabase')) {
+        Sentry.addBreadcrumb({
+          category: "storage",
+          message: `REMOVE ${key}`,
+          level: "debug",
+        });
+      }
     } catch (err) {
+      // Always log errors
       Sentry.addBreadcrumb({
         category: "storage",
         message: `REMOVE ${key} FAILED`,

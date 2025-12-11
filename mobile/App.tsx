@@ -33,6 +33,8 @@ import { GroupStatsMode, GroupStatsScreen } from "./screens/GroupStatsScreen";
 import { GroupsListScreen } from "./screens/GroupsListScreen";
 import { ProfileSetupScreen } from "./screens/ProfileSetupScreen";
 import { TransactionFormScreen } from "./screens/TransactionFormScreen";
+import { AUTH_TIMEOUTS } from "./constants/auth";
+import { supabase } from "./supabase";
 import { darkTheme, lightTheme } from "./theme";
 import { Group, GroupWithMembers } from "./types";
 import { getDefaultCurrency } from "./utils/currency";
@@ -64,6 +66,7 @@ function AppContent() {
   const prevSessionRef = React.useRef<Session | null>(null);
   const groupsListRefetchRef = React.useRef<(() => void) | null>(null);
   const lastLoggedStateRef = React.useRef<string | null>(null);
+  const stuckTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
   // Debug routing / loading state to track "stuck on spinner" issues.
   // To avoid noisy duplicate breadcrumbs, only log when the state snapshot changes.
@@ -88,7 +91,12 @@ function AppContent() {
 
   // Detect if auth is stuck in loading state for 15+ seconds
   useEffect(() => {
-    const timeout = setTimeout(() => {
+    // Clear any existing timeout
+    if (stuckTimeoutRef.current) {
+      clearTimeout(stuckTimeoutRef.current);
+    }
+
+    stuckTimeoutRef.current = setTimeout(() => {
       if (loading) {
         Sentry.captureMessage("Auth stuck in loading state for 15+ seconds", {
           level: "warning",
@@ -103,14 +111,19 @@ function AppContent() {
           },
         });
       }
-    }, 15000);
-    return () => clearTimeout(timeout);
+    }, AUTH_TIMEOUTS.STUCK_LOADING_DETECTION);
+
+    return () => {
+      if (stuckTimeoutRef.current) {
+        clearTimeout(stuckTimeoutRef.current);
+      }
+    };
   }, [loading, session, user, profileLoading, profile]);
 
   // Show retry button after 8 seconds of loading
   useEffect(() => {
     if (loading || (session && profileLoading)) {
-      const timer = setTimeout(() => setShowRetry(true), 8000);
+      const timer = setTimeout(() => setShowRetry(true), AUTH_TIMEOUTS.RETRY_BUTTON_DELAY);
       return () => clearTimeout(timer);
     } else {
       setShowRetry(false);
@@ -254,6 +267,23 @@ function AppContent() {
                   level: "info",
                   tags: { user_action: "retry_loading" },
                 });
+                // Try refreshing session first before signing out
+                try {
+                  const { data, error } = await supabase.auth.refreshSession();
+                  if (data.session && !error) {
+                    // Session refreshed successfully, no need to sign out
+                    Sentry.captureMessage("Session refreshed successfully on retry", {
+                      level: "info",
+                      tags: { user_action: "retry_loading_success" },
+                    });
+                    return;
+                  }
+                } catch (err) {
+                  Sentry.captureException(err, {
+                    tags: { user_action: "retry_loading_refresh_failed" },
+                  });
+                }
+                // If refresh fails or no session, sign out
                 await signOut();
               }}
               style={{ marginTop: 16 }}
