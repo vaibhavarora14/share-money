@@ -15,13 +15,13 @@ export interface Profile {
 }
 
 export function useProfile() {
-  const { session } = useAuth();
+  const { user } = useAuth();
   const [data, setData] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!session) {
+    if (!user?.id) {
       setData(null);
       setIsLoading(false);
       return;
@@ -58,7 +58,7 @@ export function useProfile() {
     } finally {
       setIsLoading(false);
     }
-  }, [session]);
+  }, [user?.id]);
 
   useEffect(() => {
     fetchData();
@@ -66,7 +66,7 @@ export function useProfile() {
 
   const updateProfile = useCallback(
     async (updates: Partial<Profile>) => {
-      if (!session) {
+      if (!user?.id) {
         throw new Error("Not authenticated");
       }
 
@@ -100,7 +100,7 @@ export function useProfile() {
         throw error;
       }
     },
-    [session]
+    [user?.id]
   );
 
   return {
