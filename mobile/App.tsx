@@ -286,6 +286,8 @@ function AppContent() {
                       tags: { user_action: "retry_loading_success" },
                     }
                   );
+                  // Also refetch profile to ensure complete state recovery
+                  refetchProfile();
                   return;
                 }
                 // If refresh fails, inform user and sign out to reset state

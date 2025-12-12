@@ -560,11 +560,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       if (refreshError) {
         Sentry.addBreadcrumb({
           category: "auth",
-          message: "forceRefreshSession refresh failed",
-          level: "error",
+          message: "forceRefreshSession refresh failed, attempting fallback",
+          level: "warning",
           data: { error: refreshError.message },
         });
-        // If refresh fails, try to get current session anyway
+        // If refresh fails, try to get current session as fallback
         const { data: sessionData, error: sessionError } =
           await supabase.auth.getSession();
         if (sessionError || !sessionData.session) {
@@ -573,6 +573,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           };
         }
         // Update state with current session even if refresh failed
+        // Log that we're using fallback path
+        Sentry.addBreadcrumb({
+          category: "auth",
+          message: "forceRefreshSession using fallback session",
+          level: "info",
+          data: { refreshFailed: true, fallbackUsed: true },
+        });
         setSession(sessionData.session);
         setUser(sessionData.session.user);
         applyUserToSentry(sessionData.session);
@@ -580,26 +587,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         return { error: null };
       }
 
-      // If refresh succeeded, get the updated session
-      const { data: sessionData, error: sessionError } =
-        await supabase.auth.getSession();
-
-      if (sessionError) {
-        Sentry.addBreadcrumb({
-          category: "auth",
-          message: "forceRefreshSession getSession failed",
-          level: "error",
-          data: { error: sessionError.message },
-        });
-        return { error: sessionError };
-      }
-
-      // Explicitly update state with the refreshed session
-      const updatedSession = refreshData.session || sessionData.session;
-      if (updatedSession) {
-        setSession(updatedSession);
-        setUser(updatedSession.user);
-        applyUserToSentry(updatedSession);
+      // refreshSession() already returns the refreshed session in refreshData.session
+      // No need to call getSession() again
+      if (refreshData?.session) {
+        setSession(refreshData.session);
+        setUser(refreshData.session.user);
+        applyUserToSentry(refreshData.session);
         setLoading(false);
         Sentry.addBreadcrumb({
           category: "auth",
@@ -610,12 +603,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         return { error: null };
       }
 
-      // No session found
-      setSession(null);
-      setUser(null);
-      applyUserToSentry(null);
+      // Edge case: refresh succeeded but no session returned
+      // Try getSession as a last resort
+      Sentry.captureMessage(
+        "refreshSession succeeded but no session returned",
+        {
+          level: "warning",
+          tags: { issue: "refresh_session_no_session" },
+        }
+      );
+      const { data: sessionData, error: sessionError } =
+        await supabase.auth.getSession();
+
+      if (sessionError || !sessionData.session) {
+        setSession(null);
+        setUser(null);
+        applyUserToSentry(null);
+        setLoading(false);
+        return {
+          error: new Error("No active session found. Please sign in again."),
+        };
+      }
+
+      // Use fallback session
+      setSession(sessionData.session);
+      setUser(sessionData.session.user);
+      applyUserToSentry(sessionData.session);
       setLoading(false);
-      return { error: new Error("No session found after refresh") };
+      return { error: null };
     } catch (err) {
       const error = err instanceof Error ? err : new Error("Unknown error");
       Sentry.captureException(error, {
