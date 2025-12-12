@@ -53,6 +53,7 @@ interface AuthContextType {
   signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
   signInWithGoogle: () => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
+  forceRefreshSession: () => Promise<{ error: Error | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -544,6 +545,103 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  const forceRefreshSession = async (): Promise<{ error: Error | null }> => {
+    try {
+      Sentry.addBreadcrumb({
+        category: "auth",
+        message: "forceRefreshSession called",
+        level: "info",
+      });
+
+      // First try to refresh the session
+      const { data: refreshData, error: refreshError } =
+        await supabase.auth.refreshSession();
+
+      if (refreshError) {
+        Sentry.addBreadcrumb({
+          category: "auth",
+          message: "forceRefreshSession refresh failed, attempting fallback",
+          level: "warning",
+          data: { error: refreshError.message },
+        });
+        // If refresh fails, try to get current session as fallback
+        const { data: sessionData, error: sessionError } =
+          await supabase.auth.getSession();
+        if (sessionError || !sessionData.session) {
+          return {
+            error: refreshError || new Error("Failed to get session"),
+          };
+        }
+        // Update state with current session even if refresh failed
+        // Log that we're using fallback path
+        Sentry.addBreadcrumb({
+          category: "auth",
+          message: "forceRefreshSession using fallback session",
+          level: "info",
+          data: { refreshFailed: true, fallbackUsed: true },
+        });
+        setSession(sessionData.session);
+        setUser(sessionData.session.user);
+        applyUserToSentry(sessionData.session);
+        setLoading(false);
+        return { error: null };
+      }
+
+      // refreshSession() already returns the refreshed session in refreshData.session
+      // No need to call getSession() again
+      if (refreshData?.session) {
+        setSession(refreshData.session);
+        setUser(refreshData.session.user);
+        applyUserToSentry(refreshData.session);
+        setLoading(false);
+        Sentry.addBreadcrumb({
+          category: "auth",
+          message: "forceRefreshSession success - state updated",
+          level: "info",
+          data: { hasSession: true },
+        });
+        return { error: null };
+      }
+
+      // Edge case: refresh succeeded but no session returned
+      // Try getSession as a last resort
+      Sentry.captureMessage(
+        "refreshSession succeeded but no session returned",
+        {
+          level: "warning",
+          tags: { issue: "refresh_session_no_session" },
+        }
+      );
+      const { data: sessionData, error: sessionError } =
+        await supabase.auth.getSession();
+
+      if (sessionError || !sessionData.session) {
+        setSession(null);
+        setUser(null);
+        applyUserToSentry(null);
+        setLoading(false);
+        return {
+          error: new Error("No active session found. Please sign in again."),
+        };
+      }
+
+      // Use fallback session
+      setSession(sessionData.session);
+      setUser(sessionData.session.user);
+      applyUserToSentry(sessionData.session);
+      setLoading(false);
+      return { error: null };
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error("Unknown error");
+      Sentry.captureException(error, {
+        tags: { issue: "forceRefreshSession_error" },
+      });
+      // Still set loading to false to unblock the UI
+      setLoading(false);
+      return { error };
+    }
+  };
+
   const signOut = async () => {
     // Immediately clear the session state
     setSession(null);
@@ -564,6 +662,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         signUp,
         signInWithGoogle,
         signOut,
+        forceRefreshSession,
       }}
     >
       {children}

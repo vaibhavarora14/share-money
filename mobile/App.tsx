@@ -3,7 +3,13 @@ import { Session } from "@supabase/supabase-js";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
-import { Text as RNText, StyleSheet, useColorScheme, View } from "react-native";
+import {
+  Alert,
+  Text as RNText,
+  StyleSheet,
+  useColorScheme,
+  View,
+} from "react-native";
 import {
   ActivityIndicator,
   Button,
@@ -12,6 +18,7 @@ import {
 } from "react-native-paper";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BottomNavBar } from "./components/BottomNavBar";
+import { AUTH_TIMEOUTS } from "./constants/auth";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import {
   useAddMember,
@@ -33,8 +40,6 @@ import { GroupStatsMode, GroupStatsScreen } from "./screens/GroupStatsScreen";
 import { GroupsListScreen } from "./screens/GroupsListScreen";
 import { ProfileSetupScreen } from "./screens/ProfileSetupScreen";
 import { TransactionFormScreen } from "./screens/TransactionFormScreen";
-import { AUTH_TIMEOUTS } from "./constants/auth";
-import { supabase } from "./supabase";
 import { darkTheme, lightTheme } from "./theme";
 import { Group, GroupWithMembers } from "./types";
 import { getDefaultCurrency } from "./utils/currency";
@@ -43,7 +48,7 @@ import { log, logError } from "./utils/logger";
 // ... imports
 
 function AppContent() {
-  const { session, loading, signOut, user } = useAuth();
+  const { session, loading, signOut, user, forceRefreshSession } = useAuth();
   const theme = useTheme();
   const {
     data: profile,
@@ -123,7 +128,10 @@ function AppContent() {
   // Show retry button after 8 seconds of loading
   useEffect(() => {
     if (loading || (session && profileLoading)) {
-      const timer = setTimeout(() => setShowRetry(true), AUTH_TIMEOUTS.RETRY_BUTTON_DELAY);
+      const timer = setTimeout(
+        () => setShowRetry(true),
+        AUTH_TIMEOUTS.RETRY_BUTTON_DELAY
+      );
       return () => clearTimeout(timer);
     } else {
       setShowRetry(false);
@@ -267,24 +275,43 @@ function AppContent() {
                   level: "info",
                   tags: { user_action: "retry_loading" },
                 });
-                // Try refreshing session first before signing out
-                try {
-                  const { data, error } = await supabase.auth.refreshSession();
-                  if (data.session && !error) {
-                    // Session refreshed successfully, no need to sign out
-                    Sentry.captureMessage("Session refreshed successfully on retry", {
+                // Try force refreshing session first before signing out
+                const { error } = await forceRefreshSession();
+                if (!error) {
+                  // Session refreshed successfully, state should be updated
+                  Sentry.captureMessage(
+                    "Session refreshed successfully on retry",
+                    {
                       level: "info",
                       tags: { user_action: "retry_loading_success" },
-                    });
-                    return;
-                  }
-                } catch (err) {
-                  Sentry.captureException(err, {
-                    tags: { user_action: "retry_loading_refresh_failed" },
-                  });
+                    }
+                  );
+                  // Also refetch profile to ensure complete state recovery
+                  refetchProfile();
+                  return;
                 }
-                // If refresh fails or no session, sign out
-                await signOut();
+                // If refresh fails, inform user and sign out to reset state
+                Sentry.captureMessage("Force refresh failed, signing out", {
+                  level: "warning",
+                  tags: { user_action: "retry_loading_failed" },
+                  extra: { error: error.message },
+                });
+
+                // Show alert to user explaining what happened
+                Alert.alert(
+                  "Session Expired",
+                  "We couldn't restore your session. Please sign in again.",
+                  [
+                    {
+                      text: "OK",
+                      style: "default",
+                      onPress: async () => {
+                        await signOut();
+                      },
+                    },
+                  ],
+                  { cancelable: false }
+                );
               }}
               style={{ marginTop: 16 }}
             >
