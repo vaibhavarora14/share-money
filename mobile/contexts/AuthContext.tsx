@@ -405,10 +405,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
    * Signs out the current user
    * Clears the session state and signs out from Supabase
    */
-  const signOut = () => {
+  const signOut = useCallback(() => {
     supabase.auth.signOut();
     updateAuthState(null);
-  };
+  }, []);
 
   // Memoize context value to prevent unnecessary re-renders
   const contextValue = useMemo(
