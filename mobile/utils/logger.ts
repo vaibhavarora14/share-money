@@ -4,7 +4,7 @@ type LogLevel = "debug" | "info" | "warn" | "error";
 
 export function log(
   message: string,
-  data?: Record<string, any>,
+  data?: any,
   level: LogLevel = "info"
 ) {
   try {

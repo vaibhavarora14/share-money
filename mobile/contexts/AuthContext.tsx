@@ -3,61 +3,136 @@ import { Session, User } from "@supabase/supabase-js";
 import * as AuthSession from "expo-auth-session";
 import Constants from "expo-constants";
 import * as WebBrowser from "expo-web-browser";
-import React, { createContext, useContext, useEffect, useState } from "react";
-import { AppState, AppStateStatus } from "react-native";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { AUTH_TIMEOUTS } from "../constants/auth";
 import { supabase } from "../supabase";
 import { log, logError } from "../utils/logger";
 
-// API URL - must be set via EXPO_PUBLIC_API_URL environment variable
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
-
-// Helper function to accept pending invitations for a user
-const acceptPendingInvitations = async (
-  userEmail: string,
-  accessToken: string
-): Promise<number> => {
-  if (!API_URL || !userEmail) {
-    return 0;
-  }
-
-  try {
-    // Call the database function to accept all pending invitations for this email
-    const { data, error } = await supabase.rpc(
-      "accept_pending_invitations_for_user",
-      {
-        user_email: userEmail,
-      }
-    );
-
-    if (error) {
-      console.error("Error accepting pending invitations:", error);
-      return 0;
-    }
-
-    return data || 0;
-  } catch (error) {
-    console.error("Error in acceptPendingInvitations:", error);
-    return 0;
-  }
-};
-
 // Complete the auth session when browser closes
 WebBrowser.maybeCompleteAuthSession();
 
+/**
+ * Maps Supabase auth errors to user-friendly error messages
+ * @param error - The error from Supabase auth
+ * @param operation - The operation being performed ('signIn' | 'signUp')
+ * @returns A user-friendly error message, or the original error if no mapping exists
+ */
+function mapAuthError(
+  error: Error & { status?: number; code?: string },
+  operation: "signIn" | "signUp"
+): Error {
+  // Sign in specific errors
+  if (operation === "signIn") {
+    // Invalid credentials
+    if (
+      error.status === 400 &&
+      (error.message.includes("Invalid login credentials") ||
+        error.message.includes("invalid_credentials") ||
+        error.code === "invalid_credentials")
+    ) {
+      return new Error(
+        "Invalid email or password. Please check your credentials and try again."
+      );
+    }
+
+    // Rate limit
+    if (
+      error.status === 429 ||
+      error.message.includes("rate limit") ||
+      error.message.includes("429")
+    ) {
+      return new Error(
+        "Too many sign-in attempts. Please wait a moment and try again."
+      );
+    }
+
+    // Email confirmation required
+    if (error.message.includes("email") && error.message.includes("confirm")) {
+      return new Error(
+        "Please check your email and confirm your account before signing in."
+      );
+    }
+  }
+
+  // Sign up specific errors
+  if (operation === "signUp") {
+    // User already exists
+    if (
+      error.status === 400 &&
+      (error.message.includes("User already registered") ||
+        error.message.includes("already registered") ||
+        error.message.includes("email address is already registered") ||
+        error.code === "user_already_registered")
+    ) {
+      return new Error(
+        "An account with this email already exists. Please sign in instead."
+      );
+    }
+
+    // Invalid email format
+    if (
+      error.status === 400 &&
+      (error.message.includes("Invalid email") ||
+        error.message.includes("email format") ||
+        error.code === "invalid_email")
+    ) {
+      return new Error("Please enter a valid email address.");
+    }
+
+    // Weak password
+    if (
+      error.status === 400 &&
+      ((error.message.includes("Password") && error.message.includes("weak")) ||
+        error.message.includes("password is too weak") ||
+        error.code === "weak_password")
+    ) {
+      return new Error(
+        "Password is too weak. Please choose a stronger password."
+      );
+    }
+  }
+
+  // Return original error if no mapping found
+  return error;
+}
+
+/**
+ * Authentication context type
+ * Provides session state, user information, and authentication methods
+ */
 interface AuthContextType {
+  /** Current Supabase session, null if not authenticated */
   session: Session | null;
+  /** Current user object, null if not authenticated */
   user: User | null;
+  /** Whether the auth state is still loading */
   loading: boolean;
+  /** Signs in a user with email and password */
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
+  /** Signs up a new user with email and password */
   signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
+  /** Signs in a user with Google OAuth */
   signInWithGoogle: () => Promise<{ error: Error | null }>;
-  signOut: () => Promise<void>;
-  forceRefreshSession: () => Promise<{ error: Error | null }>;
+  /** Signs out the current user */
+  signOut: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+/**
+ * AuthProvider component
+ * Provides authentication context to the application
+ * Manages user session, authentication state, and provides auth methods
+ *
+ * @param children - React children components
+ */
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
@@ -65,229 +140,113 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Keep Sentry user in sync with Supabase session
-  const applyUserToSentry = (nextSession: Session | null) => {
+  // Helper to update auth state and sync with Sentry
+  // Wrapped in useCallback to maintain stable reference for useEffect dependency
+  const updateAuthState = useCallback((nextSession: Session | null) => {
+    setSession(nextSession);
+    setUser(nextSession?.user ?? null);
+    setLoading(false);
+
+    // Sync with Sentry
     const user = nextSession?.user;
-    if (user) {
-      Sentry.setUser({
-        id: user.id,
-        email: user.email ?? undefined,
-      });
-    } else {
-      Sentry.setUser(null);
-    }
-  };
+    Sentry.setUser(
+      user
+        ? {
+            id: user.id,
+            email: user.email ?? undefined,
+          }
+        : null
+    );
+  }, []);
 
   useEffect(() => {
     let mounted = true;
     let resolved = false;
+    let timeoutId: NodeJS.Timeout | null = null;
 
     // Get initial session
-    log("[Auth] Initial getSession start");
-    Sentry.addBreadcrumb({
-      category: "auth",
-      message: "getSession started",
-      level: "info",
-    });
-
     supabase.auth
       .getSession()
       .then(({ data: { session }, error }) => {
+        // Check resolved BEFORE setting it to prevent race condition
+        if (resolved || !mounted) return;
         resolved = true;
-        Sentry.addBreadcrumb({
-          category: "auth",
-          message: "getSession resolved",
-          level: "info",
-          data: {
-            hasSession: !!session,
-            hasError: !!error,
-            mounted,
-            expiresAt: session?.expires_at,
-          },
-        });
-        if (!mounted) {
-          Sentry.addBreadcrumb({
-            category: "auth",
-            message: "getSession resolved but component unmounted",
-            level: "warning",
+
+        // Clear timeout since we resolved early
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+
+        if (error) {
+          logError(error, {
+            context: "getSession",
+            errorType: "session_error",
           });
+          updateAuthState(null);
           return;
         }
-        if (error) {
-          logError(error, { context: "Initial getSession" });
-        }
-        log("[Auth] Initial getSession result", {
-          hasSession: !!session,
-          error: error ? String(error) : null,
-        });
-        setSession(session);
-        setUser(session?.user ?? null);
-        applyUserToSentry(session);
-        setLoading(false);
-        Sentry.addBreadcrumb({
-          category: "auth",
-          message: "Auth state updated, loading=false",
-          level: "info",
-        });
+
+        updateAuthState(session);
       })
       .catch((err) => {
+        // Check resolved BEFORE setting it to prevent race condition
+        if (resolved || !mounted) return;
         resolved = true;
-        Sentry.addBreadcrumb({
-          category: "auth",
-          message: "getSession catch",
-          level: "error",
-          data: { error: err?.message, mounted },
-        });
-        if (!mounted) return;
-        logError(err, { context: "Initial getSession catch" });
-        setLoading(false);
+
+        // Clear timeout since we resolved early
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+
+        logError(err, { context: "getSession", errorType: "exception" });
+        // Log out on exception - can't get session means auth is broken
+        supabase.auth.signOut();
+        updateAuthState(null);
       });
 
-    // Fallback: If getSession doesn't resolve in 10s, force loading=false
-    const fallbackTimeout = setTimeout(() => {
+    // Fallback: If getSession doesn't resolve in time, log out
+    timeoutId = setTimeout(() => {
       if (!resolved && mounted) {
         resolved = true; // Mark as resolved to prevent race condition
-        Sentry.captureMessage("getSession timeout - forcing loading=false", {
-          level: "warning",
-          tags: { issue: "auth_timeout" },
-        });
-        setLoading(false);
-        // Attempt recovery by refreshing session
-        supabase.auth
-          .refreshSession()
-          .then(({ data, error }) => {
-            if (mounted && data.session) {
-              setSession(data.session);
-              setUser(data.session.user);
-              applyUserToSentry(data.session);
-            } else if (error) {
-              Sentry.captureException(error, {
-                tags: { issue: "auth_timeout_refresh_failed" },
-              });
-            }
-          })
-          .catch((err) => {
-            if (mounted) {
-              Sentry.captureException(err, {
-                tags: { issue: "auth_timeout_refresh_error" },
-              });
-            }
-          });
+        log(
+          "getSession timeout - logging out",
+          { context: "getSession" },
+          "warn"
+        );
+        supabase.auth.signOut();
+        updateAuthState(null);
       }
     }, AUTH_TIMEOUTS.SESSION_FETCH_TIMEOUT);
 
-    // Listen for auth changes
+    // Listen for auth changes - this is the primary source of truth
+    // This includes TOKEN_REFRESHED events from Supabase's automatic token refresh
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
+    } = supabase.auth.onAuthStateChange(async (_, session) => {
+      // Check mounted flag to prevent state updates after unmount
       if (!mounted) return;
 
-      Sentry.addBreadcrumb({
-        category: "auth",
-        message: `onAuthStateChange: ${event}`,
-        level: "info",
-        data: { hasSession: !!session, mounted },
-      });
-
-      log("[Auth] onAuthStateChange", {
-        event,
-        hasSession: !!session,
-      });
-
-      // Update state based on the session
-      setSession(session);
-      setUser(session?.user ?? null);
-      applyUserToSentry(session);
-      setLoading(false);
-
-      // Auto-accept pending invitations when user signs in or signs up
-      if (
-        session?.user?.email &&
-        (event === "SIGNED_IN" || event === "TOKEN_REFRESHED")
-      ) {
-        try {
-          await acceptPendingInvitations(
-            session.user.email,
-            session.access_token
-          );
-        } catch (error) {
-          logError(error, { context: "acceptPendingInvitations", event });
-        }
-      }
+      updateAuthState(session);
     });
-
-    // Handle app state changes (app resume/foreground)
-    // Use debouncing to prevent rapid session checks when user quickly switches apps
-    let appStateCheckTimeout: NodeJS.Timeout | null = null;
-    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
-      if (nextAppState === "active") {
-        // Clear any pending check
-        if (appStateCheckTimeout) {
-          clearTimeout(appStateCheckTimeout);
-        }
-        // Debounce rapid state changes
-        appStateCheckTimeout = setTimeout(async () => {
-          Sentry.addBreadcrumb({
-            category: "auth",
-            message: "App became active, checking session",
-            level: "info",
-          });
-          try {
-            const {
-              data: { session },
-              error,
-            } = await supabase.auth.getSession();
-            if (!mounted) return;
-            if (error) {
-              Sentry.addBreadcrumb({
-                category: "auth",
-                message: "Session check on resume failed",
-                level: "error",
-                data: { error: error.message },
-              });
-              setLoading(false);
-              return; // Don't update session state on error
-            }
-            setSession(session);
-            setUser(session?.user ?? null);
-            applyUserToSentry(session);
-            setLoading(false);
-          } catch (err) {
-            if (!mounted) return;
-            Sentry.addBreadcrumb({
-              category: "auth",
-              message: "AppState session check error",
-              level: "error",
-              data: { error: (err as Error)?.message },
-            });
-            setLoading(false);
-          }
-        }, AUTH_TIMEOUTS.APP_STATE_DEBOUNCE);
-      }
-    };
-
-    const appStateSubscription = AppState.addEventListener(
-      "change",
-      handleAppStateChange
-    );
 
     return () => {
       mounted = false;
-      clearTimeout(fallbackTimeout);
-      if (appStateCheckTimeout) {
-        clearTimeout(appStateCheckTimeout);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
       }
       subscription.unsubscribe();
-      appStateSubscription.remove();
-      Sentry.addBreadcrumb({
-        category: "auth",
-        message: "Auth useEffect cleanup",
-        level: "info",
-      });
     };
-  }, []);
+  }, [updateAuthState]);
 
-  const signIn = async (email: string, password: string) => {
+  /**
+   * Signs in a user with email and password
+   * @param email - User's email address
+   * @param password - User's password
+   * @returns Promise resolving to an object with error property (null if successful)
+   */
+  const signIn = useCallback(async (email: string, password: string) => {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -295,70 +254,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       });
 
       if (error) {
-        // Check for invalid credentials (400 error)
-        if (
-          error.status === 400 &&
-          (error.message.includes("Invalid login credentials") ||
-            error.message.includes("invalid_credentials") ||
-            (error as any).code === "invalid_credentials")
-        ) {
-          return {
-            error: new Error(
-              "Invalid email or password. Please check your credentials and try again."
-            ),
-          };
-        }
-
-        // Check for rate limit errors
-        if (
-          error.status === 429 ||
-          error.message.includes("rate limit") ||
-          error.message.includes("429")
-        ) {
-          return {
-            error: new Error(
-              "Too many sign-in attempts. Please wait a moment and try again."
-            ),
-          };
-        }
-
-        // Check if it's an email confirmation error
-        if (
-          error.message.includes("email") &&
-          error.message.includes("confirm")
-        ) {
-          return {
-            error: new Error(
-              "Please check your email and confirm your account before signing in."
-            ),
-          };
-        }
-        return { error };
-      }
-
-      // Auto-accept pending invitations after successful sign in
-      if (data?.user?.email && data?.session?.access_token) {
-        try {
-          await acceptPendingInvitations(
-            data.user.email,
-            data.session.access_token
-          );
-        } catch (err) {
-          console.error("Error auto-accepting invitations on sign in:", err);
-        }
+        return { error: mapAuthError(error, "signIn") };
       }
 
       return { error: null };
     } catch (err) {
-      console.error("Error in signIn:", err);
+      logError(err, { context: "signIn" });
       return {
         error:
           err instanceof Error ? err : new Error("Unknown error in signIn"),
       };
     }
-  };
+  }, []);
 
-  const signUp = async (email: string, password: string) => {
+  /**
+   * Signs up a new user with email and password
+   * @param email - User's email address
+   * @param password - User's password
+   * @returns Promise resolving to an object with error property (null if successful)
+   */
+  const signUp = useCallback(async (email: string, password: string) => {
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -366,72 +281,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       });
 
       if (error) {
-        // Check for user already exists (400 error)
-        if (
-          error.status === 400 &&
-          (error.message.includes("User already registered") ||
-            error.message.includes("already registered") ||
-            error.message.includes("email address is already registered") ||
-            (error as any).code === "user_already_registered")
-        ) {
-          return {
-            error: new Error(
-              "An account with this email already exists. Please sign in instead."
-            ),
-          };
-        }
-
-        // Check for invalid email format
-        if (
-          error.status === 400 &&
-          (error.message.includes("Invalid email") ||
-            error.message.includes("email format") ||
-            (error as any).code === "invalid_email")
-        ) {
-          return {
-            error: new Error("Please enter a valid email address."),
-          };
-        }
-
-        // Check for weak password
-        if (
-          error.status === 400 &&
-          ((error.message.includes("Password") &&
-            error.message.includes("weak")) ||
-            error.message.includes("password is too weak") ||
-            (error as any).code === "weak_password")
-        ) {
-          return {
-            error: new Error(
-              "Password is too weak. Please choose a stronger password."
-            ),
-          };
-        }
-      }
-
-      // Auto-accept pending invitations after successful sign up
-      if (data?.user?.email && data?.session?.access_token) {
-        try {
-          await acceptPendingInvitations(
-            data.user.email,
-            data.session.access_token
-          );
-        } catch (err) {
-          console.error("Error auto-accepting invitations on sign up:", err);
-        }
+        return { error: mapAuthError(error, "signUp") };
       }
 
       return { error };
     } catch (err) {
-      console.error("Error in signUp:", err);
+      logError(err, { context: "signUp" });
       return {
         error:
           err instanceof Error ? err : new Error("Unknown error in signUp"),
       };
     }
-  };
+  }, []);
 
-  const signInWithGoogle = async () => {
+  /**
+   * Signs in a user with Google OAuth
+   * Opens a browser for authentication and handles the OAuth callback
+   * @returns Promise resolving to an object with error property (null if successful)
+   */
+  const signInWithGoogle = useCallback(async () => {
     try {
       // For Expo Go, we MUST use the Expo proxy service
       // Custom URL schemes don't work in Expo Go and may open email app
@@ -440,8 +308,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       let redirectTo: string;
       if (isExpoGo) {
         // Use Expo's proxy service for Expo Go - this prevents email app from opening
-        // @ts-ignore - useProxy is valid at runtime but not in types
-        redirectTo = AuthSession.makeRedirectUri({ useProxy: true });
+        // useProxy is valid at runtime but not in types, so we use type assertion
+        redirectTo = AuthSession.makeRedirectUri({
+          useProxy: true,
+        } as Parameters<typeof AuthSession.makeRedirectUri>[0]);
       } else {
         // Use custom scheme for development/production builds
         redirectTo = "com.vaibhavarora.sharemoney://auth/callback";
@@ -471,8 +341,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       );
 
       if (result.type === "success") {
-        // @ts-ignore - url property exists on success result
-        const url = result.url;
+        // TypeScript doesn't narrow the type properly, but url exists on success
+        const url = (result as { type: "success"; url: string }).url;
 
         // Extract tokens from URL hash (callback always contains access_token)
         const hashMatch = url.match(/#(.+)/);
@@ -514,21 +384,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           };
         }
 
-        // Auto-accept pending invitations after successful Google sign in
-        if (verifySession?.user?.email && verifySession?.access_token) {
-          try {
-            await acceptPendingInvitations(
-              verifySession.user.email,
-              verifySession.access_token
-            );
-          } catch (err) {
-            console.error(
-              "Error auto-accepting invitations on Google sign in:",
-              err
-            );
-          }
-        }
-
         return { error: null };
       }
 
@@ -538,138 +393,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
       return { error: new Error("Authentication was cancelled or failed") };
     } catch (error) {
+      logError(error, { context: "signInWithGoogle" });
       return {
         error:
           error instanceof Error ? error : new Error("Unknown error occurred"),
       };
     }
-  };
+  }, []);
 
-  const forceRefreshSession = async (): Promise<{ error: Error | null }> => {
-    try {
-      Sentry.addBreadcrumb({
-        category: "auth",
-        message: "forceRefreshSession called",
-        level: "info",
-      });
-
-      // First try to refresh the session
-      const { data: refreshData, error: refreshError } =
-        await supabase.auth.refreshSession();
-
-      if (refreshError) {
-        Sentry.addBreadcrumb({
-          category: "auth",
-          message: "forceRefreshSession refresh failed, attempting fallback",
-          level: "warning",
-          data: { error: refreshError.message },
-        });
-        // If refresh fails, try to get current session as fallback
-        const { data: sessionData, error: sessionError } =
-          await supabase.auth.getSession();
-        if (sessionError || !sessionData.session) {
-          return {
-            error: refreshError || new Error("Failed to get session"),
-          };
-        }
-        // Update state with current session even if refresh failed
-        // Log that we're using fallback path
-        Sentry.addBreadcrumb({
-          category: "auth",
-          message: "forceRefreshSession using fallback session",
-          level: "info",
-          data: { refreshFailed: true, fallbackUsed: true },
-        });
-        setSession(sessionData.session);
-        setUser(sessionData.session.user);
-        applyUserToSentry(sessionData.session);
-        setLoading(false);
-        return { error: null };
-      }
-
-      // refreshSession() already returns the refreshed session in refreshData.session
-      // No need to call getSession() again
-      if (refreshData?.session) {
-        setSession(refreshData.session);
-        setUser(refreshData.session.user);
-        applyUserToSentry(refreshData.session);
-        setLoading(false);
-        Sentry.addBreadcrumb({
-          category: "auth",
-          message: "forceRefreshSession success - state updated",
-          level: "info",
-          data: { hasSession: true },
-        });
-        return { error: null };
-      }
-
-      // Edge case: refresh succeeded but no session returned
-      // Try getSession as a last resort
-      Sentry.captureMessage(
-        "refreshSession succeeded but no session returned",
-        {
-          level: "warning",
-          tags: { issue: "refresh_session_no_session" },
-        }
-      );
-      const { data: sessionData, error: sessionError } =
-        await supabase.auth.getSession();
-
-      if (sessionError || !sessionData.session) {
-        setSession(null);
-        setUser(null);
-        applyUserToSentry(null);
-        setLoading(false);
-        return {
-          error: new Error("No active session found. Please sign in again."),
-        };
-      }
-
-      // Use fallback session
-      setSession(sessionData.session);
-      setUser(sessionData.session.user);
-      applyUserToSentry(sessionData.session);
-      setLoading(false);
-      return { error: null };
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error("Unknown error");
-      Sentry.captureException(error, {
-        tags: { issue: "forceRefreshSession_error" },
-      });
-      // Still set loading to false to unblock the UI
-      setLoading(false);
-      return { error };
-    }
-  };
-
-  const signOut = async () => {
-    // Immediately clear the session state
-    setSession(null);
-    setUser(null);
-    applyUserToSentry(null);
-
-    // Clear the session from Supabase storage
+  /**
+   * Signs out the current user
+   * Clears the session state and signs out from Supabase
+   */
+  const signOut = useCallback(async () => {
     await supabase.auth.signOut();
-  };
+    updateAuthState(null);
+  }, []);
+
+  // Memoize context value to prevent unnecessary re-renders
+  const contextValue = useMemo(
+    () => ({
+      session,
+      user,
+      loading,
+      signIn,
+      signUp,
+      signInWithGoogle,
+      signOut,
+    }),
+    [session, user, loading, signIn, signUp, signInWithGoogle, signOut]
+  );
 
   return (
-    <AuthContext.Provider
-      value={{
-        session,
-        user,
-        loading,
-        signIn,
-        signUp,
-        signInWithGoogle,
-        signOut,
-        forceRefreshSession,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+    <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>
   );
 };
 
+/**
+ * Hook to access the authentication context
+ * @returns The authentication context with session, user, loading state, and auth methods
+ * @throws Error if used outside of AuthProvider
+ */
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
