@@ -1,16 +1,21 @@
--- Fix auto-accept invitations in handle_new_user trigger
--- Created: 2025-12-01 (Production-safe version)
+-- Consolidated: Auto-accept invitations on signup with performance optimization
+-- Created: 2025-12-01
 --
--- NOTE: This migration is identical to 20250115000002_fix_auto_accept_invitations_inline.sql
--- It was created as a new migration (not modifying existing ones) to ensure safe
--- deployment to production databases that cannot be reset. Both migrations are
--- functionally identical and safe to run multiple times (uses CREATE OR REPLACE).
+-- This migration consolidates the following migrations into a single, optimized version:
+-- - 20250115000001_auto_accept_invitations_on_signup.sql (superseded)
+-- - 20250115000002_fix_auto_accept_invitations_inline.sql (superseded)
+-- - 20251201123000_fix_auto_accept_invitations_inline.sql (superseded)
+-- - 20251201124000_add_invitations_email_status_index.sql (superseded)
 --
--- This migration updates the handle_new_user() trigger function to inline
--- the invitation acceptance logic directly, avoiding function lookup timing
--- issues. This ensures invitations are accepted reliably when new users sign up.
+-- This migration:
+-- 1. Updates handle_new_user() to auto-accept pending invitations (inlined for reliability)
+-- 2. Adds performance index for invitation lookup
+--
+-- Prerequisites: 
+-- - Profiles table must exist (created by 20251201120000_add_profiles_fix.sql or earlier)
+-- - group_invitations table must exist (created by 20250110100343_add_group_invitations.sql)
 
--- Update the handle_new_user function with inlined invitation acceptance logic
+-- Update handle_new_user function with inlined invitation acceptance logic
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -67,6 +72,12 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Add composite index for invitation lookup performance
+-- This optimizes the query in handle_new_user() that looks up pending invitations by email
+CREATE INDEX IF NOT EXISTS idx_group_invitations_email_status_pending 
+ON group_invitations(LOWER(email), status) 
+WHERE status = 'pending';
 
 -- Update the comment to reflect the new behavior
 COMMENT ON FUNCTION public.handle_new_user() IS 'Automatically creates a profile record and accepts pending group invitations when a new user signs up (with inlined logic for reliability)';

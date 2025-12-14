@@ -157,16 +157,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           }
         : null
     );
-
-    // If session is null, sign out from Supabase
-    if (nextSession === null) {
-      supabase.auth.signOut().catch((err) => {
-        logError(err, {
-          context: "updateAuthState",
-          errorType: "signout_error",
-        });
-      });
-    }
   }, []);
 
   useEffect(() => {
@@ -193,7 +183,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
             context: "getSession",
             errorType: "session_error",
           });
-          // Log out on error - can't get session means auth is broken
           updateAuthState(null);
           return;
         }
@@ -213,6 +202,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
         logError(err, { context: "getSession", errorType: "exception" });
         // Log out on exception - can't get session means auth is broken
+        supabase.auth.signOut();
         updateAuthState(null);
       });
 
@@ -225,6 +215,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           { context: "getSession" },
           "warn"
         );
+        supabase.auth.signOut();
         updateAuthState(null);
       }
     }, AUTH_TIMEOUTS.SESSION_FETCH_TIMEOUT);
@@ -233,15 +224,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     // This includes TOKEN_REFRESHED events from Supabase's automatic token refresh
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
+    } = supabase.auth.onAuthStateChange(async (_, session) => {
       // Check mounted flag to prevent state updates after unmount
       if (!mounted) return;
 
-      // Only process if getSession hasn't resolved yet, or if this is a token refresh
-      // This prevents redundant state updates when getSession resolves first
-      if (!resolved || event === "TOKEN_REFRESHED") {
-        updateAuthState(session);
-      }
+      updateAuthState(session);
     });
 
     return () => {
@@ -418,10 +405,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
    * Signs out the current user
    * Clears the session state and signs out from Supabase
    */
-  const signOut = useCallback(() => {
+  const signOut = () => {
+    supabase.auth.signOut();
     updateAuthState(null);
-    // signOut is already called in updateAuthState when null is passed
-  }, [updateAuthState]);
+  };
 
   // Memoize context value to prevent unnecessary re-renders
   const contextValue = useMemo(
