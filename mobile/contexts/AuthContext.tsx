@@ -405,8 +405,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
    * Signs out the current user
    * Clears the session state and signs out from Supabase
    */
-  const signOut = useCallback(() => {
-    supabase.auth.signOut();
+  const signOut = useCallback(async () => {
+    await supabase.auth.signOut();
     updateAuthState(null);
   }, []);
 
