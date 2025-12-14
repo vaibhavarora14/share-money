@@ -200,24 +200,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
         <Appbar.Action
           icon="logout"
           iconColor={theme.colors.error}
-          onPress={() => {
-            Alert.alert(
-              "Logout",
-              "Are you sure you want to logout?",
-              [
-                {
-                  text: "Cancel",
-                  style: "cancel",
-                },
-                {
-                  text: "Logout",
-                  style: "destructive",
-                  onPress: signOut,
-                },
-              ],
-              { cancelable: true }
-            );
-          }}
+          onPress={signOut}
         />
       </Appbar.Header>
       <KeyboardAvoidingView
