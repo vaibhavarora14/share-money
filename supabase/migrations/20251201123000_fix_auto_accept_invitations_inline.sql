@@ -1,5 +1,10 @@
 -- Fix auto-accept invitations in handle_new_user trigger
--- Created: 2025-01-15
+-- Created: 2025-12-01 (Production-safe version)
+--
+-- NOTE: This migration is identical to 20250115000002_fix_auto_accept_invitations_inline.sql
+-- It was created as a new migration (not modifying existing ones) to ensure safe
+-- deployment to production databases that cannot be reset. Both migrations are
+-- functionally identical and safe to run multiple times (uses CREATE OR REPLACE).
 --
 -- This migration updates the handle_new_user() trigger function to inline
 -- the invitation acceptance logic directly, avoiding function lookup timing
@@ -10,7 +15,6 @@ CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 DECLARE
   invitation_record RECORD;
-  accepted_count INTEGER := 0;
 BEGIN
   -- Create profile for new user
   INSERT INTO public.profiles (id, profile_completed)
@@ -45,8 +49,6 @@ BEGIN
         UPDATE public.group_invitations
         SET status = 'accepted', accepted_at = CURRENT_TIMESTAMP
         WHERE id = invitation_record.id;
-
-        accepted_count := accepted_count + 1;
       END LOOP;
 
       -- Mark expired invitations
