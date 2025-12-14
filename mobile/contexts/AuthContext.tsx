@@ -6,18 +6,6 @@ import * as WebBrowser from "expo-web-browser";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "../supabase";
 
-// Helper function to accept pending invitations for a user
-const acceptPendingInvitations = async (userEmail: string): Promise<void> => {
-  try {
-    await supabase.rpc("accept_pending_invitations_for_user", {
-      user_email: userEmail,
-    });
-  } catch (error) {
-    // Silently fail - invitation acceptance shouldn't block auth flow
-    console.error("Error accepting pending invitations:", error);
-  }
-};
-
 // Complete the auth session when browser closes
 WebBrowser.maybeCompleteAuthSession();
 
@@ -69,14 +57,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       updateAuthState(session);
-
-      // Auto-accept pending invitations when user signs in or refreshes token
-      if (
-        session?.user?.email &&
-        (event === "SIGNED_IN" || event === "TOKEN_REFRESHED")
-      ) {
-        await acceptPendingInvitations(session.user.email);
-      }
     });
 
     return () => {
@@ -131,11 +111,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           };
         }
         return { error };
-      }
-
-      // Auto-accept pending invitations after successful sign in
-      if (data?.user?.email) {
-        await acceptPendingInvitations(data.user.email);
       }
 
       return { error: null };
@@ -197,11 +172,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
             ),
           };
         }
-      }
-
-      // Auto-accept pending invitations after successful sign up
-      if (data?.user?.email) {
-        await acceptPendingInvitations(data.user.email);
       }
 
       return { error };
@@ -295,11 +265,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           return {
             error: new Error("Session was not created after setting tokens"),
           };
-        }
-
-        // Auto-accept pending invitations after successful Google sign in
-        if (verifySession?.user?.email) {
-          await acceptPendingInvitations(verifySession.user.email);
         }
 
         return { error: null };
