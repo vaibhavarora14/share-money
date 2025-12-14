@@ -4,41 +4,17 @@ import * as AuthSession from "expo-auth-session";
 import Constants from "expo-constants";
 import * as WebBrowser from "expo-web-browser";
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { AppState, AppStateStatus } from "react-native";
-import { AUTH_TIMEOUTS } from "../constants/auth";
 import { supabase } from "../supabase";
-import { log, logError } from "../utils/logger";
-
-// API URL - must be set via EXPO_PUBLIC_API_URL environment variable
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 // Helper function to accept pending invitations for a user
-const acceptPendingInvitations = async (
-  userEmail: string,
-  accessToken: string
-): Promise<number> => {
-  if (!API_URL || !userEmail) {
-    return 0;
-  }
-
+const acceptPendingInvitations = async (userEmail: string): Promise<void> => {
   try {
-    // Call the database function to accept all pending invitations for this email
-    const { data, error } = await supabase.rpc(
-      "accept_pending_invitations_for_user",
-      {
-        user_email: userEmail,
-      }
-    );
-
-    if (error) {
-      console.error("Error accepting pending invitations:", error);
-      return 0;
-    }
-
-    return data || 0;
+    await supabase.rpc("accept_pending_invitations_for_user", {
+      user_email: userEmail,
+    });
   } catch (error) {
-    console.error("Error in acceptPendingInvitations:", error);
-    return 0;
+    // Silently fail - invitation acceptance shouldn't block auth flow
+    console.error("Error accepting pending invitations:", error);
   }
 };
 
@@ -53,7 +29,6 @@ interface AuthContextType {
   signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
   signInWithGoogle: () => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
-  forceRefreshSession: () => Promise<{ error: Error | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -65,225 +40,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Keep Sentry user in sync with Supabase session
-  const applyUserToSentry = (nextSession: Session | null) => {
+  // Helper to update auth state and sync with Sentry
+  const updateAuthState = (nextSession: Session | null) => {
+    setSession(nextSession);
+    setUser(nextSession?.user ?? null);
+    setLoading(false);
+
+    // Sync with Sentry
     const user = nextSession?.user;
-    if (user) {
-      Sentry.setUser({
-        id: user.id,
-        email: user.email ?? undefined,
-      });
-    } else {
-      Sentry.setUser(null);
-    }
+    Sentry.setUser(
+      user
+        ? {
+            id: user.id,
+            email: user.email ?? undefined,
+          }
+        : null
+    );
   };
 
   useEffect(() => {
-    let mounted = true;
-    let resolved = false;
-
     // Get initial session
-    log("[Auth] Initial getSession start");
-    Sentry.addBreadcrumb({
-      category: "auth",
-      message: "getSession started",
-      level: "info",
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      updateAuthState(session);
     });
 
-    supabase.auth
-      .getSession()
-      .then(({ data: { session }, error }) => {
-        resolved = true;
-        Sentry.addBreadcrumb({
-          category: "auth",
-          message: "getSession resolved",
-          level: "info",
-          data: {
-            hasSession: !!session,
-            hasError: !!error,
-            mounted,
-            expiresAt: session?.expires_at,
-          },
-        });
-        if (!mounted) {
-          Sentry.addBreadcrumb({
-            category: "auth",
-            message: "getSession resolved but component unmounted",
-            level: "warning",
-          });
-          return;
-        }
-        if (error) {
-          logError(error, { context: "Initial getSession" });
-        }
-        log("[Auth] Initial getSession result", {
-          hasSession: !!session,
-          error: error ? String(error) : null,
-        });
-        setSession(session);
-        setUser(session?.user ?? null);
-        applyUserToSentry(session);
-        setLoading(false);
-        Sentry.addBreadcrumb({
-          category: "auth",
-          message: "Auth state updated, loading=false",
-          level: "info",
-        });
-      })
-      .catch((err) => {
-        resolved = true;
-        Sentry.addBreadcrumb({
-          category: "auth",
-          message: "getSession catch",
-          level: "error",
-          data: { error: err?.message, mounted },
-        });
-        if (!mounted) return;
-        logError(err, { context: "Initial getSession catch" });
-        setLoading(false);
-      });
-
-    // Fallback: If getSession doesn't resolve in 10s, force loading=false
-    const fallbackTimeout = setTimeout(() => {
-      if (!resolved && mounted) {
-        resolved = true; // Mark as resolved to prevent race condition
-        Sentry.captureMessage("getSession timeout - forcing loading=false", {
-          level: "warning",
-          tags: { issue: "auth_timeout" },
-        });
-        setLoading(false);
-        // Attempt recovery by refreshing session
-        supabase.auth
-          .refreshSession()
-          .then(({ data, error }) => {
-            if (mounted && data.session) {
-              setSession(data.session);
-              setUser(data.session.user);
-              applyUserToSentry(data.session);
-            } else if (error) {
-              Sentry.captureException(error, {
-                tags: { issue: "auth_timeout_refresh_failed" },
-              });
-            }
-          })
-          .catch((err) => {
-            if (mounted) {
-              Sentry.captureException(err, {
-                tags: { issue: "auth_timeout_refresh_error" },
-              });
-            }
-          });
-      }
-    }, AUTH_TIMEOUTS.SESSION_FETCH_TIMEOUT);
-
-    // Listen for auth changes
+    // Listen for auth changes - this is the primary source of truth
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return;
+      updateAuthState(session);
 
-      Sentry.addBreadcrumb({
-        category: "auth",
-        message: `onAuthStateChange: ${event}`,
-        level: "info",
-        data: { hasSession: !!session, mounted },
-      });
-
-      log("[Auth] onAuthStateChange", {
-        event,
-        hasSession: !!session,
-      });
-
-      // Update state based on the session
-      setSession(session);
-      setUser(session?.user ?? null);
-      applyUserToSentry(session);
-      setLoading(false);
-
-      // Auto-accept pending invitations when user signs in or signs up
+      // Auto-accept pending invitations when user signs in or refreshes token
       if (
         session?.user?.email &&
         (event === "SIGNED_IN" || event === "TOKEN_REFRESHED")
       ) {
-        try {
-          await acceptPendingInvitations(
-            session.user.email,
-            session.access_token
-          );
-        } catch (error) {
-          logError(error, { context: "acceptPendingInvitations", event });
-        }
+        await acceptPendingInvitations(session.user.email);
       }
     });
 
-    // Handle app state changes (app resume/foreground)
-    // Use debouncing to prevent rapid session checks when user quickly switches apps
-    let appStateCheckTimeout: NodeJS.Timeout | null = null;
-    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
-      if (nextAppState === "active") {
-        // Clear any pending check
-        if (appStateCheckTimeout) {
-          clearTimeout(appStateCheckTimeout);
-        }
-        // Debounce rapid state changes
-        appStateCheckTimeout = setTimeout(async () => {
-          Sentry.addBreadcrumb({
-            category: "auth",
-            message: "App became active, checking session",
-            level: "info",
-          });
-          try {
-            const {
-              data: { session },
-              error,
-            } = await supabase.auth.getSession();
-            if (!mounted) return;
-            if (error) {
-              Sentry.addBreadcrumb({
-                category: "auth",
-                message: "Session check on resume failed",
-                level: "error",
-                data: { error: error.message },
-              });
-              setLoading(false);
-              return; // Don't update session state on error
-            }
-            setSession(session);
-            setUser(session?.user ?? null);
-            applyUserToSentry(session);
-            setLoading(false);
-          } catch (err) {
-            if (!mounted) return;
-            Sentry.addBreadcrumb({
-              category: "auth",
-              message: "AppState session check error",
-              level: "error",
-              data: { error: (err as Error)?.message },
-            });
-            setLoading(false);
-          }
-        }, AUTH_TIMEOUTS.APP_STATE_DEBOUNCE);
-      }
-    };
-
-    const appStateSubscription = AppState.addEventListener(
-      "change",
-      handleAppStateChange
-    );
-
     return () => {
-      mounted = false;
-      clearTimeout(fallbackTimeout);
-      if (appStateCheckTimeout) {
-        clearTimeout(appStateCheckTimeout);
-      }
       subscription.unsubscribe();
-      appStateSubscription.remove();
-      Sentry.addBreadcrumb({
-        category: "auth",
-        message: "Auth useEffect cleanup",
-        level: "info",
-      });
     };
   }, []);
 
@@ -337,15 +134,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       }
 
       // Auto-accept pending invitations after successful sign in
-      if (data?.user?.email && data?.session?.access_token) {
-        try {
-          await acceptPendingInvitations(
-            data.user.email,
-            data.session.access_token
-          );
-        } catch (err) {
-          console.error("Error auto-accepting invitations on sign in:", err);
-        }
+      if (data?.user?.email) {
+        await acceptPendingInvitations(data.user.email);
       }
 
       return { error: null };
@@ -410,15 +200,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       }
 
       // Auto-accept pending invitations after successful sign up
-      if (data?.user?.email && data?.session?.access_token) {
-        try {
-          await acceptPendingInvitations(
-            data.user.email,
-            data.session.access_token
-          );
-        } catch (err) {
-          console.error("Error auto-accepting invitations on sign up:", err);
-        }
+      if (data?.user?.email) {
+        await acceptPendingInvitations(data.user.email);
       }
 
       return { error };
@@ -515,18 +298,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         }
 
         // Auto-accept pending invitations after successful Google sign in
-        if (verifySession?.user?.email && verifySession?.access_token) {
-          try {
-            await acceptPendingInvitations(
-              verifySession.user.email,
-              verifySession.access_token
-            );
-          } catch (err) {
-            console.error(
-              "Error auto-accepting invitations on Google sign in:",
-              err
-            );
-          }
+        if (verifySession?.user?.email) {
+          await acceptPendingInvitations(verifySession.user.email);
         }
 
         return { error: null };
@@ -545,110 +318,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  const forceRefreshSession = async (): Promise<{ error: Error | null }> => {
-    try {
-      Sentry.addBreadcrumb({
-        category: "auth",
-        message: "forceRefreshSession called",
-        level: "info",
-      });
-
-      // First try to refresh the session
-      const { data: refreshData, error: refreshError } =
-        await supabase.auth.refreshSession();
-
-      if (refreshError) {
-        Sentry.addBreadcrumb({
-          category: "auth",
-          message: "forceRefreshSession refresh failed, attempting fallback",
-          level: "warning",
-          data: { error: refreshError.message },
-        });
-        // If refresh fails, try to get current session as fallback
-        const { data: sessionData, error: sessionError } =
-          await supabase.auth.getSession();
-        if (sessionError || !sessionData.session) {
-          return {
-            error: refreshError || new Error("Failed to get session"),
-          };
-        }
-        // Update state with current session even if refresh failed
-        // Log that we're using fallback path
-        Sentry.addBreadcrumb({
-          category: "auth",
-          message: "forceRefreshSession using fallback session",
-          level: "info",
-          data: { refreshFailed: true, fallbackUsed: true },
-        });
-        setSession(sessionData.session);
-        setUser(sessionData.session.user);
-        applyUserToSentry(sessionData.session);
-        setLoading(false);
-        return { error: null };
-      }
-
-      // refreshSession() already returns the refreshed session in refreshData.session
-      // No need to call getSession() again
-      if (refreshData?.session) {
-        setSession(refreshData.session);
-        setUser(refreshData.session.user);
-        applyUserToSentry(refreshData.session);
-        setLoading(false);
-        Sentry.addBreadcrumb({
-          category: "auth",
-          message: "forceRefreshSession success - state updated",
-          level: "info",
-          data: { hasSession: true },
-        });
-        return { error: null };
-      }
-
-      // Edge case: refresh succeeded but no session returned
-      // Try getSession as a last resort
-      Sentry.captureMessage(
-        "refreshSession succeeded but no session returned",
-        {
-          level: "warning",
-          tags: { issue: "refresh_session_no_session" },
-        }
-      );
-      const { data: sessionData, error: sessionError } =
-        await supabase.auth.getSession();
-
-      if (sessionError || !sessionData.session) {
-        setSession(null);
-        setUser(null);
-        applyUserToSentry(null);
-        setLoading(false);
-        return {
-          error: new Error("No active session found. Please sign in again."),
-        };
-      }
-
-      // Use fallback session
-      setSession(sessionData.session);
-      setUser(sessionData.session.user);
-      applyUserToSentry(sessionData.session);
-      setLoading(false);
-      return { error: null };
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error("Unknown error");
-      Sentry.captureException(error, {
-        tags: { issue: "forceRefreshSession_error" },
-      });
-      // Still set loading to false to unblock the UI
-      setLoading(false);
-      return { error };
-    }
-  };
-
   const signOut = async () => {
-    // Immediately clear the session state
-    setSession(null);
-    setUser(null);
-    applyUserToSentry(null);
-
-    // Clear the session from Supabase storage
+    updateAuthState(null);
     await supabase.auth.signOut();
   };
 
@@ -662,7 +333,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         signUp,
         signInWithGoogle,
         signOut,
-        forceRefreshSession,
       }}
     >
       {children}

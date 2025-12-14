@@ -3,13 +3,7 @@ import { Session } from "@supabase/supabase-js";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
-import {
-  Alert,
-  Text as RNText,
-  StyleSheet,
-  useColorScheme,
-  View,
-} from "react-native";
+import { Text as RNText, StyleSheet, useColorScheme, View } from "react-native";
 import {
   ActivityIndicator,
   Button,
@@ -48,7 +42,7 @@ import { log, logError } from "./utils/logger";
 // ... imports
 
 function AppContent() {
-  const { session, loading, signOut, user, forceRefreshSession } = useAuth();
+  const { session, loading, signOut, user } = useAuth();
   const theme = useTheme();
   const {
     data: profile,
@@ -67,7 +61,6 @@ function AppContent() {
     groupId: string;
     mode: GroupStatsMode;
   } | null>(null);
-  const [showRetry, setShowRetry] = useState(false);
   const prevSessionRef = React.useRef<Session | null>(null);
   const groupsListRefetchRef = React.useRef<(() => void) | null>(null);
   const lastLoggedStateRef = React.useRef<string | null>(null);
@@ -124,19 +117,6 @@ function AppContent() {
       }
     };
   }, [loading, session, user, profileLoading, profile]);
-
-  // Show retry button after 8 seconds of loading
-  useEffect(() => {
-    if (loading || (session && profileLoading)) {
-      const timer = setTimeout(
-        () => setShowRetry(true),
-        AUTH_TIMEOUTS.RETRY_BUTTON_DELAY
-      );
-      return () => clearTimeout(timer);
-    } else {
-      setShowRetry(false);
-    }
-  }, [loading, session, profileLoading]);
 
   // Fetch selected group details via query when selectedGroup changes
   const { data: selectedGroupDetails, refetch: refetchSelectedGroup } =
@@ -258,67 +238,6 @@ function AppContent() {
         ]}
       >
         <ActivityIndicator size="large" />
-        {showRetry && (
-          <>
-            <RNText
-              style={[
-                { marginTop: 20, color: theme.colors.onSurface },
-                styles.retryText,
-              ]}
-            >
-              Taking longer than expected...
-            </RNText>
-            <Button
-              mode="contained"
-              onPress={async () => {
-                Sentry.captureMessage("User clicked retry on stuck loading", {
-                  level: "info",
-                  tags: { user_action: "retry_loading" },
-                });
-                // Try force refreshing session first before signing out
-                const { error } = await forceRefreshSession();
-                if (!error) {
-                  // Session refreshed successfully, state should be updated
-                  Sentry.captureMessage(
-                    "Session refreshed successfully on retry",
-                    {
-                      level: "info",
-                      tags: { user_action: "retry_loading_success" },
-                    }
-                  );
-                  // Also refetch profile to ensure complete state recovery
-                  refetchProfile();
-                  return;
-                }
-                // If refresh fails, inform user and sign out to reset state
-                Sentry.captureMessage("Force refresh failed, signing out", {
-                  level: "warning",
-                  tags: { user_action: "retry_loading_failed" },
-                  extra: { error: error.message },
-                });
-
-                // Show alert to user explaining what happened
-                Alert.alert(
-                  "Session Expired",
-                  "We couldn't restore your session. Please sign in again.",
-                  [
-                    {
-                      text: "OK",
-                      style: "default",
-                      onPress: async () => {
-                        await signOut();
-                      },
-                    },
-                  ],
-                  { cancelable: false }
-                );
-              }}
-              style={{ marginTop: 16 }}
-            >
-              Tap to retry
-            </Button>
-          </>
-        )}
         <StatusBar style={theme.dark ? "light" : "dark"} />
       </View>
     );
@@ -770,10 +689,6 @@ const styles = StyleSheet.create({
   errorStack: {
     fontSize: 12,
     marginBottom: 20,
-    textAlign: "center",
-  },
-  retryText: {
-    fontSize: 14,
     textAlign: "center",
   },
 });
