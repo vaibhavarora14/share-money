@@ -22,18 +22,12 @@ export async function fetchGroupDetails(groupId: string): Promise<GroupWithMembe
 
 export function useGroups() {
   const { user } = useAuth();
-
-  console.log('LOG:: userId', user?.id)
-
   const query = useQuery<Group[], Error>({
     queryKey: queryKeys.groups,
     queryFn: fetchGroups,
     enabled: !!user?.id,
     staleTime: 60_000,
   });
-
-  console.log('LOG:: groups', query)
-
   return {
     data: query.data ?? [],
     isLoading: query.isLoading,
