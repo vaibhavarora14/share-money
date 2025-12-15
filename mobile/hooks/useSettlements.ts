@@ -1,158 +1,179 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { Settlement, SettlementsResponse } from '../types';
-import { fetchWithAuth } from '../utils/api';
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "../contexts/AuthContext";
+import { SettlementsResponse } from "../types";
+import { fetchWithAuth } from "../utils/api";
+import { queryKeys } from "./queryKeys";
+
+export async function fetchSettlements(
+  groupId: string
+): Promise<SettlementsResponse> {
+  const response = await fetchWithAuth(`/settlements?group_id=${groupId}`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch settlements: ${response.status}`);
+  }
+  return response.json();
+}
+
+function invalidateSettlementAdjacents(
+  queryClient: ReturnType<typeof useQueryClient>,
+  groupId?: string
+) {
+  if (!groupId) return;
+  queryClient.invalidateQueries({ queryKey: queryKeys.settlements(groupId) });
+  queryClient.invalidateQueries({ queryKey: queryKeys.balances(groupId) });
+  queryClient.invalidateQueries({ queryKey: queryKeys.activity(groupId) });
+}
 
 export function useSettlements(groupId?: string | null) {
   const { user } = useAuth();
-  const [data, setData] = useState<Settlement[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
 
-  const fetchData = useCallback(async () => {
-    if (!user?.id || !groupId) {
-      setData([]);
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      setError(null);
-      
-      const response = await fetchWithAuth(`/settlements?group_id=${groupId}`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch settlements: ${response.status}`);
-      }
-      const result: SettlementsResponse = await response.json();
-      
-      setData(result.settlements || []);
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to fetch settlements'));
-      setData([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user?.id, groupId]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  const query = useQuery<SettlementsResponse, Error>({
+    queryKey: groupId ? queryKeys.settlements(groupId) : ["settlements", null],
+    queryFn: () => fetchSettlements(groupId as string),
+    enabled: !!user?.id && !!groupId,
+    initialData: { settlements: [] },
+    staleTime: 30_000,
+  });
 
   return {
-    data: { settlements: data },
-    isLoading,
-    error,
-    refetch: fetchData
+    data: { settlements: query.data?.settlements ?? [] },
+    isLoading: query.isLoading,
+    isFetching: query.isFetching,
+    error: query.error ?? null,
+    refetch: query.refetch,
   };
 }
 
 export function useCreateSettlement(onSuccess?: () => void) {
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
+  const queryClient = useQueryClient();
 
-  const mutate = async (settlementData: {
-    group_id: string;
-    from_user_id: string;
-    to_user_id: string;
-    amount: number;
-    currency: string;
-    notes?: string;
-  }) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      
+  const mutation = useMutation({
+    mutationFn: async (settlementData: {
+      group_id: string;
+      from_user_id: string;
+      to_user_id: string;
+      amount: number;
+      currency: string;
+      notes?: string;
+    }) => {
       const response = await fetchWithAuth("/settlements", {
         method: "POST",
         body: JSON.stringify(settlementData),
       });
-      
-      if (!response.ok) {
-        throw new Error('Failed to create settlement');
-      }
-      
-      if (onSuccess) onSuccess();
-      
-      return response.json();
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to create settlement');
-      setError(error);
-      throw error;
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
-  return { mutate, isLoading, error };
+      if (!response.ok) {
+        throw new Error("Failed to create settlement");
+      }
+
+      return response.json();
+    },
+    onSuccess: (_data, variables) => {
+      invalidateSettlementAdjacents(queryClient, variables.group_id);
+      onSuccess?.();
+    },
+  });
+
+  return {
+    mutate: mutation.mutateAsync,
+    isLoading: mutation.isPending,
+    error: (mutation.error as Error | null) ?? null,
+  };
 }
 
 export function useUpdateSettlement(onSuccess?: () => void) {
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
+  const queryClient = useQueryClient();
 
-  const mutate = async (settlementData: {
-    id: string;
-    amount?: number;
-    currency?: string;
-    notes?: string;
-  }) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      
+  const mutation = useMutation({
+    mutationFn: async (settlementData: {
+      id: string;
+      amount?: number;
+      currency?: string;
+      notes?: string;
+      group_id?: string;
+    }) => {
       const response = await fetchWithAuth("/settlements", {
         method: "PUT",
         body: JSON.stringify(settlementData),
       });
-      
-      if (!response.ok) {
-        throw new Error('Failed to update settlement');
-      }
-      
-      if (onSuccess) onSuccess();
-      
-      return response.json();
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to update settlement');
-      setError(error);
-      throw error;
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
-  return { mutate, isLoading, error };
+      if (!response.ok) {
+        throw new Error("Failed to update settlement");
+      }
+
+      return response.json();
+    },
+    onSuccess: (_data, variables) => {
+      const groupId = (variables as any).group_id as string | undefined;
+      invalidateSettlementAdjacents(queryClient, groupId);
+      onSuccess?.();
+    },
+  });
+
+  return {
+    mutate: mutation.mutateAsync,
+    isLoading: mutation.isPending,
+    error: (mutation.error as Error | null) ?? null,
+  };
 }
 
 export function useDeleteSettlement(onSuccess?: () => void) {
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
+  const queryClient = useQueryClient();
 
-  const mutate = async (variables: { id: string; groupId?: string }) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      
+  const mutation = useMutation({
+    mutationFn: async (variables: { id: string; groupId?: string }) => {
       const response = await fetchWithAuth(`/settlements?id=${variables.id}`, {
         method: "DELETE",
       });
-      
-      if (!response.ok && response.status !== 204) {
-        throw new Error('Failed to delete settlement');
-      }
-      
-      if (onSuccess) onSuccess();
-      
-      return { id: variables.id, groupId: variables.groupId };
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to delete settlement');
-      setError(error);
-      throw error;
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
-  return { mutate, isLoading, error };
+      if (!response.ok && response.status !== 204) {
+        throw new Error("Failed to delete settlement");
+      }
+
+      return variables;
+    },
+    onMutate: async (variables) => {
+      const groupId = variables.groupId;
+      if (!groupId) return { groupId, previous: undefined };
+
+      await queryClient.cancelQueries({ queryKey: queryKeys.settlements(groupId) });
+      const previous = queryClient.getQueryData<SettlementsResponse>(
+        queryKeys.settlements(groupId)
+      );
+
+      queryClient.setQueryData<SettlementsResponse>(
+        queryKeys.settlements(groupId),
+        (old) => {
+          const current = old?.settlements ?? [];
+          return {
+            settlements: current.filter((s) => s.id !== variables.id),
+          };
+        }
+      );
+
+      return { groupId, previous };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.groupId && context.previous) {
+        queryClient.setQueryData(
+          queryKeys.settlements(context.groupId),
+          context.previous
+        );
+      }
+    },
+    onSuccess: (_data, variables, context) => {
+      invalidateSettlementAdjacents(queryClient, variables.groupId);
+      if (context?.groupId) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.settlements(context.groupId),
+        });
+      }
+      onSuccess?.();
+    },
+  });
+
+  return {
+    mutate: mutation.mutateAsync,
+    isLoading: mutation.isPending,
+    error: (mutation.error as Error | null) ?? null,
+  };
 }

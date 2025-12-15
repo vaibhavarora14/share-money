@@ -1,5 +1,10 @@
 import * as Sentry from "@sentry/react-native";
 import { Session } from "@supabase/supabase-js";
+import {
+  QueryClient,
+  QueryClientProvider,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
@@ -14,14 +19,18 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BottomNavBar } from "./components/BottomNavBar";
 import { AUTH_TIMEOUTS } from "./constants/auth";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { queryKeys } from "./hooks/queryKeys";
+import { fetchActivity } from "./hooks/useActivity";
+import { fetchBalances } from "./hooks/useBalances";
 import {
   useAddMember,
   useCreateGroup,
   useRemoveMember,
 } from "./hooks/useGroupMutations";
-import { useGroupDetails } from "./hooks/useGroups";
+import { fetchGroupDetails, useGroupDetails } from "./hooks/useGroups";
 import { useProfile } from "./hooks/useProfile";
 import {
+  fetchTransactions,
   useCreateTransaction,
   useDeleteTransaction,
   useUpdateTransaction,
@@ -39,11 +48,23 @@ import { Group, GroupWithMembers } from "./types";
 import { getDefaultCurrency } from "./utils/currency";
 import { log, logError } from "./utils/logger";
 
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+    },
+  },
+});
+
 // ... imports
 
 function AppContent() {
   const { session, loading, signOut, user } = useAuth();
   const theme = useTheme();
+  const queryClientInstance = useQueryClient();
+  const prevUserIdRef = React.useRef<string | null>(null);
   const {
     data: profile,
     isLoading: profileLoading,
@@ -65,6 +86,39 @@ function AppContent() {
   const groupsListRefetchRef = React.useRef<(() => void) | null>(null);
   const lastLoggedStateRef = React.useRef<string | null>(null);
   const stuckTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const prefetchGroupData = React.useCallback(
+    async (groupId: string) => {
+      await Promise.all([
+        queryClientInstance.prefetchQuery({
+          queryKey: queryKeys.group(groupId),
+          queryFn: () => fetchGroupDetails(groupId),
+        }),
+        queryClientInstance.prefetchQuery({
+          queryKey: queryKeys.transactions(groupId),
+          queryFn: () => fetchTransactions(groupId),
+        }),
+        queryClientInstance.prefetchQuery({
+          queryKey: queryKeys.balances(groupId),
+          queryFn: () => fetchBalances(groupId),
+        }),
+        queryClientInstance.prefetchQuery({
+          queryKey: queryKeys.activity(groupId),
+          queryFn: () => fetchActivity(groupId),
+        }),
+      ]);
+    },
+    [queryClientInstance]
+  );
+
+  // Clear and isolate cache when the authenticated user changes
+  useEffect(() => {
+    const currentUserId = session?.user?.id ?? null;
+    if (prevUserIdRef.current === currentUserId) {
+      return;
+    }
+    queryClientInstance.clear();
+    prevUserIdRef.current = currentUserId;
+  }, [queryClientInstance, session?.user?.id]);
 
   // Debug routing / loading state to track "stuck on spinner" issues.
   // To avoid noisy duplicate breadcrumbs, only log when the state snapshot changes.
@@ -197,6 +251,9 @@ function AppContent() {
   };
 
   const handleGroupPress = (group: Group) => {
+    prefetchGroupData(group.id).catch((err) =>
+      logError(err, { context: "prefetchGroupData", groupId: group.id })
+    );
     setSelectedGroup(group);
     setCurrentRoute("group-details");
     setStatsContext(null);
@@ -210,6 +267,7 @@ function AppContent() {
       await updateTx.mutate({
         ...transactionData,
         id: editingTransaction.id,
+        group_id: selectedGroup.id,
         currency: transactionData.currency || getDefaultCurrency(),
       });
     } else {
@@ -564,11 +622,13 @@ export default function App() {
       }}
     >
       <SafeAreaProvider>
-        <PaperProvider theme={theme}>
-          <AuthProvider>
-            <AppContent />
-          </AuthProvider>
-        </PaperProvider>
+        <QueryClientProvider client={queryClient}>
+          <PaperProvider theme={theme}>
+            <AuthProvider>
+              <AppContent />
+            </AuthProvider>
+          </PaperProvider>
+        </QueryClientProvider>
       </SafeAreaProvider>
     </ErrorBoundary>
   );

@@ -1,52 +1,35 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { BalancesResponse } from '../types';
-import { fetchWithAuth } from '../utils/api';
+import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "../contexts/AuthContext";
+import { BalancesResponse } from "../types";
+import { fetchWithAuth } from "../utils/api";
+import { queryKeys } from "./queryKeys";
+
+export async function fetchBalances(
+  groupId?: string | null
+): Promise<BalancesResponse> {
+  const endpoint = groupId ? `/balances?group_id=${groupId}` : "/balances";
+  const response = await fetchWithAuth(endpoint);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch balances: ${response.status}`);
+  }
+  return response.json();
+}
 
 export function useBalances(groupId?: string | null) {
   const { user } = useAuth();
-  const [data, setData] = useState<BalancesResponse>({ group_balances: [], overall_balances: [] });
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
 
-  const fetchData = useCallback(async () => {
-    if (!user?.id) {
-      setData({ group_balances: [], overall_balances: [] });
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      setError(null);
-      
-      const endpoint = groupId
-        ? `/balances?group_id=${groupId}`
-        : "/balances";
-      
-      const response = await fetchWithAuth(endpoint);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch balances: ${response.status}`);
-      }
-      const result: BalancesResponse = await response.json();
-      
-      setData(result);
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to fetch balances'));
-      setData({ group_balances: [], overall_balances: [] });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user?.id, groupId]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  const query = useQuery<BalancesResponse, Error>({
+    queryKey: groupId ? queryKeys.balances(groupId) : ["balances", null],
+    queryFn: () => fetchBalances(groupId),
+    enabled: !!user?.id && (!!groupId || groupId === null || groupId === undefined),
+    staleTime: 30_000,
+  });
 
   return {
-    data,
-    isLoading,
-    error,
-    refetch: fetchData
+    data: query.data ?? { group_balances: [], overall_balances: [] },
+    isLoading: query.isLoading,
+    isFetching: query.isFetching,
+    error: query.error ?? null,
+    refetch: query.refetch,
   };
 }

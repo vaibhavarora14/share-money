@@ -16,30 +16,30 @@ export interface Profile {
 
 export function useProfile() {
   const { user } = useAuth();
+
   const [data, setData] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isFetching, setIsFetching] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const fetchData = useCallback(async () => {
+  const fetchProfile = useCallback(async () => {
     if (!user?.id) {
       setData(null);
       setIsLoading(false);
+      setIsFetching(false);
       return;
     }
 
     const startedAt = new Date().toISOString();
     log("[Profile] Fetch start", { startedAt });
-
     try {
-      setIsLoading(true);
+      setIsFetching(true);
       setError(null);
-
       const response = await fetchWithAuth("/profile");
       if (!response.ok) {
         throw new Error(`Failed to fetch profile: ${response.status}`);
       }
       const profile: Profile = await response.json();
-
       setData(profile);
       log("[Profile] Fetch success", {
         startedAt,
@@ -57,12 +57,13 @@ export function useProfile() {
       setData(null);
     } finally {
       setIsLoading(false);
+      setIsFetching(false);
     }
   }, [user?.id]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchProfile();
+  }, [fetchProfile]);
 
   const updateProfile = useCallback(
     async (updates: Partial<Profile>) => {
@@ -106,9 +107,12 @@ export function useProfile() {
   return {
     data,
     isLoading,
+    isFetching,
     error,
-    refetch: fetchData,
+    refetch: fetchProfile,
     updateProfile,
+    updateProfileLoading: false,
+    updateProfileError: null,
   };
 }
 
