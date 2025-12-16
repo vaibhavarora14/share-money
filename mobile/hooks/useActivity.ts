@@ -1,56 +1,41 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { ActivityFeedResponse, ActivityItem } from '../types';
-import { fetchWithAuth } from '../utils/api';
+import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "../contexts/AuthContext";
+import { ActivityFeedResponse } from "../types";
+import { fetchWithAuth } from "../utils/api";
+import { queryKeys } from "./queryKeys";
+
+export async function fetchActivity(
+  groupId: string
+): Promise<ActivityFeedResponse> {
+  const response = await fetchWithAuth(`/activity?group_id=${groupId}&limit=50`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch activity: ${response.status}`);
+  }
+  return response.json();
+}
 
 export function useActivity(groupId?: string | null) {
   const { user } = useAuth();
-  const [data, setData] = useState<ActivityItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-  const [total, setTotal] = useState(0);
-  const [hasMore, setHasMore] = useState(false);
 
-  const fetchData = useCallback(async () => {
-    if (!user?.id || !groupId) {
-      setData([]);
-      setIsLoading(false);
-      return;
-    }
+  const query = useQuery<ActivityFeedResponse, Error>({
+    // Guarded by `enabled`, so groupId is always non-null inside queryFn
+    queryKey: groupId ? queryKeys.activity(groupId) : queryKeys.activity(""),
+    queryFn: () => fetchActivity(groupId as string),
+    enabled: !!user?.id && !!groupId,
+    // Use placeholderData so initial load still reports isLoading=true
+    placeholderData: { activities: [], total: 0, has_more: false },
+    staleTime: 60_000,
+  });
 
-    try {
-      setIsLoading(true);
-      setError(null);
-      
-      const response = await fetchWithAuth(`/activity?group_id=${groupId}&limit=50`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch activity: ${response.status}`);
-      }
-      const result: ActivityFeedResponse = await response.json();
-      
-      setData(result.activities || []);
-      setTotal(result.total || 0);
-      setHasMore(result.has_more || false);
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to fetch activity'));
-      setData([]);
-      setTotal(0);
-      setHasMore(false);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user?.id, groupId]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  const data = query.data ?? { activities: [], total: 0, has_more: false };
 
   return {
-    data: { activities: data },
-    isLoading,
-    error,
-    total,
-    hasMore,
-    refetch: fetchData
+    data: { activities: data.activities || [] },
+    isLoading: query.isLoading,
+    isFetching: query.isFetching,
+    error: query.error ?? null,
+    total: data.total || 0,
+    hasMore: data.has_more || false,
+    refetch: query.refetch,
   };
 }

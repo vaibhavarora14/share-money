@@ -1,93 +1,59 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { Group, GroupWithMembers } from '../types';
-import { fetchWithAuth } from '../utils/api';
+import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "../contexts/AuthContext";
+import { Group, GroupWithMembers } from "../types";
+import { fetchWithAuth } from "../utils/api";
+import { queryKeys } from "./queryKeys";
+
+export async function fetchGroups(): Promise<Group[]> {
+  const response = await fetchWithAuth("/groups");
+  if (!response.ok) {
+    throw new Error(`Failed to fetch groups: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function fetchGroupDetails(groupId: string): Promise<GroupWithMembers> {
+  const response = await fetchWithAuth(`/groups/${groupId}`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch group details: ${response.status}`);
+  }
+  return response.json();
+}
 
 export function useGroups() {
   const { user } = useAuth();
-  const [data, setData] = useState<Group[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-
-  const fetchData = useCallback(async () => {
-    if (!user?.id) {
-      setData([]);
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      setError(null);
-      
-      const response = await fetchWithAuth('/groups');
-      if (!response.ok) {
-        throw new Error(`Failed to fetch groups: ${response.status}`);
-      }
-      const groups: Group[] = await response.json();
-      
-      setData(groups);
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to fetch groups');
-      setError(error);
-      setData([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user?.id]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  const query = useQuery<Group[], Error>({
+    queryKey: queryKeys.groups,
+    queryFn: fetchGroups,
+    enabled: !!user?.id,
+    staleTime: 60_000,
+  });
 
   return {
-    data,
-    isLoading,
-    error,
-    refetch: fetchData
+    data: query.data ?? [],
+    isLoading: query.isLoading,
+    isFetching: query.isFetching,
+    error: query.error ?? null,
+    refetch: query.refetch,
   };
 }
 
 export function useGroupDetails(groupId: string | null) {
   const { user } = useAuth();
-  const [data, setData] = useState<GroupWithMembers | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
 
-  const fetchData = useCallback(async () => {
-    if (!user?.id || !groupId) {
-      setData(null);
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      setError(null);
-      
-      const response = await fetchWithAuth(`/groups/${groupId}`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch group details: ${response.status}`);
-      }
-      const group: GroupWithMembers = await response.json();
-      
-      setData(group);
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to fetch group details'));
-      setData(null);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user?.id, groupId]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  const query = useQuery<GroupWithMembers | null, Error>({
+    // Guarded by `enabled`, so groupId is always non-null inside queryFn
+    queryKey: groupId ? queryKeys.group(groupId) : queryKeys.group(""),
+    queryFn: () => fetchGroupDetails(groupId as string),
+    enabled: !!user?.id && !!groupId,
+    staleTime: 60_000,
+  });
 
   return {
-    data,
-    isLoading,
-    error,
-    refetch: fetchData
+    data: query.data ?? null,
+    isLoading: query.isLoading,
+    isFetching: query.isFetching,
+    error: query.error ?? null,
+    refetch: query.refetch,
   };
 }

@@ -578,7 +578,12 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             onDismiss={handleCloseMenu}
             anchor={
               !showMembers ? (
-                <Appbar.Action icon="dots-vertical" onPress={handleOpenMenu} />
+                <Appbar.Action
+                  icon="dots-vertical"
+                  onPress={handleOpenMenu}
+                  accessibilityLabel="Group options"
+                  testID="group-menu-button"
+                />
               ) : (
                 <View style={{ width: 0, height: 0 }} />
               )

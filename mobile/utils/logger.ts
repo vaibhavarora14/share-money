@@ -16,7 +16,7 @@ export function log(
 
     // Always send lightweight breadcrumbs to Sentry (dev + prod)
     Sentry.addBreadcrumb({
-      level,
+      level: level === "warn" ? "warning" : (level as Exclude<LogLevel, "warn">),
       category: "app-log",
       message,
       data,
