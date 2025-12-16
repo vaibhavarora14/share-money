@@ -284,11 +284,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                 >
                   {selectedCountry.dialCode}
                 </Text>
-                <Icon
-                  source="chevron-down"
-                  size={18}
-                  style={styles.chevronIcon}
-                />
+                <Icon source="chevron-down" size={18} />
               </TouchableOpacity>
               <TextInput
                 label="Phone Number (Optional)"

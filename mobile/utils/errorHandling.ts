@@ -1,7 +1,7 @@
 import { Alert } from "react-native";
 import {
-    getUserFriendlyErrorMessage,
-    isSessionExpiredError,
+  getUserFriendlyErrorMessage,
+  isSessionExpiredError,
 } from "./errorMessages";
 import { logError } from "./logger";
 
@@ -13,7 +13,7 @@ import { logError } from "./logger";
  */
 export function showErrorAlert(
   error: unknown,
-  signOut: () => Promise<void>,
+  signOut: () => void | Promise<void>,
   title: string = "Error"
 ): void {
   const message = getUserFriendlyErrorMessage(error);
@@ -27,7 +27,7 @@ export function showErrorAlert(
 
   if (isSessionExpired) {
     // Sign out immediately for session expiration - don't wait for user interaction
-    signOut().catch((signOutError) => {
+    Promise.resolve(signOut()).catch((signOutError: unknown) => {
       logError(signOutError, {
         context: "signOut on session expiration",
       });
