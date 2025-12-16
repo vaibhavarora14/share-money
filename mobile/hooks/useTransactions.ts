@@ -174,7 +174,7 @@ export function useUpdateTransaction(onSuccess?: () => void) {
       }
     },
     onSuccess: (_data, variables, context) => {
-      const groupId = (variables as any).group_id as string | undefined;
+      const groupId = variables.group_id;
       invalidateTransactionAdjacents(queryClient, groupId);
       if (context?.groupId) {
         queryClient.invalidateQueries({

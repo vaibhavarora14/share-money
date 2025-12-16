@@ -54,7 +54,7 @@ export function useCreateSettlement(onSuccess?: () => void) {
     notes?: string;
   }
 
-  const mutation = useMutation<SettlementsResponse | unknown, Error, CreateSettlementInput>({
+  const mutation = useMutation<SettlementsResponse, Error, CreateSettlementInput>({
     mutationFn: async (settlementData) => {
       const response = await fetchWithAuth("/settlements", {
         method: "POST",
@@ -91,7 +91,7 @@ export function useUpdateSettlement(onSuccess?: () => void) {
     group_id?: string;
   }
 
-  const mutation = useMutation<SettlementsResponse | unknown, Error, UpdateSettlementInput>({
+  const mutation = useMutation<SettlementsResponse, Error, UpdateSettlementInput>({
     mutationFn: async (settlementData) => {
       const response = await fetchWithAuth("/settlements", {
         method: "PUT",
@@ -121,8 +121,13 @@ export function useUpdateSettlement(onSuccess?: () => void) {
 export function useDeleteSettlement(onSuccess?: () => void) {
   const queryClient = useQueryClient();
 
-  const mutation = useMutation({
-    mutationFn: async (variables: { id: string; groupId?: string }) => {
+  interface DeleteSettlementInput {
+    id: string;
+    groupId?: string;
+  }
+
+  const mutation = useMutation<DeleteSettlementInput, Error, DeleteSettlementInput>({
+    mutationFn: async (variables) => {
       const response = await fetchWithAuth(`/settlements?id=${variables.id}`, {
         method: "DELETE",
       });
