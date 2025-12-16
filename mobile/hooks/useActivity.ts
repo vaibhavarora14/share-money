@@ -18,10 +18,12 @@ export function useActivity(groupId?: string | null) {
   const { user } = useAuth();
 
   const query = useQuery<ActivityFeedResponse, Error>({
-    queryKey: groupId ? queryKeys.activity(groupId) : ["activity", null],
+    // Guarded by `enabled`, so groupId is always non-null inside queryFn
+    queryKey: groupId ? queryKeys.activity(groupId) : queryKeys.activity(""),
     queryFn: () => fetchActivity(groupId as string),
     enabled: !!user?.id && !!groupId,
-    initialData: { activities: [], total: 0, has_more: false },
+    // Use placeholderData so initial load still reports isLoading=true
+    placeholderData: { activities: [], total: 0, has_more: false },
     staleTime: 60_000,
   });
 

@@ -18,10 +18,12 @@ export function useGroupInvitations(groupId: string | null) {
   const { user } = useAuth();
 
   const query = useQuery<GroupInvitation[], Error>({
-    queryKey: groupId ? queryKeys.invitations(groupId) : ["invitations", null],
+    // Guarded by `enabled`, so groupId is always non-null inside queryFn
+    queryKey: groupId ? queryKeys.invitations(groupId) : queryKeys.invitations(""),
     queryFn: () => fetchGroupInvitations(groupId as string),
     enabled: !!user?.id && !!groupId,
-    initialData: [],
+    // Use placeholderData so initial load still reports isLoading=true
+    placeholderData: [],
     staleTime: 60_000,
   });
 

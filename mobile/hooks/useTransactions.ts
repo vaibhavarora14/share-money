@@ -5,9 +5,7 @@ import { Transaction } from "../types";
 import { fetchWithAuth } from "../utils/api";
 import { queryKeys } from "./queryKeys";
 
-export async function fetchTransactions(
-  groupId?: string | null
-): Promise<Transaction[]> {
+export async function fetchTransactions(groupId?: string | null): Promise<Transaction[]> {
   const endpoint = groupId ? `/transactions?group_id=${groupId}` : "/transactions";
   const response = await fetchWithAuth(endpoint);
   if (!response.ok) {
@@ -37,10 +35,12 @@ export function useTransactions(groupId?: string | null) {
   const { user } = useAuth();
 
   const query = useQuery<Transaction[], Error>({
-    queryKey: groupId ? queryKeys.transactions(groupId) : ["transactions", null],
+    // Guarded by `enabled`, so groupId is always defined inside queryFn
+    queryKey: groupId ? queryKeys.transactions(groupId) : queryKeys.transactions(""),
     queryFn: () => fetchTransactions(groupId),
     enabled: !!user?.id && (!!groupId || groupId === null || groupId === undefined),
-    initialData: [],
+    // Use placeholderData so initial load still reports isLoading=true
+    placeholderData: [],
     staleTime: 30_000,
   });
 
@@ -53,14 +53,20 @@ export function useTransactions(groupId?: string | null) {
   };
 }
 
+// Types for mutation inputs to improve type safety
+interface BaseTransactionInput extends Omit<Transaction, "created_at" | "user_id"> {
+  group_id: string;
+}
+
+type CreateTransactionInput = Omit<BaseTransactionInput, "id">;
+type UpdateTransactionInput = BaseTransactionInput;
+
 // Mutation hooks
 export function useCreateTransaction(onSuccess?: () => void) {
   const queryClient = useQueryClient();
 
-  const mutation = useMutation({
-    mutationFn: async (
-      transactionData: Omit<Transaction, "id" | "created_at" | "user_id">
-    ) => {
+  const mutation = useMutation<Transaction | null, Error, CreateTransactionInput>({
+    mutationFn: async (transactionData) => {
       const response = await fetchWithAuth("/transactions", {
         method: "POST",
         body: JSON.stringify(transactionData),
@@ -73,7 +79,7 @@ export function useCreateTransaction(onSuccess?: () => void) {
       return response.status === 204 ? null : await response.json();
     },
     onMutate: async (variables) => {
-      const groupId = (variables as any).group_id as string | undefined;
+      const groupId = variables.group_id;
       if (!groupId) return { groupId, previous: undefined };
 
       await queryClient.cancelQueries({ queryKey: queryKeys.transactions(groupId) });
@@ -82,7 +88,7 @@ export function useCreateTransaction(onSuccess?: () => void) {
       );
 
       const optimisticEntry: Transaction = {
-        ...(variables as any),
+        ...(variables as Transaction),
         id: Date.now(),
         created_at: new Date().toISOString(),
       };
@@ -97,7 +103,7 @@ export function useCreateTransaction(onSuccess?: () => void) {
 
       return { previous, groupId };
     },
-    onError: (_error, variables, context) => {
+    onError: (_error, _variables, context) => {
       if (context?.groupId && context.previous) {
         queryClient.setQueryData(
           queryKeys.transactions(context.groupId),
@@ -106,7 +112,7 @@ export function useCreateTransaction(onSuccess?: () => void) {
       }
     },
     onSuccess: (_data, variables, context) => {
-      const groupId = (variables as any).group_id as string | undefined;
+      const groupId = variables.group_id;
       invalidateTransactionAdjacents(queryClient, groupId);
       if (context?.groupId) {
         queryClient.invalidateQueries({
@@ -127,8 +133,8 @@ export function useCreateTransaction(onSuccess?: () => void) {
 export function useUpdateTransaction(onSuccess?: () => void) {
   const queryClient = useQueryClient();
 
-  const mutation = useMutation({
-    mutationFn: async (transactionData: Omit<Transaction, "created_at" | "user_id">) => {
+  const mutation = useMutation<Transaction | null, Error, UpdateTransactionInput>({
+    mutationFn: async (transactionData) => {
       const response = await fetchWithAuth("/transactions", {
         method: "PUT",
         body: JSON.stringify(transactionData),
@@ -141,7 +147,7 @@ export function useUpdateTransaction(onSuccess?: () => void) {
       return response.status === 204 ? null : await response.json();
     },
     onMutate: async (variables) => {
-      const groupId = (variables as any).group_id as string | undefined;
+      const groupId = variables.group_id;
       if (!groupId) return { groupId, previous: undefined };
 
       await queryClient.cancelQueries({ queryKey: queryKeys.transactions(groupId) });
@@ -149,12 +155,10 @@ export function useUpdateTransaction(onSuccess?: () => void) {
         queryKeys.transactions(groupId)
       );
 
-      queryClient.setQueryData<Transaction[]>(
-        queryKeys.transactions(groupId),
-        (old) => {
+      queryClient.setQueryData<Transaction[]>(queryKeys.transactions(groupId), (old) => {
           const current = old ?? [];
           return current.map((tx) =>
-            tx.id === (variables as any).id ? { ...tx, ...(variables as any) } : tx
+            tx.id === variables.id ? { ...tx, ...variables } : tx
           );
         }
       );
@@ -191,8 +195,12 @@ export function useUpdateTransaction(onSuccess?: () => void) {
 export function useDeleteTransaction(onSuccess?: () => void) {
   const queryClient = useQueryClient();
 
-  const mutation = useMutation({
-    mutationFn: async (variables: { id: number; group_id?: string }) => {
+  const mutation = useMutation<
+    { id: number; group_id?: string },
+    Error,
+    { id: number; group_id?: string }
+  >({
+    mutationFn: async (variables) => {
       const response = await fetchWithAuth(`/transactions?id=${variables.id}`, {
         method: "DELETE",
       });

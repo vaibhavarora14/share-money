@@ -1,12 +1,11 @@
+import type { QueryClient } from "@tanstack/react-query";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
 import { SettlementsResponse } from "../types";
 import { fetchWithAuth } from "../utils/api";
 import { queryKeys } from "./queryKeys";
 
-export async function fetchSettlements(
-  groupId: string
-): Promise<SettlementsResponse> {
+export async function fetchSettlements(groupId: string): Promise<SettlementsResponse> {
   const response = await fetchWithAuth(`/settlements?group_id=${groupId}`);
   if (!response.ok) {
     throw new Error(`Failed to fetch settlements: ${response.status}`);
@@ -14,10 +13,7 @@ export async function fetchSettlements(
   return response.json();
 }
 
-function invalidateSettlementAdjacents(
-  queryClient: ReturnType<typeof useQueryClient>,
-  groupId?: string
-) {
+function invalidateSettlementAdjacents(queryClient: QueryClient, groupId?: string) {
   if (!groupId) return;
   queryClient.invalidateQueries({ queryKey: queryKeys.settlements(groupId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.balances(groupId) });
@@ -28,10 +24,12 @@ export function useSettlements(groupId?: string | null) {
   const { user } = useAuth();
 
   const query = useQuery<SettlementsResponse, Error>({
-    queryKey: groupId ? queryKeys.settlements(groupId) : ["settlements", null],
+    // Guarded by `enabled`, so groupId is always non-null inside queryFn
+    queryKey: groupId ? queryKeys.settlements(groupId) : queryKeys.settlements(""),
     queryFn: () => fetchSettlements(groupId as string),
     enabled: !!user?.id && !!groupId,
-    initialData: { settlements: [] },
+    // Use placeholderData so initial load still reports isLoading=true
+    placeholderData: { settlements: [] },
     staleTime: 30_000,
   });
 
@@ -47,15 +45,17 @@ export function useSettlements(groupId?: string | null) {
 export function useCreateSettlement(onSuccess?: () => void) {
   const queryClient = useQueryClient();
 
-  const mutation = useMutation({
-    mutationFn: async (settlementData: {
-      group_id: string;
-      from_user_id: string;
-      to_user_id: string;
-      amount: number;
-      currency: string;
-      notes?: string;
-    }) => {
+  interface CreateSettlementInput {
+    group_id: string;
+    from_user_id: string;
+    to_user_id: string;
+    amount: number;
+    currency: string;
+    notes?: string;
+  }
+
+  const mutation = useMutation<SettlementsResponse | unknown, Error, CreateSettlementInput>({
+    mutationFn: async (settlementData) => {
       const response = await fetchWithAuth("/settlements", {
         method: "POST",
         body: JSON.stringify(settlementData),
@@ -83,14 +83,16 @@ export function useCreateSettlement(onSuccess?: () => void) {
 export function useUpdateSettlement(onSuccess?: () => void) {
   const queryClient = useQueryClient();
 
-  const mutation = useMutation({
-    mutationFn: async (settlementData: {
-      id: string;
-      amount?: number;
-      currency?: string;
-      notes?: string;
-      group_id?: string;
-    }) => {
+  interface UpdateSettlementInput {
+    id: string;
+    amount?: number;
+    currency?: string;
+    notes?: string;
+    group_id?: string;
+  }
+
+  const mutation = useMutation<SettlementsResponse | unknown, Error, UpdateSettlementInput>({
+    mutationFn: async (settlementData) => {
       const response = await fetchWithAuth("/settlements", {
         method: "PUT",
         body: JSON.stringify(settlementData),
@@ -103,7 +105,7 @@ export function useUpdateSettlement(onSuccess?: () => void) {
       return response.json();
     },
     onSuccess: (_data, variables) => {
-      const groupId = (variables as any).group_id as string | undefined;
+      const groupId = variables.group_id;
       invalidateSettlementAdjacents(queryClient, groupId);
       onSuccess?.();
     },

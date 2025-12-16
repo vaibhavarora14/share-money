@@ -42,7 +42,8 @@ export function useGroupDetails(groupId: string | null) {
   const { user } = useAuth();
 
   const query = useQuery<GroupWithMembers | null, Error>({
-    queryKey: groupId ? queryKeys.group(groupId) : ["group", null],
+    // Guarded by `enabled`, so groupId is always non-null inside queryFn
+    queryKey: groupId ? queryKeys.group(groupId) : queryKeys.group(""),
     queryFn: () => fetchGroupDetails(groupId as string),
     enabled: !!user?.id && !!groupId,
     staleTime: 60_000,

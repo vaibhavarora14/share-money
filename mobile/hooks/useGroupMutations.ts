@@ -1,8 +1,9 @@
+import type { QueryClient } from "@tanstack/react-query";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchWithAuth } from "../utils/api";
 import { queryKeys } from "./queryKeys";
 
-function invalidateGroupAdjacents(queryClient: ReturnType<typeof useQueryClient>, groupId?: string) {
+function invalidateGroupAdjacents(queryClient: QueryClient, groupId?: string) {
   queryClient.invalidateQueries({ queryKey: queryKeys.groups });
   if (!groupId) return;
   queryClient.invalidateQueries({ queryKey: queryKeys.group(groupId) });
