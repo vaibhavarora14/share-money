@@ -28,6 +28,7 @@ export function useGroups() {
     enabled: !!user?.id,
     staleTime: 60_000,
   });
+
   return {
     data: query.data ?? [],
     isLoading: query.isLoading,

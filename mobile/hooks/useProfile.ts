@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
 import { fetchWithAuth } from "../utils/api";
-import { log, logError } from "../utils/logger";
+import { logError } from "../utils/logger";
+import { queryKeys } from "./queryKeys";
 
 export interface Profile {
   id: string;
@@ -16,57 +17,34 @@ export interface Profile {
 
 export function useProfile() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
 
-  const [data, setData] = useState<Profile | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isFetching, setIsFetching] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
+  // Keyed by user.id so that when user changes asynchronously, we naturally
+  // refetch for the new user once enabled flips to true.
+  const profileQuery = useQuery<Profile, Error>({
+    queryKey: queryKeys.profile(user?.id ?? null),
+    enabled: !!user?.id,
+    queryFn: async () => {
+      try {
+        const response = await fetchWithAuth("/profile");
+        if (!response.ok) {
+          throw new Error(`Failed to fetch profile: ${response.status}`);
+        }
+        const profile: Profile = await response.json();
 
-  const fetchProfile = useCallback(async () => {
-    if (!user?.id) {
-      setData(null);
-      setIsLoading(false);
-      setIsFetching(false);
-      return;
-    }
+        return profile;
+      } catch (err) {
+        const error =
+          err instanceof Error ? err : new Error("Failed to fetch profile");
 
-    const startedAt = new Date().toISOString();
-    log("[Profile] Fetch start", { startedAt });
-    try {
-      setIsFetching(true);
-      setError(null);
-      const response = await fetchWithAuth("/profile");
-      if (!response.ok) {
-        throw new Error(`Failed to fetch profile: ${response.status}`);
+        throw error;
       }
-      const profile: Profile = await response.json();
-      setData(profile);
-      log("[Profile] Fetch success", {
-        startedAt,
-        finishedAt: new Date().toISOString(),
-      });
-    } catch (err) {
-      const error =
-        err instanceof Error ? err : new Error("Failed to fetch profile");
-      logError(error, {
-        context: "Profile fetch",
-        startedAt,
-        finishedAt: new Date().toISOString(),
-      });
-      setError(error);
-      setData(null);
-    } finally {
-      setIsLoading(false);
-      setIsFetching(false);
-    }
-  }, [user?.id]);
+    },
+    staleTime: 60_000,
+  });
 
-  useEffect(() => {
-    fetchProfile();
-  }, [fetchProfile]);
-
-  const updateProfile = useCallback(
-    async (updates: Partial<Profile>) => {
+  const updateProfileMutation = useMutation<Profile, Error, Partial<Profile>>({
+    mutationFn: async (updates: Partial<Profile>) => {
       if (!user?.id) {
         throw new Error("Not authenticated");
       }
@@ -83,36 +61,40 @@ export function useProfile() {
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(
-            errorData.message ||
+            (errorData as any).message ||
               `Failed to update profile: ${response.status}`
           );
         }
 
         const updatedProfile: Profile = await response.json();
-        setData(updatedProfile);
         return updatedProfile;
       } catch (err) {
         const error =
           err instanceof Error
             ? err
             : new Error("Failed to update profile");
-        setError(error);
         logError(error, { context: "Profile update", updates });
         throw error;
       }
     },
-    [user?.id]
-  );
+    onSuccess: (updatedProfile) => {
+      queryClient.setQueryData<Profile | null>(
+        queryKeys.profile(user?.id ?? null),
+        updatedProfile
+      );
+    },
+  });
 
   return {
-    data,
-    isLoading,
-    isFetching,
-    error,
-    refetch: fetchProfile,
-    updateProfile,
-    updateProfileLoading: false,
-    updateProfileError: null,
+    data: profileQuery.data ?? null,
+    // Only block the app on the *initial* load, not on background refetches/retries
+    isLoading: profileQuery.isLoading,
+    isFetching: profileQuery.isFetching,
+    error: profileQuery.error ?? null,
+    refetch: profileQuery.refetch,
+    updateProfile: updateProfileMutation.mutateAsync,
+    updateProfileLoading: updateProfileMutation.isPending,
+    updateProfileError: (updateProfileMutation.error as Error | null) ?? null,
   };
 }
 

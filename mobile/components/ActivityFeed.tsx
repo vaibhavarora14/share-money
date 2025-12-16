@@ -112,7 +112,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                 // Action is indicated by color (green=created, orange=updated, red=deleted)
                 const getActivityIcon = (
                   type: ActivityItem["type"]
-                ): string => {
+                ): keyof typeof MaterialCommunityIcons.glyphMap => {
                   if (type.startsWith("settlement"))
                     return ACTIVITY_ICONS.SETTLEMENT;
                   return ACTIVITY_ICONS.TRANSACTION;

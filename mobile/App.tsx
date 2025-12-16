@@ -64,7 +64,6 @@ function AppContent() {
   const { session, loading, signOut, user } = useAuth();
   const theme = useTheme();
   const queryClientInstance = useQueryClient();
-  const prevUserIdRef = React.useRef<string | null>(null);
   const {
     data: profile,
     isLoading: profileLoading,
@@ -110,14 +109,11 @@ function AppContent() {
     [queryClientInstance]
   );
 
-  // Clear and isolate cache when the authenticated user changes
+  // Clear and isolate cache on logout
   useEffect(() => {
-    const currentUserId = session?.user?.id ?? null;
-    if (prevUserIdRef.current === currentUserId) {
-      return;
+    if (!session) {
+      queryClientInstance.clear();
     }
-    queryClientInstance.clear();
-    prevUserIdRef.current = currentUserId;
   }, [queryClientInstance, session?.user?.id]);
 
   // Debug routing / loading state to track "stuck on spinner" issues.
@@ -287,7 +283,7 @@ function AppContent() {
     });
   };
 
-  if (loading || (session && profileLoading)) {
+  if (loading) {
     return (
       <View
         style={[
@@ -498,7 +494,7 @@ function AppContent() {
       <GroupsListScreen
         onGroupPress={handleGroupPress}
         onCreateGroup={handleCreateGroup}
-        onRefetchReady={(refetch) => {
+        onRefetchReady={(refetch: () => Promise<void>) => {
           groupsListRefetchRef.current = refetch;
         }}
       />
