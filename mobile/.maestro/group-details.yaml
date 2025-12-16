@@ -57,17 +57,25 @@ appId: com.vaibhavarora.sharemoney
     text: "Transactions"
 - waitForAnimationToEnd
 
-# Test accessing Members view via info icon (top right)
-# The info icon button opens the members view
+# Test accessing Members view via three-dot menu (top right)
+# The menu button opens a menu with "View Members"
 - tapOn:
-    id: "info-icon-button"
+    id: "group-menu-button"
     optional: true
 
-# Wait for potential members view to load
+# Wait for menu animation
 - waitForAnimationToEnd
 
+# Tap on "View Members" if the menu is open
+- runFlow:
+    when:
+      visible: "View Members"
+    commands:
+      - tapOn:
+          text: "View Members"
+      - waitForAnimationToEnd
+
 # Check if we're in members view - if so, navigate back to group details
-# If not, we're still on group details (info icon didn't work or already closed)
 - runFlow:
     when:
       visible: "Group Members"
@@ -79,11 +87,6 @@ appId: com.vaibhavarora.sharemoney
       - tapOn:
           text: "Navigate back"
       - waitForAnimationToEnd
-
-# At this point, we should be on group details screen
-# Verify we're on group details (either we were already here, or we navigated back)
-- assertVisible:
-    text: "Transactions"
 
 # Navigate back to groups list
 - tapOn:

@@ -27,7 +27,7 @@ interface GroupsListScreenProps {
     description?: string;
   }) => Promise<void>;
   onLogout?: () => void;
-  onRefetchReady?: (refetch: () => void) => void;
+  onRefetchReady?: (refetch: () => Promise<any>) => void;
 }
 
 export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
@@ -54,21 +54,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
     }
   }, [error, signOut]);
 
-  if (loading) {
-    return (
-      <View
-        style={[
-          styles.centerContainer,
-          { backgroundColor: theme.colors.background },
-        ]}
-      >
-        <ActivityIndicator size="large" />
-        <Text variant="bodyLarge" style={{ marginTop: 16 }}>
-          Loading groups...
-        </Text>
-      </View>
-    );
-  }
+  const isInitialLoading = loading && groups.length === 0;
 
   if (error) {
     // Don't show Retry button for session expiration - user will be signed out automatically
@@ -134,115 +120,134 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
         />
       </Appbar.Header>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {groups.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Surface style={styles.emptySurface} elevation={0}>
-              <IconButton
-                icon="account-group-outline"
-                size={48}
-                iconColor={theme.colors.primary}
-              />
-              <Text
-                variant="titleLarge"
-                style={{ marginBottom: 8, fontWeight: "bold" }}
-              >
-                No groups yet
-              </Text>
-              <Text
-                variant="bodyMedium"
-                style={{
-                  color: theme.colors.onSurfaceVariant,
-                  textAlign: "center",
-                  marginBottom: 24,
-                }}
-              >
-                Create a group to start sharing expenses with friends and
-                family.
-              </Text>
-              <Button mode="contained" onPress={() => setShowCreateGroup(true)}>
-                Create your first group
-              </Button>
-            </Surface>
-          </View>
-        ) : (
-          groups.map((group) => (
-            <Surface
-              key={group.id}
-              style={[
-                styles.groupItem,
-                { backgroundColor: theme.colors.surface },
-              ]}
-              elevation={1}
-            >
-              <TouchableOpacity
-                style={styles.groupTouchable}
-                onPress={() => onGroupPress(group)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.groupIconContainer}>
-                  <Surface
-                    style={[
-                      styles.groupIcon,
-                      { backgroundColor: theme.colors.primaryContainer },
-                    ]}
-                    elevation={0}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 20,
-                        fontWeight: "bold",
-                        color: theme.colors.onPrimaryContainer,
-                      }}
-                    >
-                      {group.name.charAt(0).toUpperCase()}
-                    </Text>
-                  </Surface>
-                </View>
+      {isInitialLoading && (
+        <View
+          style={[
+            styles.centerContainer,
+            { backgroundColor: theme.colors.background },
+          ]}
+        >
+          <ActivityIndicator size="large" />
+          <Text variant="bodyLarge" style={{ marginTop: 16 }}>
+            Loading groups...
+          </Text>
+        </View>
+      )}
 
-                <View style={styles.groupContent}>
-                  <Text
-                    variant="titleMedium"
-                    style={styles.groupName}
-                    numberOfLines={1}
-                  >
-                    {group.name}
-                  </Text>
-                  {group.description ? (
+      {!isInitialLoading && (
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {groups.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Surface style={styles.emptySurface} elevation={0}>
+                <IconButton
+                  icon="account-group-outline"
+                  size={48}
+                  iconColor={theme.colors.primary}
+                />
+                <Text
+                  variant="titleLarge"
+                  style={{ marginBottom: 8, fontWeight: "bold" }}
+                >
+                  No groups yet
+                </Text>
+                <Text
+                  variant="bodyMedium"
+                  style={{
+                    color: theme.colors.onSurfaceVariant,
+                    textAlign: "center",
+                    marginBottom: 24,
+                  }}
+                >
+                  Create a group to start sharing expenses with friends and
+                  family.
+                </Text>
+                <Button
+                  mode="contained"
+                  onPress={() => setShowCreateGroup(true)}
+                >
+                  Create your first group
+                </Button>
+              </Surface>
+            </View>
+          ) : (
+            groups.map((group) => (
+              <Surface
+                key={group.id}
+                style={[
+                  styles.groupItem,
+                  { backgroundColor: theme.colors.surface },
+                ]}
+                elevation={1}
+              >
+                <TouchableOpacity
+                  style={styles.groupTouchable}
+                  onPress={() => onGroupPress(group)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.groupIconContainer}>
+                    <Surface
+                      style={[
+                        styles.groupIcon,
+                        { backgroundColor: theme.colors.primaryContainer },
+                      ]}
+                      elevation={0}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 20,
+                          fontWeight: "bold",
+                          color: theme.colors.onPrimaryContainer,
+                        }}
+                      >
+                        {group.name.charAt(0).toUpperCase()}
+                      </Text>
+                    </Surface>
+                  </View>
+
+                  <View style={styles.groupContent}>
                     <Text
-                      variant="bodySmall"
-                      style={{ color: theme.colors.onSurfaceVariant }}
+                      variant="titleMedium"
+                      style={styles.groupName}
                       numberOfLines={1}
                     >
-                      {group.description}
+                      {group.name}
                     </Text>
-                  ) : (
-                    <Text
-                      variant="bodySmall"
-                      style={{ color: theme.colors.onSurfaceVariant }}
-                    >
-                      No description
-                    </Text>
-                  )}
-                </View>
+                    {group.description ? (
+                      <Text
+                        variant="bodySmall"
+                        style={{ color: theme.colors.onSurfaceVariant }}
+                        numberOfLines={1}
+                      >
+                        {group.description}
+                      </Text>
+                    ) : (
+                      <Text
+                        variant="bodySmall"
+                        style={{ color: theme.colors.onSurfaceVariant }}
+                      >
+                        No description
+                      </Text>
+                    )}
+                  </View>
 
-                <IconButton
-                  icon="chevron-right"
-                  size={20}
-                  iconColor={theme.colors.onSurfaceVariant}
-                />
-              </TouchableOpacity>
-            </Surface>
-          ))
-        )}
+                  <IconButton
+                    icon="chevron-right"
+                    size={20}
+                    iconColor={theme.colors.onSurfaceVariant}
+                  />
+                </TouchableOpacity>
+              </Surface>
+            ))
+          )}
 
-        {/* Bottom padding for FAB */}
-        <View style={{ height: 80 }} />
-      </ScrollView>
+          {/* Bottom padding for FAB */}
+          <View style={{ height: 80 }} />
+        </ScrollView>
+      )}
 
       <FAB
         icon="plus"
