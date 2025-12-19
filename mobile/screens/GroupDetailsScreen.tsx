@@ -22,11 +22,7 @@ import {
   useCancelInvitation,
   useGroupInvitations,
 } from "../hooks/useGroupInvitations";
-import {
-  useAddMember,
-  useDeleteGroup,
-  useRemoveMember,
-} from "../hooks/useGroupMutations";
+import { useAddMember, useRemoveMember } from "../hooks/useGroupMutations";
 import { useGroupDetails } from "../hooks/useGroups";
 import {
   useCreateSettlement,
@@ -57,7 +53,6 @@ interface GroupDetailsScreenProps {
   onAddMember: () => void;
   onRemoveMember?: (userId: string) => Promise<void>;
   onLeaveGroup?: () => void;
-  onDeleteGroup?: () => void;
   onAddTransaction: () => void;
   onEditTransaction: (transaction: Transaction) => void;
   refreshTrigger?: number; // When this changes, refresh invitations
@@ -71,7 +66,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   onAddMember,
   onRemoveMember,
   onLeaveGroup,
-  onDeleteGroup,
   onAddTransaction,
   onEditTransaction,
   refreshTrigger,
@@ -187,7 +181,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
   // Mutations
 
-  const deleteGroupMutation = useDeleteGroup(refetchGroup);
   const addMemberMutation = useAddMember(() => {
     refetchGroup();
     refetchInvites();
@@ -221,36 +214,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     }
   }, [groupRefreshTrigger, refetchGroup]);
 
-  const handleDeleteGroup = async () => {
-    Alert.alert(
-      "Delete Group",
-      `Are you sure you want to delete "${group.name}"? This action cannot be undone.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setLeaving(true);
-              await deleteGroupMutation.mutate(group.id);
-              if (onDeleteGroup) {
-                onDeleteGroup();
-              } else {
-                onBack();
-              }
-            } catch (err) {
-              Alert.alert("Error", getUserFriendlyErrorMessage(err));
-            } finally {
-              setLeaving(false);
-              setMenuVisible(false);
-            }
-          },
-        },
-      ]
-    );
-  };
-
   const handleLeaveGroup = async () => {
     Alert.alert(
       "Leave Group",
@@ -280,19 +243,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 onBack();
               }
             } catch (err) {
-              const errorMessage = getUserFriendlyErrorMessage(err);
-
-              // Show user-friendly error messages for specific cases
-              if (errorMessage.includes("last owner")) {
-                Alert.alert(
-                  "Cannot Leave Group",
-                  "You cannot leave the group because you are the last owner. Please transfer ownership to another member first or delete the group.",
-                  [{ text: "OK" }]
-                );
-                return;
-              }
-
-              Alert.alert("Error", errorMessage);
+              Alert.alert("Error", getUserFriendlyErrorMessage(err));
             } finally {
               setLeaving(false);
               setMenuVisible(false);
@@ -309,21 +260,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   ) => {
     const memberName = memberEmail || `User ${memberUserId.substring(0, 8)}...`;
     const isRemovingSelf = memberUserId === session?.user?.id;
-    const ownerCount =
-      group.members?.filter((m) => m.role === "owner").length || 0;
-    const memberToRemove = group.members?.find(
-      (m) => m.user_id === memberUserId
-    );
-    const isRemovingOwner = memberToRemove?.role === "owner";
-
-    // Check if trying to remove the last owner
-    if (isRemovingOwner && ownerCount === 1) {
-      Alert.alert(
-        "Cannot Remove Member",
-        "Cannot remove the last owner of the group. Please transfer ownership first or delete the group."
-      );
-      return;
-    }
 
     Alert.alert(
       isRemovingSelf ? "Leave Group" : "Remove Member",
@@ -420,28 +356,10 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   };
 
   const currentUserId = session?.user?.id;
-  const isOwner = Boolean(
-    currentUserId &&
-      (group.created_by === currentUserId ||
-        group.members?.some(
-          (m) => m.user_id === currentUserId && m.role === "owner"
-        ))
-  );
   const isMember =
     group.members?.some((m) => m.user_id === currentUserId) ?? false;
-
-  // Memoize isOwner to prevent unnecessary re-renders
-  const memoizedIsOwner = React.useMemo(
-    () => isOwner,
-    [
-      group.created_by,
-      currentUserId,
-      group.members?.length,
-      group.members?.find(
-        (m) => m.user_id === currentUserId && m.role === "owner"
-      )?.id,
-    ]
-  );
+  const canManageMembers = isMember;
+  const canManageInvites = isMember;
 
   const handleCancelInvitation = async (invitationId: string) => {
     Alert.alert(
@@ -571,7 +489,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           titleStyle={{ fontWeight: "bold" }}
         />
 
-        {/* Always render Menu when member to prevent unmounting - control visibility via visible prop */}
+        {/* Group options (members only) */}
         {isMember && (
           <Menu
             visible={menuVisible && !showMembers}
@@ -598,19 +516,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               title="View Members"
               leadingIcon="account-group"
             />
-            {isOwner && (
-              <Menu.Item
-                onPress={() => {
-                  handleCloseMenu();
-                  handleDeleteGroup();
-                }}
-                title="Delete Group"
-                leadingIcon="delete"
-                titleStyle={{ color: theme.colors.error }}
-                disabled={leaving}
-              />
-            )}
-            {!isOwner && (
               <Menu.Item
                 onPress={() => {
                   handleCloseMenu();
@@ -621,19 +526,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 titleStyle={{ color: theme.colors.error }}
                 disabled={leaving}
               />
-            )}
-            {isOwner && (
-              <Menu.Item
-                onPress={() => {
-                  handleCloseMenu();
-                  handleLeaveGroup();
-                }}
-                title="Leave Group"
-                leadingIcon="exit-run"
-                titleStyle={{ color: theme.colors.error }}
-                disabled={leaving}
-              />
-            )}
           </Menu>
         )}
       </Appbar.Header>
@@ -649,7 +541,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             <MembersList
               members={group.members || []}
               currentUserId={session?.user?.id}
-              isOwner={isOwner}
+              canManageMembers={canManageMembers}
               removingMemberId={removingMemberId}
               onRemove={handleRemoveMember}
             />
@@ -659,11 +551,11 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             <InvitationsList
               invitations={invitations}
               loading={invitationsLoading}
-              isOwner={memoizedIsOwner}
+              canManageInvites={canManageInvites}
               cancellingInvitationId={cancellingInvitationId}
               onCancel={handleCancelInvitation}
             />
-            {memoizedIsOwner && (
+            {canManageMembers && (
               <Button
                 mode="contained"
                 onPress={onAddMember}

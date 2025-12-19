@@ -95,13 +95,13 @@ Deno.serve(async (req: Request) => {
 
       const { data: membership, error: membershipError } = await supabase
         .from('group_members')
-        .select('role')
+        .select('id')
         .eq('group_id', requestData.group_id)
         .eq('user_id', currentUser.id)
         .single();
 
-      if (membershipError || !membership || membership.role !== 'owner') {
-        return createErrorResponse(403, 'Only group owners can create invitations', 'PERMISSION_DENIED');
+      if (membershipError || !membership) {
+        return createErrorResponse(403, 'You must be a group member to create invitations', 'PERMISSION_DENIED');
       }
 
       if (SUPABASE_SERVICE_ROLE_KEY) {
@@ -251,21 +251,13 @@ Deno.serve(async (req: Request) => {
 
       const { data: membership } = await supabase
         .from('group_members')
-        .select('role')
+        .select('id')
         .eq('group_id', invitation.group_id)
         .eq('user_id', currentUser.id)
         .single();
 
-      const { data: group } = await supabase
-        .from('groups')
-        .select('created_by')
-        .eq('id', invitation.group_id)
-        .single();
-
-      const isOwner = (membership && membership.role === 'owner') || (group && group.created_by === currentUser.id);
-
-      if (!isOwner) {
-        return createErrorResponse(403, 'Only group owners can cancel invitations', 'PERMISSION_DENIED');
+      if (!membership) {
+        return createErrorResponse(403, 'You must be a group member to cancel invitations', 'PERMISSION_DENIED');
       }
 
       const { error: updateError } = await supabase

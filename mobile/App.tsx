@@ -434,11 +434,6 @@ function AppContent() {
             setCurrentRoute("groups");
             setStatsContext(null);
           }}
-          onDeleteGroup={() => {
-            setSelectedGroup(null);
-            setCurrentRoute("groups");
-            setStatsContext(null);
-          }}
           onAddTransaction={() => {
             setEditingTransaction(null);
             setCurrentRoute("transaction-form");

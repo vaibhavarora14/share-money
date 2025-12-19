@@ -26,6 +26,7 @@ import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
+import { useUserProfiles } from "../hooks/useUserProfiles";
 import { GroupMember, Transaction } from "../types";
 import {
   CURRENCIES,
@@ -88,17 +89,156 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     [type, groupId, groupMembers.length]
   );
 
-  const allMemberIds = useMemo(
-    () => groupMembers.map((m) => m.user_id),
-
+  const activeMembers = useMemo(
+    () => groupMembers.filter((m) => m.status !== "left"),
     [groupMembers]
   );
 
-  const areAllMembersSelected = useMemo(
+  // Extract inactive user IDs from transaction (users not in current groupMembers)
+  // Only includes users who are already part of this transaction (paid_by or split_among/splits)
+  const inactiveUserIds = useMemo(() => {
+    if (!transaction) return [];
+    const ids = new Set<string>();
+
+    // Add paid_by if present
+    if (transaction.paid_by) {
+      ids.add(transaction.paid_by);
+      if (__DEV__) {
+        console.log(
+          "[TransactionForm] Added paid_by to inactive check:",
+          transaction.paid_by
+        );
+      }
+    }
+
+    // Add users from split_among (backward compatibility)
+    if (
+      Array.isArray(transaction.split_among) &&
+      transaction.split_among.length > 0
+    ) {
+      transaction.split_among.forEach((id) => {
+        ids.add(id);
+        if (__DEV__) {
+          console.log(
+            "[TransactionForm] Added split_among user to inactive check:",
+            id
+          );
+        }
+      });
+    }
+
+    // Add users from splits (preferred method)
+    if (Array.isArray(transaction.splits) && transaction.splits.length > 0) {
+      transaction.splits.forEach((split) => {
+        if (split.user_id) {
+          ids.add(split.user_id);
+          if (__DEV__) {
+            console.log(
+              "[TransactionForm] Added splits user to inactive check:",
+              split.user_id
+            );
+          }
+        }
+      });
+    }
+
+    // Filter to only include users who are NOT in current active groupMembers
+    const existingMap = new Set(groupMembers.map((m) => m.user_id));
+    const inactive = Array.from(ids).filter((id) => !existingMap.has(id));
+
+    if (__DEV__) {
+      console.log("[TransactionForm] Transaction user IDs:", Array.from(ids));
+      console.log(
+        "[TransactionForm] Active group member IDs:",
+        Array.from(existingMap)
+      );
+      console.log(
+        "[TransactionForm] Final inactive user IDs from transaction:",
+        inactive
+      );
+    }
+
+    return inactive;
+  }, [groupMembers, transaction]);
+
+  // Fetch profiles for inactive users
+  const {
+    data: inactiveProfiles,
+    isLoading: isLoadingProfiles,
+    error: profileError,
+  } = useUserProfiles(inactiveUserIds);
+
+  if (__DEV__ && inactiveUserIds.length > 0) {
+    console.log("[TransactionForm] Profile fetch:", {
+      isLoading: isLoadingProfiles,
+      error: profileError?.message,
+      profilesCount: inactiveProfiles.size,
+      profileData: Array.from(inactiveProfiles.entries()).map(([id, p]) => ({
+        id,
+        full_name: p.full_name,
+        email: p.email,
+      })),
+    });
+  }
+
+  // Create inactive members with profile data
+  const extraInactiveMembers = useMemo(() => {
+    if (inactiveUserIds.length === 0) return [];
+
+    const members = inactiveUserIds.map((id) => {
+      const profile = inactiveProfiles.get(id);
+      const member = {
+        id: `former-${id}`,
+        group_id: transaction?.group_id || "",
+        user_id: id,
+        role: "member" as const,
+        status: "left" as const,
+        joined_at: "",
+        full_name: profile?.full_name ?? undefined,
+        email: profile?.email ?? undefined,
+        avatar_url: profile?.avatar_url || undefined,
+      };
+      if (__DEV__) {
+        console.log(`[TransactionForm] Created inactive member for ${id}:`, {
+          full_name: member.full_name,
+          email: member.email,
+          hasProfile: !!profile,
+        });
+      }
+      return member;
+    });
+    return members;
+  }, [inactiveUserIds, inactiveProfiles, transaction]);
+
+  const availableMembers = useMemo(() => {
+    const combined = [...activeMembers];
+    extraInactiveMembers.forEach((m) => {
+      if (!combined.some((c) => c.user_id === m.user_id)) {
+        combined.push(m);
+      }
+    });
+    return combined;
+  }, [activeMembers, extraInactiveMembers]);
+
+  const allMemberIds = useMemo(
+    () => activeMembers.map((m) => m.user_id),
+    [activeMembers]
+  );
+
+  const areAllMembersSelected = useMemo(() => {
+    // For new transactions, check only active members
+    // For existing transactions, check all available members (active + inactive)
+    const membersToCheck = transaction ? availableMembers : activeMembers;
+    return (
+      membersToCheck.length > 0 &&
+      membersToCheck.every((m) => splitAmong.includes(m.user_id))
+    );
+  }, [activeMembers, availableMembers, splitAmong, transaction]);
+
+  const paidByMember = useMemo(
     () =>
-      groupMembers.length > 0 &&
-      groupMembers.every((m) => splitAmong.includes(m.user_id)),
-    [groupMembers, splitAmong]
+      paidBy ? availableMembers.find((m) => m.user_id === paidBy) : undefined,
+    [availableMembers, paidBy]
   );
 
   // Helper: Reset form to default state
@@ -207,7 +347,10 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       setSplitAmong([]);
     } else {
       // Select all - ensure no duplicates
-      const allMemberIds = groupMembers.map((m) => m.user_id);
+      // For new transactions, select only active members
+      // For existing transactions, select all available members (active + inactive)
+      const membersToSelect = transaction ? availableMembers : activeMembers;
+      const allMemberIds = membersToSelect.map((m) => m.user_id);
       setSplitAmong([...new Set(allMemberIds)]);
     }
     // Clear error
@@ -588,14 +731,17 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                   value={
                     paidBy
                       ? (() => {
-                          const member = groupMembers.find(
+                          const member = availableMembers.find(
                             (m) => m.user_id === paidBy
                           );
-                          return (
+                          const isInactive = member?.status === "left";
+                          const displayName =
                             member?.full_name ||
                             member?.email ||
-                            `User ${paidBy.substring(0, 8)}...`
-                          );
+                            `User ${paidBy.substring(0, 8)}...`;
+                          return isInactive
+                            ? `${displayName} (Former Member)`
+                            : displayName;
                         })()
                       : ""
                   }
@@ -654,8 +800,13 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                     },
                   ]}
                 >
-                  {groupMembers.map((member) => {
+                  {availableMembers.map((member) => {
                     const isSelected = splitAmong.includes(member.user_id);
+                    const isInactive = member.status === "left";
+                    const displayName =
+                      member.full_name ||
+                      member.email ||
+                      `User ${member.user_id.substring(0, 8)}...`;
                     return (
                       <TouchableOpacity
                         key={member.user_id}
@@ -675,31 +826,62 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                           }
                           disabled={loading}
                         />
-                        <Text
-                          variant="bodyLarge"
-                          style={styles.splitMemberText}
+                        <View
+                          style={{
+                            flex: 1,
+                            flexDirection: "row",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                          }}
                         >
-                          {member.full_name ||
-                            member.email ||
-                            `User ${member.user_id.substring(0, 8)}...`}
-                        </Text>
-                        {isSelected &&
-                          splitAmong.length > 0 &&
-                          amount &&
-                          parseFloat(amount) > 0 && (
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              flexShrink: 1,
+                            }}
+                          >
                             <Text
-                              variant="bodySmall"
+                              variant="bodyLarge"
                               style={[
-                                styles.splitAmount,
-                                { color: theme.colors.onSurfaceVariant },
+                                styles.splitMemberText,
+                                isInactive && { fontStyle: "italic" },
                               ]}
                             >
-                              {formatCurrency(
-                                parseFloat(amount) / splitAmong.length,
-                                currency
-                              )}
+                              {displayName}
                             </Text>
-                          )}
+                            {isInactive && (
+                              <Text
+                                variant="bodySmall"
+                                style={{
+                                  marginLeft: 8,
+                                  color: theme.colors.onSurfaceVariant,
+                                  opacity: 0.7,
+                                }}
+                              >
+                                (Former)
+                              </Text>
+                            )}
+                          </View>
+                          {isSelected &&
+                            splitAmong.length > 0 &&
+                            amount &&
+                            parseFloat(amount) > 0 && (
+                              <Text
+                                variant="bodySmall"
+                                style={[
+                                  styles.splitAmount,
+                                  { color: theme.colors.onSurfaceVariant },
+                                  { marginLeft: 12 },
+                                ]}
+                              >
+                                {formatCurrency(
+                                  parseFloat(amount) / splitAmong.length,
+                                  currency
+                                )}
+                              </Text>
+                            )}
+                        </View>
                       </TouchableOpacity>
                     );
                   })}
@@ -767,45 +949,72 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
               <Button onPress={() => setShowPaidByPicker(false)}>Close</Button>
             </View>
             <FlatList
-              data={groupMembers}
+              data={availableMembers}
               keyExtractor={(item) => item.user_id}
               style={styles.currencyList}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[
-                    styles.currencyItem,
-                    paidBy === item.user_id && {
-                      backgroundColor: theme.colors.secondaryContainer,
-                    },
-                  ]}
-                  onPress={() => {
-                    setPaidBy(item.user_id);
-                    setShowPaidByPicker(false);
-                    if (paidByError) {
-                      setPaidByError("");
-                    }
-                  }}
-                >
-                  <Text
-                    variant="bodyLarge"
-                    style={{
-                      fontWeight: paidBy === item.user_id ? "bold" : "normal",
+              renderItem={({ item }) => {
+                const isInactive = item.status === "left";
+                const displayName =
+                  item.full_name ||
+                  item.email ||
+                  `User ${item.user_id.substring(0, 8)}...`;
+                return (
+                  <TouchableOpacity
+                    style={[
+                      styles.currencyItem,
+                      paidBy === item.user_id && {
+                        backgroundColor: theme.colors.secondaryContainer,
+                      },
+                    ]}
+                    onPress={() => {
+                      setPaidBy(item.user_id);
+                      setShowPaidByPicker(false);
+                      if (paidByError) {
+                        setPaidByError("");
+                      }
                     }}
                   >
-                    {item.full_name ||
-                      item.email ||
-                      `User ${item.user_id.substring(0, 8)}...`}
-                  </Text>
-                  {paidBy === item.user_id && (
-                    <Text
-                      variant="bodyMedium"
-                      style={{ color: theme.colors.primary }}
+                    <View
+                      style={{
+                        flex: 1,
+                        flexDirection: "row",
+                        alignItems: "center",
+                      }}
                     >
-                      Selected
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              )}
+                      <Text
+                        variant="bodyLarge"
+                        style={{
+                          fontWeight:
+                            paidBy === item.user_id ? "bold" : "normal",
+                          fontStyle: isInactive ? "italic" : "normal",
+                        }}
+                      >
+                        {displayName}
+                      </Text>
+                      {isInactive && (
+                        <Text
+                          variant="bodySmall"
+                          style={{
+                            marginLeft: 8,
+                            color: theme.colors.onSurfaceVariant,
+                            opacity: 0.7,
+                          }}
+                        >
+                          (Former)
+                        </Text>
+                      )}
+                    </View>
+                    {paidBy === item.user_id && (
+                      <Text
+                        variant="bodyMedium"
+                        style={{ color: theme.colors.primary }}
+                      >
+                        Selected
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                );
+              }}
             />
           </View>
         </TouchableOpacity>

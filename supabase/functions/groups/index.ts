@@ -105,8 +105,9 @@ Deno.serve(async (req: Request) => {
       // Get group members
       const { data: members, error: membersError } = await supabase
         .from('group_members')
-        .select('id, group_id, user_id, role, joined_at')
+        .select('id, group_id, user_id, role, joined_at, status, left_at')
         .eq('group_id', groupId)
+        .eq('status', 'active')
         .order('joined_at', { ascending: true });
 
       if (membersError) {
@@ -181,35 +182,6 @@ Deno.serve(async (req: Request) => {
       }
 
       return createSuccessResponse(group, 201);
-    }
-
-    // Handle DELETE /groups/:id - Delete group
-    if (httpMethod === 'DELETE' && groupId) {
-      // Verify user is the owner
-      const { data: group, error: groupError } = await supabase
-        .from('groups')
-        .select('created_by')
-        .eq('id', groupId)
-        .single();
-
-      if (groupError || !group) {
-        return createErrorResponse(404, 'Group not found', 'NOT_FOUND');
-      }
-
-      if (group.created_by !== user.id) {
-        return createErrorResponse(403, 'Only group owners can delete groups', 'PERMISSION_DENIED');
-      }
-
-      const { error: deleteError } = await supabase
-        .from('groups')
-        .delete()
-        .eq('id', groupId);
-
-      if (deleteError) {
-        return handleError(deleteError, 'deleting group');
-      }
-
-      return createSuccessResponse({ success: true, message: 'Group deleted successfully' }, 200);
     }
 
     // Method not allowed

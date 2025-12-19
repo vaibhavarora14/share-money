@@ -262,10 +262,11 @@ Deno.serve(async (req: Request) => {
           .select('id')
           .eq('group_id', transactionData.group_id)
           .eq('user_id', user.id)
+          .eq('status', 'active')
           .single();
 
         if (membershipError || !membership) {
-          return createErrorResponse(403, 'You must be a member of the group to add transactions', 'PERMISSION_DENIED');
+          return createErrorResponse(403, 'You must be an active member of the group to add transactions', 'PERMISSION_DENIED');
         }
       }
 
@@ -276,10 +277,11 @@ Deno.serve(async (req: Request) => {
             .select('id')
             .eq('group_id', transactionData.group_id)
             .eq('user_id', transactionData.paid_by)
+            .eq('status', 'active')
             .single();
 
           if (paidByError || !paidByMember) {
-            return createErrorResponse(400, 'paid_by must be a member of the group', 'VALIDATION_ERROR');
+            return createErrorResponse(400, 'paid_by must be an active member of the group', 'VALIDATION_ERROR');
           }
         }
 
@@ -290,6 +292,7 @@ Deno.serve(async (req: Request) => {
               .from('group_members')
               .select('user_id')
               .eq('group_id', transactionData.group_id)
+            .eq('status', 'active')
               .in('user_id', uniqueSplitAmong);
 
             if (splitError) {
@@ -444,7 +447,7 @@ Deno.serve(async (req: Request) => {
 
       const { data: existingTransaction, error: fetchError } = await supabase
         .from('transactions')
-        .select('group_id, type, user_id')
+        .select('group_id, type, user_id, paid_by, split_among')
         .eq('id', transactionData.id)
         .single();
 
@@ -479,15 +482,19 @@ Deno.serve(async (req: Request) => {
       if (groupId && transactionType === 'expense') {
         if (transactionData.paid_by !== undefined) {
           if (transactionData.paid_by) {
-            const { data: paidByMember, error: paidByError } = await supabase
-              .from('group_members')
-              .select('id')
-              .eq('group_id', groupId)
-              .eq('user_id', transactionData.paid_by)
-              .single();
+            const isExistingPaidBy = existingTransaction.paid_by === transactionData.paid_by;
+            if (!isExistingPaidBy) {
+              const { data: paidByMember, error: paidByError } = await supabase
+                .from('group_members')
+                .select('id')
+                .eq('group_id', groupId)
+                .eq('user_id', transactionData.paid_by)
+                .eq('status', 'active')
+                .single();
 
-            if (paidByError || !paidByMember) {
-              return createErrorResponse(400, 'paid_by must be a member of the group', 'VALIDATION_ERROR');
+              if (paidByError || !paidByMember) {
+                return createErrorResponse(400, 'paid_by must be an active member of the group', 'VALIDATION_ERROR');
+              }
             }
           }
         }
@@ -496,21 +503,27 @@ Deno.serve(async (req: Request) => {
           if (transactionData.split_among && Array.isArray(transactionData.split_among)) {
             const uniqueSplitAmong = [...new Set(transactionData.split_among)];
             if (uniqueSplitAmong.length > 0) {
+              const existingSplit = Array.isArray(existingTransaction.split_among)
+                ? existingTransaction.split_among
+                : [];
               const { data: splitMembers, error: splitError } = await supabase
                 .from('group_members')
                 .select('user_id')
                 .eq('group_id', groupId)
+                .eq('status', 'active')
                 .in('user_id', uniqueSplitAmong);
 
               if (splitError) {
                 return handleError(splitError, 'validating split_among members');
               }
 
-              const validUserIds = splitMembers?.map(m => m.user_id) || [];
-              const invalidUserIds = uniqueSplitAmong.filter(id => !validUserIds.includes(id));
+              const activeUserIds = splitMembers?.map(m => m.user_id) || [];
+              const invalidUserIds = uniqueSplitAmong.filter(
+                id => !activeUserIds.includes(id) && !existingSplit.includes(id)
+              );
               
               if (invalidUserIds.length > 0) {
-                return createErrorResponse(400, 'All split_among users must be members of the group', 'VALIDATION_ERROR');
+                return createErrorResponse(400, 'All new split_among users must be active members of the group', 'VALIDATION_ERROR');
               }
             }
           }

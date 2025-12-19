@@ -286,6 +286,7 @@ Deno.serve(async (req: Request) => {
       .select('id')
       .eq('group_id', groupId)
       .eq('user_id', user.id)
+      .eq('status', 'active')
       .single();
 
     if (membershipError || !membership) {

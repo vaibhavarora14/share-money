@@ -50,7 +50,9 @@ export interface GroupMember {
   group_id: string;
   user_id: string;
   role: 'owner' | 'member';
+  status?: 'active' | 'left';
   joined_at: string;
+  left_at?: string | null;
   email?: string;
   full_name?: string | null;
   avatar_url?: string | null;

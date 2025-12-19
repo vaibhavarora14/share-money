@@ -115,13 +115,13 @@ Deno.serve(async (req: Request) => {
 
       const { data: membership, error: membershipError } = await supabase
         .from('group_members')
-        .select('role')
+        .select('id')
         .eq('group_id', requestData.group_id)
         .eq('user_id', currentUser.id)
         .single();
 
-      if (membershipError || !membership || membership.role !== 'owner') {
-        return createErrorResponse(403, 'Only group owners can add members', 'PERMISSION_DENIED');
+      if (membershipError || !membership) {
+        return createErrorResponse(403, 'You must be a member of the group to add members', 'PERMISSION_DENIED');
       }
 
       const normalizedEmail = requestData.email.toLowerCase().trim();
@@ -313,10 +313,6 @@ Deno.serve(async (req: Request) => {
 
       if (rpcError) {
         const errorMessage = rpcError.message || 'Failed to remove member';
-        
-        if (errorMessage.includes('last owner')) {
-          return createErrorResponse(400, 'Cannot remove the last owner of the group', 'VALIDATION_ERROR');
-        }
         
         if (errorMessage.includes('not authenticated') || errorMessage.includes('Unauthorized')) {
           return createErrorResponse(401, 'Unauthorized', 'AUTH_ERROR');
