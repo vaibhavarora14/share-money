@@ -3,8 +3,6 @@ import { formatCurrency } from '../_shared/currency.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { log } from '../_shared/logger.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
-import { fetchUserEmails } from '../_shared/user-email.ts';
-import { fetchUserProfiles } from '../_shared/user-profiles.ts';
 import { isValidUUID, validateBodySize, validateTransactionData } from '../_shared/validation.ts';
 
 /**
@@ -32,15 +30,27 @@ interface Transaction {
   user_id?: string;
   group_id?: string;
   currency?: string;
-  paid_by?: string;
-  split_among?: string[];
+  paid_by_participant_id?: string; // Participant who paid
+  split_among_participant_ids?: string[]; // Array of participant IDs to split among
 }
 
 interface TransactionSplit {
   transaction_id: number;
-  user_id: string;
+  participant_id: string | null; // New: participant reference (nullable for backward compatibility)
+  user_id?: string | null; // Legacy: kept for backward compatibility
+  email?: string | null; // Legacy: kept for backward compatibility
   amount: number;
-  email?: string;
+  full_name?: string | null;
+  avatar_url?: string | null;
+}
+
+interface Participant {
+  id: string;
+  group_id: string;
+  user_id?: string | null;
+  email?: string | null;
+  type: 'member' | 'invited' | 'former';
+  role?: 'owner' | 'member';
   full_name?: string | null;
   avatar_url?: string | null;
 }
@@ -51,14 +61,15 @@ interface TransactionWithSplits extends Transaction {
 }
 
 /**
- * Calculates equal split amounts for a given total amount and user IDs.
+ * Calculates equal split amounts for a given total amount.
+ * Now uses participant_ids instead of user_ids/emails.
  */
 function calculateEqualSplits(
   totalAmount: number,
-  userIds: string[]
+  participantIds: string[] // Array of participant UUIDs
 ): TransactionSplit[] {
-  const uniqueUserIds = [...new Set(userIds)];
-  const splitCount = uniqueUserIds.length;
+  const uniqueParticipantIds = [...new Set(participantIds)];
+  const splitCount = uniqueParticipantIds.length;
 
   if (splitCount === 0) {
     return [];
@@ -68,14 +79,14 @@ function calculateEqualSplits(
   const baseSum = baseAmount * splitCount;
   const remainder = Math.round((totalAmount - baseSum) * 100) / 100;
 
-  const splits: TransactionSplit[] = uniqueUserIds.map((userId, index) => {
+  const splits: TransactionSplit[] = uniqueParticipantIds.map((participantId, index) => {
     const amount = index === 0
       ? Math.round((baseAmount + remainder) * 100) / 100
       : baseAmount;
     
     return {
       transaction_id: 0,
-      user_id: userId,
+      participant_id: participantId,
       amount: amount,
     };
   });
@@ -145,7 +156,7 @@ Deno.serve(async (req: Request) => {
           *,
           transaction_splits (
             id,
-            user_id,
+            participant_id,
             amount,
             created_at
           )
@@ -153,83 +164,115 @@ Deno.serve(async (req: Request) => {
 
       if (groupId) {
         query = query.eq('group_id', groupId);
+
+        // Fetch user's participant record to check status and ID
+        const { data: participantData, error: participantAuthError } = await supabase
+          .from('participants')
+          .select('id, type')
+          .eq('group_id', groupId)
+          .eq('user_id', user.id)
+          .single();
+
+        if (participantAuthError || !participantData) {
+          return createErrorResponse(403, 'Forbidden: You are not a participant in this group', 'PERMISSION_DENIED');
+        }
+
+        // If user is not active (e.g. 'former'), restrict visibility
+        // Showing only transactions they are involved in (Personal Relevance View)
+        if (participantData.type === 'former') {
+          // We can't easily filter by "split inclusion" in the main query without complex RPC
+          // So we'll fetch broader range and filter in memory.
+          // Note: This might miss older transactions if limit(100) cuts them off.
+          // For now, this tradeoff is acceptable or we could increase limit for former members.
+        }
       }
 
-      let { data: transactions, error } = await query
+      const { data: transactionsData, error } = await query
         .order('date', { ascending: false })
-        .limit(100);
+        .limit(200); // Increased limit to accommodate filtering
 
-      if (error && (error.message?.includes('relation') || error.message?.includes('does not exist') || error.code === '42P01')) {
-        let fallbackQuery = supabase.from('transactions').select('id, amount, description, date, type, category, user_id, group_id, currency, paid_by, split_among, created_at, updated_at');
-        if (groupId) {
-          fallbackQuery = fallbackQuery.eq('group_id', groupId);
-        }
-        const fallbackResult = await fallbackQuery.order('date', { ascending: false }).limit(100);
-        if (fallbackResult.error) {
-          return handleError(fallbackResult.error, 'fetching transactions (fallback)');
-        }
-        transactions = fallbackResult.data;
-        error = null;
-      } else if (error) {
+      if (error) {
         return handleError(error, 'fetching transactions');
       }
 
-      // Collect all user IDs from splits to enrich with email and profile data
-      const allUserIds = new Set<string>();
+      let transactions = transactionsData || [];
+      if (groupId) {
+         const { data: participantCheck } = await supabase
+          .from('participants')
+          .select('id, type')
+          .eq('group_id', groupId)
+          .eq('user_id', user.id)
+          .maybeSingle();
+         
+         if (participantCheck && participantCheck.type === 'former') {
+             const pId = participantCheck.id;
+             transactions = transactions.filter((tx: any) => {
+                 const isPayer = tx.paid_by_participant_id === pId;
+                 // Check splits (fetched via join as transaction_splits)
+                 const isInSplits = tx.transaction_splits?.some((s: any) => s.participant_id === pId);
+                 // Check legacy fields just in case
+                 const isLegacyPayer = tx.paid_by === user.id || tx.user_id === user.id;
+                 const isLegacySplit = tx.split_among?.includes(user.id);
+                 
+                 return isPayer || isInSplits || isLegacyPayer || isLegacySplit;
+             });
+         }
+      }
+
+      // Collect all participant IDs from splits and paid_by to enrich with participant data
+      const allParticipantIds = new Set<string>();
+      
       (transactions || []).forEach((tx: TransactionWithSplits) => {
         if (tx.transaction_splits) {
           tx.transaction_splits.forEach((split) => {
-            allUserIds.add(split.user_id);
+            if (split.participant_id) {
+              allParticipantIds.add(split.participant_id);
+            }
           });
         }
-        if (tx.paid_by) {
-          allUserIds.add(tx.paid_by);
+        if (tx.paid_by_participant_id) {
+          allParticipantIds.add(tx.paid_by_participant_id);
         }
       });
 
-      // Enrich with email and profile data
-      let emailMap = new Map<string, string>();
-      let profileMap = new Map<string, { full_name: string | null; avatar_url: string | null }>();
+      // Fetch participant data for enrichment
+      let participantMap = new Map<string, Participant>();
       
-      if (allUserIds.size > 0) {
-        const userIdsArray = Array.from(allUserIds);
-        const currentUserEmail = user.email || null;
-        [emailMap, profileMap] = await Promise.all([
-          fetchUserEmails(userIdsArray, user.id, currentUserEmail),
-          fetchUserProfiles(supabase, userIdsArray),
-        ]);
+      if (allParticipantIds.size > 0) {
+        const { data: participants, error: participantsError } = await supabase
+          .from('participants')
+          .select('id, group_id, user_id, email, type, role, full_name, avatar_url')
+          .in('id', Array.from(allParticipantIds));
+
+        if (!participantsError && participants) {
+          participants.forEach((p: Participant) => {
+            participantMap.set(p.id, p);
+          });
+        }
       }
 
       const parsedTransactions = (transactions || []).map((tx: TransactionWithSplits) => {
+        // Enrich splits with participant data
         if (tx.transaction_splits) {
-          // Enrich splits with email and profile data
           tx.splits = tx.transaction_splits.map((split) => {
-            const profile = profileMap.get(split.user_id);
+            const participant = split.participant_id ? participantMap.get(split.participant_id) : null;
+            
             return {
               ...split,
-              email: emailMap.get(split.user_id),
-              full_name: profile?.full_name || null,
-              avatar_url: profile?.avatar_url || null,
+              user_id: participant?.user_id || null,
+              email: participant?.email || null,
+              full_name: participant?.full_name || null,
+              avatar_url: participant?.avatar_url || null,
             };
           });
           delete tx.transaction_splits;
         }
 
-        if (tx.split_among && !Array.isArray(tx.split_among)) {
-          try {
-            const parsed = typeof tx.split_among === 'string' 
-              ? JSON.parse(tx.split_among)
-              : tx.split_among;
-            tx.split_among = Array.isArray(parsed) ? parsed : [];
-          } catch {
-            tx.split_among = [];
-          }
-        } else if (!tx.split_among) {
-          tx.split_among = [];
-        }
-
-        if (tx.splits && tx.splits.length > 0 && (!tx.split_among || tx.split_among.length === 0)) {
-          tx.split_among = tx.splits.map((s) => s.user_id);
+        // Populate split_among_participant_ids for the frontend
+        if (tx.splits) {
+          tx.split_among_participant_ids = tx.splits
+            .map((s) => s.participant_id)
+            .filter((id): id is string => !!id);
         }
 
         return tx;
@@ -271,43 +314,49 @@ Deno.serve(async (req: Request) => {
       }
 
       if (transactionData.group_id && transactionData.type === 'expense') {
-        if (transactionData.paid_by) {
-          const { data: paidByMember, error: paidByError } = await supabase
-            .from('group_members')
-            .select('id')
+        // Validate paid_by_participant_id
+        if (transactionData.paid_by_participant_id) {
+          const { data: participant, error: participantError } = await supabase
+            .from('participants')
+            .select('id, type')
+            .eq('id', transactionData.paid_by_participant_id)
             .eq('group_id', transactionData.group_id)
-            .eq('user_id', transactionData.paid_by)
-            .eq('status', 'active')
             .single();
 
-          if (paidByError || !paidByMember) {
-            return createErrorResponse(400, 'paid_by must be an active member of the group', 'VALIDATION_ERROR');
+          if (participantError || !participant) {
+            return createErrorResponse(400, 'paid_by_participant_id must be a valid participant in the group', 'VALIDATION_ERROR');
           }
         }
 
-        if (transactionData.split_among && Array.isArray(transactionData.split_among)) {
-          const uniqueSplitAmong = [...new Set(transactionData.split_among)];
-          if (uniqueSplitAmong.length > 0) {
-            const { data: splitMembers, error: splitError } = await supabase
-              .from('group_members')
-              .select('user_id')
+        // Validate split_among_participant_ids
+        if (transactionData.split_among_participant_ids && Array.isArray(transactionData.split_among_participant_ids)) {
+          const uniqueParticipantIds = [...new Set(transactionData.split_among_participant_ids)];
+          if (uniqueParticipantIds.length > 0) {
+            // Validate all participant_ids exist and belong to the group
+            const { data: participants, error: participantsError } = await supabase
+              .from('participants')
+              .select('id')
               .eq('group_id', transactionData.group_id)
-            .eq('status', 'active')
-              .in('user_id', uniqueSplitAmong);
+              .in('id', uniqueParticipantIds);
 
-            if (splitError) {
-              return handleError(splitError, 'validating split_among members');
+            if (participantsError) {
+              return createErrorResponse(400, 'Failed to validate participants', 'VALIDATION_ERROR');
             }
 
-            const validUserIds = splitMembers?.map(m => m.user_id) || [];
-            const invalidUserIds = uniqueSplitAmong.filter(id => !validUserIds.includes(id));
+            const foundParticipantIds = new Set((participants || []).map(p => p.id));
+            const invalidParticipantIds = uniqueParticipantIds.filter(id => !foundParticipantIds.has(id));
             
-            if (invalidUserIds.length > 0) {
-              return createErrorResponse(400, 'All split_among users must be members of the group', 'VALIDATION_ERROR');
+            if (invalidParticipantIds.length > 0) {
+              return createErrorResponse(400, `Invalid participant_ids: ${invalidParticipantIds.join(', ')}`, 'VALIDATION_ERROR');
             }
           }
         }
       }
+
+      // Use split_among_participant_ids directly
+      const participantIds = transactionData.split_among_participant_ids && Array.isArray(transactionData.split_among_participant_ids)
+        ? [...new Set(transactionData.split_among_participant_ids)]
+        : [];
 
       const { data: transaction, error } = await supabase
         .from('transactions')
@@ -320,10 +369,7 @@ Deno.serve(async (req: Request) => {
           category: transactionData.category || null,
           group_id: transactionData.group_id || null,
           currency: transactionData.currency,
-          paid_by: transactionData.paid_by || null,
-          split_among: transactionData.split_among && Array.isArray(transactionData.split_among)
-            ? [...new Set(transactionData.split_among)]
-            : null,
+          paid_by_participant_id: transactionData.paid_by_participant_id || null,
         })
         .select()
         .single();
@@ -332,8 +378,8 @@ Deno.serve(async (req: Request) => {
         return handleError(error, 'creating transaction');
       }
 
-      if (transaction && transactionData.split_among && Array.isArray(transactionData.split_among) && transactionData.split_among.length > 0) {
-        const splits = calculateEqualSplits(transaction.amount, transactionData.split_among);
+      if (transaction && participantIds.length > 0) {
+        const splits = calculateEqualSplits(transaction.amount, participantIds);
         splits.forEach(split => {
           split.transaction_id = transaction.id;
         });
@@ -347,8 +393,6 @@ Deno.serve(async (req: Request) => {
             amount: transaction.amount,
             currency: transaction.currency || 'USD',
           });
-          // Note: Transaction is already created, split_among column has the data
-          // Consider monitoring/alerting for data integrity issues
         }
 
         const { error: splitsError } = await supabase
@@ -356,33 +400,26 @@ Deno.serve(async (req: Request) => {
           .insert(splits);
 
         if (splitsError) {
-          // If table doesn't exist, that's okay - split_among column has the data
-          if (splitsError.message?.includes('relation') || splitsError.message?.includes('does not exist') || splitsError.code === '42P01') {
-            log.warn('transaction_splits table does not exist, using split_among column', 'transaction-creation', {
+          log.error('Failed to create transaction_splits, rolling back transaction', 'transaction-creation', {
+            transactionId: transaction.id,
+            error: splitsError.message,
+            code: splitsError.code,
+          });
+
+          const { error: rollbackError } = await supabase
+            .from('transactions')
+            .delete()
+            .eq('id', transaction.id);
+
+          if (rollbackError) {
+            log.error('Failed to rollback transaction after split insert failure', 'transaction-creation', {
               transactionId: transaction.id,
+              error: rollbackError.message,
+              code: rollbackError.code,
             });
-          } else {
-            log.error('Failed to create transaction_splits, rolling back transaction', 'transaction-creation', {
-              transactionId: transaction.id,
-              error: splitsError.message,
-              code: splitsError.code,
-            });
-
-            const { error: rollbackError } = await supabase
-              .from('transactions')
-              .delete()
-              .eq('id', transaction.id);
-
-            if (rollbackError) {
-              log.error('Failed to rollback transaction after split insert failure', 'transaction-creation', {
-                transactionId: transaction.id,
-                error: rollbackError.message,
-                code: rollbackError.code,
-              });
-            }
-
-            return createErrorResponse(500, 'Failed to create transaction splits', 'TRANSACTION_SPLIT_ERROR');
           }
+
+          return createErrorResponse(500, 'Failed to create transaction splits', 'TRANSACTION_SPLIT_ERROR');
         }
       }
 
@@ -394,7 +431,7 @@ Deno.serve(async (req: Request) => {
             *,
             transaction_splits (
               id,
-              user_id,
+              participant_id,
               amount,
               created_at
             )
@@ -447,7 +484,7 @@ Deno.serve(async (req: Request) => {
 
       const { data: existingTransaction, error: fetchError } = await supabase
         .from('transactions')
-        .select('group_id, type, user_id, paid_by, split_among')
+        .select('group_id, type, user_id, paid_by_participant_id')
         .eq('id', transactionData.id)
         .single();
 
@@ -479,52 +516,39 @@ Deno.serve(async (req: Request) => {
         ? transactionData.type 
         : existingTransaction.type;
 
+      // Validate participant_ids for expense transactions
       if (groupId && transactionType === 'expense') {
-        if (transactionData.paid_by !== undefined) {
-          if (transactionData.paid_by) {
-            const isExistingPaidBy = existingTransaction.paid_by === transactionData.paid_by;
-            if (!isExistingPaidBy) {
-              const { data: paidByMember, error: paidByError } = await supabase
-                .from('group_members')
-                .select('id')
-                .eq('group_id', groupId)
-                .eq('user_id', transactionData.paid_by)
-                .eq('status', 'active')
-                .single();
+        if (transactionData.paid_by_participant_id !== undefined && transactionData.paid_by_participant_id) {
+          const { data: participant, error: participantError } = await supabase
+            .from('participants')
+            .select('id')
+            .eq('id', transactionData.paid_by_participant_id)
+            .eq('group_id', groupId)
+            .single();
 
-              if (paidByError || !paidByMember) {
-                return createErrorResponse(400, 'paid_by must be an active member of the group', 'VALIDATION_ERROR');
-              }
-            }
+          if (participantError || !participant) {
+            return createErrorResponse(400, 'paid_by_participant_id must be a valid participant in the group', 'VALIDATION_ERROR');
           }
         }
 
-        if (transactionData.split_among !== undefined) {
-          if (transactionData.split_among && Array.isArray(transactionData.split_among)) {
-            const uniqueSplitAmong = [...new Set(transactionData.split_among)];
-            if (uniqueSplitAmong.length > 0) {
-              const existingSplit = Array.isArray(existingTransaction.split_among)
-                ? existingTransaction.split_among
-                : [];
-              const { data: splitMembers, error: splitError } = await supabase
-                .from('group_members')
-                .select('user_id')
-                .eq('group_id', groupId)
-                .eq('status', 'active')
-                .in('user_id', uniqueSplitAmong);
+        if (transactionData.split_among_participant_ids !== undefined && Array.isArray(transactionData.split_among_participant_ids)) {
+          const uniqueParticipantIds = [...new Set(transactionData.split_among_participant_ids)];
+          if (uniqueParticipantIds.length > 0) {
+            const { data: participants, error: participantsError } = await supabase
+              .from('participants')
+              .select('id')
+              .eq('group_id', groupId)
+              .in('id', uniqueParticipantIds);
 
-              if (splitError) {
-                return handleError(splitError, 'validating split_among members');
-              }
+            if (participantsError) {
+              return createErrorResponse(400, 'Failed to validate participants', 'VALIDATION_ERROR');
+            }
 
-              const activeUserIds = splitMembers?.map(m => m.user_id) || [];
-              const invalidUserIds = uniqueSplitAmong.filter(
-                id => !activeUserIds.includes(id) && !existingSplit.includes(id)
-              );
-              
-              if (invalidUserIds.length > 0) {
-                return createErrorResponse(400, 'All new split_among users must be active members of the group', 'VALIDATION_ERROR');
-              }
+            const foundParticipantIds = new Set((participants || []).map(p => p.id));
+            const invalidParticipantIds = uniqueParticipantIds.filter(id => !foundParticipantIds.has(id));
+            
+            if (invalidParticipantIds.length > 0) {
+              return createErrorResponse(400, `Invalid participant_ids: ${invalidParticipantIds.join(', ')}`, 'VALIDATION_ERROR');
             }
           }
         }
@@ -537,13 +561,7 @@ Deno.serve(async (req: Request) => {
       if (transactionData.type !== undefined) updateData.type = transactionData.type;
       if (transactionData.category !== undefined) updateData.category = transactionData.category || undefined;
       if (transactionData.currency !== undefined) updateData.currency = transactionData.currency;
-      if (transactionData.paid_by !== undefined) updateData.paid_by = transactionData.paid_by || undefined;
-      if (transactionData.split_among !== undefined) {
-        const uniqueSplitAmong = transactionData.split_among && Array.isArray(transactionData.split_among)
-          ? [...new Set(transactionData.split_among)]
-          : transactionData.split_among;
-        updateData.split_among = uniqueSplitAmong || null;
-      }
+      if (transactionData.paid_by_participant_id !== undefined) updateData.paid_by_participant_id = transactionData.paid_by_participant_id || undefined;
 
       const { data: transaction, error } = await supabase
         .from('transactions')
@@ -560,15 +578,16 @@ Deno.serve(async (req: Request) => {
         return createErrorResponse(404, 'Transaction not found', 'NOT_FOUND');
       }
 
-      if (transactionData.split_among !== undefined) {
+      if (transactionData.split_among_participant_ids !== undefined) {
         await supabase
           .from('transaction_splits')
           .delete()
           .eq('transaction_id', transactionData.id);
 
-        if (transactionData.split_among && Array.isArray(transactionData.split_among) && transactionData.split_among.length > 0) {
+        if (transactionData.split_among_participant_ids && Array.isArray(transactionData.split_among_participant_ids) && transactionData.split_among_participant_ids.length > 0) {
+          const uniqueParticipantIds = [...new Set(transactionData.split_among_participant_ids)];
           const totalAmount = transaction.amount;
-          const splits = calculateEqualSplits(totalAmount, transactionData.split_among);
+          const splits = calculateEqualSplits(totalAmount, uniqueParticipantIds);
           splits.forEach(split => {
             split.transaction_id = transaction.id;
           });
@@ -597,14 +616,16 @@ Deno.serve(async (req: Request) => {
           }
         }
       } else if (transactionData.amount !== undefined) {
+        // Recalculate splits when amount changes but participants don't
         const { data: existingSplits, error: splitsFetchError } = await supabase
           .from('transaction_splits')
-          .select('user_id')
+          .select('participant_id')
           .eq('transaction_id', transactionData.id);
 
         if (!splitsFetchError && existingSplits && existingSplits.length > 0) {
           const newAmount = transactionData.amount;
-          const newSplits = calculateEqualSplits(newAmount, existingSplits.map(s => s.user_id));
+          const participantIds = existingSplits.map(s => s.participant_id).filter((id): id is string => !!id);
+          const newSplits = calculateEqualSplits(newAmount, participantIds);
           newSplits.forEach(split => {
             split.transaction_id = transaction.id;
           });
@@ -645,7 +666,7 @@ Deno.serve(async (req: Request) => {
           *,
           transaction_splits (
             id,
-            user_id,
+            participant_id,
             amount,
             created_at
           )
@@ -659,12 +680,11 @@ Deno.serve(async (req: Request) => {
         delete responseTransaction.transaction_splits;
       }
 
-      if (responseTransaction.split_among) {
-        if (Array.isArray(responseTransaction.split_among)) {
-          responseTransaction.split_among = [...new Set(responseTransaction.split_among)];
-        } else {
-          responseTransaction.split_among = [];
-        }
+      // Populate split_among_participant_ids from splits for backward compatibility in response
+      if (responseTransaction.splits && Array.isArray(responseTransaction.splits)) {
+        responseTransaction.split_among_participant_ids = responseTransaction.splits
+          .map(s => s.participant_id)
+          .filter((id): id is string => !!id);
       }
 
       return createSuccessResponse(responseTransaction, 200);

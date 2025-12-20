@@ -28,6 +28,7 @@ interface GroupInvitation {
   expires_at: string;
   created_at: string;
   accepted_at?: string;
+  user_id?: string; // User ID if the invited user has signed up
 }
 
 interface CreateInvitationRequest {
@@ -220,7 +221,48 @@ Deno.serve(async (req: Request) => {
         return handleError(error, 'fetching invitations');
       }
 
-      return createSuccessResponse(invitations || [], 200, 0);
+      // Enrich invitations with user_id for invited users who have signed up
+      const enrichedInvitations = await Promise.all(
+        (invitations || []).map(async (invitation: GroupInvitation) => {
+          // Only look up user_id for pending invitations
+          if (invitation.status !== 'pending' || !SUPABASE_SERVICE_ROLE_KEY) {
+            return invitation;
+          }
+
+          try {
+            const findUserResponse = await fetch(
+              `${SUPABASE_URL}/auth/v1/admin/users?email=${encodeURIComponent(invitation.email.toLowerCase())}`,
+              {
+                headers: {
+                  'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+                  'apikey': SUPABASE_SERVICE_ROLE_KEY,
+                },
+              }
+            );
+
+            if (findUserResponse.ok) {
+              const usersData = await findUserResponse.json() as UsersResponse;
+              const targetUser = Array.isArray(usersData.users)
+                ? usersData.users.find((u: SupabaseUser) => u.email?.toLowerCase() === invitation.email.toLowerCase())
+                : usersData.users?.[0];
+
+              if (targetUser?.id) {
+                return {
+                  ...invitation,
+                  user_id: targetUser.id,
+                };
+              }
+            }
+          } catch (err) {
+            // If lookup fails, just return invitation without user_id
+            // This is expected for users who haven't signed up yet
+          }
+
+          return invitation;
+        })
+      );
+
+      return createSuccessResponse(enrichedInvitations || [], 200, 0);
     }
 
     // Handle POST /invitations/:id/accept - Accept invitation

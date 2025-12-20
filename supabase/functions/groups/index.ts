@@ -107,7 +107,6 @@ Deno.serve(async (req: Request) => {
         .from('group_members')
         .select('id, group_id, user_id, role, joined_at, status, left_at')
         .eq('group_id', groupId)
-        .eq('status', 'active')
         .order('joined_at', { ascending: true });
 
       if (membersError) {
@@ -115,19 +114,28 @@ Deno.serve(async (req: Request) => {
       }
 
       // Enrich members with email addresses and profile data using shared utilities
-      const userIds = (members || []).map(m => m.user_id);
-      const [emailMap, profileMap] = await Promise.all([
-        fetchUserEmails(userIds, user.id, currentUserEmail),
-        fetchUserProfiles(supabase, userIds),
+      const memberIds = new Set((members || []).map((m: GroupMember) => m.user_id));
+      const [emailMap, profileMap, participantsResult] = await Promise.all([
+        fetchUserEmails(Array.from(memberIds) as string[], user.id, currentUserEmail),
+        fetchUserProfiles(supabase, Array.from(memberIds) as string[]),
+        supabase
+          .from('participants')
+          .select('id, user_id')
+          .eq('group_id', groupId)
+          .in('user_id', Array.from(memberIds))
       ]);
       
-      const membersWithEmails = (members || []).map(member => {
+      const participants = participantsResult.data || [];
+      const participantMap = new Map(participants.map((p: any) => [p.user_id, p.id]));
+      
+      const membersWithEmails = (members || []).map((member: any) => {
         const profile = profileMap.get(member.user_id);
         return {
           ...member,
           email: emailMap.get(member.user_id),
           full_name: profile?.full_name || null,
           avatar_url: profile?.avatar_url || null,
+          participant_id: participantMap.get(member.user_id) || null,
         };
       });
 

@@ -9,4 +9,5 @@ export const queryKeys = {
   activity: (groupId: string) => ["activity", groupId] as const,
   invitations: (groupId: string) => ["invitations", groupId] as const,
   settlements: (groupId: string) => ["settlements", groupId] as const,
+  participants: (groupId: string) => ["participants", groupId] as const,
 };

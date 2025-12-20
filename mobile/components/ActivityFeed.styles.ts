@@ -12,13 +12,13 @@ const SPACING = {
 
 export const styles = StyleSheet.create({
   section: {
-    // No top margin needed - parent container handles spacing
+    paddingTop: SPACING.md,
   },
   dateHeaderContainer: {
     flexDirection: "row",
     alignItems: "center",
     marginTop: SPACING.lg,
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.sm,
   },
   dateHeaderText: {
     fontWeight: "700",
@@ -30,60 +30,53 @@ export const styles = StyleSheet.create({
   dateHeaderLine: {
     flex: 1,
     height: 1,
-    opacity: 0.3,
+    opacity: 0.2, // Subtle divider
   },
-  activityCard: {
-    marginBottom: SPACING.sm,
-    borderRadius: SPACING.md,
-    overflow: "hidden",
-    // Subtle shadow for depth
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-    borderWidth: 0,
-  },
-  activityRow: {
+  
+  // MD3 List Item Style
+  activityItem: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    paddingVertical: SPACING.md, // 12
+    alignItems: 'flex-start',
   },
   iconContainer: {
-    width: 40,
+    width: 40, // Standard Tonal Avatar Size
     height: 40,
     borderRadius: 20,
-    marginRight: SPACING.md,
+    marginRight: SPACING.lg, // 16
     justifyContent: "center",
     alignItems: "center",
   },
   activityContent: {
     flex: 1,
-    minWidth: 0,
+    justifyContent: 'center',
+    paddingTop: 0, // Align with icon top or center? Center usually better for 2 lines.
+    minHeight: 40,
   },
   activityHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: SPACING.xs,
+    marginBottom: 2,
   },
   activityUser: {
-    fontWeight: "700",
-    fontSize: 15,
-    letterSpacing: -0.2,
+    fontWeight: "600",
+    flex: 1,
+    marginRight: 8,
   },
   activityTime: {
-    fontSize: 12,
-    fontWeight: "500",
-    letterSpacing: 0.1,
+    // handled by font variant
   },
   activityDescription: {
-    marginBottom: SPACING.sm,
-    lineHeight: 22,
-    fontSize: 14,
-    paddingRight: SPACING.sm,
+    // handled by font variant
   },
+
+  // Empty State
   emptyStateCard: {
     marginTop: SPACING.lg,
+    backgroundColor: 'transparent', // Flat
+    borderWidth: 0,
+    elevation: 0,
   },
   emptyStateContent: {
     alignItems: "center",
@@ -96,6 +89,7 @@ export const styles = StyleSheet.create({
   emptyStateTitle: {
     marginBottom: SPACING.sm,
     textAlign: "center",
+    fontWeight: '600',
   },
   emptyStateMessage: {
     textAlign: "center",

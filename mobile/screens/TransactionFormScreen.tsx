@@ -1,38 +1,38 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Alert,
-  BackHandler,
-  Dimensions,
-  FlatList,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  View,
+    Alert,
+    BackHandler,
+    Dimensions,
+    FlatList,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import {
-  Appbar,
-  Button,
-  Checkbox,
-  SegmentedButtons,
-  Text,
-  TextInput,
-  useTheme,
+    Appbar,
+    Button,
+    Checkbox,
+    SegmentedButtons,
+    Text,
+    TextInput,
+    useTheme,
 } from "react-native-paper";
 import {
-  SafeAreaView,
-  useSafeAreaInsets,
+    SafeAreaView,
+    useSafeAreaInsets,
 } from "react-native-safe-area-context";
-import { useUserProfiles } from "../hooks/useUserProfiles";
-import { GroupMember, Transaction } from "../types";
+import { useParticipants } from "../hooks/useParticipants";
+import { Transaction } from "../types";
 import {
-  CURRENCIES,
-  formatCurrency,
-  getCurrencySymbol,
-  getDefaultCurrency,
+    CURRENCIES,
+    formatCurrency,
+    getCurrencySymbol,
+    getDefaultCurrency,
 } from "../utils/currency";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 
@@ -44,7 +44,6 @@ interface TransactionFormScreenProps {
   onDismiss: () => void;
   onDelete?: () => Promise<void>;
   defaultCurrency?: string;
-  groupMembers?: GroupMember[]; // Members of the group for expense splitting
   groupId?: string; // Group ID to determine if this is a group transaction
 }
 
@@ -54,7 +53,6 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   onDismiss,
   onDelete,
   defaultCurrency,
-  groupMembers = [],
   groupId,
 }) => {
   // Use the prop if provided, otherwise get from environment variable at runtime
@@ -70,8 +68,8 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   const [loading, setLoading] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [paidBy, setPaidBy] = useState<string>("");
-  const [splitAmong, setSplitAmong] = useState<string[]>([]);
+  const [paidBy, setPaidBy] = useState<string>(""); // Now stores participant_id
+  const [splitAmong, setSplitAmong] = useState<string[]>([]); // Now stores participant_ids
   const [showPaidByPicker, setShowPaidByPicker] = useState(false);
   // Error states for inline validation
   const [descriptionError, setDescriptionError] = useState<string>("");
@@ -83,162 +81,105 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   const insets = useSafeAreaInsets();
   const screenHeight = Dimensions.get("window").height;
 
+  // Fetch participants for the group
+  const {
+    data: participants,
+    isLoading: isLoadingParticipants,
+    error: participantsError,
+  } = useParticipants(groupId || null);
+
   // Memoize derived values to avoid recalculations
   const isGroupExpense = useMemo(
-    () => type === "expense" && groupId && groupMembers.length > 0,
-    [type, groupId, groupMembers.length]
+    () => type === "expense" && groupId && (participants?.length || 0) > 0,
+    [type, groupId, participants?.length]
   );
 
-  const activeMembers = useMemo(
-    () => groupMembers.filter((m) => m.status !== "left"),
-    [groupMembers]
+  // Filter participants by type
+  const activeParticipants = useMemo(
+    () => (participants || []).filter((p) => p.type === "member"),
+    [participants]
   );
 
-  // Extract inactive user IDs from transaction (users not in current groupMembers)
-  // Only includes users who are already part of this transaction (paid_by or split_among/splits)
-  const inactiveUserIds = useMemo(() => {
-    if (!transaction) return [];
+  const invitedParticipants = useMemo(
+    () => (participants || []).filter((p) => p.type === "invited"),
+    [participants]
+  );
+
+  const formerParticipants = useMemo(
+    () => (participants || []).filter((p) => p.type === "former"),
+    [participants]
+  );
+
+  // Get participants that are in the current transaction (for editing)
+  const transactionParticipantIds = useMemo(() => {
+    if (!transaction) return new Set<string>();
     const ids = new Set<string>();
 
-    // Add paid_by if present
-    if (transaction.paid_by) {
-      ids.add(transaction.paid_by);
-      if (__DEV__) {
-        console.log(
-          "[TransactionForm] Added paid_by to inactive check:",
-          transaction.paid_by
-        );
-      }
+    // Add paid_by_participant_id if present
+    if (transaction.paid_by_participant_id) {
+      ids.add(transaction.paid_by_participant_id);
     }
 
-    // Add users from split_among (backward compatibility)
-    if (
-      Array.isArray(transaction.split_among) &&
-      transaction.split_among.length > 0
-    ) {
-      transaction.split_among.forEach((id) => {
-        ids.add(id);
-        if (__DEV__) {
-          console.log(
-            "[TransactionForm] Added split_among user to inactive check:",
-            id
-          );
+    // Add participant_ids from splits
+    if (Array.isArray(transaction.splits) && transaction.splits.length > 0) {
+      transaction.splits.forEach((split) => {
+        if (split.participant_id) {
+          ids.add(split.participant_id);
         }
       });
     }
 
-    // Add users from splits (preferred method)
-    if (Array.isArray(transaction.splits) && transaction.splits.length > 0) {
-      transaction.splits.forEach((split) => {
-        if (split.user_id) {
-          ids.add(split.user_id);
-          if (__DEV__) {
-            console.log(
-              "[TransactionForm] Added splits user to inactive check:",
-              split.user_id
-            );
+    return ids;
+  }, [transaction]);
+
+  // Include former participants if they're in the current transaction OR if they're the paid_by participant
+  const availableParticipants = useMemo(() => {
+    const combined = [...activeParticipants, ...invitedParticipants];
+
+    // Add former participants if they're part of this transaction OR if they're the paid_by participant
+    if (transaction || paidBy) {
+      formerParticipants.forEach((p) => {
+        const isInTransaction =
+          transaction && transactionParticipantIds.has(p.id);
+        const isPaidBy = paidBy && p.id === paidBy;
+        if (isInTransaction || isPaidBy) {
+          // Only add if not already in combined
+          if (!combined.some((c) => c.id === p.id)) {
+            combined.push(p);
           }
         }
       });
     }
 
-    // Filter to only include users who are NOT in current active groupMembers
-    const existingMap = new Set(groupMembers.map((m) => m.user_id));
-    const inactive = Array.from(ids).filter((id) => !existingMap.has(id));
-
-    if (__DEV__) {
-      console.log("[TransactionForm] Transaction user IDs:", Array.from(ids));
-      console.log(
-        "[TransactionForm] Active group member IDs:",
-        Array.from(existingMap)
-      );
-      console.log(
-        "[TransactionForm] Final inactive user IDs from transaction:",
-        inactive
-      );
-    }
-
-    return inactive;
-  }, [groupMembers, transaction]);
-
-  // Fetch profiles for inactive users
-  const {
-    data: inactiveProfiles,
-    isLoading: isLoadingProfiles,
-    error: profileError,
-  } = useUserProfiles(inactiveUserIds);
-
-  if (__DEV__ && inactiveUserIds.length > 0) {
-    console.log("[TransactionForm] Profile fetch:", {
-      isLoading: isLoadingProfiles,
-      error: profileError?.message,
-      profilesCount: inactiveProfiles.size,
-      profileData: Array.from(inactiveProfiles.entries()).map(([id, p]) => ({
-        id,
-        full_name: p.full_name,
-        email: p.email,
-      })),
-    });
-  }
-
-  // Create inactive members with profile data
-  const extraInactiveMembers = useMemo(() => {
-    if (inactiveUserIds.length === 0) return [];
-
-    const members = inactiveUserIds.map((id) => {
-      const profile = inactiveProfiles.get(id);
-      const member = {
-        id: `former-${id}`,
-        group_id: transaction?.group_id || "",
-        user_id: id,
-        role: "member" as const,
-        status: "left" as const,
-        joined_at: "",
-        full_name: profile?.full_name ?? undefined,
-        email: profile?.email ?? undefined,
-        avatar_url: profile?.avatar_url || undefined,
-      };
-      if (__DEV__) {
-        console.log(`[TransactionForm] Created inactive member for ${id}:`, {
-          full_name: member.full_name,
-          email: member.email,
-          hasProfile: !!profile,
-        });
-      }
-      return member;
-    });
-    return members;
-  }, [inactiveUserIds, inactiveProfiles, transaction]);
-
-  const availableMembers = useMemo(() => {
-    const combined = [...activeMembers];
-    extraInactiveMembers.forEach((m) => {
-      if (!combined.some((c) => c.user_id === m.user_id)) {
-        combined.push(m);
-      }
-    });
     return combined;
-  }, [activeMembers, extraInactiveMembers]);
+  }, [
+    activeParticipants,
+    invitedParticipants,
+    formerParticipants,
+    transaction,
+    transactionParticipantIds,
+    paidBy,
+  ]);
 
-  const allMemberIds = useMemo(
-    () => activeMembers.map((m) => m.user_id),
-    [activeMembers]
+  const allParticipantIds = useMemo(
+    () => activeParticipants.map((p) => p.id),
+    [activeParticipants]
   );
 
-  const areAllMembersSelected = useMemo(() => {
-    // For new transactions, check only active members
-    // For existing transactions, check all available members (active + inactive)
-    const membersToCheck = transaction ? availableMembers : activeMembers;
+  const areAllParticipantsSelected = useMemo(() => {
+    const participantsToCheck = transaction
+      ? availableParticipants
+      : activeParticipants;
     return (
-      membersToCheck.length > 0 &&
-      membersToCheck.every((m) => splitAmong.includes(m.user_id))
+      participantsToCheck.length > 0 &&
+      participantsToCheck.every((p) => splitAmong.includes(p.id))
     );
-  }, [activeMembers, availableMembers, splitAmong, transaction]);
+  }, [activeParticipants, availableParticipants, splitAmong, transaction]);
 
-  const paidByMember = useMemo(
+  const paidByParticipant = useMemo(
     () =>
-      paidBy ? availableMembers.find((m) => m.user_id === paidBy) : undefined,
-    [availableMembers, paidBy]
+      paidBy ? availableParticipants.find((p) => p.id === paidBy) : undefined,
+    [availableParticipants, paidBy]
   );
 
   // Helper: Reset form to default state
@@ -252,17 +193,22 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     setCategory("");
     setCurrency(effectiveDefaultCurrency);
     setPaidBy("");
-    // Default split: all members if it's a group expense context
-    // We check groupId and groupMembers directly to avoid circular dependency
-    const shouldDefaultToAllMembers = groupId && groupMembers.length > 0;
-    setSplitAmong(shouldDefaultToAllMembers ? allMemberIds : []);
+    // Default split: all participants if it's a group expense context
+    const shouldDefaultToAllParticipants =
+      groupId && activeParticipants.length > 0;
+    setSplitAmong(shouldDefaultToAllParticipants ? allParticipantIds : []);
     // Clear all errors
     setDescriptionError("");
     setAmountError("");
     setDateError("");
     setPaidByError("");
     setSplitAmongError("");
-  }, [effectiveDefaultCurrency, groupId, groupMembers.length, allMemberIds]);
+  }, [
+    effectiveDefaultCurrency,
+    groupId,
+    activeParticipants.length,
+    allParticipantIds,
+  ]);
 
   // Helper: Load transaction data into form
   const loadTransactionData = useCallback(
@@ -275,10 +221,28 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       setType(tx.type || "expense");
       setCategory(tx.category || "");
       setCurrency(tx.currency || effectiveDefaultCurrency);
-      setPaidBy(tx.paid_by || "");
-      setSplitAmong(
-        Array.isArray(tx.split_among) ? [...new Set(tx.split_among)] : []
-      );
+
+      // Use paid_by_participant_id exclusively
+      if (tx.paid_by_participant_id) {
+        setPaidBy(tx.paid_by_participant_id);
+      } else {
+        setPaidBy("");
+      }
+
+      // Extract participant_ids from splits or split_among_participant_ids
+      if (Array.isArray(tx.splits) && tx.splits.length > 0) {
+        const participantIds = tx.splits
+          .map((s) => s.participant_id)
+          .filter((id): id is string => !!id);
+        setSplitAmong([...new Set(participantIds)]);
+      } else if (
+        Array.isArray(tx.split_among_participant_ids) &&
+        tx.split_among_participant_ids.length > 0
+      ) {
+        setSplitAmong([...new Set(tx.split_among_participant_ids)]);
+      } else {
+        setSplitAmong([]);
+      }
     },
     [effectiveDefaultCurrency]
   );
@@ -291,6 +255,8 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       resetFormToDefaults();
     }
   }, [transaction, loadTransactionData, resetFormToDefaults]);
+
+  // No longer need legacy resolution useEffects as they are handled by the participant model
 
   // Clear split data when switching away from expense type (only for new transactions)
   useEffect(() => {
@@ -325,14 +291,20 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     }
   };
 
-  const handleToggleSplitMember = (userId: string) => {
+  const handleToggleSplitMember = (participantId: string) => {
     setSplitAmong((prev) => {
       // Remove duplicates first to ensure data integrity
       const uniquePrev = [...new Set(prev)];
-      if (uniquePrev.includes(userId)) {
-        return uniquePrev.filter((id) => id !== userId);
+      if (uniquePrev.includes(participantId)) {
+        // Prevent removing if this is the paidBy person and they're the only one in the split
+        if (paidBy === participantId && uniquePrev.length === 1) {
+          // Can't remove the only person, especially if they're the one who paid
+          return uniquePrev;
+        }
+        // Allow removal of paidBy person if there are other people in the split
+        return uniquePrev.filter((id) => id !== participantId);
       } else {
-        return [...uniquePrev, userId];
+        return [...uniquePrev, participantId];
       }
     });
     // Clear error when user makes a selection
@@ -342,16 +314,18 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   };
 
   const handleToggleAllMembers = () => {
-    if (areAllMembersSelected) {
+    if (areAllParticipantsSelected) {
       // Deselect all
       setSplitAmong([]);
     } else {
       // Select all - ensure no duplicates
-      // For new transactions, select only active members
-      // For existing transactions, select all available members (active + inactive)
-      const membersToSelect = transaction ? availableMembers : activeMembers;
-      const allMemberIds = membersToSelect.map((m) => m.user_id);
-      setSplitAmong([...new Set(allMemberIds)]);
+      // For new transactions, select only active participants
+      // For existing transactions, select all available participants (active + invited + former)
+      const participantsToSelect = transaction
+        ? availableParticipants
+        : activeParticipants;
+      const allParticipantIds = participantsToSelect.map((p) => p.id);
+      setSplitAmong([...new Set(allParticipantIds)]);
     }
     // Clear error
     if (splitAmongError) {
@@ -435,6 +409,8 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     const amountValue = parseFloat(amount);
     setLoading(true);
     try {
+      // When updating, always include current splits to preserve former participants
+      // If this is an update and we have a transaction, ensure we include all current splits
       await onSave({
         description: description.trim(),
         amount: amountValue,
@@ -442,8 +418,10 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
         type,
         category: category.trim() || undefined,
         currency: currency || effectiveDefaultCurrency,
-        paid_by: isGroupExpense ? paidBy : undefined,
-        split_among: isGroupExpense ? splitAmong : undefined,
+        paid_by_participant_id: isGroupExpense ? paidBy : undefined,
+        split_among_participant_ids: isGroupExpense
+          ? splitAmong
+          : undefined,
       });
       // onDismiss will be called by the parent after successful save if needed,
       // but usually we want to close the screen.
@@ -684,9 +662,12 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                 if (newType === "income") {
                   setPaidBy("");
                   setSplitAmong([]);
-                } else if (newType === "expense" && groupMembers.length > 0) {
-                  // When switching to expense, default to all members
-                  setSplitAmong(groupMembers.map((m) => m.user_id));
+                } else if (
+                  newType === "expense" &&
+                  activeParticipants.length > 0
+                ) {
+                  // When switching to expense, default to all active participants
+                  setSplitAmong(activeParticipants.map((p) => p.id));
                 }
               }}
               buttons={[
@@ -731,17 +712,38 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                   value={
                     paidBy
                       ? (() => {
-                          const member = availableMembers.find(
-                            (m) => m.user_id === paidBy
+                          // First try to find in availableParticipants by participant_id
+                          let participant = availableParticipants.find(
+                            (p) => p.id === paidBy
                           );
-                          const isInactive = member?.status === "left";
+
+                          // If not found, try all participants by participant_id
+                          if (!participant) {
+                            participant = participants.find(
+                              (p) => p.id === paidBy
+                            );
+                          }
+
+                          // If still not found, paidBy might be a user_id (legacy), search by user_id
+                          if (!participant) {
+                            participant = participants.find(
+                              (p) => p.user_id === paidBy
+                            );
+                          }
+
+                          const isFormer = participant?.type === "former";
+                          const isInvited = participant?.type === "invited";
                           const displayName =
-                            member?.full_name ||
-                            member?.email ||
-                            `User ${paidBy.substring(0, 8)}...`;
-                          return isInactive
-                            ? `${displayName} (Former Member)`
-                            : displayName;
+                            participant?.full_name ||
+                            participant?.email ||
+                            `Participant ${paidBy.substring(0, 8)}...`;
+                          if (isFormer) {
+                            return `${displayName} (Former)`;
+                          }
+                          if (isInvited) {
+                            return `${displayName} (Invited)`;
+                          }
+                          return displayName;
                         })()
                       : ""
                   }
@@ -777,10 +779,10 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                     mode="text"
                     compact
                     onPress={handleToggleAllMembers}
-                    disabled={loading}
+                    disabled={loading || isLoadingParticipants}
                     style={styles.selectAllButton}
                   >
-                    {areAllMembersSelected ? "Deselect All" : "Select All"}
+                    {areAllParticipantsSelected ? "Deselect All" : "Select All"}
                   </Button>
                 </View>
                 {splitAmongError ? (
@@ -791,6 +793,35 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                     {splitAmongError}
                   </Text>
                 ) : null}
+                {participantsError && (
+                  <Text
+                    variant="bodySmall"
+                    style={[styles.errorText, { color: theme.colors.error }]}
+                  >
+                    Failed to load participants: {participantsError.message}
+                  </Text>
+                )}
+                {isLoadingParticipants && (
+                  <Text
+                    variant="bodySmall"
+                    style={[
+                      { color: theme.colors.onSurfaceVariant, padding: 8 },
+                    ]}
+                  >
+                    Loading participants...
+                  </Text>
+                )}
+                {!isLoadingParticipants &&
+                  availableParticipants.length === 0 && (
+                    <Text
+                      variant="bodySmall"
+                      style={[
+                        { color: theme.colors.onSurfaceVariant, padding: 8 },
+                      ]}
+                    >
+                      No participants found. Add members to the group first.
+                    </Text>
+                  )}
                 <View
                   style={[
                     styles.splitAmongList,
@@ -800,31 +831,54 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                     },
                   ]}
                 >
-                  {availableMembers.map((member) => {
-                    const isSelected = splitAmong.includes(member.user_id);
-                    const isInactive = member.status === "left";
+                  {availableParticipants.map((participant) => {
+                    const isSelected = splitAmong.includes(participant.id);
+                    if (
+                      __DEV__ &&
+                      transaction &&
+                      availableParticipants.length <= 3
+                    ) {
+                      console.log(
+                        "[TransactionForm] Participant selection check:",
+                        {
+                          participant_id: participant.id,
+                          participant_name:
+                            participant.full_name || participant.email,
+                          isSelected,
+                          splitAmong,
+                        }
+                      );
+                    }
+                    const isFormer = participant.type === "former";
+                    const isInvited = participant.type === "invited";
                     const displayName =
-                      member.full_name ||
-                      member.email ||
-                      `User ${member.user_id.substring(0, 8)}...`;
+                      participant.full_name ||
+                      participant.email ||
+                      `Participant ${participant.id.substring(0, 8)}...`;
                     return (
                       <TouchableOpacity
-                        key={member.user_id}
+                        key={participant.id}
                         style={[
                           styles.splitMemberItem,
                           isSelected && {
                             backgroundColor: theme.colors.primaryContainer,
                           },
                         ]}
-                        onPress={() => handleToggleSplitMember(member.user_id)}
+                        onPress={() => handleToggleSplitMember(participant.id)}
                         disabled={loading}
                       >
                         <Checkbox
                           status={isSelected ? "checked" : "unchecked"}
                           onPress={() =>
-                            handleToggleSplitMember(member.user_id)
+                            handleToggleSplitMember(participant.id)
                           }
-                          disabled={loading}
+                          disabled={
+                            loading ||
+                            // Disable if this is the paidBy person and they're the only one in splitAmong
+                            (paidBy === participant.id &&
+                              splitAmong.length === 1 &&
+                              splitAmong.includes(participant.id))
+                          }
                         />
                         <View
                           style={{
@@ -845,12 +899,14 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                               variant="bodyLarge"
                               style={[
                                 styles.splitMemberText,
-                                isInactive && { fontStyle: "italic" },
+                                (isFormer || isInvited) && {
+                                  fontStyle: "italic",
+                                },
                               ]}
                             >
                               {displayName}
                             </Text>
-                            {isInactive && (
+                            {isFormer && (
                               <Text
                                 variant="bodySmall"
                                 style={{
@@ -860,6 +916,18 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                                 }}
                               >
                                 (Former)
+                              </Text>
+                            )}
+                            {isInvited && (
+                              <Text
+                                variant="bodySmall"
+                                style={{
+                                  marginLeft: 8,
+                                  color: theme.colors.primary,
+                                  opacity: 0.8,
+                                }}
+                              >
+                                (Invited)
                               </Text>
                             )}
                           </View>
@@ -949,25 +1017,26 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
               <Button onPress={() => setShowPaidByPicker(false)}>Close</Button>
             </View>
             <FlatList
-              data={availableMembers}
-              keyExtractor={(item) => item.user_id}
+              data={availableParticipants}
+              keyExtractor={(item) => item.id}
               style={styles.currencyList}
               renderItem={({ item }) => {
-                const isInactive = item.status === "left";
+                const isFormer = item.type === "former";
+                const isInvited = item.type === "invited";
                 const displayName =
                   item.full_name ||
                   item.email ||
-                  `User ${item.user_id.substring(0, 8)}...`;
+                  `Participant ${item.id.substring(0, 8)}...`;
                 return (
                   <TouchableOpacity
                     style={[
                       styles.currencyItem,
-                      paidBy === item.user_id && {
+                      paidBy === item.id && {
                         backgroundColor: theme.colors.secondaryContainer,
                       },
                     ]}
                     onPress={() => {
-                      setPaidBy(item.user_id);
+                      setPaidBy(item.id);
                       setShowPaidByPicker(false);
                       if (paidByError) {
                         setPaidByError("");
@@ -984,14 +1053,14 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                       <Text
                         variant="bodyLarge"
                         style={{
-                          fontWeight:
-                            paidBy === item.user_id ? "bold" : "normal",
-                          fontStyle: isInactive ? "italic" : "normal",
+                          fontWeight: paidBy === item.id ? "bold" : "normal",
+                          fontStyle:
+                            isFormer || isInvited ? "italic" : "normal",
                         }}
                       >
                         {displayName}
                       </Text>
-                      {isInactive && (
+                      {isFormer && (
                         <Text
                           variant="bodySmall"
                           style={{
@@ -1003,8 +1072,20 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                           (Former)
                         </Text>
                       )}
+                      {isInvited && (
+                        <Text
+                          variant="bodySmall"
+                          style={{
+                            marginLeft: 8,
+                            color: theme.colors.primary,
+                            opacity: 0.8,
+                          }}
+                        >
+                          (Invited)
+                        </Text>
+                      )}
                     </View>
-                    {paidBy === item.user_id && (
+                    {paidBy === item.id && (
                       <Text
                         variant="bodyMedium"
                         style={{ color: theme.colors.primary }}

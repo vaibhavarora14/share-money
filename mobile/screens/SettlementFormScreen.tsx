@@ -1,20 +1,20 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Alert,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  View,
+    Alert,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    View,
 } from "react-native";
 import { Appbar, Button, Text, TextInput, useTheme } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Balance, GroupMember, Settlement } from "../types";
 import {
-  formatCurrency,
-  getCurrencySymbol,
-  getDefaultCurrency,
+    formatCurrency,
+    getCurrencySymbol,
+    getDefaultCurrency,
 } from "../utils/currency";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 
@@ -28,8 +28,8 @@ interface SettlementFormScreenProps {
   defaultCurrency?: string;
   onSave: (data: {
     group_id: string;
-    from_user_id: string;
-    to_user_id: string;
+    from_participant_id: string;
+    to_participant_id: string;
     amount: number;
     currency: string;
     notes?: string;
@@ -39,6 +39,8 @@ interface SettlementFormScreenProps {
     amount?: number;
     currency?: string;
     notes?: string;
+    from_participant_id?: string;
+    to_participant_id?: string;
   }) => Promise<void>;
   onDismiss: () => void;
 }
@@ -68,19 +70,19 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
 
   const [amount, setAmount] = useState("");
   const [notes, setNotes] = useState("");
-  const [selectedToUserId, setSelectedToUserId] = useState<string>("");
+  const [selectedToParticipantId, setSelectedToParticipantId] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [amountError, setAmountError] = useState<string>("");
 
   // Determine the other user based on balance or selection
-  const otherUser = useMemo(() => {
+  const otherMember = useMemo(() => {
     if (balance) {
-      // If settling a specific balance, return the user from the balance
+      // If settling a specific balance, return the member from the balance
       return groupMembers.find((m) => m.user_id === balance.user_id);
     }
-    // Manual entry - find selected user
-    return groupMembers.find((m) => m.user_id === selectedToUserId);
-  }, [balance, selectedToUserId, groupMembers]);
+    // Manual entry - find selected participant
+    return groupMembers.find((m) => m.participant_id === selectedToParticipantId);
+  }, [balance, selectedToParticipantId, groupMembers]);
 
   // Determine settlement direction
   const isPaying = useMemo(() => {
@@ -102,7 +104,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
     if (!visible) {
       setAmount("");
       setNotes("");
-      setSelectedToUserId("");
+      setSelectedToParticipantId("");
       setAmountError("");
       return;
     }
@@ -111,21 +113,26 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
     if (settlement) {
       setAmount(settlement.amount.toString());
       setNotes(settlement.notes || "");
-      // Determine which user is the "other" user
-      const otherUserId =
-        settlement.from_user_id === currentUserId
-          ? settlement.to_user_id
-          : settlement.from_user_id;
-      setSelectedToUserId(otherUserId);
+      // Determine which participant is the "other" participant
+      const currentParticipant = groupMembers.find(m => m.user_id === currentUserId);
+      const currentParticipantId = currentParticipant?.participant_id;
+      
+      const otherParticipantId =
+        settlement.from_participant_id === currentParticipantId
+          ? settlement.to_participant_id
+          : settlement.from_participant_id;
+          
+      setSelectedToParticipantId(otherParticipantId || "");
     }
     // Pre-fill based on balance if provided
     else if (balance) {
-      setSelectedToUserId(balance.user_id);
+      const member = groupMembers.find(m => m.user_id === balance.user_id);
+      setSelectedToParticipantId(member?.participant_id || "");
       // Pre-fill with absolute balance amount as suggestion
       setAmount(Math.abs(balance.amount).toFixed(2));
     } else if (availableUsers.length > 0) {
       // Default to first available user
-      setSelectedToUserId(availableUsers[0].user_id);
+      setSelectedToParticipantId(availableUsers[0].participant_id || "");
     }
   }, [visible, balance, settlement, availableUsers, currentUserId]);
 
@@ -141,8 +148,8 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
       setAmountError("");
     }
 
-    // Validate user selection (for manual entry)
-    if (!balance && !selectedToUserId) {
+    // Validate participant selection (for manual entry)
+    if (!balance && !selectedToParticipantId) {
       isValid = false;
     }
 
@@ -168,27 +175,42 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
           notes: notes.trim() || undefined,
         });
       } else {
-        // Determine the other user ID
-        let otherUserId: string;
+        // Determine the current user's participant ID
+        const currentMember = groupMembers.find(m => m.user_id === currentUserId);
+        const currentParticipantId = currentMember?.participant_id;
+
+        if (!currentParticipantId) {
+           Alert.alert("Error", "Unable to identify your participant record in this group");
+           return;
+        }
+
+        // Determine the other participant ID
+        let otherParticipantId: string;
         if (balance) {
-          otherUserId = balance.user_id;
-        } else if (selectedToUserId) {
-          otherUserId = selectedToUserId;
+          const member = groupMembers.find(m => m.user_id === balance.user_id);
+          otherParticipantId = member?.participant_id || "";
+        } else if (selectedToParticipantId) {
+          otherParticipantId = selectedToParticipantId;
         } else {
-          Alert.alert("Error", "Please select a user to settle with");
+          Alert.alert("Error", "Please select a member to settle with");
           return;
         }
 
-        // Determine from_user_id and to_user_id
-        // If paying (isPaying = true): from_user_id = currentUserId, to_user_id = otherUserId
-        // If receiving (isPaying = false): from_user_id = otherUserId, to_user_id = currentUserId
-        const fromUserId = isPaying ? currentUserId : otherUserId;
-        const toUserId = isPaying ? otherUserId : currentUserId;
+        if (!otherParticipantId) {
+           Alert.alert("Error", "Selected member does not have a valid participant record");
+           return;
+        }
+
+        // Determine from_participant_id and to_participant_id
+        // If paying (isPaying = true): from_participant_id = currentParticipantId, to_participant_id = otherParticipantId
+        // If receiving (isPaying = false): from_participant_id = otherParticipantId, to_participant_id = currentParticipantId
+        const fromParticipantId = isPaying ? currentParticipantId : otherParticipantId;
+        const toParticipantId = isPaying ? otherParticipantId : currentParticipantId;
 
         await onSave({
           group_id: groupId,
-          from_user_id: fromUserId,
-          to_user_id: toUserId,
+          from_participant_id: fromParticipantId,
+          to_participant_id: toParticipantId,
           amount: amountNum,
           currency: effectiveDefaultCurrency,
           notes: notes.trim() || undefined,
@@ -198,7 +220,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
       // Reset form
       setAmount("");
       setNotes("");
-      setSelectedToUserId("");
+      setSelectedToParticipantId("");
       setAmountError("");
     } catch (error) {
       Alert.alert("Error", getUserFriendlyErrorMessage(error));
@@ -207,10 +229,10 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
     }
   };
 
-  const getUserDisplayName = (userId: string): string => {
-    const member = groupMembers.find((m) => m.user_id === userId);
+  const getParticipantDisplayName = (participantId: string): string => {
+    const member = groupMembers.find((m) => m.participant_id === participantId);
     return (
-      member?.full_name || member?.email || `User ${userId.substring(0, 8)}...`
+      member?.full_name || member?.email || `Member ${participantId.substring(0, 8)}...`
     );
   };
 
@@ -263,7 +285,15 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                   { color: theme.colors.onSecondaryContainer },
                 ]}
               >
-                {getUserDisplayName(balance.user_id)}
+              <Text
+                variant="titleMedium"
+                style={[
+                  styles.balanceText,
+                  { color: theme.colors.onSecondaryContainer },
+                ]}
+              >
+                {groupMembers.find(m => m.user_id === balance.user_id)?.full_name || balance.email || "Unknown Member"}
+              </Text>
               </Text>
               <Text
                 variant="bodyMedium"
@@ -291,9 +321,17 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                   { color: theme.colors.onSecondaryContainer },
                 ]}
               >
-                {settlement.from_user_id === currentUserId
-                  ? `You paid ${getUserDisplayName(settlement.to_user_id)}`
-                  : `${getUserDisplayName(settlement.from_user_id)} paid you`}
+              <Text
+                variant="titleMedium"
+                style={[
+                  styles.balanceText,
+                  { color: theme.colors.onSecondaryContainer },
+                ]}
+              >
+                {settlement.from_participant_id === groupMembers.find(m => m.user_id === currentUserId)?.participant_id
+                  ? `You paid ${getParticipantDisplayName(settlement.to_participant_id || "")}`
+                  : `${getParticipantDisplayName(settlement.from_participant_id || "")} paid you`}
+              </Text>
               </Text>
               <Text
                 variant="bodyMedium"
@@ -322,18 +360,18 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
               >
                 {availableUsers.map((member) => (
                   <Button
-                    key={member.user_id}
+                    key={member.participant_id}
                     mode={
-                      selectedToUserId === member.user_id
+                      selectedToParticipantId === member.participant_id
                         ? "contained"
                         : "outlined"
                     }
-                    onPress={() => setSelectedToUserId(member.user_id)}
+                    onPress={() => setSelectedToParticipantId(member.participant_id || "")}
                     style={styles.userButton}
                   >
                     {member.full_name ||
                       member.email ||
-                      `User ${member.user_id.substring(0, 8)}...`}
+                      `Member ${member.participant_id?.substring(0, 8)}...`}
                   </Button>
                 ))}
               </ScrollView>
@@ -349,9 +387,9 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                 variant="bodyMedium"
                 style={{ color: theme.colors.onSurfaceVariant }}
               >
-                {settlement.from_user_id === currentUserId
-                  ? getUserDisplayName(settlement.to_user_id)
-                  : getUserDisplayName(settlement.from_user_id)}
+                {settlement.from_participant_id === groupMembers.find(m => m.user_id === currentUserId)?.participant_id
+                  ? getParticipantDisplayName(settlement.to_participant_id || "")
+                  : getParticipantDisplayName(settlement.from_participant_id || "")}
               </Text>
               <Text
                 variant="bodySmall"
@@ -412,7 +450,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
               mode="contained"
               onPress={handleSave}
               loading={loading}
-              disabled={loading || !amount || (!isEditing && !selectedToUserId)}
+              disabled={loading || !amount || (!isEditing && !selectedToParticipantId)}
               style={styles.saveButton}
             >
               {isEditing

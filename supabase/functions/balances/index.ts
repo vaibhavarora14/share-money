@@ -1,4 +1,3 @@
-import { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 import { verifyAuth } from '../_shared/auth.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { log } from '../_shared/logger.ts';
@@ -37,14 +36,17 @@ interface Group {
 }
 
 interface TransactionSplit {
-  user_id: string;
+  participant_id?: string | null;
+  user_id?: string | null;
+  email?: string | null;
   amount: number | string;
 }
 
 interface TransactionWithSplits {
   id: number;
   amount: number | string;
-  paid_by: string | null;
+  paid_by: string | null; // Legacy
+  paid_by_participant_id?: string | null; // New
   currency: string;
   split_among?: string[] | null;
   transaction_splits?: TransactionSplit[];
@@ -63,7 +65,7 @@ interface TransactionWithSplits {
  */
 
 async function calculateGroupBalances(
-  supabase: SupabaseClient,
+  supabase: any,
   groupId: string,
   currentUserId: string
 ): Promise<Balance[]> {
@@ -72,11 +74,11 @@ async function calculateGroupBalances(
     .select(`
       id,
       amount,
-      paid_by,
+      amount,
+      paid_by_participant_id,
       currency,
-      split_among,
       transaction_splits (
-        user_id,
+        participant_id,
         amount
       )
     `)
@@ -107,92 +109,119 @@ async function calculateGroupBalances(
     userBalances.set(currency, currentAmount + amount);
   };
 
+  // Collect all unique participant IDs from transactions and settlements
+  const allParticipantIds = new Set<string>();
+  
+  // From transactions
   for (const tx of (transactions || []) as TransactionWithSplits[]) {
-    const paidBy = tx.paid_by;
-    const totalAmount = typeof tx.amount === 'string' ? parseFloat(tx.amount) : tx.amount;
-    const currency = tx.currency;
-    
-    if (isNaN(totalAmount) || totalAmount <= 0) {
-      log.warn('Invalid transaction amount', 'balance-calculation', {
-        transactionId: tx.id,
-        amount: tx.amount,
-        groupId,
+    if (tx.paid_by_participant_id) allParticipantIds.add(tx.paid_by_participant_id);
+    if (tx.transaction_splits) {
+      tx.transaction_splits.forEach(s => {
+        if (s.participant_id) allParticipantIds.add(s.participant_id);
       });
-      continue;
-    }
-
-    let splits: Array<{ user_id: string; amount: number }> = [];
-
-    if (tx.transaction_splits && Array.isArray(tx.transaction_splits) && tx.transaction_splits.length > 0) {
-      splits = tx.transaction_splits
-        .map((s: TransactionSplit) => {
-          const amount = typeof s.amount === 'string' ? parseFloat(s.amount) : s.amount;
-          if (isNaN(amount) || amount <= 0) {
-            log.warn('Invalid split amount', 'balance-calculation', {
-              transactionId: tx.id,
-              userId: s.user_id,
-              amount: s.amount,
-              groupId,
-            });
-            return null;
-          }
-          return {
-            user_id: s.user_id,
-            amount,
-          };
-        })
-        .filter((s): s is { user_id: string; amount: number } => s !== null);
-    } else if (tx.split_among && Array.isArray(tx.split_among) && tx.split_among.length > 0) {
-      const splitCount = tx.split_among.length;
-      if (splitCount === 0) {
-        continue;
-      }
-      const splitAmount = totalAmount / splitCount;
-      splits = tx.split_among.map((userId: string) => ({
-        user_id: userId,
-        amount: Math.round((splitAmount) * 100) / 100,
-      }));
-      if (splits.length > 0) {
-        const sum = splits.reduce((acc, s) => acc + s.amount, 0);
-        const diff = totalAmount - sum;
-        if (Math.abs(diff) > 0.001) {
-          splits[0].amount = Math.round((splits[0].amount + diff) * 100) / 100;
-        }
-      }
-    }
-
-    if (splits.length === 0 || !paidBy || !memberIds.has(paidBy)) {
-      continue;
-    }
-
-    const currentUserSplit = splits.find((s) => s.user_id === currentUserId);
-    
-    if (paidBy === currentUserId) {
-      for (const split of splits) {
-        if (split.user_id !== currentUserId && memberIds.has(split.user_id)) {
-          updateBalance(split.user_id, currency, split.amount);
-        }
-      }
-    } else if (currentUserSplit) {
-      updateBalance(paidBy, currency, -currentUserSplit.amount);
     }
   }
 
-  const { data: settlements } = await supabase
+  // From settlements
+  const { data: settlements, error: settlementsError } = await supabase
     .from('settlements')
-    .select('from_user_id, to_user_id, amount, currency')
+    .select('id, group_id, from_participant_id, to_participant_id, amount, currency')
     .eq('group_id', groupId);
 
+  if (settlementsError) {
+    log.error('Error fetching settlements', 'balance-calculation', { groupId, error: settlementsError.message });
+    throw settlementsError;
+  }
+
   for (const settlement of (settlements || [])) {
-    const fromUserId = settlement.from_user_id;
-    const toUserId = settlement.to_user_id;
+    if (settlement.from_participant_id) allParticipantIds.add(settlement.from_participant_id);
+    if (settlement.to_participant_id) allParticipantIds.add(settlement.to_participant_id);
+  }
+
+  // Map to store participant user_id lookups
+  const participantToUserMap = new Map<string, string>();
+
+  // Batch fetch all participants
+  if (allParticipantIds.size > 0) {
+    const { data: participants } = await supabase
+      .from('participants')
+      .select('id, user_id')
+      .in('id', Array.from(allParticipantIds));
+    
+    if (participants) {
+      participants.forEach((p: any) => {
+        if (p.user_id) participantToUserMap.set(p.id, p.user_id);
+      });
+    }
+  }
+
+  // Process Transactions
+  for (const tx of (transactions || []) as TransactionWithSplits[]) {
+    const totalAmount = typeof tx.amount === 'string' ? parseFloat(tx.amount) : tx.amount;
+    const currency = tx.currency;
+    
+    if (isNaN(totalAmount) || totalAmount <= 0) continue;
+
+    const paidByUserId = tx.paid_by_participant_id ? participantToUserMap.get(tx.paid_by_participant_id) : null;
+    if (!paidByUserId || !memberIds.has(paidByUserId)) continue;
+
+    if (tx.transaction_splits && Array.isArray(tx.transaction_splits)) {
+      const splits = tx.transaction_splits
+        .map((s: TransactionSplit) => {
+          const amount = typeof s.amount === 'string' ? parseFloat(s.amount) : s.amount;
+          const userId = s.participant_id ? participantToUserMap.get(s.participant_id) : null;
+          
+          if (!userId || isNaN(amount) || amount <= 0) return null;
+          return { user_id: userId, amount };
+        })
+        .filter((s): s is { user_id: string; amount: number } => s !== null);
+
+      if (splits.length === 0) continue;
+
+      const currentUserSplit = splits.find((s) => s.user_id === currentUserId);
+      
+      if (paidByUserId === currentUserId) {
+        for (const split of splits) {
+          if (split.user_id !== currentUserId && memberIds.has(split.user_id)) {
+            updateBalance(split.user_id, currency, split.amount);
+          }
+        }
+      } else if (currentUserSplit) {
+        updateBalance(paidByUserId, currency, -currentUserSplit.amount);
+      }
+    }
+  }
+
+  // Process Settlements
+  for (const settlement of (settlements || [])) {
+    // Get user_ids from participant_ids or use legacy user_ids as fallback
+    let fromUserId: string | null = null;
+    let toUserId: string | null = null;
+    
+    if (settlement.from_participant_id) {
+      fromUserId = participantToUserMap.get(settlement.from_participant_id) || null;
+    } 
+    if (!fromUserId && settlement.from_user_id) {
+      fromUserId = settlement.from_user_id;
+    }
+    
+    if (settlement.to_participant_id) {
+      toUserId = participantToUserMap.get(settlement.to_participant_id) || null;
+    } 
+    if (!toUserId && settlement.to_user_id) {
+      toUserId = settlement.to_user_id;
+    }
+    
+    if (!fromUserId || !toUserId) {
+      continue; 
+    }
+    
     const settlementAmount = typeof settlement.amount === 'string' 
       ? parseFloat(settlement.amount) 
       : settlement.amount;
     const currency = settlement.currency;
 
     if (!currency) {
-      // This should not happen if NOT NULL constraint is enforced, but handle gracefully
       log.error('Settlement missing currency', 'balance-calculation', { settlementId: settlement.id });
       continue;
     }
@@ -202,9 +231,20 @@ async function calculateGroupBalances(
     }
 
     if (fromUserId === currentUserId && memberIds.has(toUserId)) {
+      log.info('Reducing balance (receive)', 'balance-debug', { toUserId, amount: settlementAmount });
       updateBalance(toUserId, currency, settlementAmount);
     } else if (toUserId === currentUserId && memberIds.has(fromUserId)) {
+      log.info('Reducing balance (pay)', 'balance-debug', { fromUserId, amount: -settlementAmount });
       updateBalance(fromUserId, currency, -settlementAmount);
+    } else {
+      log.info('Skipping settlement update', 'balance-debug', { 
+        settlementId: settlement.id, 
+        currentUserId, 
+        fromUserId, 
+        toUserId,
+        fromMember: memberIds.has(fromUserId || ''),
+        toMember: memberIds.has(toUserId || '')
+      });
     }
   }
 
@@ -280,7 +320,7 @@ Deno.serve(async (req: Request) => {
 
     const groupMap = new Map((groups || []).map((g: Group) => [g.id, g.name]));
 
-    const balancePromises = targetGroupIds.map(async (gId) => {
+    const balancePromises = targetGroupIds.map(async (gId: string) => {
       try {
         const balances = await calculateGroupBalances(supabase, gId, currentUserId);
         const groupName = groupMap.get(gId) || 'Unknown Group';

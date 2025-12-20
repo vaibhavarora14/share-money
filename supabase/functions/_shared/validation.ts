@@ -120,8 +120,8 @@ export function validateGroupData(data: {
  */
 export function validateSettlementData(data: {
   group_id?: string;
-  from_user_id?: string;
-  to_user_id?: string;
+  from_participant_id?: string;
+  to_participant_id?: string;
   amount?: number;
   currency?: string;
 }): TransactionValidationResult {
@@ -129,12 +129,12 @@ export function validateSettlementData(data: {
     return { valid: false, error: 'Invalid group_id format. Expected UUID.' };
   }
 
-  if (data.from_user_id !== undefined && !isValidUUID(data.from_user_id)) {
-    return { valid: false, error: 'Invalid from_user_id format. Expected UUID.' };
+  if (data.from_participant_id !== undefined && !isValidUUID(data.from_participant_id)) {
+    return { valid: false, error: 'Invalid from_participant_id format. Expected UUID.' };
   }
 
-  if (data.to_user_id !== undefined && !isValidUUID(data.to_user_id)) {
-    return { valid: false, error: 'Invalid to_user_id format. Expected UUID.' };
+  if (data.to_participant_id !== undefined && !isValidUUID(data.to_participant_id)) {
+    return { valid: false, error: 'Invalid to_participant_id format. Expected UUID.' };
   }
 
   if (data.amount !== undefined) {

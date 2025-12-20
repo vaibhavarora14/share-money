@@ -1,22 +1,24 @@
 import React, { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import {
-  ActivityIndicator,
-  Appbar,
-  Button,
-  FAB,
-  IconButton,
-  Surface,
-  Text,
-  useTheme,
+    ActivityIndicator,
+    Appbar,
+    Button,
+    FAB,
+    IconButton,
+    Surface,
+    Text,
+    useTheme,
 } from "react-native-paper";
 import { useAuth } from "../contexts/AuthContext";
+import { useBalances } from "../hooks/useBalances";
 import { useGroups } from "../hooks/useGroups";
 import { Group } from "../types";
+import { formatCurrency } from "../utils/currency";
 import { showErrorAlert } from "../utils/errorHandling";
 import {
-  getUserFriendlyErrorMessage,
-  isSessionExpiredError,
+    getUserFriendlyErrorMessage,
+    isSessionExpiredError,
 } from "../utils/errorMessages";
 import { CreateGroupScreen } from "./CreateGroupScreen";
 
@@ -39,6 +41,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   const theme = useTheme();
   const { signOut } = useAuth();
   const { data: groups, isLoading: loading, error, refetch } = useGroups();
+  const { data: balancesData } = useBalances(null);
 
   // Expose refetch function to parent component
   React.useEffect(() => {
@@ -188,57 +191,95 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                   onPress={() => onGroupPress(group)}
                   activeOpacity={0.7}
                 >
-                  <View style={styles.groupIconContainer}>
-                    <Surface
-                      style={[
-                        styles.groupIcon,
-                        { backgroundColor: theme.colors.primaryContainer },
-                      ]}
-                      elevation={0}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 20,
-                          fontWeight: "bold",
-                          color: theme.colors.onPrimaryContainer,
-                        }}
+                  <View style={styles.groupMainContent}>
+                    <View style={styles.groupIconContainer}>
+                      <Surface
+                        style={[
+                          styles.groupIcon,
+                          { backgroundColor: theme.colors.primaryContainer },
+                        ]}
+                        elevation={0}
                       >
-                        {group.name.charAt(0).toUpperCase()}
-                      </Text>
-                    </Surface>
-                  </View>
+                        <Text
+                          style={{
+                            fontSize: 20,
+                            fontWeight: "bold",
+                            color: theme.colors.onPrimaryContainer,
+                          }}
+                        >
+                          {group.name.charAt(0).toUpperCase()}
+                        </Text>
+                      </Surface>
+                    </View>
 
-                  <View style={styles.groupContent}>
-                    <Text
-                      variant="titleMedium"
-                      style={styles.groupName}
-                      numberOfLines={1}
-                    >
-                      {group.name}
-                    </Text>
-                    {group.description ? (
+                    <View style={styles.groupInfo}>
                       <Text
-                        variant="bodySmall"
-                        style={{ color: theme.colors.onSurfaceVariant }}
+                        variant="titleMedium"
+                        style={styles.groupName}
                         numberOfLines={1}
                       >
-                        {group.description}
+                        {group.name}
                       </Text>
-                    ) : (
-                      <Text
-                        variant="bodySmall"
-                        style={{ color: theme.colors.onSurfaceVariant }}
-                      >
-                        No description
-                      </Text>
-                    )}
+                      {group.description ? (
+                        <Text
+                          variant="bodySmall"
+                          style={{ color: theme.colors.onSurfaceVariant }}
+                          numberOfLines={1}
+                        >
+                          {group.description}
+                        </Text>
+                      ) : (
+                        <Text
+                          variant="bodySmall"
+                          style={{ color: theme.colors.onSurfaceVariant }}
+                        >
+                          No description
+                        </Text>
+                      )}
+                    </View>
                   </View>
 
-                  <IconButton
-                    icon="chevron-right"
-                    size={20}
-                    iconColor={theme.colors.onSurfaceVariant}
-                  />
+                  {/* Balance Badge */}
+                  {(() => {
+                    const groupBalanceData = balancesData?.group_balances?.find(
+                      (gb) => gb.group_id === group.id
+                    );
+                    
+                    if (!groupBalanceData || !groupBalanceData.balances || groupBalanceData.balances.length === 0) {
+                        return (
+                             <View style={[styles.balanceBadge, { backgroundColor: theme.colors.surfaceVariant }]}>
+                                <Text style={[styles.balanceText, { color: theme.colors.onSurfaceVariant }]}>Settled</Text>
+                             </View>
+                        );
+                    }
+
+                    // Naive summation: take the first currency encountered.
+                    const currency = groupBalanceData.balances[0].currency;
+                    const netAmount = groupBalanceData.balances
+                        .filter(b => b.currency === currency)
+                        .reduce((sum, b) => sum + b.amount, 0);
+
+                    if (Math.abs(netAmount) < 0.01) {
+                         return (
+                             <View style={[styles.balanceBadge, { backgroundColor: theme.colors.surfaceVariant }]}>
+                                <Text style={[styles.balanceText, { color: theme.colors.onSurfaceVariant }]}>Settled</Text>
+                             </View>
+                        );
+                    }
+
+                    const isPositive = netAmount > 0;
+                    // Use Material Design 3 Token Colors for better theming support
+                    const badgeColor = isPositive ? theme.colors.primaryContainer : theme.colors.errorContainer;
+                    const textColor = isPositive ? theme.colors.onPrimaryContainer : theme.colors.onErrorContainer;
+                    
+                    return (
+                        <View style={[styles.balanceBadge, { backgroundColor: badgeColor }]}>
+                            <Text style={[styles.balanceText, { color: textColor, fontWeight: '700' }]}>
+                                {isPositive ? '+' : ''}{formatCurrency(netAmount, currency)}
+                            </Text>
+                        </View>
+                    );
+                  })()}
                 </TouchableOpacity>
               </Surface>
             ))
@@ -330,5 +371,27 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 10,
     borderRadius: 16,
+  },
+  // New Styles
+  groupMainContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  groupInfo: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  balanceBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    minWidth: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  balanceText: {
+    fontSize: 12,
+    fontWeight: '500',
   },
 });

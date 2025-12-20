@@ -47,8 +47,8 @@ export function useCreateSettlement(onSuccess?: () => void) {
 
   interface CreateSettlementInput {
     group_id: string;
-    from_user_id: string;
-    to_user_id: string;
+    from_participant_id: string;
+    to_participant_id: string;
     amount: number;
     currency: string;
     notes?: string;
@@ -89,6 +89,8 @@ export function useUpdateSettlement(onSuccess?: () => void) {
     currency?: string;
     notes?: string;
     group_id?: string;
+    from_participant_id?: string;
+    to_participant_id?: string;
   }
 
   const mutation = useMutation<SettlementsResponse, Error, UpdateSettlementInput>({
@@ -138,7 +140,7 @@ export function useDeleteSettlement(onSuccess?: () => void) {
 
       return variables;
     },
-    onMutate: async (variables) => {
+    onMutate: async (variables: DeleteSettlementInput) => {
       const groupId = variables.groupId;
       if (!groupId) return { groupId, previous: undefined };
 
@@ -159,7 +161,7 @@ export function useDeleteSettlement(onSuccess?: () => void) {
 
       return { groupId, previous };
     },
-    onError: (_error, _variables, context) => {
+    onError: (_error, _variables, context: any) => {
       if (context?.groupId && context.previous) {
         queryClient.setQueryData(
           queryKeys.settlements(context.groupId),
@@ -167,7 +169,7 @@ export function useDeleteSettlement(onSuccess?: () => void) {
         );
       }
     },
-    onSuccess: (_data, variables, context) => {
+    onSuccess: (_data, variables, context: any) => {
       invalidateSettlementAdjacents(queryClient, variables.groupId);
       if (context?.groupId) {
         queryClient.invalidateQueries({

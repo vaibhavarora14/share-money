@@ -1,78 +1,64 @@
 import { StyleSheet } from "react-native";
 
+
 export const styles = StyleSheet.create({
-  sectionSurface: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginTop: 16,
+  container: {
+    paddingTop: 8,
   },
-  sectionHeader: {
+  list: {
+    gap: 8, // Spacing between items
+  },
+  card: {
+    borderRadius: 20, // Pill-ish / Large corners
+    backgroundColor: 'transparent', // Let list blend or use surface
+    overflow: 'hidden',
+  },
+  pressable: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  iconContainer: {
+    width: 48, // Larger touch target/visual
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  content: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    marginBottom: 2,
   },
-  sectionTitleContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  sectionTitle: {
-    fontWeight: "600",
-    marginRight: 8,
-  },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: "bold",
-  },
-  sectionContent: {
-    paddingBottom: 8,
-  },
-  transactionItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-  },
-  transactionContent: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  transactionLeft: {
+  title: {
     flex: 1,
     marginRight: 16,
+    fontWeight: '600', // MD3 Title Medium is 500/Medium or 600/SemiBold
   },
-  transactionDescription: {
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  transactionRight: {
-    alignItems: "flex-end",
-  },
-  transactionAmount: {
-    fontWeight: "bold",
-    marginBottom: 4,
-  },
-  emptyStateContent: {
+  subRow: {
+    flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 32,
-    paddingHorizontal: 16,
   },
-  emptyStateIcon: {
-    fontSize: 48,
-    marginBottom: 16,
+  // Empty State
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 48,
+    paddingHorizontal: 24,
+    borderRadius: 24,
+    marginTop: 16,
   },
-  emptyStateTitle: {
-    fontWeight: "600",
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  emptyStateMessage: {
-    textAlign: "center",
-    lineHeight: 20,
-  },
+  // Legacy styles (if referenced elsewhere, though unlikely for this component)
+  sectionSurface: {},
+  sectionContent: {},
 });
 

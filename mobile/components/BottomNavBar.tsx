@@ -11,24 +11,20 @@ import { ProfileIcon } from "./ProfileIcon";
 
 interface BottomNavBarProps {
   onGroupsPress: () => void;
-  onBalancesPress: () => void;
   onLogoutPress: () => void;
   onProfilePress: () => void;
   currentRoute: string;
-  isProfileIncomplete?: boolean; // Show badge if profile needs completion
+
 }
 
 export const BottomNavBar: React.FC<BottomNavBarProps> = ({
   onGroupsPress,
-  onBalancesPress,
   onLogoutPress,
   onProfilePress,
   currentRoute,
-  isProfileIncomplete = false,
 }) => {
   const theme = useTheme();
   const isGroupsActive = currentRoute === "groups";
-  const isBalancesActive = currentRoute === "balances";
   const isProfileActive = currentRoute === "profile";
 
   const renderItem = (
@@ -48,7 +44,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
     const labelColor = isLogout
       ? theme.colors.error
       : isActive
-      ? theme.colors.onSurface
+      ? theme.colors.onSecondaryContainer
       : theme.colors.onSurfaceVariant;
 
     return (
@@ -99,18 +95,11 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
     >
       <View style={styles.content}>
         {renderItem(
-          "Groups",
-          "account-group-outline",
-          "account-group",
+          "Home",
+          "home-outline",
+          "home",
           isGroupsActive,
           onGroupsPress
-        )}
-        {renderItem(
-          "Balances",
-          "wallet-outline",
-          "wallet",
-          isBalancesActive,
-          onBalancesPress
         )}
         <TouchableRipple
           onPress={onProfilePress}
@@ -127,7 +116,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
                 },
               ]}
             >
-              <ProfileIcon showIncompleteBadge={isProfileIncomplete} />
+              <ProfileIcon />
             </View>
             <Text
               variant="labelMedium"
@@ -135,7 +124,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
                 styles.label,
                 {
                   color: isProfileActive
-                    ? theme.colors.onSurface
+                    ? theme.colors.onSecondaryContainer
                     : theme.colors.onSurfaceVariant,
                   fontWeight: isProfileActive ? "bold" : "normal",
                 },
@@ -158,7 +147,7 @@ const styles = StyleSheet.create({
   content: {
     flexDirection: "row",
     height: 80,
-    paddingBottom: 0,
+    paddingBottom: 0, 
   },
   tab: {
     flex: 1,

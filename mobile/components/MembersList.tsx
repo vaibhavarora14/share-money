@@ -1,13 +1,13 @@
 import React from "react";
 import { View } from "react-native";
 import {
-  ActivityIndicator,
-  Avatar,
-  Divider,
-  IconButton,
-  Surface,
-  Text,
-  useTheme,
+    ActivityIndicator,
+    Avatar,
+    Divider,
+    IconButton,
+    Surface,
+    Text,
+    useTheme,
 } from "react-native-paper";
 import { GroupMember } from "../types";
 import { formatDate } from "../utils/date";
@@ -33,8 +33,12 @@ export const MembersList: React.FC<MembersListProps> = ({
 }) => {
   const theme = useTheme();
   const sortedMembers = React.useMemo(() => {
-    // Show only active members in the list view
-    return members.filter((m) => m.status !== "left");
+    // Show all members, just sort by status (active first)
+    return [...members].sort((a, b) => {
+      if (a.status === 'left' && b.status !== 'left') return 1;
+      if (a.status !== 'left' && b.status === 'left') return -1;
+      return 0;
+    });
   }, [members]);
 
   if (members.length === 0) {
@@ -116,7 +120,7 @@ export const MembersList: React.FC<MembersListProps> = ({
                     ]}
                   >
                     {memberName} {isCurrentUser ? "(You)" : ""}
-                    {!isActive ? " (Left)" : ""}
+                    {!isActive ? " (Former)" : ""}
                   </Text>
                 </View>
                 <Text

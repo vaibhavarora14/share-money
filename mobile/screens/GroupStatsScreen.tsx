@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { BackHandler, ScrollView, StyleSheet, View } from "react-native";
 import {
-  ActivityIndicator,
-  Appbar,
-  Surface,
-  Text,
-  useTheme,
+    ActivityIndicator,
+    Appbar,
+    Surface,
+    Text,
+    useTheme,
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BalancesSection } from "../components/BalancesSection";
@@ -16,9 +16,9 @@ import { useCreateSettlement } from "../hooks/useSettlements";
 import { useTransactions } from "../hooks/useTransactions";
 import { Balance, GroupMember, Transaction } from "../types";
 import {
-  formatCurrency,
-  formatTotals,
-  getDefaultCurrency,
+    formatCurrency,
+    formatTotals,
+    getDefaultCurrency,
 } from "../utils/currency";
 import { SettlementFormScreen } from "./SettlementFormScreen";
 
@@ -297,7 +297,7 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
   }, [transactions, currentUserId]);
 
   const filteredBalances = useMemo(() => {
-    const balances = balancesData?.overall_balances || [];
+    const balances = balancesData?.group_balances?.[0]?.balances || balancesData?.overall_balances || [];
     if (mode === "i-owe") {
       return balances.filter((balance) => balance.amount < 0);
     }

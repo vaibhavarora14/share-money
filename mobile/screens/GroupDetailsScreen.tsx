@@ -301,8 +301,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
   const handleSettlementSave = async (settlementData: {
     group_id: string;
-    from_user_id: string;
-    to_user_id: string;
+    from_participant_id: string;
+    to_participant_id: string;
     amount: number;
     currency: string;
     notes?: string;
@@ -317,6 +317,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     amount?: number;
     currency?: string;
     notes?: string;
+    from_participant_id?: string;
+    to_participant_id?: string;
   }) => {
     await updateSettlement.mutate(updateData);
     setShowSettlementForm(false);
@@ -356,10 +358,16 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   };
 
   const currentUserId = session?.user?.id;
+  // isMember checks if the user exists in the group list at all (includes active and left)
   const isMember =
     group.members?.some((m) => m.user_id === currentUserId) ?? false;
-  const canManageMembers = isMember;
-  const canManageInvites = isMember;
+  
+  // isActiveMember checks if the user is currently active
+  const isActiveMember =
+    group.members?.some((m) => m.user_id === currentUserId && m.status === 'active') ?? false;
+
+  const canManageMembers = isActiveMember;
+  const canManageInvites = isActiveMember;
 
   const handleCancelInvitation = async (invitationId: string) => {
     Alert.alert(
@@ -488,9 +496,18 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           title={showMembers ? "Group Members" : group.name}
           titleStyle={{ fontWeight: "bold" }}
         />
+        
+        {/* Banner for former members */}
+        {!isActiveMember && isMember && !showMembers && (
+           <View style={{ backgroundColor: theme.colors.errorContainer, paddingHorizontal: 16, paddingVertical: 4, position: 'absolute', top: 56, left: 0, right: 0, zIndex: 1, alignItems: 'center' }}>
+             <Text style={{ color: theme.colors.onErrorContainer, fontSize: 12, fontWeight: 'bold' }}>
+               You are viewing this group as a former member
+             </Text>
+           </View>
+        )}
 
-        {/* Group options (members only) */}
-        {isMember && (
+        {/* Group options (active members only) */}
+        {isActiveMember && (
           <Menu
             visible={menuVisible && !showMembers}
             onDismiss={handleCloseMenu}
@@ -570,13 +587,16 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           // DASHBOARD & LIST VIEW
           <>
             <GroupDashboard
-              balances={balancesData?.overall_balances || []}
+              balances={balancesData?.group_balances?.[0]?.balances || []}
               transactions={transactions || []}
               currentUserId={session?.user?.id}
-              loading={balancesLoading || txLoading}
+              currentUserParticipantId={group.members?.find(m => m.user_id === session?.user?.id)?.participant_id}
+              loading={balancesLoading}
               defaultCurrency={getDefaultCurrency()}
-              onOwePress={() => handleStatNavigation("i-owe")}
-              onOwedPress={() => handleStatNavigation("im-owed")}
+              onSettlePress={(balance) => {
+                  setSettlingBalance(balance);
+                  setShowSettlementForm(true);
+              }}
               onMyCostsPress={() => handleStatNavigation("my-costs")}
               onTotalCostsPress={() => handleStatNavigation("total-costs")}
             />
@@ -608,7 +628,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               <TransactionsSection
                 items={transactions}
                 loading={txLoading}
-                onEdit={onEditTransaction}
+                onEdit={isActiveMember ? onEditTransaction : () => {}}
+                members={group.members || []}
               />
             ) : (
               <View style={styles.sectionContent}>
@@ -625,7 +646,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         <View style={{ height: 80 }} />
       </ScrollView>
 
-      {!showMembers && (
+      {!showMembers && isActiveMember && (
         <FAB
           icon="plus"
           style={[
@@ -654,10 +675,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               ...data,
             });
           } else {
-            await handleSettlementSave({
-              ...data,
-              group_id: group.id,
-            });
+            await handleSettlementSave(data);
           }
         }}
         onDismiss={() => {

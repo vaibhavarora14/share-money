@@ -6,10 +6,10 @@ import { ACTIVITY_FEED_UI, ACTIVITY_ICONS } from "../constants/activityFeed";
 import { useAuth } from "../contexts/AuthContext";
 import { ActivityItem } from "../types";
 import {
-  formatActivityTime,
-  getActivityColor,
-  getUserDisplayName,
-  groupActivitiesByDate,
+    formatActivityTime,
+    getActivityColor,
+    getUserDisplayName,
+    groupActivitiesByDate,
 } from "../utils/activityDescriptions";
 import { styles } from "./ActivityFeed.styles";
 
@@ -119,72 +119,54 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                 };
 
                 const activityIcon = getActivityIcon(activity.type);
-
+                
+                // Use Tonal colors for backgrounds:
+                // Green -> SecondaryContainer-ish (but custom hex), Red -> ErrorContainer
+                // For simplicity/consistency with Transactions, let's use a standard Tonal styling.
+                // We'll use the specific activityColor for the ICON, and a generic Surface Variant for background if needed, 
+                // OR just transparent with generic Tonal Icon background.
+                
+                // Let's use the exact same Tonal Icon style as TransactionsSection:
+                // Background: SecondaryContainer (or calculated from activityColor with opacity)
+                // Icon: activityColor (or OnSecondaryContainer)
+                
                 return (
-                  <React.Fragment key={activity.id}>
-                    {activityIndex > 0 && <View style={{ height: 8 }} />}
-                    <Card style={styles.activityCard}>
-                      <Card.Content style={{ padding: 16 }}>
-                        <View style={styles.activityRow}>
-                          {/* Left: Circular Icon */}
-                          <View
-                            style={[
-                              styles.iconContainer,
-                              {
-                                backgroundColor:
-                                  activityColor + ACTIVITY_FEED_UI.ICON_OPACITY,
-                              },
-                            ]}
-                          >
-                            <MaterialCommunityIcons
-                              name={activityIcon}
-                              size={ACTIVITY_FEED_UI.ACTIVITY_ICON_SIZE}
-                              color={activityColor}
-                            />
-                          </View>
+                  <View key={activity.id} style={styles.activityItem}>
+                      {/* Left: Tonal Icon */}
+                      <View
+                        style={[
+                          styles.iconContainer,
+                          {
+                            backgroundColor: activityColor + "20", // 12% opacity roughly, similar to Tonal
+                          },
+                        ]}
+                      >
+                        <MaterialCommunityIcons
+                          name={activityIcon}
+                          size={20} // Slightly smaller than generic 24
+                          color={activityColor}
+                        />
+                      </View>
 
-                          {/* Right: Content */}
-                          <View style={styles.activityContent}>
-                            {/* Header: User and Time */}
-                            <View style={styles.activityHeader}>
-                              <Text
-                                variant="bodyMedium"
-                                style={[
-                                  styles.activityUser,
-                                  { color: theme.colors.onSurface },
-                                ]}
-                              >
+                      {/* Right: Content */}
+                      <View style={styles.activityContent}>
+                         <View style={styles.activityHeader}>
+                            <Text variant="bodyLarge" style={[styles.activityUser, { color: theme.colors.onSurface }]}>
                                 {userDisplayName}
-                              </Text>
-                              <Text
-                                variant="bodySmall"
-                                style={[
-                                  styles.activityTime,
-                                  { color: theme.colors.outline },
-                                ]}
-                              >
-                                {formatActivityTime(activity.changed_at)}
-                              </Text>
-                            </View>
-
-                            {/* Description */}
-                            <Text
-                              variant="bodyMedium"
-                              style={[
-                                styles.activityDescription,
-                                { color: theme.colors.onSurfaceVariant },
-                              ]}
-                              numberOfLines={
-                                ACTIVITY_FEED_UI.MAX_DESCRIPTION_LINES
-                              }
-                            >
-                              {activity.description}
                             </Text>
-                          </View>
-                        </View>
-                      </Card.Content>
-                    </Card>
-                  </React.Fragment>
+                            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                                {formatActivityTime(activity.changed_at)}
+                            </Text>
+                         </View>
+                         
+                         <Text 
+                            variant="bodyMedium" 
+                            style={[styles.activityDescription, { color: theme.colors.onSurfaceVariant }]}
+                         >
+                             {activity.description}
+                         </Text>
+                      </View>
+                  </View>
                 );
               })}
             </React.Fragment>
