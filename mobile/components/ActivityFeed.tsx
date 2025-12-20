@@ -99,7 +99,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                   ]}
                 />
               </View>
-              {activitiesForDate.map((activity, activityIndex) => {
+              {activitiesForDate.map((activity) => {
                 const userDisplayName = getUserDisplayName(
                   activity.changed_by.id,
                   activity.changed_by.email,
@@ -119,16 +119,6 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                 };
 
                 const activityIcon = getActivityIcon(activity.type);
-                
-                // Use Tonal colors for backgrounds:
-                // Green -> SecondaryContainer-ish (but custom hex), Red -> ErrorContainer
-                // For simplicity/consistency with Transactions, let's use a standard Tonal styling.
-                // We'll use the specific activityColor for the ICON, and a generic Surface Variant for background if needed, 
-                // OR just transparent with generic Tonal Icon background.
-                
-                // Let's use the exact same Tonal Icon style as TransactionsSection:
-                // Background: SecondaryContainer (or calculated from activityColor with opacity)
-                // Icon: activityColor (or OnSecondaryContainer)
                 
                 return (
                   <View key={activity.id} style={styles.activityItem}>

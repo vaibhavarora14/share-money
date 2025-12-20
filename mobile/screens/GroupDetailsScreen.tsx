@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { Alert, BackHandler, ScrollView, StyleSheet, View } from "react-native";
 import {
-  ActivityIndicator,
-  Appbar,
-  Button,
-  FAB,
-  Menu,
-  SegmentedButtons,
-  Text,
-  useTheme,
+    ActivityIndicator,
+    Appbar,
+    Button,
+    FAB,
+    Menu,
+    SegmentedButtons,
+    Text,
+    useTheme,
 } from "react-native-paper";
 import { ActivityFeed } from "../components/ActivityFeed";
 import { GroupDashboard } from "../components/GroupDashboard";
@@ -19,30 +19,30 @@ import { useAuth } from "../contexts/AuthContext";
 import { useActivity } from "../hooks/useActivity";
 import { useBalances } from "../hooks/useBalances";
 import {
-  useCancelInvitation,
-  useGroupInvitations,
+    useCancelInvitation,
+    useGroupInvitations,
 } from "../hooks/useGroupInvitations";
 import { useAddMember, useRemoveMember } from "../hooks/useGroupMutations";
 import { useGroupDetails } from "../hooks/useGroups";
 import {
-  useCreateSettlement,
-  useDeleteSettlement,
-  useSettlements,
-  useUpdateSettlement,
+    useCreateSettlement,
+    useDeleteSettlement,
+    useSettlements,
+    useUpdateSettlement,
 } from "../hooks/useSettlements";
 import { useTransactions } from "../hooks/useTransactions";
 import {
-  Balance,
-  GroupInvitation,
-  GroupWithMembers,
-  Settlement,
-  Transaction,
+    Balance,
+    GroupInvitation,
+    GroupWithMembers,
+    Settlement,
+    Transaction,
 } from "../types";
 import { formatCurrency, getDefaultCurrency } from "../utils/currency";
 import { showErrorAlert } from "../utils/errorHandling";
 import {
-  getUserFriendlyErrorMessage,
-  isSessionExpiredError,
+    getUserFriendlyErrorMessage,
+    isSessionExpiredError,
 } from "../utils/errorMessages";
 import { GroupStatsMode } from "./GroupStatsScreen";
 import { SettlementFormScreen } from "./SettlementFormScreen";
@@ -326,7 +326,12 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   };
 
   const handleEditSettlement = (settlement: Settlement) => {
-    setEditingSettlement(settlement);
+    // Ensure settlement has group_id (may be missing from activity snapshot)
+    const settlementWithGroupId = {
+      ...settlement,
+      group_id: settlement.group_id || group.id,
+    };
+    setEditingSettlement(settlementWithGroupId);
     setShowSettlementForm(true);
   };
 
@@ -346,7 +351,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             try {
               await deleteSettlement.mutate({
                 id: settlement.id,
-                groupId: settlement.group_id,
+                groupId: settlement.group_id || group.id,
               });
             } catch (err) {
               Alert.alert("Error", getUserFriendlyErrorMessage(err));
