@@ -74,7 +74,6 @@ async function calculateGroupBalances(
     .select(`
       id,
       amount,
-      amount,
       paid_by_participant_id,
       currency,
       transaction_splits (
@@ -85,10 +84,10 @@ async function calculateGroupBalances(
     .eq('group_id', groupId)
     .eq('type', 'expense');
 
-    if (error) {
-      log.error('Error fetching transactions', 'balance-calculation', { groupId, error: error.message });
-      throw error;
-    }
+  if (error) {
+    log.error('Error fetching transactions', 'balance-calculation', { groupId, error: error.message });
+    throw error;
+  }
 
   const { data: members } = await supabase
     .from('group_members')
@@ -97,30 +96,77 @@ async function calculateGroupBalances(
 
   const memberIds = new Set((members || []).map((m: GroupMember) => m.user_id));
   
-  // Map<UserId, Map<Currency, Amount>>
+  // Map<ParticipantId/UserId, Map<Currency, Amount>>
+  // We'll track by user_id where possible, fallback to participant_id for invited users
   const balanceMap = new Map<string, Map<string, number>>();
 
-  const updateBalance = (userId: string, currency: string, amount: number) => {
-    if (!balanceMap.has(userId)) {
-      balanceMap.set(userId, new Map());
+  const updateBalance = (key: string, currency: string, amount: number) => {
+    if (!balanceMap.has(key)) {
+      balanceMap.set(key, new Map());
     }
-    const userBalances = balanceMap.get(userId)!;
+    const userBalances = balanceMap.get(key)!;
     const currentAmount = userBalances.get(currency) || 0;
     userBalances.set(currency, currentAmount + amount);
   };
 
-  // Collect all unique participant IDs from transactions and settlements
-  const allParticipantIds = new Set<string>();
+  // 1. Fetch all participants to resolve user_ids
+  const { data: participants } = await supabase
+    .from('participants')
+    .select('id, user_id, email')
+    .eq('group_id', groupId);
   
-  // From transactions
-  for (const tx of (transactions || []) as TransactionWithSplits[]) {
-    if (tx.paid_by_participant_id) allParticipantIds.add(tx.paid_by_participant_id);
-    if (tx.transaction_splits) {
-      tx.transaction_splits.forEach(s => {
-        if (s.participant_id) allParticipantIds.add(s.participant_id);
-      });
-    }
+  const participantToUserMap = new Map<string, string>();
+  const participantToEmailMap = new Map<string, string>();
+  if (participants) {
+    participants.forEach((p: any) => {
+      if (p.user_id) participantToUserMap.set(p.id, p.user_id);
+      if (p.email) participantToEmailMap.set(p.id, p.email);
+    });
   }
+
+  // Process Transactions
+  for (const tx of (transactions || []) as TransactionWithSplits[]) {
+    const totalAmount = typeof tx.amount === 'string' ? parseFloat(tx.amount) : tx.amount;
+    const currency = tx.currency;
+    
+    if (isNaN(totalAmount)) continue;
+
+    const paidByPid = tx.paid_by_participant_id;
+    if (!paidByPid) continue;
+    
+    const paidByUserId = participantToUserMap.get(paidByPid);
+    const paidByKey = paidByUserId || paidByPid; // Fallback to PID for non-users
+
+      if (tx.transaction_splits && Array.isArray(tx.transaction_splits)) {
+        const splits = tx.transaction_splits
+          .map((s: TransactionSplit) => {
+            if (!s) return undefined;
+            const amount = typeof s.amount === 'string' ? parseFloat(s.amount) : s.amount;
+            if (!s.participant_id || isNaN(amount)) return undefined;
+            
+            const uId = participantToUserMap.get(s.participant_id);
+            return { pid: s.participant_id, user_id: uId as string | undefined, amount };
+          })
+          .filter((s): s is { pid: string; user_id: string | undefined; amount: number } => !!s);
+
+        if (splits.length === 0) continue;
+
+        const userSplit = splits.find((s) => s.user_id === currentUserId);
+        
+        if (paidByUserId === currentUserId) {
+          // Alice paid, others owe her
+          for (const split of splits) {
+            if (split.pid !== paidByPid) {
+              const key = split.user_id || split.pid;
+              updateBalance(key, currency, split.amount);
+            }
+          }
+        } else if (userSplit) {
+          // Alice owes payer
+          updateBalance(paidByKey, currency, -userSplit.amount);
+        }
+      }
+    }
 
   // From settlements
   const { data: settlements, error: settlementsError } = await supabase
@@ -133,131 +179,45 @@ async function calculateGroupBalances(
     throw settlementsError;
   }
 
-  for (const settlement of (settlements || [])) {
-    if (settlement.from_participant_id) allParticipantIds.add(settlement.from_participant_id);
-    if (settlement.to_participant_id) allParticipantIds.add(settlement.to_participant_id);
-  }
-
-  // Map to store participant user_id lookups
-  const participantToUserMap = new Map<string, string>();
-
-  // Batch fetch all participants
-  if (allParticipantIds.size > 0) {
-    const { data: participants } = await supabase
-      .from('participants')
-      .select('id, user_id')
-      .in('id', Array.from(allParticipantIds));
-    
-    if (participants) {
-      participants.forEach((p: any) => {
-        if (p.user_id) participantToUserMap.set(p.id, p.user_id);
-      });
-    }
-  }
-
-  // Process Transactions
-  for (const tx of (transactions || []) as TransactionWithSplits[]) {
-    const totalAmount = typeof tx.amount === 'string' ? parseFloat(tx.amount) : tx.amount;
-    const currency = tx.currency;
-    
-    if (isNaN(totalAmount) || totalAmount <= 0) continue;
-
-    const paidByUserId = tx.paid_by_participant_id ? participantToUserMap.get(tx.paid_by_participant_id) : null;
-    if (!paidByUserId || !memberIds.has(paidByUserId)) continue;
-
-    if (tx.transaction_splits && Array.isArray(tx.transaction_splits)) {
-      const splits = tx.transaction_splits
-        .map((s: TransactionSplit) => {
-          const amount = typeof s.amount === 'string' ? parseFloat(s.amount) : s.amount;
-          const userId = s.participant_id ? participantToUserMap.get(s.participant_id) : null;
-          
-          if (!userId || isNaN(amount) || amount <= 0) return null;
-          return { user_id: userId, amount };
-        })
-        .filter((s): s is { user_id: string; amount: number } => s !== null);
-
-      if (splits.length === 0) continue;
-
-      const currentUserSplit = splits.find((s) => s.user_id === currentUserId);
-      
-      if (paidByUserId === currentUserId) {
-        for (const split of splits) {
-          if (split.user_id !== currentUserId && memberIds.has(split.user_id)) {
-            updateBalance(split.user_id, currency, split.amount);
-          }
-        }
-      } else if (currentUserSplit) {
-        updateBalance(paidByUserId, currency, -currentUserSplit.amount);
-      }
-    }
-  }
-
   // Process Settlements
   for (const settlement of (settlements || [])) {
-    // Get user_ids from participant_ids or use legacy user_ids as fallback
-    let fromUserId: string | null = null;
-    let toUserId: string | null = null;
+    const fromUserId = settlement.from_participant_id ? participantToUserMap.get(settlement.from_participant_id) : null;
+    const toUserId = settlement.to_participant_id ? participantToUserMap.get(settlement.to_participant_id) : null;
     
-    if (settlement.from_participant_id) {
-      fromUserId = participantToUserMap.get(settlement.from_participant_id) || null;
-    } 
-    if (!fromUserId && settlement.from_user_id) {
-      fromUserId = settlement.from_user_id;
-    }
-    
-    if (settlement.to_participant_id) {
-      toUserId = participantToUserMap.get(settlement.to_participant_id) || null;
-    } 
-    if (!toUserId && settlement.to_user_id) {
-      toUserId = settlement.to_user_id;
-    }
-    
-    if (!fromUserId || !toUserId) {
-      continue; 
-    }
+    // Fallback to PIDs if no user IDs
+    const fromKey = fromUserId || settlement.from_participant_id;
+    const toKey = toUserId || settlement.to_participant_id;
+
+    if (!fromKey || !toKey) continue; 
     
     const settlementAmount = typeof settlement.amount === 'string' 
       ? parseFloat(settlement.amount) 
       : settlement.amount;
     const currency = settlement.currency;
 
-    if (!currency) {
-      log.error('Settlement missing currency', 'balance-calculation', { settlementId: settlement.id });
-      continue;
-    }
+    if (isNaN(settlementAmount) || settlementAmount <= 0) continue;
 
-    if (isNaN(settlementAmount) || settlementAmount <= 0) {
-      continue;
-    }
-
-    if (fromUserId === currentUserId && memberIds.has(toUserId)) {
-      log.info('Reducing balance (receive)', 'balance-debug', { toUserId, amount: settlementAmount });
-      updateBalance(toUserId, currency, settlementAmount);
-    } else if (toUserId === currentUserId && memberIds.has(fromUserId)) {
-      log.info('Reducing balance (pay)', 'balance-debug', { fromUserId, amount: -settlementAmount });
-      updateBalance(fromUserId, currency, -settlementAmount);
-    } else {
-      log.info('Skipping settlement update', 'balance-debug', { 
-        settlementId: settlement.id, 
-        currentUserId, 
-        fromUserId, 
-        toUserId,
-        fromMember: memberIds.has(fromUserId || ''),
-        toMember: memberIds.has(toUserId || '')
-      });
+    if (fromUserId === currentUserId) {
+      updateBalance(toKey, currency, settlementAmount);
+    } else if (toUserId === currentUserId) {
+      updateBalance(fromKey, currency, -settlementAmount);
     }
   }
 
   const balances: Balance[] = [];
   
-  for (const [userId, currencyMap] of balanceMap.entries()) {
-    if (userId === currentUserId) continue;
+  for (const [key, currencyMap] of balanceMap.entries()) {
+    if (key === currentUserId) continue;
     
     for (const [currency, amount] of currencyMap.entries()) {
       const roundedAmount = Math.round(amount * 100) / 100;
       if (Math.abs(roundedAmount) > 0.01) {
+        // Find email if available
+        const email = participantToEmailMap.get(key);
+        
         balances.push({
-          user_id: userId,
+          user_id: isValidUUID(key) ? key : '', // userId or blank for invited
+          email: email,
           amount: roundedAmount,
           currency: currency
         });
@@ -394,15 +354,19 @@ Deno.serve(async (req: Request) => {
 
       for (const gb of groupBalances) {
         for (const b of gb.balances) {
-          const profile = profileMap.get(b.user_id);
-          b.email = emailMap.get(b.user_id);
+          const profile = b.user_id ? profileMap.get(b.user_id) : null;
+          if (b.user_id) {
+            b.email = emailMap.get(b.user_id);
+          }
           b.full_name = profile?.full_name || null;
           b.avatar_url = profile?.avatar_url || null;
         }
       }
       for (const b of overallBalances) {
-        const profile = profileMap.get(b.user_id);
-        b.email = emailMap.get(b.user_id);
+        const profile = b.user_id ? profileMap.get(b.user_id) : null;
+        if (b.user_id) {
+          b.email = emailMap.get(b.user_id);
+        }
         b.full_name = profile?.full_name || null;
         b.avatar_url = profile?.avatar_url || null;
       }

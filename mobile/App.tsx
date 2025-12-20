@@ -1,19 +1,19 @@
 import * as Sentry from "@sentry/react-native";
 import { Session } from "@supabase/supabase-js";
 import {
-  QueryClient,
-  QueryClientProvider,
-  useQueryClient,
+    QueryClient,
+    QueryClientProvider,
+    useQueryClient,
 } from "@tanstack/react-query";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { Text as RNText, StyleSheet, useColorScheme, View } from "react-native";
 import {
-  ActivityIndicator,
-  Button,
-  Provider as PaperProvider,
-  useTheme,
+    ActivityIndicator,
+    Button,
+    Provider as PaperProvider,
+    useTheme,
 } from "react-native-paper";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BottomNavBar } from "./components/BottomNavBar";
@@ -23,17 +23,17 @@ import { queryKeys } from "./hooks/queryKeys";
 import { fetchActivity } from "./hooks/useActivity";
 import { fetchBalances } from "./hooks/useBalances";
 import {
-  useAddMember,
-  useCreateGroup,
-  useRemoveMember,
+    useAddMember,
+    useCreateGroup,
+    useRemoveMember,
 } from "./hooks/useGroupMutations";
 import { fetchGroupDetails, useGroupDetails } from "./hooks/useGroups";
 import { useProfile } from "./hooks/useProfile";
 import {
-  fetchTransactions,
-  useCreateTransaction,
-  useDeleteTransaction,
-  useUpdateTransaction,
+    fetchTransactions,
+    useCreateTransaction,
+    useDeleteTransaction,
+    useUpdateTransaction,
 } from "./hooks/useTransactions";
 import { AddMemberScreen } from "./screens/AddMemberScreen";
 import { AuthScreen } from "./screens/AuthScreen";
@@ -320,12 +320,14 @@ function AppContent() {
           onComplete={() => {
             refetchProfile();
             setCurrentRoute("groups");
+            setGroupRefreshTrigger((prev) => prev + 1);
           }}
         />
         <BottomNavBar
           currentRoute={currentRoute}
           onGroupsPress={() => {
             setCurrentRoute("groups");
+            setGroupRefreshTrigger((prev) => prev + 1);
           }}
           onProfilePress={() => {
             setCurrentRoute("profile");
@@ -396,6 +398,7 @@ function AppContent() {
             setSelectedGroup(null);
             setCurrentRoute("groups");
             setStatsContext(null);
+            setGroupRefreshTrigger((prev) => prev + 1);
           }}
           onAddMember={() => setShowAddMember(true)}
           onRemoveMember={async (userId: string) => {
@@ -405,6 +408,7 @@ function AppContent() {
             setSelectedGroup(null);
             setCurrentRoute("groups");
             setStatsContext(null);
+            setGroupRefreshTrigger((prev) => prev + 1);
           }}
           onAddTransaction={() => {
             setEditingTransaction(null);
@@ -426,6 +430,7 @@ function AppContent() {
             setSelectedGroup(null);
             setCurrentRoute("groups");
             setStatsContext(null);
+            setGroupRefreshTrigger((prev) => prev + 1);
           }}
           onLogoutPress={signOut}
           onProfilePress={() => setCurrentRoute("profile")}
@@ -459,10 +464,14 @@ function AppContent() {
         onRefetchReady={(refetch: () => Promise<void>) => {
           groupsListRefetchRef.current = refetch;
         }}
+        refetchTrigger={groupRefreshTrigger}
       />
         <BottomNavBar
           currentRoute={currentRoute}
-          onGroupsPress={() => setCurrentRoute("groups")}
+          onGroupsPress={() => {
+            setCurrentRoute("groups");
+            setGroupRefreshTrigger((prev) => prev + 1);
+          }}
           onProfilePress={() => setCurrentRoute("profile")}
           onLogoutPress={signOut}
         />

@@ -30,25 +30,40 @@ interface GroupsListScreenProps {
   }) => Promise<void>;
   onLogout?: () => void;
   onRefetchReady?: (refetch: () => Promise<any>) => void;
+  refetchTrigger?: number; // Added to trigger refetch from parent
 }
 
 export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   onGroupPress,
   onCreateGroup,
   onRefetchReady,
+  refetchTrigger,
 }) => {
   const [showCreateGroup, setShowCreateGroup] = useState<boolean>(false);
   const theme = useTheme();
   const { signOut } = useAuth();
   const { data: groups, isLoading: loading, error, refetch } = useGroups();
-  const { data: balancesData } = useBalances(null);
+  const {
+    data: balancesData,
+    refetch: refetchBalances,
+  } = useBalances();
 
-  // Expose refetch function to parent component
+  // Expose refetch functions to parent component
   React.useEffect(() => {
     if (onRefetchReady) {
-      onRefetchReady(refetch);
+      onRefetchReady(async () => {
+        await Promise.all([refetch(), refetchBalances()]);
+      });
     }
-  }, [onRefetchReady, refetch]);
+  }, [onRefetchReady, refetch, refetchBalances]);
+
+  // Handle manual trigger from parent
+  React.useEffect(() => {
+    if (refetchTrigger) {
+      refetch();
+      refetchBalances();
+    }
+  }, [refetchTrigger, refetch, refetchBalances]);
 
   // Auto sign-out on session expiration with alert
   useEffect(() => {

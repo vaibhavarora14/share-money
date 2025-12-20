@@ -44,11 +44,29 @@ export const GroupBalanceBadge: React.FC<GroupBalanceBadgeProps> = ({
     );
   }
 
-  // Multi-currency handling: 
-  // For now, we show the first significant balance.
-  // If there are multiple, we append '+' to indicate more depth.
-  const mainBalance = nonZeroBalances[0];
-  const isMultiCurrency = nonZeroBalances.length > 1;
+  // Sum balances by currency
+  const netBalancesMap = nonZeroBalances.reduce((acc, b) => {
+    acc[b.currency] = (acc[b.currency] || 0) + b.amount;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const netBalances = Object.entries(netBalancesMap)
+    .map(([currency, amount]) => ({ currency, amount }))
+    .filter(b => Math.abs(b.amount) >= 0.01);
+
+  if (netBalances.length === 0) {
+    return (
+      <View style={[styles.balanceBadge, { backgroundColor: theme.colors.surfaceVariant }, style]}>
+        <Text style={[styles.balanceText, { color: theme.colors.onSurfaceVariant }]}>Settled</Text>
+      </View>
+    );
+  }
+
+  // Sort by absolute amount to show the most significant balance first
+  netBalances.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+
+  const mainBalance = netBalances[0];
+  const isMultiCurrency = netBalances.length > 1;
   const isPositive = mainBalance.amount > 0;
   
   const badgeColor = isPositive ? theme.colors.primaryContainer : theme.colors.errorContainer;
@@ -59,7 +77,7 @@ export const GroupBalanceBadge: React.FC<GroupBalanceBadgeProps> = ({
       <Text style={[styles.balanceText, { color: textColor, fontWeight: '700' }]}>
         {isPositive ? '+' : ''}
         {formatCurrency(mainBalance.amount, mainBalance.currency)}
-        {isMultiCurrency ? '*' : ''}
+        {isMultiCurrency ? ' (+)' : ''}
       </Text>
     </View>
   );

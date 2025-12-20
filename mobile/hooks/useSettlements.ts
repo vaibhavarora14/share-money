@@ -16,6 +16,7 @@ export async function fetchSettlements(groupId: string): Promise<SettlementsResp
 function invalidateSettlementAdjacents(queryClient: QueryClient, groupId?: string) {
   if (!groupId) return;
   queryClient.invalidateQueries({ queryKey: queryKeys.settlements(groupId) });
+  queryClient.invalidateQueries({ queryKey: ["balances"] }); // Invalidate all balances (including global)
   queryClient.invalidateQueries({ queryKey: queryKeys.balances(groupId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.activity(groupId) });
 }
@@ -128,7 +129,7 @@ export function useDeleteSettlement(onSuccess?: () => void) {
     groupId?: string;
   }
 
-  const mutation = useMutation<DeleteSettlementInput, Error, DeleteSettlementInput>({
+  const mutation = useMutation<DeleteSettlementInput, Error, DeleteSettlementInput, { groupId?: string, previous?: SettlementsResponse }>({
     mutationFn: async (variables) => {
       const response = await fetchWithAuth(`/settlements?id=${variables.id}`, {
         method: "DELETE",

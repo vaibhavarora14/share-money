@@ -19,11 +19,11 @@ export function useBalances(groupId?: string | null) {
   const { user } = useAuth();
 
   const query = useQuery<BalancesResponse, Error>({
-    // Guarded by `enabled`, so groupId is always defined inside queryFn
-    queryKey: groupId ? queryKeys.balances(groupId) : queryKeys.balances(""),
+    // Use "all" for global fetch to differentiate from specific group fetches
+    queryKey: groupId ? queryKeys.balances(groupId) : ["balances", "all"],
     queryFn: () => fetchBalances(groupId),
     enabled: !!user?.id && (!!groupId || groupId === null || groupId === undefined),
-    staleTime: 30_000,
+    staleTime: 5_000, // Reduced for testing responsiveness
   });
 
   return {
