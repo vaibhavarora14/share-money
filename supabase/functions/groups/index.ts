@@ -5,6 +5,7 @@ import { createEmptyResponse, createSuccessResponse } from '../_shared/response.
 import { fetchUserEmails } from '../_shared/user-email.ts';
 import { fetchUserProfiles } from '../_shared/user-profiles.ts';
 import { isValidUUID, validateBodySize, validateGroupData } from '../_shared/validation.ts';
+import { requireMinVersion } from '../_shared/version-check.ts';
 
 /**
  * Groups Edge Function
@@ -44,6 +45,12 @@ Deno.serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return createEmptyResponse(200);
+  }
+
+  // Check app version - return 426 if outdated
+  const versionError = requireMinVersion(req);
+  if (versionError) {
+    return versionError;
   }
 
   try {

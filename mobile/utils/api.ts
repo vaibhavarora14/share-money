@@ -85,6 +85,8 @@ async function fetchWithTimeout(
   }
 }
 
+import { APP_VERSION } from "../constants/version";
+
 export async function fetchWithAuth(
   endpoint: string,
   options: RequestInit = {}
@@ -109,6 +111,7 @@ export async function fetchWithAuth(
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
+        "X-App-Version": APP_VERSION,
         ...options.headers,
       },
     });
@@ -195,6 +198,31 @@ export async function fetchWithAuth(
     }
 
     throw new Error("Unauthorized");
+  }
+
+  // Handle 426 Upgrade Required - app version is too old
+  if (response.status === 426) {
+    let errorData: ApiErrorResponse | null = null;
+    try {
+      const responseText = await response.text();
+      if (responseText) {
+        errorData = JSON.parse(responseText) as ApiErrorResponse;
+      }
+    } catch {
+      // Ignore parse errors
+    }
+    
+    // Trigger the global upgrade modal
+    const { triggerGlobalUpgrade } = await import("../contexts/UpgradeContext");
+    triggerGlobalUpgrade(
+      errorData?.error || "Please update your app to continue.",
+      errorData?.details
+    );
+    
+    // Throw a special error that hooks can recognize
+    const error = new Error("UPGRADE_REQUIRED");
+    (error as any).code = "UPGRADE_REQUIRED";
+    throw error;
   }
 
   if (response.status === 429) {

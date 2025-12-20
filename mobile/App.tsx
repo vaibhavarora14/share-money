@@ -17,8 +17,10 @@ import {
 } from "react-native-paper";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BottomNavBar } from "./components/BottomNavBar";
+import { ForceUpdateModal } from "./components/ForceUpdateModal";
 import { AUTH_TIMEOUTS } from "./constants/auth";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { UpgradeProvider, useUpgrade } from "./contexts/UpgradeContext";
 import { queryKeys } from "./hooks/queryKeys";
 import { fetchActivity } from "./hooks/useActivity";
 import { fetchBalances } from "./hooks/useBalances";
@@ -589,13 +591,30 @@ export default function App() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <PaperProvider theme={theme}>
-            <AuthProvider>
-              <AppContent />
-            </AuthProvider>
+            <UpgradeProvider>
+              <AuthProvider>
+                <AppContent />
+                <ForceUpdateOverlay />
+              </AuthProvider>
+            </UpgradeProvider>
           </PaperProvider>
         </QueryClientProvider>
       </SafeAreaProvider>
     </ErrorBoundary>
+  );
+}
+
+// Force Update Overlay - shows modal when upgrade is required
+function ForceUpdateOverlay() {
+  const { isUpgradeRequired, upgradeMessage, upgradeDetails } = useUpgrade();
+  
+  return (
+    <ForceUpdateModal
+      visible={isUpgradeRequired}
+      message={upgradeMessage || undefined}
+      storeUrlIos={upgradeDetails?.storeUrlIos}
+      storeUrlAndroid={upgradeDetails?.storeUrlAndroid}
+    />
   );
 }
 
