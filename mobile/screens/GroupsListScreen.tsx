@@ -1,24 +1,24 @@
 import React, { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import {
-    ActivityIndicator,
-    Appbar,
-    Button,
-    FAB,
-    IconButton,
-    Surface,
-    Text,
-    useTheme,
+  ActivityIndicator,
+  Appbar,
+  Button,
+  FAB,
+  IconButton,
+  Surface,
+  Text,
+  useTheme,
 } from "react-native-paper";
+import { GroupBalanceBadge } from "../components/GroupBalanceBadge";
 import { useAuth } from "../contexts/AuthContext";
 import { useBalances } from "../hooks/useBalances";
 import { useGroups } from "../hooks/useGroups";
 import { Group } from "../types";
-import { formatCurrency } from "../utils/currency";
 import { showErrorAlert } from "../utils/errorHandling";
 import {
-    getUserFriendlyErrorMessage,
-    isSessionExpiredError,
+  getUserFriendlyErrorMessage,
+  isSessionExpiredError,
 } from "../utils/errorMessages";
 import { CreateGroupScreen } from "./CreateGroupScreen";
 
@@ -240,46 +240,9 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                   </View>
 
                   {/* Balance Badge */}
-                  {(() => {
-                    const groupBalanceData = balancesData?.group_balances?.find(
-                      (gb) => gb.group_id === group.id
-                    );
-                    
-                    if (!groupBalanceData || !groupBalanceData.balances || groupBalanceData.balances.length === 0) {
-                        return (
-                             <View style={[styles.balanceBadge, { backgroundColor: theme.colors.surfaceVariant }]}>
-                                <Text style={[styles.balanceText, { color: theme.colors.onSurfaceVariant }]}>Settled</Text>
-                             </View>
-                        );
-                    }
-
-                    // Naive summation: take the first currency encountered.
-                    const currency = groupBalanceData.balances[0].currency;
-                    const netAmount = groupBalanceData.balances
-                        .filter(b => b.currency === currency)
-                        .reduce((sum, b) => sum + b.amount, 0);
-
-                    if (Math.abs(netAmount) < 0.01) {
-                         return (
-                             <View style={[styles.balanceBadge, { backgroundColor: theme.colors.surfaceVariant }]}>
-                                <Text style={[styles.balanceText, { color: theme.colors.onSurfaceVariant }]}>Settled</Text>
-                             </View>
-                        );
-                    }
-
-                    const isPositive = netAmount > 0;
-                    // Use Material Design 3 Token Colors for better theming support
-                    const badgeColor = isPositive ? theme.colors.primaryContainer : theme.colors.errorContainer;
-                    const textColor = isPositive ? theme.colors.onPrimaryContainer : theme.colors.onErrorContainer;
-                    
-                    return (
-                        <View style={[styles.balanceBadge, { backgroundColor: badgeColor }]}>
-                            <Text style={[styles.balanceText, { color: textColor, fontWeight: '700' }]}>
-                                {isPositive ? '+' : ''}{formatCurrency(netAmount, currency)}
-                            </Text>
-                        </View>
-                    );
-                  })()}
+                  <GroupBalanceBadge 
+                    balanceData={balancesData?.group_balances?.find(gb => gb.group_id === group.id)} 
+                  />
                 </TouchableOpacity>
               </Surface>
             ))
@@ -381,17 +344,5 @@ const styles = StyleSheet.create({
   groupInfo: {
     flex: 1,
     paddingRight: 8,
-  },
-  balanceBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    minWidth: 60,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  balanceText: {
-    fontSize: 12,
-    fontWeight: '500',
   },
 });
