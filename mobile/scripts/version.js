@@ -105,6 +105,23 @@ function updatePackageJson(version) {
   }
 }
 
+const APP_JSON_FILE = path.join(__dirname, '..', 'app.json');
+
+function updateAppJson(version, buildNumber) {
+  try {
+    const appJson = JSON.parse(fs.readFileSync(APP_JSON_FILE, 'utf8'));
+    appJson.expo.version = version;
+    if (appJson.expo.ios) {
+      appJson.expo.ios.buildNumber = buildNumber.toString();
+    }
+    fs.writeFileSync(APP_JSON_FILE, JSON.stringify(appJson, null, 2) + '\n');
+    console.log(`✓ Updated ${APP_JSON_FILE}`);
+  } catch (error) {
+    console.error('Error updating app.json:', error.message);
+    process.exit(1);
+  }
+}
+
 function incrementVersion(currentVersion, type) {
   const parts = validateVersion(currentVersion);
 
@@ -192,6 +209,7 @@ function bumpVersion(type, isDryRun = false) {
   
   if (!isDryRun) {
     updatePackageJson(newVersion);
+    updateAppJson(newVersion, newBuildNumber);
     console.log(`\n✅ Version updated successfully!`);
     console.log(`   New version: ${newVersion}`);
     console.log(`   New build: ${newBuildNumber}\n`);
