@@ -32,5 +32,5 @@ appId: com.vaibhavarora.sharemoney
 - assertVisible: "Your Groups"
 - assertNotVisible: "Welcome Back"
 # Also verify the bottom nav bar is visible
-- assertVisible: "Groups"
+- assertVisible: "Home"
 
