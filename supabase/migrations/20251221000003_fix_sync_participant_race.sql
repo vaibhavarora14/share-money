@@ -29,7 +29,7 @@ BEGIN
       p_role, 
       CASE WHEN p_target_type = 'member' THEN CURRENT_TIMESTAMP ELSE NULL END
     )
-    ON CONFLICT (group_id, user_id) WHERE user_id IS NOT NULL
+    ON CONFLICT (group_id, user_id)
     DO UPDATE SET
       email = NULL, -- Ensure email is cleared on update too
       type = EXCLUDED.type,
@@ -41,9 +41,16 @@ BEGIN
 
     -- Cleanup: If there was a participant record for this email that isn't linked to a user yet,
     -- and we just linked the user, we should ideally merge them.
-    -- For now, we simply ensure we don't have duplicates by removing the email-only record
-    -- if the caller provided an email that matches.
     IF v_normalized_email IS NOT NULL THEN
+      -- Safety: Move any transaction splits from the old email participant to the new user participant
+      UPDATE public.transaction_splits
+      SET participant_id = v_participant_id
+      WHERE participant_id IN (
+        SELECT id FROM public.participants 
+        WHERE group_id = p_group_id AND LOWER(email) = v_normalized_email AND user_id IS NULL
+      );
+
+      -- Now it's safe to delete the old participant record
       DELETE FROM public.participants 
       WHERE group_id = p_group_id AND LOWER(email) = v_normalized_email AND user_id IS NULL;
     END IF;
@@ -55,7 +62,7 @@ BEGIN
   IF v_normalized_email IS NOT NULL THEN
     INSERT INTO public.participants (group_id, email, type, role)
     VALUES (p_group_id, v_normalized_email, p_target_type, p_role)
-    ON CONFLICT (group_id, email) WHERE email IS NOT NULL
+    ON CONFLICT (group_id, email)
     DO UPDATE SET
       type = EXCLUDED.type,
       role = COALESCE(p_role, participants.role),

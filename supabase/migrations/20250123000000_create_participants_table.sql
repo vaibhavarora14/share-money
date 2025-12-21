@@ -49,13 +49,11 @@ CREATE INDEX IF NOT EXISTS idx_participants_email ON participants(email) WHERE e
 CREATE INDEX IF NOT EXISTS idx_participants_type ON participants(type);
 CREATE INDEX IF NOT EXISTS idx_participants_group_type ON participants(group_id, type);
 
--- Unique constraints using partial indexes (one participant per (group_id, user_id) or (group_id, email))
+-- Unique constraints using standard indexes (PostgreSQL treats NULLs as distinct)
 CREATE UNIQUE INDEX IF NOT EXISTS idx_participants_unique_group_user 
-  ON participants(group_id, user_id) 
-  WHERE user_id IS NOT NULL;
+  ON participants(group_id, user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_participants_unique_group_email 
-  ON participants(group_id, email) 
-  WHERE email IS NOT NULL;
+  ON participants(group_id, email);
 
 -- Enable Row Level Security
 ALTER TABLE participants ENABLE ROW LEVEL SECURITY;
