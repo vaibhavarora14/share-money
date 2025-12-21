@@ -100,6 +100,7 @@ export type CurrencyCode = 'USD' | 'INR' | 'EUR' | 'GBP' | 'JPY' | 'KRW' | 'CNY'
 
 export interface Balance {
   user_id: string;
+  participant_id?: string; // New: link to participant
   email?: string; // Enriched by API
   full_name?: string | null; // Enriched by API
   avatar_url?: string | null; // Enriched by API

@@ -1,15 +1,17 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import {
-  Avatar,
-  Surface,
-  Text,
-  TouchableRipple,
-  useTheme
+    Avatar,
+    Button,
+    Surface,
+    Text,
+    TouchableRipple,
+    useTheme
 } from "react-native-paper";
 import { Balance, Transaction } from "../types";
 import { formatCurrency, formatTotals } from "../utils/currency";
+import { DebtEdge, simplifyDebts } from "../utils/debt";
 
 interface GroupDashboardProps {
   balances: Balance[];
@@ -23,79 +25,7 @@ interface GroupDashboardProps {
   onTotalCostsPress?: () => void;
 }
 
-type DebtEdge = {
-  fromUser: Balance;
-  toUser: Balance;
-  amount: number;
-  currency: string;
-};
 
-// Greedy debt simplification algorithm
-function simplifyDebts(
-  balances: Balance[],
-  currentUserId: string,
-  defaultCurrency: string
-): DebtEdge[] {
-  const byCurrency = new Map<string, Balance[]>();
-  // Deep copy AND Invert Sign to match API Semantics
-  // API: Positive = They Owe Me (User is Debtor relative to me) -> Ledger: Negative
-  // API: Negative = I Owe Them (User is Creditor relative to me) -> Ledger: Positive
-  const balancesCopy = balances.map(b => ({ ...b, amount: -b.amount }));
-  
-  const addBalance = (b: Balance) => {
-    const list = byCurrency.get(b.currency) || [];
-    list.push(b);
-    byCurrency.set(b.currency, list);
-  };
-  balancesCopy.forEach(addBalance);
-
-  const edges: DebtEdge[] = [];
-
-  byCurrency.forEach((currencyBalances, currency) => {
-    const sumOthers = currencyBalances.reduce((sum, b) => sum + b.amount, 0);
-    const myBalanceAmount = -sumOthers;
-    const allBalances = [...currencyBalances];
-    if (Math.abs(myBalanceAmount) > 0.01) {
-      allBalances.push({
-        user_id: currentUserId,
-        amount: myBalanceAmount,
-        currency: currency,
-        full_name: "You",
-      });
-    }
-
-    const debtors = allBalances
-      .filter((b) => b.amount < -0.01)
-      .sort((a, b) => a.amount - b.amount);
-    const creditors = allBalances
-      .filter((b) => b.amount > 0.01)
-      .sort((a, b) => b.amount - a.amount);
-
-    let i = 0;
-    let j = 0;
-
-    while (i < debtors.length && j < creditors.length) {
-      const debtor = debtors[i];
-      const creditor = creditors[j];
-      const amount = Math.min(Math.abs(debtor.amount), creditor.amount);
-
-      edges.push({
-        fromUser: debtor,
-        toUser: creditor,
-        amount: amount,
-        currency: currency,
-      });
-
-      debtor.amount += amount;
-      creditor.amount -= amount;
-
-      if (Math.abs(debtor.amount) < 0.01) i++;
-      if (creditor.amount < 0.01) j++;
-    }
-  });
-
-  return edges;
-}
 
 export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   balances,
@@ -109,19 +39,29 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   onTotalCostsPress,
 }) => {
   const theme = useTheme();
+  const [showAllActions, setShowAllActions] = useState(false);
 
   // 1. Calculate Debts (Action List)
   const debts = useMemo(() => {
     if (!currentUserId) return [];
-    return simplifyDebts(balances, currentUserId, defaultCurrency);
+    return simplifyDebts(balances, currentUserId, defaultCurrency, currentUserParticipantId);
   }, [balances, currentUserId, defaultCurrency]);
 
   const myDebts = useMemo(() => {
     if (!currentUserId) return [];
-    return debts.filter(
+    const filtered = debts.filter(
       (d) =>
         d.fromUser.user_id === currentUserId || d.toUser.user_id === currentUserId
     );
+    // Stable sort: by amount (descending), then by other user's id for consistency
+    return filtered.sort((a, b) => {
+      // First sort by amount (larger amounts first)
+      if (b.amount !== a.amount) return b.amount - a.amount;
+      // Then by the other user's id for stability
+      const aOtherId = a.fromUser.user_id === currentUserId ? a.toUser.user_id : a.fromUser.user_id;
+      const bOtherId = b.fromUser.user_id === currentUserId ? b.toUser.user_id : b.fromUser.user_id;
+      return aOtherId.localeCompare(bOtherId);
+    });
   }, [debts, currentUserId]);
 
   // 2. Calculate My Net Position (Hero)
@@ -205,8 +145,12 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
     // We'll stick to semantic red/green but with a "Google" feel (clean, readable).
     const amountColor = isOwed ? "#1e8e3e" : "#d93025"; // Google Green / Google Red
 
+    // Look up display name - backend now enriches full_name/email for all users (including invited)
     const displayName =
-      otherUser.full_name || otherUser.email?.split("@")[0] || "User";
+      otherUser.full_name || 
+      otherUser.email?.split("@")[0] || 
+      otherUser.email || 
+      "User";
     const avatarLabel = displayName.substring(0, 2).toUpperCase();
 
     // Construct balance object for settlement
@@ -283,9 +227,9 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
             <View style={[styles.miniIcon, { backgroundColor: theme.colors.background }]}>
               <MaterialCommunityIcons name="wallet" size={18} color={theme.colors.onSurface} />
             </View>
-            <View>
+            <View style={{ flex: 1 }}>
                 <Text variant="labelSmall" style={{ color: theme.colors.onSecondaryContainer, opacity: 0.8 }}>My Spending</Text>
-                <Text variant="labelLarge" style={{ color: theme.colors.onSecondaryContainer, fontWeight: 'bold' }}>
+                <Text variant="labelMedium" numberOfLines={2} style={{ color: theme.colors.onSecondaryContainer, fontWeight: 'bold' }}>
                     {loading ? "..." : formattedMyCost}
                 </Text>
             </View>
@@ -300,9 +244,9 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
              <View style={[styles.miniIcon, { backgroundColor: theme.colors.background }]}>
               <MaterialCommunityIcons name="chart-pie" size={18} color={theme.colors.onSurface} />
             </View>
-            <View>
-                <Text variant="labelSmall" style={{ color: theme.colors.onTertiaryContainer, opacity: 0.8 }}>Group Total</Text>
-                <Text variant="labelLarge" style={{ color: theme.colors.onTertiaryContainer, fontWeight: 'bold' }}>
+            <View style={{ flex: 1 }}>
+                <Text variant="labelSmall" style={{ color: theme.colors.onTertiaryContainer, opacity: 0.8 }}>Group summary</Text>
+                <Text variant="labelMedium" numberOfLines={2} style={{ color: theme.colors.onTertiaryContainer, fontWeight: 'bold' }}>
                     {loading ? "..." : formattedGroupCost}
                 </Text>
             </View>
@@ -319,14 +263,20 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
       
       {/* 1. Settlements List */}
       <View style={styles.section}>
-        {/* Header - Google style: Label Large, subtle */}
-        {myDebts.length > 0 
-            ? <Text variant="labelLarge" style={{ color: theme.colors.primary, marginLeft: 4, marginBottom: 8 }}>Suggested Actions</Text>
-            : null
-        }
-        
         {myDebts.length > 0 ? (
-           <View style={{ gap: 12 }}>{myDebts.map(renderActionItem)}</View>
+           <View style={{ gap: 4 }}>
+             {(showAllActions ? myDebts : myDebts.slice(0, 2)).map(renderActionItem)}
+             {myDebts.length > 2 && (
+               <Button 
+                 mode="text" 
+                 compact 
+                 onPress={() => setShowAllActions(!showAllActions)}
+                 icon={showAllActions ? "chevron-up" : "chevron-down"}
+               >
+                 {showAllActions ? "Show less" : `Show ${myDebts.length - 2} more`}
+               </Button>
+             )}
+           </View>
         ) : (loading || !currentUserId) ? (
              <View style={{ padding: 20, alignItems: 'center' }}>
                 <Text variant="bodySmall" style={{ opacity: 0.5 }}>Updating balances...</Text>
@@ -354,9 +304,9 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: 8,
     paddingBottom: 8,
-    gap: 24, // More breathing room (Google Design)
+    gap: 16,
   },
   section: {
     gap: 4,
@@ -386,9 +336,9 @@ const styles = StyleSheet.create({
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 12,
-      paddingVertical: 16,
-      borderRadius: 16,
+      gap: 8,
+      paddingVertical: 8,
+      borderRadius: 12,
       backgroundColor: 'rgba(0,0,0,0.03)',
   },
   compactStatsRow: {

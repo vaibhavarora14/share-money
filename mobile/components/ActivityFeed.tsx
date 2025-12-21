@@ -6,21 +6,23 @@ import { ACTIVITY_FEED_UI, ACTIVITY_ICONS } from "../constants/activityFeed";
 import { useAuth } from "../contexts/AuthContext";
 import { ActivityItem } from "../types";
 import {
-    formatActivityTime,
-    getActivityColor,
-    getUserDisplayName,
-    groupActivitiesByDate,
+  formatActivityTime,
+  getActivityColor,
+  getUserDisplayName,
+  groupActivitiesByDate,
 } from "../utils/activityDescriptions";
 import { styles } from "./ActivityFeed.styles";
 
 interface ActivityFeedProps {
   items: ActivityItem[];
   loading: boolean;
+  isFiltered?: boolean;
 }
 
 export const ActivityFeed: React.FC<ActivityFeedProps> = ({
   items,
   loading,
+  isFiltered,
 }) => {
   const theme = useTheme();
   const { session } = useAuth();
@@ -42,7 +44,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
           <Card style={styles.emptyStateCard} mode="outlined">
             <Card.Content style={styles.emptyStateContent}>
               <MaterialCommunityIcons
-                name={ACTIVITY_ICONS.EMPTY_STATE}
+                name={isFiltered ? "filter-variant-remove" : ACTIVITY_ICONS.EMPTY_STATE}
                 size={ACTIVITY_FEED_UI.EMPTY_STATE_ICON_SIZE}
                 color={theme.colors.onSurfaceVariant}
               />
@@ -53,7 +55,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                   { color: theme.colors.onSurface },
                 ]}
               >
-                No Activity Yet
+                {isFiltered ? "No matching activity" : "No Activity Yet"}
               </Text>
               <Text
                 variant="bodyMedium"
@@ -62,8 +64,9 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                   { color: theme.colors.onSurfaceVariant },
                 ]}
               >
-                Activity feed will show all transaction changes made in this
-                group.
+                {isFiltered 
+                  ? "Try adjusting your filters to see more activity."
+                  : "Activity feed will show all transaction changes made in this group."}
               </Text>
             </Card.Content>
           </Card>
@@ -76,13 +79,13 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
     const dateKeys = Object.keys(groupedActivities);
 
     return (
-      <View style={styles.section}>
+      <View>
         {dateKeys.map((dateKey, dateIndex) => {
           const activitiesForDate = groupedActivities[dateKey];
           return (
-            <React.Fragment key={dateKey}>
+            <View key={dateKey}>
               {dateIndex > 0 && <View style={{ height: 16 }} />}
-              <View style={styles.dateHeaderContainer}>
+              <View style={[styles.dateHeaderContainer, dateIndex === 0 && { marginTop: 0 }]}>
                 <Text
                   variant="labelMedium"
                   style={[
@@ -127,13 +130,13 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                         style={[
                           styles.iconContainer,
                           {
-                            backgroundColor: activityColor + "20", // 12% opacity roughly, similar to Tonal
+                            backgroundColor: activityColor + "20",
                           },
                         ]}
                       >
                         <MaterialCommunityIcons
                           name={activityIcon}
-                          size={20} // Slightly smaller than generic 24
+                          size={20}
                           color={activityColor}
                         />
                       </View>
@@ -159,7 +162,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                   </View>
                 );
               })}
-            </React.Fragment>
+            </View>
           );
         })}
       </View>

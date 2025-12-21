@@ -11,14 +11,11 @@ const SPACING = {
 };
 
 export const styles = StyleSheet.create({
-  section: {
-    paddingTop: SPACING.md,
-  },
   dateHeaderContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: SPACING.lg,
-    marginBottom: SPACING.sm,
+    marginTop: 8, // Reduced from 16
+    marginBottom: 0, // Reduced from 4
   },
   dateHeaderText: {
     fontWeight: "700",
@@ -36,7 +33,7 @@ export const styles = StyleSheet.create({
   // MD3 List Item Style
   activityItem: {
     flexDirection: "row",
-    paddingVertical: SPACING.md, // 12
+    paddingVertical: SPACING.sm, // 8
     alignItems: 'flex-start',
   },
   iconContainer: {

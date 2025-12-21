@@ -59,6 +59,7 @@ export function useCancelInvitation(onSuccess?: () => void) {
         queryKey: queryKeys.invitations(data.groupId),
       });
       queryClient.invalidateQueries({ queryKey: queryKeys.group(data.groupId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.participants(data.groupId) });
       onSuccess?.();
     },
   });

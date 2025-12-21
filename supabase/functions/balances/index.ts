@@ -8,6 +8,7 @@ import { isValidUUID } from '../_shared/validation.ts';
 
 interface Balance {
   user_id: string;
+  participant_id?: string;
   email?: string;
   full_name?: string | null;
   avatar_url?: string | null;
@@ -109,18 +110,23 @@ async function calculateGroupBalances(
     userBalances.set(currency, currentAmount + amount);
   };
 
-  // 1. Fetch all participants to resolve user_ids
+  // 1. Fetch all participants to resolve user_ids and names
   const { data: participants } = await supabase
     .from('participants')
-    .select('id, user_id, email')
+    .select('id, user_id, email, full_name, avatar_url')
     .eq('group_id', groupId);
   
   const participantToUserMap = new Map<string, string>();
   const participantToEmailMap = new Map<string, string>();
+  const participantToFullNameMap = new Map<string, string>();
+  const participantToAvatarMap = new Map<string, string>();
+
   if (participants) {
     participants.forEach((p: any) => {
       if (p.user_id) participantToUserMap.set(p.id, p.user_id);
       if (p.email) participantToEmailMap.set(p.id, p.email);
+      if (p.full_name) participantToFullNameMap.set(p.id, p.full_name);
+      if (p.avatar_url) participantToAvatarMap.set(p.id, p.avatar_url);
     });
   }
 
@@ -134,8 +140,8 @@ async function calculateGroupBalances(
     const paidByPid = tx.paid_by_participant_id;
     if (!paidByPid) continue;
     
-    const paidByUserId = participantToUserMap.get(paidByPid);
-    const paidByKey = paidByUserId || paidByPid; // Fallback to PID for non-users
+    // Use Participant ID as the key for strict correctness
+    const paidByKey = paidByPid;
 
       if (tx.transaction_splits && Array.isArray(tx.transaction_splits)) {
         const splits = tx.transaction_splits
@@ -144,26 +150,18 @@ async function calculateGroupBalances(
             const amount = typeof s.amount === 'string' ? parseFloat(s.amount) : s.amount;
             if (!s.participant_id || isNaN(amount)) return undefined;
             
-            const uId = participantToUserMap.get(s.participant_id);
-            return { pid: s.participant_id, user_id: uId as string | undefined, amount };
+            return { pid: s.participant_id, amount };
           })
-          .filter((s): s is { pid: string; user_id: string | undefined; amount: number } => !!s);
+          .filter((s): s is { pid: string; amount: number } => !!s);
 
         if (splits.length === 0) continue;
 
-        const userSplit = splits.find((s) => s.user_id === currentUserId);
-        
-        if (paidByUserId === currentUserId) {
-          // Alice paid, others owe her
-          for (const split of splits) {
-            if (split.pid !== paidByPid) {
-              const key = split.user_id || split.pid;
-              updateBalance(key, currency, split.amount);
-            }
-          }
-        } else if (userSplit) {
-          // Alice owes payer
-          updateBalance(paidByKey, currency, -userSplit.amount);
+        // Add credit to payer
+        updateBalance(paidByKey, currency, totalAmount);
+
+        // Add debit to each split participant
+        for (const split of splits) {
+          updateBalance(split.pid, currency, -split.amount);
         }
       }
     }
@@ -181,12 +179,9 @@ async function calculateGroupBalances(
 
   // Process Settlements
   for (const settlement of (settlements || [])) {
-    const fromUserId = settlement.from_participant_id ? participantToUserMap.get(settlement.from_participant_id) : null;
-    const toUserId = settlement.to_participant_id ? participantToUserMap.get(settlement.to_participant_id) : null;
-    
-    // Fallback to PIDs if no user IDs
-    const fromKey = fromUserId || settlement.from_participant_id;
-    const toKey = toUserId || settlement.to_participant_id;
+    // strict PID usage
+    const fromKey = settlement.from_participant_id;
+    const toKey = settlement.to_participant_id;
 
     if (!fromKey || !toKey) continue; 
     
@@ -197,27 +192,32 @@ async function calculateGroupBalances(
 
     if (isNaN(settlementAmount) || settlementAmount <= 0) continue;
 
-    if (fromUserId === currentUserId) {
-      updateBalance(toKey, currency, settlementAmount);
-    } else if (toUserId === currentUserId) {
-      updateBalance(fromKey, currency, -settlementAmount);
-    }
+    // From (sender) is less in debt (Credit)
+    updateBalance(fromKey, currency, settlementAmount);
+    // To (receiver) is less a creditor (Debit)
+    updateBalance(toKey, currency, -settlementAmount);
   }
 
   const balances: Balance[] = [];
   
   for (const [key, currencyMap] of balanceMap.entries()) {
-    if (key === currentUserId) continue;
+    // Return all balances (including current user) so frontend can calculate full graph
     
     for (const [currency, amount] of currencyMap.entries()) {
       const roundedAmount = Math.round(amount * 100) / 100;
       if (Math.abs(roundedAmount) > 0.01) {
-        // Find email if available
+        // Find user_id, email and full_name using PID maps
+        const userId = participantToUserMap.get(key);
         const email = participantToEmailMap.get(key);
+        const fullName = participantToFullNameMap.get(key);
+        const avatarUrl = participantToAvatarMap.get(key);
         
         balances.push({
-          user_id: isValidUUID(key) ? key : '', // userId or blank for invited
+          user_id: userId || (isValidUUID(key) ? key : ''), // Return UserID if exists (crucial for aggregation)
+          participant_id: key, // KEY is now GUARANTEED to be Participant ID (UUID)
           email: email,
+          full_name: fullName || null,
+          avatar_url: avatarUrl || null,
           amount: roundedAmount,
           currency: currency
         });
@@ -322,6 +322,9 @@ Deno.serve(async (req: Request) => {
 
     const overallBalances: Balance[] = [];
     for (const [userId, currencyMap] of overallBalanceMap.entries()) {
+      // Overall balances (across groups) should only return the requester's position
+      if (userId !== currentUserId) continue;
+      
       for (const [currency, amount] of currencyMap.entries()) {
         const roundedAmount = Math.round(amount * 100) / 100;
         if (Math.abs(roundedAmount) > 0.01) {
@@ -356,19 +359,22 @@ Deno.serve(async (req: Request) => {
         for (const b of gb.balances) {
           const profile = b.user_id ? profileMap.get(b.user_id) : null;
           if (b.user_id) {
-            b.email = emailMap.get(b.user_id);
+            const authEmail = emailMap.get(b.user_id);
+            if (authEmail) b.email = authEmail;
           }
-          b.full_name = profile?.full_name || null;
-          b.avatar_url = profile?.avatar_url || null;
+          // Only overwrite if profile has data (merging auth profile over participant data)
+          b.full_name = profile?.full_name || b.full_name || null;
+          b.avatar_url = profile?.avatar_url || b.avatar_url || null;
         }
       }
       for (const b of overallBalances) {
         const profile = b.user_id ? profileMap.get(b.user_id) : null;
         if (b.user_id) {
-          b.email = emailMap.get(b.user_id);
+          const authEmail = emailMap.get(b.user_id);
+          if (authEmail) b.email = authEmail;
         }
-        b.full_name = profile?.full_name || null;
-        b.avatar_url = profile?.avatar_url || null;
+        b.full_name = profile?.full_name || b.full_name || null;
+        b.avatar_url = profile?.avatar_url || b.avatar_url || null;
       }
     }
 

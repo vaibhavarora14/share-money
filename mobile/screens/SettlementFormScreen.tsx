@@ -1,20 +1,20 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    View,
+  Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  View,
 } from "react-native";
 import { Appbar, Button, Text, TextInput, useTheme } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Balance, GroupMember, Settlement } from "../types";
+import { Balance, GroupMember, Participant, Settlement } from "../types";
 import {
-    formatCurrency,
-    getCurrencySymbol,
-    getDefaultCurrency,
+  formatCurrency,
+  getCurrencySymbol,
+  getDefaultCurrency,
 } from "../utils/currency";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 
@@ -43,6 +43,12 @@ interface SettlementFormScreenProps {
     to_participant_id?: string;
   }) => Promise<void>;
   onDismiss: () => void;
+  // Admin mode: explicit sender/receiver
+  fromParticipantId?: string;
+  toParticipantId?: string;
+  initialAmount?: number;
+  initialCurrency?: string;
+  participants?: Participant[];
 }
 
 export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
@@ -56,13 +62,21 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   onSave,
   onUpdate,
   onDismiss,
+  fromParticipantId,
+  toParticipantId,
+  initialAmount,
+  initialCurrency,
+  participants = [],
 }) => {
   const isEditing = !!settlement;
+  const isAdminMode = !!(fromParticipantId && toParticipantId);
+
   // If settling a specific balance, use that currency. Otherwise use default.
   // Note: The form currently does not allow changing currency, so it is effectively locked.
   const effectiveDefaultCurrency =
     settlement?.currency ||
     balance?.currency ||
+    initialCurrency ||
     defaultCurrency ||
     getDefaultCurrency();
   const theme = useTheme();
@@ -93,6 +107,17 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
     // For manual entry, we'll assume user is paying (from_user_id = currentUserId)
     return true;
   }, [balance]);
+
+  // Determine fixed payer/receiver display names
+  const adminPayer = useMemo(() => {
+     if (!fromParticipantId) return null;
+     return groupMembers.find(m => m.participant_id === fromParticipantId);
+  }, [fromParticipantId, groupMembers]);
+
+  const adminReceiver = useMemo(() => {
+     if (!toParticipantId) return null;
+     return groupMembers.find(m => m.participant_id === toParticipantId);
+  }, [toParticipantId, groupMembers]);
 
   // Get available users to settle with (excluding current user)
   const availableUsers = useMemo(() => {
@@ -127,14 +152,18 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
     // Pre-fill based on balance if provided
     else if (balance) {
       const member = groupMembers.find(m => m.user_id === balance.user_id);
-      setSelectedToParticipantId(member?.participant_id || "");
+      // For invited users, balance.user_id IS the participant_id
+      setSelectedToParticipantId(balance.participant_id || member?.participant_id || balance.user_id);
       // Pre-fill with absolute balance amount as suggestion
       setAmount(Math.abs(balance.amount).toFixed(2));
+      setAmount(Math.abs(balance.amount).toFixed(2));
+    } else if (isAdminMode) {
+      if (initialAmount) setAmount(initialAmount.toFixed(2));
     } else if (availableUsers.length > 0) {
       // Default to first available user
       setSelectedToParticipantId(availableUsers[0].participant_id || "");
     }
-  }, [visible, balance, settlement, availableUsers, currentUserId]);
+  }, [visible, balance, settlement, availableUsers, currentUserId, isAdminMode, initialAmount]);
 
   const validateForm = (): boolean => {
     let isValid = true;
@@ -149,7 +178,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
     }
 
     // Validate participant selection (for manual entry)
-    if (!balance && !selectedToParticipantId) {
+    if (!balance && !settlement && !isAdminMode && !selectedToParticipantId) {
       isValid = false;
     }
 
@@ -174,48 +203,62 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
           currency: effectiveDefaultCurrency,
           notes: notes.trim() || undefined,
         });
-      } else {
-        // Determine the current user's participant ID
-        const currentMember = groupMembers.find(m => m.user_id === currentUserId);
-        const currentParticipantId = currentMember?.participant_id;
-
-        if (!currentParticipantId) {
-           Alert.alert("Error", "Unable to identify your participant record in this group");
-           return;
-        }
-
-        // Determine the other participant ID
-        let otherParticipantId: string;
-        if (balance) {
-          const member = groupMembers.find(m => m.user_id === balance.user_id);
-          otherParticipantId = member?.participant_id || "";
-        } else if (selectedToParticipantId) {
-          otherParticipantId = selectedToParticipantId;
+      } else if (isAdminMode) {
+            // Explicit mode
+            if (!fromParticipantId || !toParticipantId) return; // Should likely alert
+            
+            await onSave({
+              group_id: groupId,
+              from_participant_id: fromParticipantId,
+              to_participant_id: toParticipantId,
+              amount: amountNum,
+              currency: effectiveDefaultCurrency,
+              notes: notes.trim() || undefined,
+            });
+            
         } else {
-          Alert.alert("Error", "Please select a member to settle with");
-          return;
+             // Standard "Me vs Them" mode
+             // Determine the current user's participant ID
+            const currentMember = groupMembers.find(m => m.user_id === currentUserId);
+            const currentParticipantId = currentMember?.participant_id;
+
+            if (!currentParticipantId) {
+            Alert.alert("Error", "Unable to identify your participant record in this group");
+            return;
+            }
+
+            // Determine the other participant ID
+            let otherParticipantId: string;
+            if (balance) {
+            const member = groupMembers.find(m => m.user_id === balance.user_id);
+            // Prioritize the member's participant_id if found (since balance.participant_id might be the user_id)
+            otherParticipantId = member?.participant_id || balance.participant_id || balance.user_id;
+            } else if (selectedToParticipantId) {
+            otherParticipantId = selectedToParticipantId;
+            } else {
+            Alert.alert("Error", "Please select a member to settle with");
+            return;
+            }
+
+            if (!otherParticipantId) {
+            Alert.alert("Error", "Selected member does not have a valid participant record");
+            return;
+            }
+
+            // Determine from_participant_id and to_participant_id
+            const fromParticipantId = isPaying ? currentParticipantId : otherParticipantId;
+            const toParticipantId = isPaying ? otherParticipantId : currentParticipantId;
+
+            await onSave({
+            group_id: groupId,
+            from_participant_id: fromParticipantId,
+            to_participant_id: toParticipantId,
+            amount: amountNum,
+            currency: effectiveDefaultCurrency,
+            notes: notes.trim() || undefined,
+            });
         }
 
-        if (!otherParticipantId) {
-           Alert.alert("Error", "Selected member does not have a valid participant record");
-           return;
-        }
-
-        // Determine from_participant_id and to_participant_id
-        // If paying (isPaying = true): from_participant_id = currentParticipantId, to_participant_id = otherParticipantId
-        // If receiving (isPaying = false): from_participant_id = otherParticipantId, to_participant_id = currentParticipantId
-        const fromParticipantId = isPaying ? currentParticipantId : otherParticipantId;
-        const toParticipantId = isPaying ? otherParticipantId : currentParticipantId;
-
-        await onSave({
-          group_id: groupId,
-          from_participant_id: fromParticipantId,
-          to_participant_id: toParticipantId,
-          amount: amountNum,
-          currency: effectiveDefaultCurrency,
-          notes: notes.trim() || undefined,
-        });
-      }
 
       // Reset form
       setAmount("");
@@ -230,10 +273,17 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   };
 
   const getParticipantDisplayName = (participantId: string): string => {
+    // 1. Try participants list (source of truth including names/emails)
+    const participant = participants.find((p: Participant) => p.id === participantId);
+    if (participant?.full_name) return participant.full_name;
+    if (participant?.email) return participant.email;
+
+    // 2. Fallback to groupMembers
     const member = groupMembers.find((m) => m.participant_id === participantId);
-    return (
-      member?.full_name || member?.email || `Member ${participantId.substring(0, 8)}...`
-    );
+    if (member?.full_name) return member.full_name;
+    if (member?.email) return member.email;
+
+    return `Member ${participantId.substring(0, 8)}`;
   };
 
   const getBalanceDisplay = (): string => {
@@ -271,84 +321,88 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          {!isEditing && balance && (
-            <View
-              style={[
-                styles.balanceInfo,
-                { backgroundColor: theme.colors.secondaryContainer },
-              ]}
-            >
-              <Text
-                variant="titleMedium"
-                style={[
-                  styles.balanceText,
-                  { color: theme.colors.onSecondaryContainer },
-                ]}
-              >
-              <Text
-                variant="titleMedium"
-                style={[
-                  styles.balanceText,
-                  { color: theme.colors.onSecondaryContainer },
-                ]}
-              >
-                {groupMembers.find(m => m.user_id === balance.user_id)?.full_name || balance.email || "Unknown Member"}
-              </Text>
-              </Text>
-              <Text
-                variant="bodyMedium"
-                style={[
-                  styles.balanceAmount,
-                  { color: theme.colors.onSecondaryContainer },
-                ]}
-              >
-                {getBalanceDisplay()}
-              </Text>
-            </View>
-          )}
+          {/* Unified Settlement Header: Shows Who is Paying Who */}
+          <View
+            style={[
+              styles.balanceInfo,
+              { backgroundColor: theme.colors.secondaryContainer },
+            ]}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+              {(() => {
+                let fromName = "";
+                let toName = "";
 
-          {isEditing && settlement && (
-            <View
-              style={[
-                styles.balanceInfo,
-                { backgroundColor: theme.colors.secondaryContainer },
-              ]}
-            >
-              <Text
-                variant="titleMedium"
-                style={[
-                  styles.balanceText,
-                  { color: theme.colors.onSecondaryContainer },
-                ]}
-              >
-              <Text
-                variant="titleMedium"
-                style={[
-                  styles.balanceText,
-                  { color: theme.colors.onSecondaryContainer },
-                ]}
-              >
-                {settlement.from_participant_id === groupMembers.find(m => m.user_id === currentUserId)?.participant_id
-                  ? `You paid ${getParticipantDisplayName(settlement.to_participant_id || "")}`
-                  : `${getParticipantDisplayName(settlement.from_participant_id || "")} paid you`}
-              </Text>
-              </Text>
+                if (isEditing && settlement) {
+                  const currentMember = groupMembers.find(m => m.user_id === currentUserId);
+                  const currentParticipantId = currentMember?.participant_id;
+                  
+                  if (settlement.from_participant_id === currentParticipantId) {
+                    fromName = "You";
+                    toName = getParticipantDisplayName(settlement.to_participant_id || "");
+                  } else {
+                    fromName = getParticipantDisplayName(settlement.from_participant_id || "");
+                    toName = "You";
+                  }
+                } else if (isAdminMode) {
+                  fromName = adminPayer?.full_name || adminPayer?.email || "Payer";
+                  toName = adminReceiver?.full_name || adminReceiver?.email || "Receiver";
+                  if (adminPayer?.user_id === currentUserId) fromName = "You";
+                  if (adminReceiver?.user_id === currentUserId) toName = "You";
+                } else if (balance) {
+                  if (isPaying) {
+                    fromName = "You";
+                    toName = balance.full_name || balance.email || "Member";
+                  } else {
+                    fromName = balance.full_name || balance.email || "Member";
+                    toName = "You";
+                  }
+                } else if (selectedToParticipantId) {
+                   // Manual entry
+                   fromName = "You";
+                   const member = availableUsers.find(u => u.participant_id === selectedToParticipantId);
+                   toName = member?.full_name || member?.email || "Member";
+                } else {
+                  return (
+                    <Text variant="titleMedium" style={{ color: theme.colors.onSecondaryContainer, opacity: 0.6 }}>
+                      Select a member to settle with
+                    </Text>
+                  );
+                }
+
+                return (
+                  <>
+                    <Text variant="titleMedium" style={{ color: theme.colors.onSecondaryContainer, fontWeight: 'bold' }}>
+                      {fromName}
+                    </Text>
+                    <Text variant="titleMedium" style={{ color: theme.colors.onSecondaryContainer, marginHorizontal: 8, opacity: 0.7 }}>
+                      paying
+                    </Text>
+                    <Text variant="titleMedium" style={{ color: theme.colors.onSecondaryContainer, fontWeight: 'bold' }}>
+                      {toName}
+                    </Text>
+                  </>
+                );
+              })()}
+            </View>
+            
+            {(amount || isEditing || isAdminMode) && (
               <Text
                 variant="bodyMedium"
                 style={[
                   styles.balanceAmount,
-                  { color: theme.colors.onSecondaryContainer },
+                  { color: theme.colors.onSecondaryContainer, marginTop: 8, opacity: 0.8 },
                 ]}
               >
                 {formatCurrency(
-                  settlement.amount,
-                  settlement.currency || effectiveDefaultCurrency
+                  parseFloat(amount) || initialAmount || settlement?.amount || 0,
+                  effectiveDefaultCurrency
                 )}
               </Text>
-            </View>
-          )}
+            )}
+          </View>
 
-          {!isEditing && !balance && (
+          {!isEditing && !balance && !isAdminMode && (
             <View style={styles.section}>
               <Text variant="labelLarge" style={styles.label}>
                 Settle with
@@ -375,28 +429,6 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                   </Button>
                 ))}
               </ScrollView>
-            </View>
-          )}
-
-          {isEditing && settlement && (
-            <View style={styles.section}>
-              <Text variant="labelLarge" style={styles.label}>
-                Settlement with
-              </Text>
-              <Text
-                variant="bodyMedium"
-                style={{ color: theme.colors.onSurfaceVariant }}
-              >
-                {settlement.from_participant_id === groupMembers.find(m => m.user_id === currentUserId)?.participant_id
-                  ? getParticipantDisplayName(settlement.to_participant_id || "")
-                  : getParticipantDisplayName(settlement.from_participant_id || "")}
-              </Text>
-              <Text
-                variant="bodySmall"
-                style={{ color: theme.colors.onSurfaceVariant, marginTop: 4 }}
-              >
-                (Cannot change settlement parties)
-              </Text>
             </View>
           )}
 
@@ -450,14 +482,15 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
               mode="contained"
               onPress={handleSave}
               loading={loading}
-              disabled={loading || !amount || (!isEditing && !selectedToParticipantId)}
+              disabled={loading || !amount || (!isEditing && !isAdminMode && !selectedToParticipantId)}
               style={styles.saveButton}
             >
               {isEditing
                 ? "Update Settlement"
-                : isPaying
+                : isAdminMode && !isEditing ? "" : isPaying
                 ? "Mark as Paid"
                 : "Mark as Received"}
+               {isAdminMode && !isEditing && "Record Payment"}
             </Button>
             <Button
               mode="outlined"

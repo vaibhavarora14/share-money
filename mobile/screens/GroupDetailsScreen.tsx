@@ -1,14 +1,16 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Alert, BackHandler, ScrollView, StyleSheet, View } from "react-native";
 import {
-    ActivityIndicator,
-    Appbar,
-    Button,
-    FAB,
-    Menu,
-    SegmentedButtons,
-    Text,
-    useTheme,
+  ActivityIndicator,
+  Appbar,
+  Avatar,
+  Button,
+  Chip,
+  FAB,
+  Menu,
+  SegmentedButtons,
+  Text,
+  useTheme
 } from "react-native-paper";
 import { ActivityFeed } from "../components/ActivityFeed";
 import { GroupDashboard } from "../components/GroupDashboard";
@@ -19,30 +21,31 @@ import { useAuth } from "../contexts/AuthContext";
 import { useActivity } from "../hooks/useActivity";
 import { useBalances } from "../hooks/useBalances";
 import {
-    useCancelInvitation,
-    useGroupInvitations,
+  useCancelInvitation,
+  useGroupInvitations,
 } from "../hooks/useGroupInvitations";
 import { useAddMember, useRemoveMember } from "../hooks/useGroupMutations";
 import { useGroupDetails } from "../hooks/useGroups";
+import { useParticipants } from "../hooks/useParticipants";
 import {
-    useCreateSettlement,
-    useDeleteSettlement,
-    useSettlements,
-    useUpdateSettlement,
+  useCreateSettlement,
+  useDeleteSettlement,
+  useSettlements,
+  useUpdateSettlement,
 } from "../hooks/useSettlements";
 import { useTransactions } from "../hooks/useTransactions";
 import {
-    Balance,
-    GroupInvitation,
-    GroupWithMembers,
-    Settlement,
-    Transaction,
+  Balance,
+  GroupInvitation,
+  GroupWithMembers,
+  Settlement,
+  Transaction,
 } from "../types";
-import { formatCurrency, getDefaultCurrency } from "../utils/currency";
+import { getDefaultCurrency } from "../utils/currency";
 import { showErrorAlert } from "../utils/errorHandling";
 import {
-    getUserFriendlyErrorMessage,
-    isSessionExpiredError,
+  getUserFriendlyErrorMessage,
+  isSessionExpiredError,
 } from "../utils/errorMessages";
 import { GroupStatsMode } from "./GroupStatsScreen";
 import { SettlementFormScreen } from "./SettlementFormScreen";
@@ -84,6 +87,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [listMode, setListMode] = useState<"transactions" | "activity">(
     "transactions"
   );
+  const [showActivityFilters, setShowActivityFilters] = useState(false);
+  const [activityFilterType, setActivityFilterType] = useState<"all" | "expenses" | "settlements">("all");
+  const [activityFilterParticipantId, setActivityFilterParticipantId] = useState<string>("all");
 
   // Stable handler for closing menu
   const handleCloseMenu = () => {
@@ -125,6 +131,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     refetch: refetchInvites,
   } = useGroupInvitations(initialGroup.id);
   const {
+    data: participants = [],
+  } = useParticipants(initialGroup.id);
+  const {
     data: balancesData,
     isLoading: balancesLoading,
     refetch: refetchBalances,
@@ -144,6 +153,58 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   >(null);
   const { session, signOut } = useAuth();
   const theme = useTheme();
+
+
+  // Map user_id to participant_id for involvement filtering
+  const userIdToParticipantId = useMemo(() => {
+    const map = new Map<string, string>();
+    participants.forEach(p => {
+      if (p.user_id) map.set(p.user_id, p.id);
+    });
+    return map;
+  }, [participants]);
+
+  // Filter activity items
+  const filteredActivities = useMemo(() => {
+    let items = activityData?.activities || [];
+    
+    // Filter by type
+    if (activityFilterType !== "all") {
+      items = items.filter(item => {
+        if (activityFilterType === "expenses") return item.type.startsWith("transaction");
+        if (activityFilterType === "settlements") return item.type.startsWith("settlement");
+        return true;
+      });
+    }
+    
+    // Filter by participant involvement
+    if (activityFilterParticipantId !== "all") {
+      items = items.filter(item => {
+        // 1. Check if they are the actor (the one who made the change)
+        const actorParticipantId = userIdToParticipantId.get(item.changed_by.id);
+        if (actorParticipantId === activityFilterParticipantId) return true;
+
+        // 2. Check transaction details
+        if (item.details?.transaction) {
+          const t = item.details.transaction;
+          if (t.paid_by_participant_id === activityFilterParticipantId) return true;
+          if (t.split_among_participant_ids?.includes(activityFilterParticipantId)) return true;
+          if (t.splits?.some(s => s.participant_id === activityFilterParticipantId)) return true;
+        }
+
+        // 3. Check settlement details
+        if (item.details?.settlement) {
+          const s = item.details.settlement;
+          if (s.from_participant_id === activityFilterParticipantId) return true;
+          if (s.to_participant_id === activityFilterParticipantId) return true;
+        }
+
+        return false;
+      });
+    }
+    
+    return items;
+  }, [activityData?.activities, activityFilterType, activityFilterParticipantId, userIdToParticipantId]);
 
   // Auto sign-out on session expiration with alert
   useEffect(() => {
@@ -335,33 +396,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     setShowSettlementForm(true);
   };
 
-  const handleDeleteSettlement = async (settlement: Settlement) => {
-    Alert.alert(
-      "Delete Settlement",
-      `Are you sure you want to delete this settlement of ${formatCurrency(
-        settlement.amount,
-        settlement.currency || getDefaultCurrency()
-      )}?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteSettlement.mutate({
-                id: settlement.id,
-                groupId: settlement.group_id || group.id,
-              });
-            } catch (err) {
-              Alert.alert("Error", getUserFriendlyErrorMessage(err));
-            }
-          },
-        },
-      ]
-    );
-  };
-
   const currentUserId = session?.user?.id;
   // isMember checks if the user exists in the group list at all (includes active and left)
   const isMember =
@@ -502,14 +536,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           titleStyle={{ fontWeight: "bold" }}
         />
         
-        {/* Banner for former members */}
-        {!isActiveMember && isMember && !showMembers && (
-           <View style={{ backgroundColor: theme.colors.errorContainer, paddingHorizontal: 16, paddingVertical: 4, position: 'absolute', top: 56, left: 0, right: 0, zIndex: 1, alignItems: 'center' }}>
-             <Text style={{ color: theme.colors.onErrorContainer, fontSize: 12, fontWeight: 'bold' }}>
-               You are viewing this group as a former member
-             </Text>
-           </View>
-        )}
+
 
         {/* Group options (active members only) */}
         {isActiveMember && (
@@ -551,6 +578,15 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           </Menu>
         )}
       </Appbar.Header>
+
+      {/* Banner for former members */}
+      {!isActiveMember && isMember && !showMembers && (
+          <View style={{ backgroundColor: theme.colors.errorContainer, paddingHorizontal: 16, paddingVertical: 8, alignItems: 'center', width: '100%' }}>
+            <Text style={{ color: theme.colors.onErrorContainer, fontSize: 12, fontWeight: 'bold' }}>
+              You are viewing this group as a former member
+            </Text>
+          </View>
+      )}
 
       <ScrollView
         style={styles.scrollView}
@@ -607,7 +643,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             />
 
             <View
-              style={{ paddingHorizontal: 16, marginTop: 24, marginBottom: 8 }}
+              style={{ paddingHorizontal: 16, marginTop: 16, marginBottom: 0 }}
             >
               <SegmentedButtons
                 value={listMode}
@@ -635,12 +671,91 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 loading={txLoading}
                 onEdit={isActiveMember ? onEditTransaction : () => {}}
                 members={group.members || []}
+                participants={participants}
               />
             ) : (
-              <View style={styles.sectionContent}>
+              <View style={[styles.sectionContent, styles.activitySection]}>
+
+                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 0, paddingHorizontal: 4, marginTop: -8 }}>
+                   <Button 
+                     mode={showActivityFilters ? "contained-tonal" : "text"}
+                     onPress={() => setShowActivityFilters(!showActivityFilters)} 
+                     icon={showActivityFilters ? "filter-variant-remove" : "filter-variant"}
+                     compact
+                     style={{ borderRadius: 20 }}
+                     contentStyle={{ flexDirection: 'row-reverse' }}
+                   >
+                     Filters {(activityFilterType !== "all" || activityFilterParticipantId !== "all") && "•"}
+                   </Button>
+                </View>
+
+                {showActivityFilters && (
+                  <View style={styles.filterContainer}>
+                    <Text variant="labelLarge" style={styles.filterLabel}>Filter by Type</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
+                      <Chip 
+                        selected={activityFilterType === "all"} 
+                        onPress={() => setActivityFilterType("all")}
+                        style={[styles.filterChip, activityFilterType === "all" && { backgroundColor: theme.colors.primaryContainer }]}
+                        showSelectedCheck={true}
+                        mode={activityFilterType === "all" ? "flat" : "outlined"}
+                      >
+                        All Types
+                      </Chip>
+                      <Chip 
+                        selected={activityFilterType === "expenses"} 
+                        onPress={() => setActivityFilterType("expenses")}
+                        style={[styles.filterChip, activityFilterType === "expenses" && { backgroundColor: theme.colors.primaryContainer }]}
+                        showSelectedCheck={true}
+                        icon="format-list-bulleted"
+                        mode={activityFilterType === "expenses" ? "flat" : "outlined"}
+                      >
+                        Expenses
+                      </Chip>
+                      <Chip 
+                        selected={activityFilterType === "settlements"} 
+                        onPress={() => setActivityFilterType("settlements")}
+                        style={[styles.filterChip, activityFilterType === "settlements" && { backgroundColor: theme.colors.primaryContainer }]}
+                        showSelectedCheck={true}
+                        icon="hand-coin"
+                        mode={activityFilterType === "settlements" ? "flat" : "outlined"}
+                      >
+                        Settlements
+                      </Chip>
+                    </ScrollView>
+
+                    <Text variant="labelLarge" style={[styles.filterLabel, { marginTop: 4 }]}>Filter by Person</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
+                      <Chip 
+                        selected={activityFilterParticipantId === "all"} 
+                        onPress={() => setActivityFilterParticipantId("all")}
+                        style={[styles.filterChip, activityFilterParticipantId === "all" && { backgroundColor: theme.colors.primaryContainer }]}
+                        showSelectedCheck={true}
+                        mode={activityFilterParticipantId === "all" ? "flat" : "outlined"}
+                      >
+                        Everyone
+                      </Chip>
+                      {participants.map(participant => (
+                        <Chip
+                          key={participant.id}
+                          selected={activityFilterParticipantId === participant.id}
+                          onPress={() => setActivityFilterParticipantId(participant.id)}
+                          style={[styles.filterChip, activityFilterParticipantId === participant.id && { backgroundColor: theme.colors.primaryContainer }]}
+                          showSelectedCheck={true}
+                          avatar={participant.avatar_url ? <Avatar.Image size={24} source={{ uri: participant.avatar_url }} /> : undefined}
+                          mode={activityFilterParticipantId === participant.id ? "flat" : "outlined"}
+                        >
+                          {participant.full_name || participant.email?.split('@')[0] || "User"}
+                        </Chip>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+
                 <ActivityFeed
-                  items={activityData?.activities || []}
+                  items={filteredActivities}
                   loading={activityLoading}
+                  isFiltered={activityFilterType !== "all" || activityFilterParticipantId !== "all"}
                 />
               </View>
             )}
@@ -707,7 +822,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 16,
+    paddingHorizontal: 0,
+    paddingBottom: 16,
   },
   sectionSurface: {
     borderRadius: 16,
@@ -837,5 +953,28 @@ const styles = StyleSheet.create({
   emptyStateMessage: {
     textAlign: "center",
     lineHeight: 20,
+  },
+  activitySection: {
+    paddingBottom: 16,
+    paddingTop: 12, 
+  },
+  filterContainer: {
+    marginBottom: 12, 
+    paddingTop: 0,
+  },
+  filterLabel: {
+    marginBottom: 2,
+    opacity: 0.7,
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  filterRow: {
+    marginBottom: 0,
+  },
+  filterChip: {
+    marginRight: 8,
+    height: 32,
   },
 });

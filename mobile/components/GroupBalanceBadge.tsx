@@ -1,25 +1,23 @@
 import React from 'react';
 import { StyleSheet, View, ViewStyle } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
+import { Balance } from '../types';
 import { formatCurrency } from '../utils/currency';
-
-interface GroupBalance {
-  currency: string;
-  amount: number;
-}
 
 interface GroupBalanceData {
   group_id: string;
-  balances: GroupBalance[];
+  balances: Balance[];
 }
 
 interface GroupBalanceBadgeProps {
   balanceData?: GroupBalanceData | null;
+  currentUserId?: string | null;
   style?: ViewStyle;
 }
 
 export const GroupBalanceBadge: React.FC<GroupBalanceBadgeProps> = ({ 
   balanceData,
+  currentUserId,
   style 
 }) => {
   const theme = useTheme();
@@ -33,8 +31,16 @@ export const GroupBalanceBadge: React.FC<GroupBalanceBadgeProps> = ({
     );
   }
 
+  // Filter balances
+  let displayBalances = balanceData.balances;
+  
+  if (currentUserId) {
+    // If we have a current user, only show their personal balance in this group
+    displayBalances = balanceData.balances.filter(b => b.user_id === currentUserId);
+  }
+
   // Filter out zero residues
-  const nonZeroBalances = balanceData.balances.filter(b => Math.abs(b.amount) >= 0.01);
+  const nonZeroBalances = displayBalances.filter(b => Math.abs(b.amount) >= 0.01);
 
   if (nonZeroBalances.length === 0) {
     return (
@@ -44,7 +50,7 @@ export const GroupBalanceBadge: React.FC<GroupBalanceBadgeProps> = ({
     );
   }
 
-  // Sum balances by currency
+  // Sum balances by currency (important if user has multiple residues, e.g. from invited state vs user state)
   const netBalancesMap = nonZeroBalances.reduce((acc, b) => {
     acc[b.currency] = (acc[b.currency] || 0) + b.amount;
     return acc;

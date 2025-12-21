@@ -12,6 +12,7 @@ function invalidateGroupAdjacents(queryClient: QueryClient, groupId?: string) {
   queryClient.invalidateQueries({ queryKey: queryKeys.activity(groupId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.invitations(groupId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.settlements(groupId) });
+  queryClient.invalidateQueries({ queryKey: queryKeys.participants(groupId) });
 }
 
 export function useCreateGroup(onSuccess?: () => void) {

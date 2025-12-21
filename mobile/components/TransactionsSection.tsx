@@ -2,7 +2,7 @@ import React from "react";
 import { Pressable, View } from "react-native";
 import { ActivityIndicator, Avatar, Surface, Text, useTheme } from "react-native-paper";
 import { useAuth } from "../contexts/AuthContext";
-import { Transaction } from "../types";
+import { Participant, Transaction } from "../types";
 import { formatCurrency, getDefaultCurrency } from "../utils/currency";
 import { styles } from "./TransactionsSection.styles";
 
@@ -11,6 +11,7 @@ interface TransactionsSectionProps {
   loading: boolean;
   onEdit: (t: Transaction) => void;
   members: any[]; // Using any[] temporarily if GroupMember import has issues, but ideally GroupMember[]
+  participants?: Participant[];
 }
 
 export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
@@ -18,6 +19,7 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
   loading,
   onEdit,
   members = [],
+  participants = [],
 }) => {
   const theme = useTheme();
   const { session } = useAuth();
@@ -35,11 +37,25 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
   };
 
   const getPayerName = (transaction: Transaction) => {
-      // 1. Try resolving by participant_id (Preferred)
+      // 1. Try resolving by participant_id from participants array first (for invited users)
       if (transaction.paid_by_participant_id) {
-          const payer = members.find(m => m.participant_id === transaction.paid_by_participant_id);
+          // Check participants first (includes invited users)
+          const participant = participants.find(p => 
+            p.id === transaction.paid_by_participant_id
+          );
+          if (participant) {
+              const baseName = participant.user_id === currentUserId ? "You" : (participant.full_name || participant.email?.split('@')[0] || participant.email || "Unknown");
+              return participant.type === 'former' ? `${baseName} (Former)` : baseName;
+          }
+          
+          // Fallback to members lookup
+          const payer = members.find(m => 
+            m.participant_id === transaction.paid_by_participant_id || 
+            m.id === transaction.paid_by_participant_id
+          );
           if (payer) {
-              return payer.user_id === currentUserId ? "You" : (payer.full_name || payer.email?.split('@')[0] || "Unknown");
+              const baseName = payer.user_id === currentUserId ? "You" : (payer.full_name || payer.email?.split('@')[0] || payer.email || "Unknown");
+              return payer.status === 'left' ? `${baseName} (Former)` : baseName;
           }
       }
       
@@ -48,7 +64,7 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
            if (transaction.paid_by === currentUserId) return "You";
            const payer = members.find(m => m.user_id === transaction.paid_by);
            if (payer) {
-               return payer.full_name || payer.email?.split('@')[0] || "Unknown";
+               return payer.full_name || payer.email?.split('@')[0] || payer.email || "Unknown";
            }
       }
 
@@ -110,13 +126,13 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
                           <Text variant="titleMedium" numberOfLines={1} style={[styles.title, { color: theme.colors.onSurface }]}>
                             {transaction.description || "Untitled"}
                           </Text>
-                          <Text variant="titleMedium" style={{ fontWeight: 'bold', color: theme.colors.onSurface }}>
+                          <Text variant="titleMedium" style={{ fontWeight: 'bold', color: theme.colors.onSurface, flexShrink: 0 }}>
                             {formatCurrency(transaction.amount, currency)}
                           </Text>
                       </View>
                       
                       <View style={styles.subRow}>
-                          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                          <Text variant="bodySmall" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant, flex: 1 }}>
                              {dateString} • {payerName} paid
                           </Text>
                       </View>

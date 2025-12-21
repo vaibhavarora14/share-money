@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import {
-  ActivityIndicator,
-  Appbar,
-  Button,
-  FAB,
-  IconButton,
-  Surface,
-  Text,
-  useTheme,
+    ActivityIndicator,
+    Appbar,
+    Button,
+    FAB,
+    IconButton,
+    Surface,
+    Text,
+    useTheme,
 } from "react-native-paper";
 import { GroupBalanceBadge } from "../components/GroupBalanceBadge";
 import { useAuth } from "../contexts/AuthContext";
@@ -17,8 +17,8 @@ import { useGroups } from "../hooks/useGroups";
 import { Group } from "../types";
 import { showErrorAlert } from "../utils/errorHandling";
 import {
-  getUserFriendlyErrorMessage,
-  isSessionExpiredError,
+    getUserFriendlyErrorMessage,
+    isSessionExpiredError,
 } from "../utils/errorMessages";
 import { CreateGroupScreen } from "./CreateGroupScreen";
 
@@ -41,7 +41,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
 }) => {
   const [showCreateGroup, setShowCreateGroup] = useState<boolean>(false);
   const theme = useTheme();
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
   const { data: groups, isLoading: loading, error, refetch } = useGroups();
   const {
     data: balancesData,
@@ -257,6 +257,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                   {/* Balance Badge */}
                   <GroupBalanceBadge 
                     balanceData={balancesData?.group_balances?.find(gb => gb.group_id === group.id)} 
+                    currentUserId={user?.id}
                   />
                 </TouchableOpacity>
               </Surface>

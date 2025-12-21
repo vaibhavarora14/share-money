@@ -32,21 +32,25 @@ export const styles = StyleSheet.create({
   content: {
     flex: 1,
     justifyContent: 'center',
+    display: 'flex',
+    flexDirection: 'column',
   },
   headerRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 2,
+    width: '100%',
   },
   title: {
-    flex: 1,
-    marginRight: 16,
+    flexGrow: 1,
+    flexShrink: 1,
+    marginRight: 8,
     fontWeight: '600', // MD3 Title Medium is 500/Medium or 600/SemiBold
   },
   subRow: {
     flexDirection: "row",
     alignItems: "center",
+    width: '100%',
   },
   // Empty State
   emptyState: {

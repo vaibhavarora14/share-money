@@ -1,38 +1,42 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    Alert,
-    BackHandler,
-    Dimensions,
-    FlatList,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    TouchableOpacity,
-    View,
+  Alert,
+  BackHandler,
+  FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  TextInput as RNTextInput,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import {
-    Appbar,
-    Button,
-    Checkbox,
-    SegmentedButtons,
-    Text,
-    TextInput,
-    useTheme,
+  Appbar,
+  Button,
+  Card,
+  Chip,
+  Divider,
+  IconButton,
+  Surface,
+  Text,
+  TextInput,
+  useTheme,
 } from "react-native-paper";
 import {
-    SafeAreaView,
-    useSafeAreaInsets,
+  SafeAreaView,
+  useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import { useParticipants } from "../hooks/useParticipants";
-import { Transaction } from "../types";
+import { Participant, Transaction } from "../types";
 import {
-    CURRENCIES,
-    formatCurrency,
-    getCurrencySymbol,
-    getDefaultCurrency,
+  CURRENCIES,
+  formatCurrency,
+  getCurrencySymbol,
+  getDefaultCurrency,
 } from "../utils/currency";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 
@@ -44,7 +48,7 @@ interface TransactionFormScreenProps {
   onDismiss: () => void;
   onDelete?: () => Promise<void>;
   defaultCurrency?: string;
-  groupId?: string; // Group ID to determine if this is a group transaction
+  groupId?: string;
 }
 
 export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
@@ -55,9 +59,12 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   defaultCurrency,
   groupId,
 }) => {
-  // Use the prop if provided, otherwise get from environment variable at runtime
   const effectiveDefaultCurrency = defaultCurrency || getDefaultCurrency();
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const amountInputRef = useRef<RNTextInput>(null);
 
+  // Form state
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState("");
@@ -68,33 +75,31 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   const [loading, setLoading] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [paidBy, setPaidBy] = useState<string>(""); // Now stores participant_id
-  const [splitAmong, setSplitAmong] = useState<string[]>([]); // Now stores participant_ids
+  const [paidBy, setPaidBy] = useState<string>("");
+  const [splitAmong, setSplitAmong] = useState<string[]>([]);
   const [showPaidByPicker, setShowPaidByPicker] = useState(false);
-  // Error states for inline validation
+  const [showMoreOptions, setShowMoreOptions] = useState(false);
+
+  // Error states
   const [descriptionError, setDescriptionError] = useState<string>("");
   const [amountError, setAmountError] = useState<string>("");
   const [dateError, setDateError] = useState<string>("");
   const [paidByError, setPaidByError] = useState<string>("");
   const [splitAmongError, setSplitAmongError] = useState<string>("");
-  const theme = useTheme();
-  const insets = useSafeAreaInsets();
-  const screenHeight = Dimensions.get("window").height;
 
-  // Fetch participants for the group
+  // Fetch participants
   const {
     data: participants,
     isLoading: isLoadingParticipants,
     error: participantsError,
   } = useParticipants(groupId || null);
 
-  // Memoize derived values to avoid recalculations
+  // Memoized values
   const isGroupExpense = useMemo(
     () => type === "expense" && groupId && (participants?.length || 0) > 0,
     [type, groupId, participants?.length]
   );
 
-  // Filter participants by type
   const activeParticipants = useMemo(
     () => (participants || []).filter((p) => p.type === "member"),
     [participants]
@@ -110,17 +115,12 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     [participants]
   );
 
-  // Get participants that are in the current transaction (for editing)
   const transactionParticipantIds = useMemo(() => {
     if (!transaction) return new Set<string>();
     const ids = new Set<string>();
-
-    // Add paid_by_participant_id if present
     if (transaction.paid_by_participant_id) {
       ids.add(transaction.paid_by_participant_id);
     }
-
-    // Add participant_ids from splits
     if (Array.isArray(transaction.splits) && transaction.splits.length > 0) {
       transaction.splits.forEach((split) => {
         if (split.participant_id) {
@@ -128,61 +128,62 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
         }
       });
     }
-
     return ids;
   }, [transaction]);
 
-  // Include former participants if they're in the current transaction OR if they're the paid_by participant
   const availableParticipants = useMemo(() => {
     const combined = [...activeParticipants, ...invitedParticipants];
-
-    // Add former participants if they're part of this transaction OR if they're the paid_by participant
-    if (transaction || paidBy) {
-      formerParticipants.forEach((p) => {
-        const isInTransaction =
-          transaction && transactionParticipantIds.has(p.id);
-        const isPaidBy = paidBy && p.id === paidBy;
-        if (isInTransaction || isPaidBy) {
-          // Only add if not already in combined
-          if (!combined.some((c) => c.id === p.id)) {
+    if (transaction) {
+      // 1. Check payer
+      if (transaction.paid_by_participant_id) {
+        if (!combined.some(c => c.id === transaction.paid_by_participant_id)) {
+          // Find the payer in the full participants list or reconstruct
+          const p = (participants || []).find(p => p.id === transaction.paid_by_participant_id);
+          if (p) {
             combined.push(p);
           }
         }
-      });
+      }
+      // 2. Check all split members
+      if (Array.isArray(transaction.splits)) {
+        transaction.splits.forEach(split => {
+          if (split.participant_id && !combined.some(c => c.id === split.participant_id)) {
+            const p = (participants || []).find(p => p.id === split.participant_id) || split.participant;
+            if (p) {
+              combined.push(p as Participant);
+            }
+          }
+        });
+      }
     }
 
+    // Also ensure current paidBy is included if not already
+    if (paidBy && !combined.some(c => c.id === paidBy)) {
+      const p = (participants || []).find(p => p.id === paidBy);
+      if (p) combined.push(p);
+    }
+    
     return combined;
-  }, [
-    activeParticipants,
-    invitedParticipants,
-    formerParticipants,
-    transaction,
-    transactionParticipantIds,
-    paidBy,
-  ]);
+  }, [activeParticipants, invitedParticipants, formerParticipants, transaction, transactionParticipantIds, paidBy]);
 
   const allParticipantIds = useMemo(
-    () => activeParticipants.map((p) => p.id),
-    [activeParticipants]
+    () => availableParticipants.map((p) => p.id),
+    [availableParticipants]
   );
 
   const areAllParticipantsSelected = useMemo(() => {
-    const participantsToCheck = transaction
-      ? availableParticipants
-      : activeParticipants;
-    return (
-      participantsToCheck.length > 0 &&
-      participantsToCheck.every((p) => splitAmong.includes(p.id))
-    );
-  }, [activeParticipants, availableParticipants, splitAmong, transaction]);
+    return availableParticipants.length > 0 && availableParticipants.every((p) => splitAmong.includes(p.id));
+  }, [availableParticipants, splitAmong]);
 
   const paidByParticipant = useMemo(
-    () =>
-      paidBy ? availableParticipants.find((p) => p.id === paidBy) : undefined,
+    () => paidBy ? availableParticipants.find((p) => p.id === paidBy) : undefined,
     [availableParticipants, paidBy]
   );
 
-  // Helper: Reset form to default state
+  // Use inline chips if 5 or fewer participants
+  const useInlineChipsForPaidBy = availableParticipants.length <= 5;
+
+  // Helper functions
   const resetFormToDefaults = useCallback(() => {
     const today = new Date();
     setDescription("");
@@ -193,24 +194,15 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     setCategory("");
     setCurrency(effectiveDefaultCurrency);
     setPaidBy("");
-    // Default split: all participants if it's a group expense context
-    const shouldDefaultToAllParticipants =
-      groupId && activeParticipants.length > 0;
-    setSplitAmong(shouldDefaultToAllParticipants ? allParticipantIds : []);
-    // Clear all errors
+    const canDefaultToAll = groupId && (activeParticipants.length > 0 || invitedParticipants.length > 0);
+    setSplitAmong(canDefaultToAll ? allParticipantIds : []);
     setDescriptionError("");
     setAmountError("");
     setDateError("");
     setPaidByError("");
     setSplitAmongError("");
-  }, [
-    effectiveDefaultCurrency,
-    groupId,
-    activeParticipants.length,
-    allParticipantIds,
-  ]);
+  }, [effectiveDefaultCurrency, groupId, activeParticipants.length, invitedParticipants.length, allParticipantIds]);
 
-  // Helper: Load transaction data into form
   const loadTransactionData = useCallback(
     (tx: Transaction) => {
       setDescription(tx.description || "");
@@ -222,48 +214,48 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       setCategory(tx.category || "");
       setCurrency(tx.currency || effectiveDefaultCurrency);
 
-      // Use paid_by_participant_id exclusively
       if (tx.paid_by_participant_id) {
         setPaidBy(tx.paid_by_participant_id);
       } else {
         setPaidBy("");
       }
 
-      // Extract participant_ids from splits or split_among_participant_ids
       if (Array.isArray(tx.splits) && tx.splits.length > 0) {
         const participantIds = tx.splits
           .map((s) => s.participant_id)
           .filter((id): id is string => !!id);
         setSplitAmong([...new Set(participantIds)]);
-      } else if (
-        Array.isArray(tx.split_among_participant_ids) &&
-        tx.split_among_participant_ids.length > 0
-      ) {
+      } else if (Array.isArray(tx.split_among_participant_ids) && tx.split_among_participant_ids.length > 0) {
         setSplitAmong([...new Set(tx.split_among_participant_ids)]);
       } else {
         setSplitAmong([]);
+      }
+      
+      // Show more options if type is income or category is set
+      if (tx.type === "income" || tx.category) {
+        setShowMoreOptions(true);
       }
     },
     [effectiveDefaultCurrency]
   );
 
-  // Initialize form on mount
+  // Handle loading transaction data for editing
   useEffect(() => {
     if (transaction) {
       loadTransactionData(transaction);
-    } else {
+    }
+  }, [transaction?.id, loadTransactionData]);
+
+  // Handle resetting form to defaults for new transactions
+  useEffect(() => {
+    if (!transaction) {
       resetFormToDefaults();
     }
-  }, [transaction, loadTransactionData, resetFormToDefaults]);
+  }, [transaction === null, resetFormToDefaults]);
 
-  // No longer need legacy resolution useEffects as they are handled by the participant model
-
-  // Clear split data when switching away from expense type (only for new transactions)
   useEffect(() => {
-    if (transaction) return; // Don't auto-update when editing
-
+    if (transaction) return;
     if (!isGroupExpense) {
-      // Clear split data when switching away from expense
       setSplitAmong([]);
       setPaidBy("");
     }
@@ -273,15 +265,29 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     return date.toISOString().split("T")[0];
   };
 
+  const formatDateForDisplay = (dateStr: string): string => {
+    if (!dateStr) return "Select date";
+    try {
+      const d = new Date(dateStr + "T00:00:00");
+      return d.toLocaleDateString(undefined, { 
+        weekday: 'short', 
+        month: 'short', 
+        day: 'numeric' 
+      });
+    } catch {
+      return dateStr;
+    }
+  };
+
   const handleDateChange = (event: any, selectedDate?: Date) => {
     if (Platform.OS === "android") {
       setShowDatePicker(false);
       if (event.type === "set" && selectedDate) {
         setSelectedDate(selectedDate);
         setDate(formatDateForInput(selectedDate));
+        if (dateError) setDateError("");
       }
     } else {
-      // iOS - update date as user scrolls, but don't close until Done is pressed
       if (selectedDate) {
         setSelectedDate(selectedDate);
       }
@@ -293,83 +299,51 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
 
   const handleToggleSplitMember = (participantId: string) => {
     setSplitAmong((prev) => {
-      // Remove duplicates first to ensure data integrity
       const uniquePrev = [...new Set(prev)];
       if (uniquePrev.includes(participantId)) {
-        // Prevent removing if this is the paidBy person and they're the only one in the split
         if (paidBy === participantId && uniquePrev.length === 1) {
-          // Can't remove the only person, especially if they're the one who paid
           return uniquePrev;
         }
-        // Allow removal of paidBy person if there are other people in the split
         return uniquePrev.filter((id) => id !== participantId);
       } else {
         return [...uniquePrev, participantId];
       }
     });
-    // Clear error when user makes a selection
-    if (splitAmongError) {
-      setSplitAmongError("");
-    }
+    if (splitAmongError) setSplitAmongError("");
   };
 
   const handleToggleAllMembers = () => {
     if (areAllParticipantsSelected) {
-      // Deselect all
       setSplitAmong([]);
     } else {
-      // Select all - ensure no duplicates
-      // For new transactions, select only active participants
-      // For existing transactions, select all available participants (active + invited + former)
-      const participantsToSelect = transaction
-        ? availableParticipants
-        : activeParticipants;
-      const allParticipantIds = participantsToSelect.map((p) => p.id);
       setSplitAmong([...new Set(allParticipantIds)]);
     }
-    // Clear error
-    if (splitAmongError) {
-      setSplitAmongError("");
-    }
+    if (splitAmongError) setSplitAmongError("");
   };
 
-  // Handler to open Paid By picker
-  const handleOpenPaidByPicker = useCallback(() => {
-    if (!loading) {
-      setShowPaidByPicker(true);
-    }
-  }, [loading]);
-
-  // Validation function that returns true if form is valid
   const validateForm = (): boolean => {
     let isValid = true;
-
-    // Clear previous errors
     setDescriptionError("");
     setAmountError("");
     setDateError("");
     setPaidByError("");
     setSplitAmongError("");
 
-    // Validate description
     if (!description.trim()) {
       setDescriptionError("Please enter a description");
       isValid = false;
     }
 
-    // Validate amount
     if (!amount.trim()) {
       setAmountError("Please enter an amount");
       isValid = false;
     } else {
-      // Validate format: only digits and optional decimal point with 1-2 decimal places
       const amountRegex = /^\d+(\.\d{1,2})?$/;
       if (!amountRegex.test(amount.trim())) {
         setAmountError("Please enter a valid amount (e.g., 10.50)");
         isValid = false;
       } else {
         const amountValue = parseFloat(amount);
-        // Check for NaN, Infinity, and negative values
         if (isNaN(amountValue) || !isFinite(amountValue) || amountValue <= 0) {
           setAmountError("Please enter a valid amount greater than 0");
           isValid = false;
@@ -377,22 +351,18 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       }
     }
 
-    // Validate date
     if (!date.trim()) {
       setDateError("Please enter a date");
       isValid = false;
     }
 
-    // Validate expense splitting fields for group expenses
     if (isGroupExpense) {
       if (!paidBy) {
         setPaidByError("Please select who paid for this expense");
         isValid = false;
       }
       if (splitAmong.length === 0) {
-        setSplitAmongError(
-          "Please select at least one person to split the expense among"
-        );
+        setSplitAmongError("Please select at least one person to split the expense among");
         isValid = false;
       }
     }
@@ -401,16 +371,11 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   };
 
   const handleSave = async () => {
-    // Validate form
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
 
     const amountValue = parseFloat(amount);
     setLoading(true);
     try {
-      // When updating, always include current splits to preserve former participants
-      // If this is an update and we have a transaction, ensure we include all current splits
       await onSave({
         description: description.trim(),
         amount: amountValue,
@@ -419,15 +384,9 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
         category: category.trim() || undefined,
         currency: currency || effectiveDefaultCurrency,
         paid_by_participant_id: isGroupExpense ? paidBy : undefined,
-        split_among_participant_ids: isGroupExpense
-          ? splitAmong
-          : undefined,
+        split_among_participant_ids: isGroupExpense ? splitAmong : undefined,
       });
-      // onDismiss will be called by the parent after successful save if needed,
-      // but usually we want to close the screen.
-      // Here we rely on the parent to navigate back.
     } catch (error) {
-      // Show error in an alert for API errors (not validation errors)
       Alert.alert("Error", getUserFriendlyErrorMessage(error));
     } finally {
       setLoading(false);
@@ -436,12 +395,9 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
 
   const handleDelete = () => {
     if (!onDelete || !transaction) return;
-
     Alert.alert(
       "Delete Transaction",
-      `Are you sure you want to delete "${
-        transaction.description || "this transaction"
-      }"?`,
+      `Are you sure you want to delete "${transaction.description || "this transaction"}"?`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -451,7 +407,6 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
             setLoading(true);
             try {
               await onDelete();
-              // Parent handles navigation
             } catch (error) {
               Alert.alert("Error", getUserFriendlyErrorMessage(error));
             } finally {
@@ -468,45 +423,55 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       setShowCurrencyPicker(false);
       return true;
     }
-
     if (showPaidByPicker) {
       setShowPaidByPicker(false);
       return true;
     }
-
     if (showDatePicker && Platform.OS === "android") {
       setShowDatePicker(false);
       return true;
     }
-
     onDismiss();
     return true;
   }, [onDismiss, showCurrencyPicker, showPaidByPicker, showDatePicker]);
 
   useEffect(() => {
-    const subscription = BackHandler.addEventListener(
-      "hardwareBackPress",
-      handleHardwareBack
-    );
-
+    const subscription = BackHandler.addEventListener("hardwareBackPress", handleHardwareBack);
     return () => subscription.remove();
   }, [handleHardwareBack]);
+
+  // Get participant display name
+  const getParticipantDisplayName = (participantId: string) => {
+    const p = availableParticipants.find((p) => p.id === participantId) 
+              || participants?.find((p) => p.id === participantId)
+              || participants?.find((p) => p.user_id === participantId);
+    if (!p) return null;
+    return p.full_name || p.email || `Participant`;
+  };
+
+  // Calculate split amount per person
+  const splitAmountPerPerson = useMemo(() => {
+    if (splitAmong.length === 0 || !amount || parseFloat(amount) <= 0) return null;
+    return parseFloat(amount) / splitAmong.length;
+  }, [amount, splitAmong.length]);
 
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: theme.colors.background }]}
       edges={["top", "left", "right"]}
     >
-      <Appbar.Header
-        style={[styles.header, { backgroundColor: theme.colors.surface }]}
-        elevated
-      >
+      {/* Header */}
+      <Appbar.Header style={[styles.header, { backgroundColor: theme.colors.background }]}>
         <Appbar.BackAction onPress={onDismiss} />
         <Appbar.Content
-          title={transaction ? "Edit Transaction" : "New Transaction"}
-          titleStyle={{ fontWeight: "bold" }}
+          title={transaction ? "Edit Expense" : "Add Expense"}
+          titleStyle={{ fontWeight: "600" }}
         />
+        {transaction && onDelete && (
+          <Appbar.Action icon="delete-outline" onPress={handleDelete} iconColor={theme.colors.error} />
+        )}
       </Appbar.Header>
+
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardView}
@@ -514,111 +479,313 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       >
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: 100 + insets.bottom }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
-          nestedScrollEnabled={true}
         >
-          <TextInput
-            label="Description"
-            value={description}
-            onChangeText={(text) => {
-              setDescription(text);
-              if (descriptionError) {
-                setDescriptionError("");
-              }
-            }}
-            mode="outlined"
-            disabled={loading}
-            error={!!descriptionError}
-            style={styles.input}
-            left={<TextInput.Icon icon="text" />}
-            placeholder="e.g., Grocery shopping"
-          />
+          {/* HERO AMOUNT SECTION */}
+          <View style={styles.heroAmountContainer}>
+            <View style={styles.heroAmountInputRow}>
+              <Text 
+                variant="displayMedium" 
+                style={[styles.heroAmountText, { color: theme.colors.onSurface }]}
+              >
+                {getCurrencySymbol(currency)}
+              </Text>
+              <RNTextInput
+                ref={amountInputRef}
+                value={amount}
+                onChangeText={(text) => {
+                  // Only allow numbers and one decimal point
+                  const cleaned = text.replace(/[^0-9.]/g, '');
+                  const parts = cleaned.split('.');
+                  if (parts.length > 2) return;
+                  if (parts[1]?.length > 2) return;
+                  setAmount(cleaned);
+                  if (amountError) setAmountError("");
+                }}
+                keyboardType="decimal-pad"
+                placeholder="0"
+                placeholderTextColor={theme.colors.onSurfaceVariant}
+                style={[
+                  styles.heroAmountInput, 
+                  { 
+                    color: theme.colors.onSurface,
+                    minWidth: amount ? undefined : 40,
+                  }
+                ]}
+                autoFocus={!transaction}
+                selectTextOnFocus
+              />
+            </View>
+            {amountError && (
+              <Text variant="bodySmall" style={{ color: theme.colors.error, marginTop: 4 }}>
+                {amountError}
+              </Text>
+            )}
 
-          <View style={styles.amountRow}>
-            <TextInput
-              label="Amount"
-              value={amount}
-              onChangeText={(text) => {
-                setAmount(text);
-                if (amountError) {
-                  setAmountError("");
-                }
-              }}
-              mode="outlined"
-              keyboardType="decimal-pad"
-              disabled={loading}
-              error={!!amountError}
-              style={styles.amountInput}
-              left={
-                <TextInput.Affix
-                  text={getCurrencySymbol(currency)}
-                  textStyle={styles.currencyAffix}
-                />
-              }
-              placeholder="0.00"
-            />
-            <Button
-              mode="outlined"
+            {/* Currency Chip */}
+            <Chip 
+              mode="outlined" 
               onPress={() => setShowCurrencyPicker(true)}
-              style={styles.currencyButton}
+              style={styles.currencyChip}
               disabled={loading}
             >
               {currency}
-            </Button>
+            </Chip>
           </View>
 
-          <TextInput
-            label="Date"
-            value={date}
-            mode="outlined"
-            editable={!loading}
-            showSoftInputOnFocus={false}
-            onFocus={() => setShowDatePicker(true)}
-            error={!!dateError}
-            style={styles.input}
-            left={<TextInput.Icon icon="calendar" />}
-            right={
-              <TextInput.Icon
-                icon="calendar"
-                onPress={() => !loading && setShowDatePicker(true)}
+          {/* DETAILS CARD */}
+          <Card style={styles.card} mode="outlined">
+            <Card.Content>
+              <TextInput
+                label="Description"
+                value={description}
+                onChangeText={(text) => {
+                  setDescription(text);
+                  if (descriptionError) setDescriptionError("");
+                }}
+                mode="flat"
+                disabled={loading}
+                error={!!descriptionError}
+                style={styles.flatInput}
+                left={<TextInput.Icon icon="pencil-outline" />}
+                placeholder="What was this for?"
               />
-            }
-            placeholder="YYYY-MM-DD"
-            onPressIn={() => !loading && setShowDatePicker(true)}
-          />
-          {showDatePicker && (
-            <>
-              {Platform.OS === "ios" && (
-                <View
-                  style={[
-                    styles.datePickerContainer,
-                    {
-                      backgroundColor: theme.colors.surface,
-                      borderColor: theme.colors.outlineVariant,
-                    },
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.datePickerHeader,
-                      { borderBottomColor: theme.colors.outlineVariant },
-                    ]}
+              {descriptionError && (
+                <Text variant="bodySmall" style={{ color: theme.colors.error, marginLeft: 12 }}>
+                  {descriptionError}
+                </Text>
+              )}
+
+              <Divider style={styles.divider} />
+
+              <Pressable onPress={() => setShowDatePicker(true)} disabled={loading}>
+                <View style={styles.dateRow}>
+                  <IconButton icon="calendar-outline" size={24} />
+                  <View style={{ flex: 1 }}>
+                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                      Date
+                    </Text>
+                    <Text variant="bodyLarge">
+                      {formatDateForDisplay(date)}
+                    </Text>
+                  </View>
+                  <IconButton icon="chevron-right" size={24} />
+                </View>
+              </Pressable>
+              {dateError && (
+                <Text variant="bodySmall" style={{ color: theme.colors.error, marginLeft: 12 }}>
+                  {dateError}
+                </Text>
+              )}
+            </Card.Content>
+          </Card>
+
+          {/* SPLITTING CARD - Only for group expenses */}
+          {isGroupExpense && (
+            <Card style={styles.card} mode="outlined">
+              <Card.Content>
+                {/* Paid By Section */}
+                <View style={styles.sectionHeader}>
+                  <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant }}>
+                    Paid by
+                  </Text>
+                </View>
+                {paidByError && (
+                  <Text variant="bodySmall" style={{ color: theme.colors.error, marginBottom: 8 }}>
+                    {paidByError}
+                  </Text>
+                )}
+                
+                {useInlineChipsForPaidBy ? (
+                  <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.chipScrollView}
                   >
-                    <Button onPress={() => setShowDatePicker(false)}>
-                      Cancel
-                    </Button>
+                    {availableParticipants.map((p) => {
+                      const isSelected = paidBy === p.id;
+                      const displayName = p.full_name || p.email || "Unknown";
+                      const isFormer = p.type === "former";
+                      const isInvited = p.type === "invited";
+                      return (
+                        <Chip
+                          key={p.id}
+                          selected={isSelected}
+                          onPress={() => {
+                            setPaidBy(p.id);
+                            if (paidByError) setPaidByError("");
+                          }}
+                          style={[
+                            styles.chip, 
+                            isFormer && styles.formerChip,
+                            !isSelected && { backgroundColor: theme.colors.surfaceVariant },
+                          ]}
+                          disabled={loading}
+                          showSelectedCheck={true}
+                        >
+                          {displayName}
+                          {isInvited && " (Invited)"}
+                          {isFormer && " (Former)"}
+                        </Chip>
+                      );
+                    })}
+                  </ScrollView>
+                ) : (
+                  <Button
+                    mode="outlined"
+                    onPress={() => setShowPaidByPicker(true)}
+                    style={styles.paidByButton}
+                    icon="account"
+                    contentStyle={{ justifyContent: "flex-start" }}
+                    disabled={loading}
+                  >
+                    {paidByParticipant 
+                      ? `${paidByParticipant.full_name || paidByParticipant.email}${paidByParticipant.type === 'former' ? " (Former)" : ""}${paidByParticipant.type === 'invited' ? " (Invited)" : ""}` 
+                      : "Select who paid"}
+                  </Button>
+                )}
+
+                <Divider style={styles.divider} />
+
+                {/* Split Among Section */}
+                <View style={styles.sectionHeaderWithAction}>
+                  <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant }}>
+                    Split among
+                  </Text>
+                  <Button 
+                    mode="text" 
+                    compact 
+                    onPress={handleToggleAllMembers}
+                    disabled={loading}
+                  >
+                    {areAllParticipantsSelected ? "None" : "All"}
+                  </Button>
+                </View>
+                {splitAmongError && (
+                  <Text variant="bodySmall" style={{ color: theme.colors.error, marginBottom: 8 }}>
+                    {splitAmongError}
+                  </Text>
+                )}
+
+                <View style={styles.chipWrap}>
+                  {availableParticipants.map((p) => {
+                    const isSelected = splitAmong.includes(p.id);
+                    const displayName = p.full_name || p.email || "Unknown";
+                    const isFormer = p.type === "former";
+                    const isInvited = p.type === "invited";
+                    return (
+                      <Chip
+                        key={p.id}
+                        selected={isSelected}
+                        onPress={() => handleToggleSplitMember(p.id)}
+                        style={[
+                          styles.wrapChip,
+                          isFormer && styles.formerChip,
+                          isInvited && styles.invitedChip,
+                          !isSelected && { backgroundColor: theme.colors.surfaceVariant },
+                        ]}
+                        disabled={loading}
+                        showSelectedCheck={true}
+                      >
+                        {displayName}
+                        {isFormer && " (Former)"}
+                        {isInvited && " (Invited)"}
+                      </Chip>
+                    );
+                  })}
+                </View>
+
+                {/* Split amount preview */}
+                {splitAmountPerPerson && splitAmountPerPerson > 0 && (
+                  <View style={styles.splitPreview}>
+                    <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                      Each person pays: {" "}
+                      <Text style={{ color: theme.colors.primary, fontWeight: "600" }}>
+                        {formatCurrency(splitAmountPerPerson, currency)}
+                      </Text>
+                    </Text>
+                  </View>
+                )}
+              </Card.Content>
+            </Card>
+          )}
+
+          {/* MORE OPTIONS */}
+          <Pressable onPress={() => setShowMoreOptions(!showMoreOptions)}>
+            <View style={styles.moreOptionsHeader}>
+              <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant }}>
+                More options
+              </Text>
+              <IconButton 
+                icon={showMoreOptions ? "chevron-up" : "chevron-down"} 
+                size={20} 
+              />
+            </View>
+          </Pressable>
+
+          {showMoreOptions && (
+            <Card style={styles.card} mode="outlined">
+              <Card.Content>
+                <TextInput
+                  label="Category (Optional)"
+                  value={category}
+                  onChangeText={setCategory}
+                  mode="flat"
+                  disabled={loading}
+                  style={styles.flatInput}
+                  left={<TextInput.Icon icon="tag-outline" />}
+                  placeholder="e.g., Food, Transportation"
+                />
+              </Card.Content>
+            </Card>
+          )}
+        </ScrollView>
+
+        {/* STICKY BOTTOM ACTION BAR */}
+        <Surface 
+          style={[
+            styles.bottomBar, 
+            { paddingBottom: insets.bottom + 16 }
+          ]} 
+          elevation={2}
+        >
+          <Button
+            mode="contained"
+            onPress={handleSave}
+            disabled={loading}
+            loading={loading}
+            style={styles.saveButton}
+            contentStyle={styles.saveButtonContent}
+          >
+            {transaction ? "Update" : "Save"}
+          </Button>
+        </Surface>
+      </KeyboardAvoidingView>
+
+      {/* Date Picker */}
+      {showDatePicker && (
+        <>
+          {Platform.OS === "ios" && (
+            <Modal visible={showDatePicker} transparent animationType="slide">
+              <TouchableOpacity 
+                style={styles.modalOverlay} 
+                activeOpacity={1} 
+                onPress={() => setShowDatePicker(false)}
+              >
+                <View 
+                  style={[styles.datePickerModal, { backgroundColor: theme.colors.surface }]}
+                  onStartShouldSetResponder={() => true}
+                >
+                  <View style={styles.datePickerHeader}>
+                    <Button onPress={() => setShowDatePicker(false)}>Cancel</Button>
                     <Text variant="titleMedium">Select Date</Text>
                     <Button
                       onPress={() => {
-                        const formattedDate = formatDateForInput(selectedDate);
-                        setDate(formattedDate);
+                        setDate(formatDateForInput(selectedDate));
                         setShowDatePicker(false);
-                        // Clear error when date is selected
-                        if (dateError) {
-                          setDateError("");
-                        }
+                        if (dateError) setDateError("");
                       }}
                     >
                       Done
@@ -630,365 +797,25 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                     display="spinner"
                     onChange={handleDateChange}
                     maximumDate={new Date()}
-                    style={styles.datePicker}
+                    style={{ height: 200 }}
                   />
                 </View>
-              )}
-              {Platform.OS === "android" && (
-                <DateTimePicker
-                  value={selectedDate}
-                  mode="date"
-                  display="default"
-                  onChange={handleDateChange}
-                  maximumDate={new Date()}
-                />
-              )}
-            </>
-          )}
-
-          <View style={styles.segmentedContainer}>
-            <Text
-              variant="labelLarge"
-              style={[styles.label, { color: theme.colors.onSurfaceVariant }]}
-            >
-              Type
-            </Text>
-            <SegmentedButtons
-              value={type}
-              onValueChange={(value) => {
-                const newType = value as "income" | "expense";
-                setType(newType);
-                // Clear expense splitting fields when switching to income
-                if (newType === "income") {
-                  setPaidBy("");
-                  setSplitAmong([]);
-                } else if (
-                  newType === "expense" &&
-                  activeParticipants.length > 0
-                ) {
-                  // When switching to expense, default to all active participants
-                  setSplitAmong(activeParticipants.map((p) => p.id));
-                }
-              }}
-              buttons={[
-                {
-                  value: "expense",
-                  label: "Expense",
-                  icon: "arrow-down",
-                },
-                {
-                  value: "income",
-                  label: "Income",
-                  icon: "arrow-up",
-                },
-              ]}
-              style={styles.segmentedButtons}
-            />
-          </View>
-
-          <TextInput
-            label="Category (Optional)"
-            value={category}
-            onChangeText={setCategory}
-            mode="outlined"
-            disabled={loading}
-            style={styles.input}
-            left={<TextInput.Icon icon="tag" />}
-            placeholder="e.g., Food, Transportation"
-          />
-
-          {/* Expense Splitting Fields - Only for group expenses */}
-          {isGroupExpense && (
-            <>
-              <TouchableOpacity
-                onPress={handleOpenPaidByPicker}
-                activeOpacity={0.7}
-                disabled={loading}
-                accessibilityRole="button"
-                accessibilityLabel="Select who paid for this expense"
-              >
-                <TextInput
-                  label="Paid By"
-                  value={
-                    paidBy
-                      ? (() => {
-                          // First try to find in availableParticipants by participant_id
-                          let participant = availableParticipants.find(
-                            (p) => p.id === paidBy
-                          );
-
-                          // If not found, try all participants by participant_id
-                          if (!participant) {
-                            participant = participants.find(
-                              (p) => p.id === paidBy
-                            );
-                          }
-
-                          // If still not found, paidBy might be a user_id (legacy), search by user_id
-                          if (!participant) {
-                            participant = participants.find(
-                              (p) => p.user_id === paidBy
-                            );
-                          }
-
-                          const isFormer = participant?.type === "former";
-                          const isInvited = participant?.type === "invited";
-                          const displayName =
-                            participant?.full_name ||
-                            participant?.email ||
-                            `Participant ${paidBy.substring(0, 8)}...`;
-                          if (isFormer) {
-                            return `${displayName} (Former)`;
-                          }
-                          if (isInvited) {
-                            return `${displayName} (Invited)`;
-                          }
-                          return displayName;
-                        })()
-                      : ""
-                  }
-                  mode="outlined"
-                  editable={false}
-                  disabled={loading}
-                  error={!!paidByError}
-                  style={styles.input}
-                  showSoftInputOnFocus={false}
-                  left={<TextInput.Icon icon="account" />}
-                  right={
-                    <TextInput.Icon
-                      icon="chevron-down"
-                      onPress={handleOpenPaidByPicker}
-                    />
-                  }
-                  placeholder="Select who paid"
-                />
               </TouchableOpacity>
-
-              <View style={styles.splitAmongContainer}>
-                <View style={styles.splitAmongHeader}>
-                  <Text
-                    variant="labelLarge"
-                    style={[
-                      styles.label,
-                      { color: theme.colors.onSurfaceVariant },
-                    ]}
-                  >
-                    Split Among
-                  </Text>
-                  <Button
-                    mode="text"
-                    compact
-                    onPress={handleToggleAllMembers}
-                    disabled={loading || isLoadingParticipants}
-                    style={styles.selectAllButton}
-                  >
-                    {areAllParticipantsSelected ? "Deselect All" : "Select All"}
-                  </Button>
-                </View>
-                {splitAmongError ? (
-                  <Text
-                    variant="bodySmall"
-                    style={[styles.errorText, { color: theme.colors.error }]}
-                  >
-                    {splitAmongError}
-                  </Text>
-                ) : null}
-                {participantsError && (
-                  <Text
-                    variant="bodySmall"
-                    style={[styles.errorText, { color: theme.colors.error }]}
-                  >
-                    Failed to load participants: {participantsError.message}
-                  </Text>
-                )}
-                {isLoadingParticipants && (
-                  <Text
-                    variant="bodySmall"
-                    style={[
-                      { color: theme.colors.onSurfaceVariant, padding: 8 },
-                    ]}
-                  >
-                    Loading participants...
-                  </Text>
-                )}
-                {!isLoadingParticipants &&
-                  availableParticipants.length === 0 && (
-                    <Text
-                      variant="bodySmall"
-                      style={[
-                        { color: theme.colors.onSurfaceVariant, padding: 8 },
-                      ]}
-                    >
-                      No participants found. Add members to the group first.
-                    </Text>
-                  )}
-                <View
-                  style={[
-                    styles.splitAmongList,
-                    splitAmongError && {
-                      borderColor: theme.colors.error,
-                      borderWidth: 1,
-                    },
-                  ]}
-                >
-                  {availableParticipants.map((participant) => {
-                    const isSelected = splitAmong.includes(participant.id);
-                    if (
-                      __DEV__ &&
-                      transaction &&
-                      availableParticipants.length <= 3
-                    ) {
-                      console.log(
-                        "[TransactionForm] Participant selection check:",
-                        {
-                          participant_id: participant.id,
-                          participant_name:
-                            participant.full_name || participant.email,
-                          isSelected,
-                          splitAmong,
-                        }
-                      );
-                    }
-                    const isFormer = participant.type === "former";
-                    const isInvited = participant.type === "invited";
-                    const displayName =
-                      participant.full_name ||
-                      participant.email ||
-                      `Participant ${participant.id.substring(0, 8)}...`;
-                    return (
-                      <TouchableOpacity
-                        key={participant.id}
-                        style={[
-                          styles.splitMemberItem,
-                          isSelected && {
-                            backgroundColor: theme.colors.primaryContainer,
-                          },
-                        ]}
-                        onPress={() => handleToggleSplitMember(participant.id)}
-                        disabled={loading}
-                      >
-                        <Checkbox
-                          status={isSelected ? "checked" : "unchecked"}
-                          onPress={() =>
-                            handleToggleSplitMember(participant.id)
-                          }
-                          disabled={
-                            loading ||
-                            // Disable if this is the paidBy person and they're the only one in splitAmong
-                            (paidBy === participant.id &&
-                              splitAmong.length === 1 &&
-                              splitAmong.includes(participant.id))
-                          }
-                        />
-                        <View
-                          style={{
-                            flex: 1,
-                            flexDirection: "row",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                          }}
-                        >
-                          <View
-                            style={{
-                              flexDirection: "row",
-                              alignItems: "center",
-                              flexShrink: 1,
-                            }}
-                          >
-                            <Text
-                              variant="bodyLarge"
-                              style={[
-                                styles.splitMemberText,
-                                (isFormer || isInvited) && {
-                                  fontStyle: "italic",
-                                },
-                              ]}
-                            >
-                              {displayName}
-                            </Text>
-                            {isFormer && (
-                              <Text
-                                variant="bodySmall"
-                                style={{
-                                  marginLeft: 8,
-                                  color: theme.colors.onSurfaceVariant,
-                                  opacity: 0.7,
-                                }}
-                              >
-                                (Former)
-                              </Text>
-                            )}
-                            {isInvited && (
-                              <Text
-                                variant="bodySmall"
-                                style={{
-                                  marginLeft: 8,
-                                  color: theme.colors.primary,
-                                  opacity: 0.8,
-                                }}
-                              >
-                                (Invited)
-                              </Text>
-                            )}
-                          </View>
-                          {isSelected &&
-                            splitAmong.length > 0 &&
-                            amount &&
-                            parseFloat(amount) > 0 && (
-                              <Text
-                                variant="bodySmall"
-                                style={[
-                                  styles.splitAmount,
-                                  { color: theme.colors.onSurfaceVariant },
-                                  { marginLeft: 12 },
-                                ]}
-                              >
-                                {formatCurrency(
-                                  parseFloat(amount) / splitAmong.length,
-                                  currency
-                                )}
-                              </Text>
-                            )}
-                        </View>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-            </>
+            </Modal>
           )}
+          {Platform.OS === "android" && (
+            <DateTimePicker
+              value={selectedDate}
+              mode="date"
+              display="default"
+              onChange={handleDateChange}
+              maximumDate={new Date()}
+            />
+          )}
+        </>
+      )}
 
-          <View style={styles.buttonRow}>
-            {transaction && onDelete && (
-              <Button
-                mode="outlined"
-                onPress={handleDelete}
-                disabled={loading}
-                style={[styles.button, styles.deleteButton]}
-                textColor={theme.colors.error}
-                icon="delete"
-              >
-                Delete
-              </Button>
-            )}
-            <Button
-              mode="contained"
-              onPress={handleSave}
-              disabled={loading}
-              loading={loading}
-              style={[
-                styles.button,
-                styles.saveButton,
-                !(transaction && onDelete) && styles.saveButtonFullWidth,
-              ]}
-            >
-              {transaction ? "Update" : "Create"}
-            </Button>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-
-      {/* Paid By Picker Modal */}
+      {/* Paid By Picker Modal (for > 5 participants) */}
       <Modal
         visible={showPaidByPicker}
         transparent
@@ -996,102 +823,44 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
         onRequestClose={() => setShowPaidByPicker(false)}
       >
         <TouchableOpacity
-          style={styles.currencyPickerOverlay}
+          style={styles.modalOverlay}
           activeOpacity={1}
           onPress={() => setShowPaidByPicker(false)}
         >
           <View
-            style={[
-              styles.currencyPickerContainer,
-              { backgroundColor: theme.colors.surface },
-            ]}
+            style={[styles.pickerModal, { backgroundColor: theme.colors.surface }]}
             onStartShouldSetResponder={() => true}
           >
-            <View
-              style={[
-                styles.currencyPickerHeader,
-                { borderBottomColor: theme.colors.outlineVariant },
-              ]}
-            >
-              <Text variant="titleLarge">Select Who Paid</Text>
-              <Button onPress={() => setShowPaidByPicker(false)}>Close</Button>
+            <View style={styles.pickerHeader}>
+              <Text variant="titleLarge">Who paid?</Text>
+              <IconButton icon="close" onPress={() => setShowPaidByPicker(false)} />
             </View>
             <FlatList
               data={availableParticipants}
               keyExtractor={(item) => item.id}
-              style={styles.currencyList}
+              style={styles.pickerList}
               renderItem={({ item }) => {
-                const isFormer = item.type === "former";
-                const isInvited = item.type === "invited";
-                const displayName =
-                  item.full_name ||
-                  item.email ||
-                  `Participant ${item.id.substring(0, 8)}...`;
+                const isSelected = paidBy === item.id;
+                const displayName = item.full_name || item.email || "Unknown";
                 return (
                   <TouchableOpacity
                     style={[
-                      styles.currencyItem,
-                      paidBy === item.id && {
-                        backgroundColor: theme.colors.secondaryContainer,
-                      },
+                      styles.pickerItem,
+                      isSelected && { backgroundColor: theme.colors.secondaryContainer },
                     ]}
                     onPress={() => {
                       setPaidBy(item.id);
                       setShowPaidByPicker(false);
-                      if (paidByError) {
-                        setPaidByError("");
-                      }
+                      if (paidByError) setPaidByError("");
                     }}
                   >
-                    <View
-                      style={{
-                        flex: 1,
-                        flexDirection: "row",
-                        alignItems: "center",
-                      }}
-                    >
-                      <Text
-                        variant="bodyLarge"
-                        style={{
-                          fontWeight: paidBy === item.id ? "bold" : "normal",
-                          fontStyle:
-                            isFormer || isInvited ? "italic" : "normal",
-                        }}
-                      >
-                        {displayName}
-                      </Text>
-                      {isFormer && (
-                        <Text
-                          variant="bodySmall"
-                          style={{
-                            marginLeft: 8,
-                            color: theme.colors.onSurfaceVariant,
-                            opacity: 0.7,
-                          }}
-                        >
-                          (Former)
-                        </Text>
-                      )}
-                      {isInvited && (
-                        <Text
-                          variant="bodySmall"
-                          style={{
-                            marginLeft: 8,
-                            color: theme.colors.primary,
-                            opacity: 0.8,
-                          }}
-                        >
-                          (Invited)
-                        </Text>
-                      )}
-                    </View>
-                    {paidBy === item.id && (
-                      <Text
-                        variant="bodyMedium"
-                        style={{ color: theme.colors.primary }}
-                      >
-                        Selected
-                      </Text>
+                    <Text variant="bodyLarge">
+                      {displayName}
+                      {item.type === 'invited' && " (Invited)"}
+                      {item.type === 'former' && " (Former)"}
+                    </Text>
+                    {isSelected && (
+                      <IconButton icon="check" size={20} iconColor={theme.colors.primary} />
                     )}
                   </TouchableOpacity>
                 );
@@ -1109,63 +878,44 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
         onRequestClose={() => setShowCurrencyPicker(false)}
       >
         <TouchableOpacity
-          style={styles.currencyPickerOverlay}
+          style={styles.modalOverlay}
           activeOpacity={1}
           onPress={() => setShowCurrencyPicker(false)}
         >
           <View
-            style={[
-              styles.currencyPickerContainer,
-              { backgroundColor: theme.colors.surface },
-            ]}
+            style={[styles.pickerModal, { backgroundColor: theme.colors.surface }]}
             onStartShouldSetResponder={() => true}
           >
-            <View
-              style={[
-                styles.currencyPickerHeader,
-                { borderBottomColor: theme.colors.outlineVariant },
-              ]}
-            >
+            <View style={styles.pickerHeader}>
               <Text variant="titleLarge">Select Currency</Text>
-              <Button onPress={() => setShowCurrencyPicker(false)}>
-                Close
-              </Button>
+              <IconButton icon="close" onPress={() => setShowCurrencyPicker(false)} />
             </View>
             <FlatList
               data={CURRENCIES}
               keyExtractor={(item) => item.code}
-              style={styles.currencyList}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[
-                    styles.currencyItem,
-                    currency === item.code && {
-                      backgroundColor: theme.colors.secondaryContainer,
-                    },
-                  ]}
-                  onPress={() => {
-                    setCurrency(item.code);
-                    setShowCurrencyPicker(false);
-                  }}
-                >
-                  <Text
-                    variant="bodyLarge"
-                    style={{
-                      fontWeight: currency === item.code ? "bold" : "normal",
+              style={styles.pickerList}
+              renderItem={({ item }) => {
+                const isSelected = currency === item.code;
+                return (
+                  <TouchableOpacity
+                    style={[
+                      styles.pickerItem,
+                      isSelected && { backgroundColor: theme.colors.secondaryContainer },
+                    ]}
+                    onPress={() => {
+                      setCurrency(item.code);
+                      setShowCurrencyPicker(false);
                     }}
                   >
-                    {item.code} ({item.symbol})
-                  </Text>
-                  {currency === item.code && (
-                    <Text
-                      variant="bodyMedium"
-                      style={{ color: theme.colors.primary }}
-                    >
-                      Selected
+                    <Text variant="bodyLarge">
+                      {item.code} ({item.symbol})
                     </Text>
-                  )}
-                </TouchableOpacity>
-              )}
+                    {isSelected && (
+                      <IconButton icon="check" size={20} iconColor={theme.colors.primary} />
+                    )}
+                  </TouchableOpacity>
+                );
+              }}
             />
           </View>
         </TouchableOpacity>
@@ -1189,129 +939,182 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 32,
   },
-  input: {
-    marginBottom: 16,
+  
+  // Hero Amount
+  heroAmountContainer: {
+    alignItems: "center",
+    paddingVertical: 32,
+    marginBottom: 8,
   },
-  amountRow: {
+  heroAmountInputRow: {
     flexDirection: "row",
-    marginBottom: 16,
-  },
-  amountInput: {
-    flex: 1,
-    marginRight: 8,
-  },
-  currencyButton: {
+    alignItems: "center",
     justifyContent: "center",
-    marginTop: 6,
   },
-  currencyAffix: {
+  heroAmountText: {
+    fontWeight: "300",
+    letterSpacing: -2,
+  },
+  heroAmountInput: {
+    fontSize: 45,
+    fontWeight: "300",
+    letterSpacing: -2,
+    textAlign: "left",
+    padding: 0,
+    margin: 0,
+  },
+  currencyChip: {
+    marginTop: 12,
+  },
+
+  // Cards
+  card: {
+    marginBottom: 16,
+    borderRadius: 16,
+  },
+  flatInput: {
+    backgroundColor: "transparent",
+  },
+  divider: {
+    marginVertical: 8,
+  },
+  
+  // Date Row
+  dateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  // Section Headers
+  sectionHeader: {
+    marginBottom: 12,
+  },
+  sectionHeaderWithAction: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+
+  // Chips
+  chipScrollView: {
+    marginBottom: 8,
+  },
+  chip: {
     marginRight: 8,
   },
-  segmentedContainer: {
-    marginBottom: 16,
+  chipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
   },
-  label: {
+  wrapChip: {
+    marginBottom: 4,
+  },
+  formerChip: {
+    opacity: 0.7,
+  },
+  invitedChip: {
+    borderStyle: "dashed",
+  },
+  
+  paidByButton: {
     marginBottom: 8,
   },
-  segmentedButtons: {
+
+  // Split Preview
+  splitPreview: {
+    marginTop: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: "rgba(0,0,0,0.04)",
+    borderRadius: 12,
+    alignItems: "center",
+  },
+
+  // More Options
+  moreOptionsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 8,
     marginBottom: 8,
   },
-  datePickerContainer: {
-    borderWidth: 1,
-    borderRadius: 8,
-    marginBottom: 16,
-    overflow: "hidden",
+
+  // Type Row
+  typeRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 8,
+  },
+  typeChips: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  typeChip: {
+    // chipStyle
+  },
+
+  // Bottom Bar
+  bottomBar: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
+  saveButton: {
+    borderRadius: 24,
+  },
+  saveButtonContent: {
+    paddingVertical: 8,
+  },
+
+  // Modals
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  datePickerModal: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingBottom: 24,
   },
   datePickerHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 8,
+    padding: 16,
     borderBottomWidth: 1,
+    borderBottomColor: "rgba(0,0,0,0.1)",
   },
-  datePicker: {
-    height: 200,
+  pickerModal: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: "60%",
   },
-  buttonRow: {
+  pickerHeader: {
     flexDirection: "row",
-    marginTop: 16,
-    marginBottom: 32,
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(0,0,0,0.1)",
   },
-  button: {
-    flex: 1,
+  pickerList: {
+    padding: 8,
   },
-  deleteButton: {
-    marginRight: 8,
-    borderColor: "transparent",
-  },
-  saveButton: {
-    marginLeft: 8,
-  },
-  saveButtonFullWidth: {
-    marginLeft: 0,
-  },
-  currencyPickerOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    padding: 20,
-  },
-  currencyPickerContainer: {
+  pickerItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
     borderRadius: 12,
-    maxHeight: "80%",
-    elevation: 5,
-  },
-  currencyPickerHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-    borderBottomWidth: 1,
-  },
-  currencyList: {
-    padding: 8,
-  },
-  currencyItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-    borderRadius: 8,
-  },
-  splitAmongContainer: {
-    marginTop: 8,
-    marginBottom: 16,
-  },
-  splitAmongHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  selectAllButton: {
-    marginRight: -8,
-  },
-  splitAmongList: {
-    borderRadius: 8,
-    overflow: "hidden",
-  },
-  splitMemberItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    borderRadius: 8,
-  },
-  splitMemberText: {
-    flex: 1,
-    marginLeft: 4,
-  },
-  splitAmount: {
-    marginRight: 8,
-  },
-  errorText: {
-    marginBottom: 8,
   },
 });
