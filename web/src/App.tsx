@@ -12,19 +12,15 @@ function App() {
       }}>
         <div className="container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '80px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ 
-              width: '32px', 
-              height: '32px', 
-              borderRadius: '8px', 
-              background: 'var(--gradient-primary)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'white',
-              fontWeight: 'bold'
-            }}>
-              ₹
-            </div>
+            <img 
+              src="/favicon.png" 
+              alt="ShareMoney Logo" 
+              style={{ 
+                width: '32px', 
+                height: '32px',
+                borderRadius: '8px'
+              }} 
+            />
             <span style={{ fontSize: '1.25rem', fontWeight: 700 }}>ShareMoney</span>
           </div>
 
