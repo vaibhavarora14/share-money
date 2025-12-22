@@ -16,7 +16,10 @@ import { styles } from "./MembersList.styles";
 interface MembersListProps {
   members: GroupMember[];
   currentUserId?: string;
-  isOwner: boolean;
+  /**
+   * If true, the current user can remove any member (including themselves).
+   */
+  canManageMembers: boolean;
   removingMemberId: string | null;
   onRemove: (userId: string, email?: string) => void;
 }
@@ -24,11 +27,19 @@ interface MembersListProps {
 export const MembersList: React.FC<MembersListProps> = ({
   members,
   currentUserId,
-  isOwner,
+  canManageMembers,
   removingMemberId,
   onRemove,
 }) => {
   const theme = useTheme();
+  const sortedMembers = React.useMemo(() => {
+    // Show all members, just sort by status (active first)
+    return [...members].sort((a, b) => {
+      if (a.status === 'left' && b.status !== 'left') return 1;
+      if (a.status !== 'left' && b.status === 'left') return -1;
+      return 0;
+    });
+  }, [members]);
 
   if (members.length === 0) {
     return (
@@ -59,21 +70,19 @@ export const MembersList: React.FC<MembersListProps> = ({
       elevation={0}
       style={{ backgroundColor: theme.colors.surface, borderRadius: 12 }}
     >
-      {members.map((member, index) => {
+      {sortedMembers.map((member, index) => {
         // Priority: full_name → email → fallback to truncated user_id
         const memberName =
           member.full_name ||
           member.email ||
           `User ${member.user_id.substring(0, 8)}...`;
         const isCurrentUser = member.user_id === currentUserId;
-        const ownerCount =
-          members.filter((m) => m.role === "owner").length || 0;
+        const isActive = member.status !== "left";
         const canRemove =
-          (isOwner &&
-            (!isCurrentUser ||
-              (isCurrentUser &&
-                (ownerCount > 1 || member.role !== "owner")))) ||
-          (!isOwner && isCurrentUser);
+          isActive &&
+          (canManageMembers ||
+            (isCurrentUser && canManageMembers) ||
+            isCurrentUser);
         const isRemoving = removingMemberId === member.user_id;
 
         return (
@@ -89,16 +98,15 @@ export const MembersList: React.FC<MembersListProps> = ({
                 size={40}
                 label={getInitials(memberName)}
                 style={{
-                  backgroundColor:
-                    member.role === "owner"
-                      ? theme.colors.primaryContainer
-                      : theme.colors.secondaryContainer,
+                  backgroundColor: isActive
+                    ? theme.colors.secondaryContainer
+                    : theme.colors.surfaceVariant,
                   marginRight: 16,
                 }}
                 color={
-                  member.role === "owner"
-                    ? theme.colors.onPrimaryContainer
-                    : theme.colors.onSecondaryContainer
+                  isActive
+                    ? theme.colors.onSecondaryContainer
+                    : theme.colors.onSurfaceVariant
                 }
               />
               <View style={styles.memberLeft}>
@@ -108,21 +116,12 @@ export const MembersList: React.FC<MembersListProps> = ({
                     style={[
                       styles.memberName,
                       isRemoving && { opacity: 0.6 },
-                      {
-                        fontWeight: member.role === "owner" ? "bold" : "normal",
-                      },
+                      {},
                     ]}
                   >
-                    {memberName} {isCurrentUser ? "(You)" : ""}
+                    {memberName}{isCurrentUser ? " (You)" : ""}
+                    {!isActive ? " (Former)" : ""}
                   </Text>
-                  {member.role === "owner" && (
-                    <IconButton
-                      icon="crown"
-                      size={16}
-                      iconColor={theme.colors.primary}
-                      style={{ margin: 0, marginLeft: 4 }}
-                    />
-                  )}
                 </View>
                 <Text
                   variant="bodyMedium"
@@ -157,7 +156,7 @@ export const MembersList: React.FC<MembersListProps> = ({
                 )}
               </View>
             </View>
-            {index < members.length - 1 && <Divider />}
+            {index < sortedMembers.length - 1 && <Divider />}
           </React.Fragment>
         );
       })}

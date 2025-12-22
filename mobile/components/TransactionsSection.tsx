@@ -1,8 +1,8 @@
 import React from "react";
 import { Pressable, View } from "react-native";
-import { ActivityIndicator, Avatar, Divider, Surface, Text, useTheme } from "react-native-paper";
+import { ActivityIndicator, Avatar, Surface, Text, useTheme } from "react-native-paper";
 import { useAuth } from "../contexts/AuthContext";
-import { Transaction } from "../types";
+import { Participant, Transaction } from "../types";
 import { formatCurrency, getDefaultCurrency } from "../utils/currency";
 import { styles } from "./TransactionsSection.styles";
 
@@ -10,60 +10,16 @@ interface TransactionsSectionProps {
   items: Transaction[];
   loading: boolean;
   onEdit: (t: Transaction) => void;
+  members: any[]; // Using any[] temporarily if GroupMember import has issues, but ideally GroupMember[]
+  participants?: Participant[];
 }
-
-// Calculate user's split amount and split count
-const getUserSplitInfo = (
-  transaction: Transaction,
-  currentUserId: string | undefined
-): {
-  amount: number;
-  count: number;
-} | null => {
-  if (!currentUserId) return null;
-
-  // Check if transaction has splits (preferred method)
-  if (
-    transaction.splits &&
-    Array.isArray(transaction.splits) &&
-    transaction.splits.length > 0
-  ) {
-    const userSplit = transaction.splits.find(
-      (split) => split.user_id === currentUserId
-    );
-    if (userSplit) {
-      return {
-        amount: userSplit.amount,
-        count: transaction.splits.length,
-      };
-    }
-  }
-
-  // Fallback to split_among (backward compatibility)
-  if (
-    transaction.split_among &&
-    Array.isArray(transaction.split_among) &&
-    transaction.split_among.length > 0
-  ) {
-    const isUserInSplit =
-      transaction.split_among.includes(currentUserId);
-    if (isUserInSplit) {
-      // Calculate equal split
-      const splitCount = transaction.split_among.length;
-      return {
-        amount: transaction.amount / splitCount,
-        count: splitCount,
-      };
-    }
-  }
-
-  return null;
-};
 
 export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
   items,
   loading,
   onEdit,
+  members = [],
+  participants = [],
 }) => {
   const theme = useTheme();
   const { session } = useAuth();
@@ -80,134 +36,124 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
     return "receipt";
   };
 
-  return (
-    <Surface style={styles.sectionSurface} elevation={1}>
-      <View style={styles.sectionHeader}>
-        <View style={styles.sectionTitleContainer}>
-          <Avatar.Icon 
-            size={32} 
-            icon="format-list-bulleted" 
-            style={{ backgroundColor: theme.colors.primaryContainer, marginRight: 12 }} 
-            color={theme.colors.onPrimaryContainer}
-          />
-          <Text variant="titleMedium" style={styles.sectionTitle}>
-            Transactions
-          </Text>
-          <View style={[styles.badge, { backgroundColor: theme.colors.primaryContainer }]}>
-            <Text style={[styles.badgeText, { color: theme.colors.onPrimaryContainer }]}>
-              {items.length}
-            </Text>
-          </View>
-        </View>
-      </View>
+  const getPayerName = (transaction: Transaction) => {
+      // 1. Try resolving by participant_id from participants array first (for invited users)
+      if (transaction.paid_by_participant_id) {
+          // Check participants first (includes invited users)
+          const participant = participants.find(p => 
+            p.id === transaction.paid_by_participant_id
+          );
+          if (participant) {
+              const baseName = participant.user_id === currentUserId ? "You" : (participant.full_name || participant.email?.split('@')[0] || participant.email || "Unknown");
+              return participant.type === 'former' ? `${baseName} (Former)` : baseName;
+          }
+          
+          // Fallback to members lookup
+          const payer = members.find(m => 
+            m.participant_id === transaction.paid_by_participant_id || 
+            m.id === transaction.paid_by_participant_id
+          );
+          if (payer) {
+              const baseName = payer.user_id === currentUserId ? "You" : (payer.full_name || payer.email?.split('@')[0] || payer.email || "Unknown");
+              return payer.status === 'left' ? `${baseName} (Former)` : baseName;
+          }
+      }
+      
+      // 2. Fallback to user_id
+      if (transaction.paid_by) {
+           if (transaction.paid_by === currentUserId) return "You";
+           const payer = members.find(m => m.user_id === transaction.paid_by);
+           if (payer) {
+               return payer.full_name || payer.email?.split('@')[0] || payer.email || "Unknown";
+           }
+      }
 
+      return "Unknown";
+  };
+
+  return (
+    <View style={styles.container}>
       {loading ? (
-        <ActivityIndicator size="small" style={{ marginVertical: 16 }} />
+        <ActivityIndicator size="small" style={{ marginVertical: 24 }} />
       ) : items.length > 0 ? (
-        <View style={styles.sectionContent}>
+        <View style={styles.list}>
           {items.map((transaction, index) => {
-            const userSplitInfo = getUserSplitInfo(transaction, currentUserId);
             const currency = transaction.currency || getDefaultCurrency();
             const categoryIcon = getCategoryIcon(transaction.category || "");
+            const date = new Date(transaction.date);
+            const now = new Date();
+            const yesterday = new Date(now);
+            yesterday.setDate(yesterday.getDate() - 1);
+
+            let dateString = "";
+            if (date.toDateString() === now.toDateString()) {
+                dateString = "Today";
+            } else if (date.toDateString() === yesterday.toDateString()) {
+                dateString = "Yesterday";
+            } else {
+                dateString = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+            }
+
+            const payerName = getPayerName(transaction);
 
             return (
-              <React.Fragment key={transaction.id}>
+              <Surface
+                key={transaction.id}
+                style={styles.card}
+                elevation={0} // Flat, transparent background for list item feel
+              >
                 <Pressable
                   onPress={() => onEdit(transaction)}
                   style={({ pressed }) => [
-                    styles.transactionItem,
+                    styles.pressable,
                     pressed && { backgroundColor: theme.colors.surfaceVariant }
                   ]}
                 >
-                  <View style={styles.transactionContent}>
-                    <Avatar.Icon 
-                      size={40} 
-                      icon={categoryIcon} 
-                      style={{ backgroundColor: theme.colors.surfaceVariant, marginRight: 16 }}
-                      color={theme.colors.onSurfaceVariant}
-                    />
-                    <View style={styles.transactionLeft}>
-                      <Text
-                        variant="titleMedium"
-                        style={[
-                          styles.transactionDescription,
-                          { color: theme.colors.onSurface },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {transaction.description || "No description"}
-                      </Text>
-                      <Text
-                        variant="bodySmall"
-                        style={{ color: theme.colors.onSurfaceVariant }}
-                      >
-                        {new Date(transaction.date).toLocaleDateString()} • {transaction.paid_by === currentUserId ? "You paid" : "Someone paid"}
-                      </Text>
+                  <View style={styles.row}>
+                    {/* Icon: Tonal Circle */}
+                    <View style={[styles.iconContainer, { backgroundColor: theme.colors.secondaryContainer }]}>
+                        <Avatar.Icon 
+                          size={24} 
+                          icon={categoryIcon} 
+                          color={theme.colors.onSecondaryContainer}
+                          style={{ backgroundColor: 'transparent' }}
+                        />
                     </View>
-                    <View style={styles.transactionRight}>
-                      <Text
-                        variant="titleMedium"
-                        style={[
-                          styles.transactionAmount,
-                          { color: theme.colors.onSurface, fontWeight: 'bold' },
-                        ]}
-                      >
-                        {formatCurrency(
-                          transaction.amount,
-                          currency
-                        )}
-                      </Text>
-                      {userSplitInfo && (
-                        <Text
-                          variant="bodySmall"
-                          style={{ 
-                            color: userSplitInfo.amount > 0 ? theme.colors.error : theme.colors.primary,
-                            fontWeight: '500'
-                          }}
-                        >
-                          {userSplitInfo.amount > 0 ? "You owe" : "You lent"} {formatCurrency(Math.abs(userSplitInfo.amount), currency)}
-                        </Text>
-                      )}
+
+                    {/* Content */}
+                    <View style={styles.content}>
+                      <View style={styles.headerRow}>
+                          <Text variant="titleMedium" numberOfLines={1} style={[styles.title, { color: theme.colors.onSurface }]}>
+                            {transaction.description || "Untitled"}
+                          </Text>
+                          <Text variant="titleMedium" style={{ fontWeight: 'bold', color: theme.colors.onSurface, flexShrink: 0 }}>
+                            {formatCurrency(transaction.amount, currency)}
+                          </Text>
+                      </View>
+                      
+                      <View style={styles.subRow}>
+                          <Text variant="bodySmall" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant, flex: 1 }}>
+                             {dateString} • {payerName} paid
+                          </Text>
+                      </View>
                     </View>
                   </View>
                 </Pressable>
-                {index < items.length - 1 && <Divider />}
-              </React.Fragment>
+              </Surface>
             );
           })}
         </View>
       ) : (
-        <View style={styles.emptyStateContent}>
-          <Text
-            variant="headlineSmall"
-            style={[
-              styles.emptyStateIcon,
-              { color: theme.colors.onSurfaceVariant },
-            ]}
-          >
-            💰
+        <View style={[styles.emptyState, { backgroundColor: theme.colors.surfaceVariant }]}>
+          <Text style={{ fontSize: 40, marginBottom: 16 }}>💸</Text>
+          <Text variant="titleMedium" style={{ color: theme.colors.onSurface, marginBottom: 8 }}>
+            No transactions yet
           </Text>
-          <Text
-            variant="titleMedium"
-            style={[
-              styles.emptyStateTitle,
-              { color: theme.colors.onSurface },
-            ]}
-          >
-            No Transactions Yet
-          </Text>
-          <Text
-            variant="bodyMedium"
-            style={[
-              styles.emptyStateMessage,
-              { color: theme.colors.onSurfaceVariant },
-            ]}
-          >
-            Start tracking expenses and income for this group by adding your
-            first transaction.
+          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center' }}>
+            Tap the + button to add your first expense.
           </Text>
         </View>
       )}
-    </Surface>
+    </View>
   );
 };

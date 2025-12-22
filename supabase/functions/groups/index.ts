@@ -5,6 +5,7 @@ import { createEmptyResponse, createSuccessResponse } from '../_shared/response.
 import { fetchUserEmails } from '../_shared/user-email.ts';
 import { fetchUserProfiles } from '../_shared/user-profiles.ts';
 import { isValidUUID, validateBodySize, validateGroupData } from '../_shared/validation.ts';
+import { requireMinVersion } from '../_shared/version-check.ts';
 
 /**
  * Groups Edge Function
@@ -46,6 +47,12 @@ Deno.serve(async (req: Request) => {
     return createEmptyResponse(200);
   }
 
+  // Check app version - return 426 if outdated
+  const versionError = requireMinVersion(req);
+  if (versionError) {
+    return versionError;
+  }
+
   try {
     // Validate request body size
     const body = await req.text().catch(() => null);
@@ -72,16 +79,41 @@ Deno.serve(async (req: Request) => {
 
     // Handle GET /groups - List all groups user belongs to
     if (httpMethod === 'GET' && !groupId) {
+      // Get groups and include the user's membership status
       const { data: groups, error } = await supabase
         .from('groups')
-        .select('id, name, description, created_by, created_at, updated_at')
+        .select(`
+          id, 
+          name, 
+          description, 
+          created_by, 
+          created_at, 
+          updated_at,
+          group_members!inner(status)
+        `)
+        .eq('group_members.user_id', user.id)
         .order('created_at', { ascending: false });
 
       if (error) {
         return handleError(error, 'fetching groups');
       }
 
-      return createSuccessResponse(groups || [], 200, 0); // No caching - real-time data
+      // Flatten the response and extract status
+      const flattenedGroups = (groups || []).map((g: any) => ({
+        ...g,
+        user_status: g.group_members?.[0]?.status || 'active',
+        group_members: undefined // Remove nesting
+      }));
+
+      // Sort: active/invited first, left (former) last. 
+      // Secondary sort is created_at (already handled by DB query, but sort is stable)
+      flattenedGroups.sort((a: any, b: any) => {
+        if (a.user_status === 'left' && b.user_status !== 'left') return 1;
+        if (a.user_status !== 'left' && b.user_status === 'left') return -1;
+        return 0; // Keep DB order (created_at DESC) for same statuses
+      });
+
+      return createSuccessResponse(flattenedGroups, 200, 0); // No caching - real-time data
     }
 
     // Handle GET /groups/:id - Get group details with members
@@ -105,7 +137,7 @@ Deno.serve(async (req: Request) => {
       // Get group members
       const { data: members, error: membersError } = await supabase
         .from('group_members')
-        .select('id, group_id, user_id, role, joined_at')
+        .select('id, group_id, user_id, role, joined_at, status, left_at')
         .eq('group_id', groupId)
         .order('joined_at', { ascending: true });
 
@@ -114,19 +146,28 @@ Deno.serve(async (req: Request) => {
       }
 
       // Enrich members with email addresses and profile data using shared utilities
-      const userIds = (members || []).map(m => m.user_id);
-      const [emailMap, profileMap] = await Promise.all([
-        fetchUserEmails(userIds, user.id, currentUserEmail),
-        fetchUserProfiles(supabase, userIds),
+      const memberIds = new Set((members || []).map((m: GroupMember) => m.user_id));
+      const [emailMap, profileMap, participantsResult] = await Promise.all([
+        fetchUserEmails(Array.from(memberIds) as string[], user.id, currentUserEmail),
+        fetchUserProfiles(supabase, Array.from(memberIds) as string[]),
+        supabase
+          .from('participants')
+          .select('id, user_id')
+          .eq('group_id', groupId)
+          .in('user_id', Array.from(memberIds))
       ]);
       
-      const membersWithEmails = (members || []).map(member => {
+      const participants = participantsResult.data || [];
+      const participantMap = new Map(participants.map((p: any) => [p.user_id, p.id]));
+      
+      const membersWithEmails = (members || []).map((member: any) => {
         const profile = profileMap.get(member.user_id);
         return {
           ...member,
           email: emailMap.get(member.user_id),
           full_name: profile?.full_name || null,
           avatar_url: profile?.avatar_url || null,
+          participant_id: participantMap.get(member.user_id) || null,
         };
       });
 
@@ -181,35 +222,6 @@ Deno.serve(async (req: Request) => {
       }
 
       return createSuccessResponse(group, 201);
-    }
-
-    // Handle DELETE /groups/:id - Delete group
-    if (httpMethod === 'DELETE' && groupId) {
-      // Verify user is the owner
-      const { data: group, error: groupError } = await supabase
-        .from('groups')
-        .select('created_by')
-        .eq('id', groupId)
-        .single();
-
-      if (groupError || !group) {
-        return createErrorResponse(404, 'Group not found', 'NOT_FOUND');
-      }
-
-      if (group.created_by !== user.id) {
-        return createErrorResponse(403, 'Only group owners can delete groups', 'PERMISSION_DENIED');
-      }
-
-      const { error: deleteError } = await supabase
-        .from('groups')
-        .delete()
-        .eq('id', groupId);
-
-      if (deleteError) {
-        return handleError(deleteError, 'deleting group');
-      }
-
-      return createSuccessResponse({ success: true, message: 'Group deleted successfully' }, 200);
     }
 
     // Method not allowed

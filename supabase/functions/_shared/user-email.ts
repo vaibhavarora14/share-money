@@ -70,13 +70,22 @@ export async function fetchUserEmails(
     return emailMap;
   }
 
+  // Filter out non-UUID values (emails, etc.) - only process valid UUIDs
+  // UUID pattern: 8-4-4-4-12 hexadecimal characters
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const validUserIds = userIds.filter(id => uuidPattern.test(id));
+
+  if (validUserIds.length === 0) {
+    return emailMap;
+  }
+
   // Add current user email if in the list
-  if (currentUserEmail && userIds.includes(currentUserId)) {
+  if (currentUserEmail && validUserIds.includes(currentUserId)) {
     emailMap.set(currentUserId, currentUserEmail);
   }
 
   // Filter out current user ID since we already have their email
-  const userIdsToFetch = userIds.filter(id => id !== currentUserId);
+  const userIdsToFetch = validUserIds.filter(id => id !== currentUserId);
   
   if (userIdsToFetch.length === 0) {
     return emailMap;

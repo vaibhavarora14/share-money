@@ -118,3 +118,4 @@ appId: com.vaibhavarora.sharemoney
 
 # Verify we're back on groups list
 - assertVisible: "Your Groups"
+- runFlow: signout.yaml

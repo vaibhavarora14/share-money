@@ -1,16 +1,16 @@
 import React, { useMemo } from "react";
 import { View } from "react-native";
 import {
-  ActivityIndicator,
-  Avatar,
-  Button,
-  Divider,
-  Surface,
-  Text,
-  TouchableRipple,
-  useTheme,
+    ActivityIndicator,
+    Avatar,
+    Button,
+    Divider,
+    Surface,
+    Text,
+    TouchableRipple,
+    useTheme,
 } from "react-native-paper";
-import { Balance, GroupBalance } from "../types";
+import { Balance, GroupBalance, Participant } from "../types";
 import { formatCurrency } from "../utils/currency";
 import { styles } from "./BalancesSection.styles";
 
@@ -28,6 +28,7 @@ interface BalancesSectionProps {
     full_name?: string | null;
     avatar_url?: string | null;
   }>; // Group members for settlement
+  participants?: Participant[]; // All participants (source of truth for names)
 }
 
 export const BalancesSection: React.FC<BalancesSectionProps> = ({
@@ -39,6 +40,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
   onSettleUp,
   currentUserId,
   groupMembers = [],
+  participants = [],
 }) => {
   const theme = useTheme();
 
@@ -56,16 +58,23 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
   }, [overallBalances]);
 
   const getUserDisplayName = (balance: Balance): string => {
-    // Priority: full_name → balance.email → groupMembers full_name/email → fallback to truncated user_id
+    // 1. Try participants list (source of truth including names/emails even for invited)
+    const participantId = balance.participant_id || (balance.user_id ? "" : ""); // Participant ID is preferred
+    // Actually balance.participant_id SHOULD be there now.
+    const participant = participants.find((p: Participant) => p.id === balance.participant_id || (p.user_id && p.user_id === balance.user_id));
+    
+    if (participant?.full_name) return participant.full_name;
+    if (participant?.email) return participant.email;
+
+    // 2. Priority from balance object directly (Enriched by API)
     if (balance.full_name) {
       return balance.full_name;
     }
-
     if (balance.email) {
       return balance.email;
     }
-
-    // Fallback to groupMembers lookup
+    
+    // 3. Fallback to groupMembers lookup
     const member = groupMembers.find((m) => m.user_id === balance.user_id);
     if (member?.full_name) {
       return member.full_name;
@@ -74,8 +83,9 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
       return member.email;
     }
 
-    // Last resort: truncated user_id
-    return `User ${balance.user_id.substring(0, 8)}...`;
+    // Last resort: truncated user_id or participant_id
+    const id = balance.user_id || balance.participant_id || "???";
+    return `User ${id.substring(0, 8)}...`;
   };
 
   const getInitials = (name: string) => {
