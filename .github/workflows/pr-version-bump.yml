@@ -18,11 +18,15 @@ jobs:
         id: title
         run: |
           TITLE="${{ github.event.pull_request.title }}"
-          if [[ ! "$TITLE" =~ ^(feat|fix|chore|docs|refactor)(\(.+\))?: ]]; then
-            echo "::error::PR title must start with feat|fix|chore|docs|refactor (optionally with scope). Current title: '$TITLE'"
+          # Allow ! for breaking changes (e.g., feat!: or fix!:)
+          if [[ ! "$TITLE" =~ ^(feat|fix|chore|docs|refactor)(\(.+\))?(!?): ]]; then
+            echo "::error::PR title must start with feat|fix|chore|docs|refactor (optionally with scope and !). Current title: '$TITLE'"
             exit 1
           fi
-          if [[ "$TITLE" =~ ^feat ]]; then
+          
+          if [[ "$TITLE" =~ ^[a-z]+(\(.+\))?!: ]]; then
+            echo "bump=major" >> $GITHUB_OUTPUT
+          elif [[ "$TITLE" =~ ^feat ]]; then
             echo "bump=minor" >> $GITHUB_OUTPUT
           else
             echo "bump=patch" >> $GITHUB_OUTPUT
@@ -63,6 +67,9 @@ jobs:
             const parts = version.split('.').map(Number);
             while (parts.length < 3) parts.push(0);
             const [major, minor, patch] = parts;
+            if (type === 'major') {
+              return `${major + 1}.0.0`;
+            }
             if (type === 'minor') {
               return `${major}.${minor + 1}.0`;
             }
