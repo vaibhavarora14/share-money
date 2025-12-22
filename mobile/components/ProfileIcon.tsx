@@ -6,10 +6,10 @@ import { useProfile } from "../hooks/useProfile";
 
 interface ProfileIconProps {
   // Removed onProfilePress - parent component handles touch events
-  showIncompleteBadge?: boolean; // Show badge if profile is incomplete
+  // Removed onProfilePress - parent component handles touch events
 }
 
-export const ProfileIcon: React.FC<ProfileIconProps> = ({ showIncompleteBadge = false }) => {
+export const ProfileIcon: React.FC<ProfileIconProps> = () => {
   const theme = useTheme();
   const { user } = useAuth();
   const { data: profile } = useProfile();
@@ -38,14 +38,7 @@ export const ProfileIcon: React.FC<ProfileIconProps> = ({ showIncompleteBadge = 
           { backgroundColor: theme.colors.primaryContainer },
         ]}
       />
-      {showIncompleteBadge && (
-        <View
-          style={[
-            styles.badge,
-            { backgroundColor: theme.colors.error },
-          ]}
-        />
-      )}
+
     </View>
   );
 };
@@ -57,14 +50,5 @@ const styles = StyleSheet.create({
   avatar: {
     // Avatar styling handled by component
   },
-  badge: {
-    position: "absolute",
-    top: -2,
-    right: -2,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    borderColor: "white",
-  },
+
 });

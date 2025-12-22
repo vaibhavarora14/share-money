@@ -10,7 +10,9 @@ import {
   Text,
   useTheme,
 } from "react-native-paper";
+import { GroupBalanceBadge } from "../components/GroupBalanceBadge";
 import { useAuth } from "../contexts/AuthContext";
+import { useBalances } from "../hooks/useBalances";
 import { useGroups } from "../hooks/useGroups";
 import { Group } from "../types";
 import { showErrorAlert } from "../utils/errorHandling";
@@ -28,24 +30,40 @@ interface GroupsListScreenProps {
   }) => Promise<void>;
   onLogout?: () => void;
   onRefetchReady?: (refetch: () => Promise<any>) => void;
+  refetchTrigger?: number; // Added to trigger refetch from parent
 }
 
 export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   onGroupPress,
   onCreateGroup,
   onRefetchReady,
+  refetchTrigger,
 }) => {
   const [showCreateGroup, setShowCreateGroup] = useState<boolean>(false);
   const theme = useTheme();
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
   const { data: groups, isLoading: loading, error, refetch } = useGroups();
+  const {
+    data: balancesData,
+    refetch: refetchBalances,
+  } = useBalances();
 
-  // Expose refetch function to parent component
+  // Expose refetch functions to parent component
   React.useEffect(() => {
     if (onRefetchReady) {
-      onRefetchReady(refetch);
+      onRefetchReady(async () => {
+        await Promise.all([refetch(), refetchBalances()]);
+      });
     }
-  }, [onRefetchReady, refetch]);
+  }, [onRefetchReady, refetch, refetchBalances]);
+
+  // Handle manual trigger from parent
+  React.useEffect(() => {
+    if (refetchTrigger) {
+      refetch();
+      refetchBalances();
+    }
+  }, [refetchTrigger, refetch, refetchBalances]);
 
   // Auto sign-out on session expiration with alert
   useEffect(() => {
@@ -188,56 +206,70 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                   onPress={() => onGroupPress(group)}
                   activeOpacity={0.7}
                 >
-                  <View style={styles.groupIconContainer}>
-                    <Surface
-                      style={[
-                        styles.groupIcon,
-                        { backgroundColor: theme.colors.primaryContainer },
-                      ]}
-                      elevation={0}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 20,
-                          fontWeight: "bold",
-                          color: theme.colors.onPrimaryContainer,
-                        }}
+                  <View style={styles.groupMainContent}>
+                    <View style={styles.groupIconContainer}>
+                      <Surface
+                        style={[
+                          styles.groupIcon,
+                          { backgroundColor: theme.colors.primaryContainer },
+                        ]}
+                        elevation={0}
                       >
-                        {group.name.charAt(0).toUpperCase()}
-                      </Text>
-                    </Surface>
-                  </View>
+                        <Text
+                          style={{
+                            fontSize: 20,
+                            fontWeight: "bold",
+                            color: theme.colors.onPrimaryContainer,
+                          }}
+                        >
+                          {group.name.charAt(0).toUpperCase()}
+                        </Text>
+                      </Surface>
+                    </View>
 
-                  <View style={styles.groupContent}>
-                    <Text
-                      variant="titleMedium"
-                      style={styles.groupName}
-                      numberOfLines={1}
-                    >
-                      {group.name}
-                    </Text>
-                    {group.description ? (
+                    <View style={styles.groupInfo}>
                       <Text
-                        variant="bodySmall"
-                        style={{ color: theme.colors.onSurfaceVariant }}
+                        variant="titleMedium"
+                        style={[
+                          styles.groupName,
+                          group.user_status === 'left' && { color: theme.colors.onSurfaceVariant }
+                        ]}
                         numberOfLines={1}
                       >
-                        {group.description}
+                        {group.name}
                       </Text>
-                    ) : (
-                      <Text
-                        variant="bodySmall"
-                        style={{ color: theme.colors.onSurfaceVariant }}
-                      >
-                        No description
-                      </Text>
-                    )}
+                      <View style={styles.groupMetadata}>
+                        {group.user_status === 'left' && (
+                          <Text 
+                            variant="bodySmall"
+                            style={[styles.formerStatusText, { color: theme.colors.error }]}
+                          >
+                            Former Member
+                          </Text>
+                        )}
+                        {group.user_status === 'left' && (
+                          <Text
+                            variant="bodySmall"
+                            style={[styles.metadataSeparator, { color: theme.colors.onSurfaceVariant }]}
+                          >
+                            •
+                          </Text>
+                        )}
+                        <Text
+                          variant="bodySmall"
+                          style={{ color: theme.colors.onSurfaceVariant, flex: 1 }}
+                          numberOfLines={1}
+                        >
+                          {group.description || "No description"}
+                        </Text>
+                      </View>
+                    </View>
                   </View>
 
-                  <IconButton
-                    icon="chevron-right"
-                    size={20}
-                    iconColor={theme.colors.onSurfaceVariant}
+                  {/* Balance Badge */}
+                  <GroupBalanceBadge 
+                    balanceData={balancesData?.group_balances?.find(gb => gb.group_id === group.id)} 
+                    currentUserId={user?.id}
                   />
                 </TouchableOpacity>
               </Surface>
@@ -320,9 +352,15 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
   },
+  groupNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 4,
+  },
   groupName: {
-    fontWeight: "600",
-    marginBottom: 2,
+    fontWeight: "bold",
+    flexShrink: 1,
   },
   fab: {
     position: "absolute",
@@ -330,5 +368,25 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 10,
     borderRadius: 16,
+  },
+  // New Styles
+  groupMetadata: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  formerStatusText: {
+    fontWeight: "bold",
+  },
+  metadataSeparator: {
+    marginHorizontal: 4,
+  },
+  groupMainContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  groupInfo: {
+    flex: 1,
+    paddingRight: 8,
   },
 });

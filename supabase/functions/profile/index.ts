@@ -1,6 +1,9 @@
+import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { verifyAuth } from '../_shared/auth.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
+import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from '../_shared/env.ts';
+import { fetchUserEmails } from '../_shared/user-email.ts';
 import { validateBodySize } from '../_shared/validation.ts';
 
 interface Profile {
@@ -151,6 +154,90 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const method = req.method;
 
     if (method === 'GET') {
+      const url = new URL(req.url);
+      const userIdsParam = url.searchParams.get('user_ids');
+      
+      // Support batch fetching profiles by user_ids
+      if (userIdsParam) {
+        try {
+          const userIds = JSON.parse(userIdsParam) as string[];
+          
+          if (!Array.isArray(userIds) || userIds.length === 0) {
+            return createErrorResponse(400, 'user_ids must be a non-empty array', 'VALIDATION_ERROR');
+          }
+          
+          // Limit batch size for performance
+          if (userIds.length > 100) {
+            return createErrorResponse(400, 'Maximum 100 user_ids allowed per request', 'VALIDATION_ERROR');
+          }
+          
+          // Use service role client to bypass RLS for batch profile fetching
+          // This allows fetching profiles for any user, not just the authenticated user
+          if (!SUPABASE_SERVICE_ROLE_KEY) {
+            return createErrorResponse(
+              500,
+              'Server configuration error: Service role key not configured. This is required for batch profile fetching.',
+              'CONFIGURATION_ERROR'
+            );
+          }
+          
+          const serviceClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+            auth: {
+              persistSession: false,
+              autoRefreshToken: false,
+            },
+          });
+          
+          // Fetch all profile fields using service role client (bypasses RLS)
+          const { data: profiles, error } = await serviceClient
+            .from('profiles')
+            .select('id, full_name, avatar_url, phone, country_code, profile_completed, created_at, updated_at')
+            .in('id', userIds);
+          
+          if (error) {
+            return handleError(error, 'fetching profiles');
+          }
+          
+          // Enrich profiles with email addresses
+          const emailMap = await fetchUserEmails(userIds, user.id, user.email || null);
+          
+          // Create a map of existing profiles
+          const profileMap = new Map((profiles || []).map(p => [p.id, p]));
+          
+          // Create enriched profiles for all requested user IDs
+          // Include users even if they don't have a profile record (they might have an email)
+          const enrichedProfiles = userIds.map(userId => {
+            const existingProfile = profileMap.get(userId);
+            const email = emailMap.get(userId) || null;
+            
+            if (existingProfile) {
+              return {
+                ...existingProfile,
+                email,
+              };
+            } else {
+              // Return minimal profile for users without profile records
+              return {
+                id: userId,
+                full_name: null,
+                avatar_url: null,
+                phone: null,
+                country_code: null,
+                profile_completed: false,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                email,
+              };
+            }
+          });
+          
+          return createSuccessResponse(enrichedProfiles, 200, 0);
+        } catch (parseError) {
+          return createErrorResponse(400, 'Invalid user_ids format. Expected JSON array.', 'VALIDATION_ERROR');
+        }
+      }
+      
+      // Single profile fetch (existing behavior)
       const { data: profile, error } = await supabase
         .from('profiles')
         .select('*')

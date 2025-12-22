@@ -29,6 +29,16 @@ DECLARE
   charlie_id UUID := '33333333-3333-3333-3333-333333333333';
   diana_id UUID := '44444444-4444-4444-4444-444444444444';
   test_password TEXT := 'testpassword123';
+  
+  -- Participant IDs
+  alice_vacation_pid UUID;
+  bob_vacation_pid UUID;
+  charlie_vacation_pid UUID;
+  diana_vacation_pid UUID;
+  
+  bob_dinner_pid UUID;
+  alice_dinner_pid UUID;
+  charlie_dinner_pid UUID;
 BEGIN
   -- Create test users in auth.users
   -- Using crypt() for password hashing (requires pgcrypto extension)
@@ -148,17 +158,11 @@ BEGIN
     phone_change_token = EXCLUDED.phone_change_token;
 
   -- Create identities for the users (required for Supabase Auth)
-  INSERT INTO auth.identities (
-    id,
-    user_id,
-    identity_data,
-    provider,
-    provider_id,
-    last_sign_in_at,
-    created_at,
-    updated_at
-  ) VALUES
-    (
+  -- Check if identity exists before inserting to avoid conflicts
+  IF NOT EXISTS (SELECT 1 FROM auth.identities WHERE user_id = alice_id AND provider = 'email') THEN
+    INSERT INTO auth.identities (
+      id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at
+    ) VALUES (
       gen_random_uuid(),
       alice_id,
       format('{"sub": "%s", "email": "alice@test.com"}', alice_id)::jsonb,
@@ -167,8 +171,13 @@ BEGIN
       NOW(),
       NOW(),
       NOW()
-    ),
-    (
+    );
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM auth.identities WHERE user_id = bob_id AND provider = 'email') THEN
+    INSERT INTO auth.identities (
+      id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at
+    ) VALUES (
       gen_random_uuid(),
       bob_id,
       format('{"sub": "%s", "email": "bob@test.com"}', bob_id)::jsonb,
@@ -177,8 +186,13 @@ BEGIN
       NOW(),
       NOW(),
       NOW()
-    ),
-    (
+    );
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM auth.identities WHERE user_id = charlie_id AND provider = 'email') THEN
+    INSERT INTO auth.identities (
+      id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at
+    ) VALUES (
       gen_random_uuid(),
       charlie_id,
       format('{"sub": "%s", "email": "charlie@test.com"}', charlie_id)::jsonb,
@@ -187,8 +201,13 @@ BEGIN
       NOW(),
       NOW(),
       NOW()
-    ),
-    (
+    );
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM auth.identities WHERE user_id = diana_id AND provider = 'email') THEN
+    INSERT INTO auth.identities (
+      id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at
+    ) VALUES (
       gen_random_uuid(),
       diana_id,
       format('{"sub": "%s", "email": "diana@test.com"}', diana_id)::jsonb,
@@ -197,8 +216,8 @@ BEGIN
       NOW(),
       NOW(),
       NOW()
-    )
-  ON CONFLICT DO NOTHING;
+    );
+  END IF;
 
   -- ============================================================================
   -- CREATE TEST GROUPS
@@ -249,12 +268,22 @@ BEGIN
     ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', charlie_id, 'member', NOW())
   ON CONFLICT (group_id, user_id) DO NOTHING;
 
+  -- Resolve participant IDs
+  alice_vacation_pid := public.sync_participant_state('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', alice_id, NULL);
+  bob_vacation_pid := public.sync_participant_state('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', bob_id, NULL);
+  charlie_vacation_pid := public.sync_participant_state('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', charlie_id, NULL);
+  diana_vacation_pid := public.sync_participant_state('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', diana_id, NULL);
+  
+  bob_dinner_pid := public.sync_participant_state('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', bob_id, NULL);
+  alice_dinner_pid := public.sync_participant_state('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', alice_id, NULL);
+  charlie_dinner_pid := public.sync_participant_state('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', charlie_id, NULL);
+
   -- ============================================================================
   -- CREATE TRANSACTIONS WITH SPLITS
   -- ============================================================================
 
   -- Hotel booking (Vacation group) - Alice paid, split 4 ways
-  INSERT INTO transactions (id, amount, description, date, type, category, user_id, group_id, paid_by, split_among, currency, created_at)
+  INSERT INTO transactions (id, amount, description, date, type, category, user_id, group_id, paid_by_participant_id, currency, created_at)
   VALUES (
     1001,
     100000.00,
@@ -264,24 +293,28 @@ BEGIN
     'Accommodation',
     alice_id,
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-    alice_id,
-    jsonb_build_array(alice_id::text, bob_id::text, charlie_id::text, diana_id::text),
+    alice_vacation_pid,
     'INR',
     NOW()
   )
   ON CONFLICT (id) DO NOTHING;
 
   -- Transaction splits for hotel
-  INSERT INTO transaction_splits (transaction_id, user_id, amount)
-  VALUES
-    (1001, alice_id, 25000.00),
-    (1001, bob_id, 25000.00),
-    (1001, charlie_id, 25000.00),
-    (1001, diana_id, 25000.00)
-  ON CONFLICT (transaction_id, user_id) DO NOTHING;
+  IF NOT EXISTS (SELECT 1 FROM transaction_splits WHERE transaction_id = 1001 AND participant_id = alice_vacation_pid) THEN
+    INSERT INTO transaction_splits (transaction_id, participant_id, amount) VALUES (1001, alice_vacation_pid, 25000.00);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM transaction_splits WHERE transaction_id = 1001 AND participant_id = bob_vacation_pid) THEN
+    INSERT INTO transaction_splits (transaction_id, participant_id, amount) VALUES (1001, bob_vacation_pid, 25000.00);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM transaction_splits WHERE transaction_id = 1001 AND participant_id = charlie_vacation_pid) THEN
+    INSERT INTO transaction_splits (transaction_id, participant_id, amount) VALUES (1001, charlie_vacation_pid, 25000.00);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM transaction_splits WHERE transaction_id = 1001 AND participant_id = diana_vacation_pid) THEN
+    INSERT INTO transaction_splits (transaction_id, participant_id, amount) VALUES (1001, diana_vacation_pid, 25000.00);
+  END IF;
 
   -- Restaurant dinner (Vacation group) - Bob paid, split 4 ways
-  INSERT INTO transactions (id, amount, description, date, type, category, user_id, group_id, paid_by, split_among, currency, created_at)
+  INSERT INTO transactions (id, amount, description, date, type, category, user_id, group_id, paid_by_participant_id, currency, created_at)
   VALUES (
     1002,
     20000.00,
@@ -291,24 +324,28 @@ BEGIN
     'Food',
     bob_id,
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-    bob_id,
-    jsonb_build_array(alice_id::text, bob_id::text, charlie_id::text, diana_id::text),
+    bob_vacation_pid,
     'INR',
     NOW()
   )
   ON CONFLICT (id) DO NOTHING;
 
   -- Transaction splits for restaurant
-  INSERT INTO transaction_splits (transaction_id, user_id, amount)
-  VALUES
-    (1002, alice_id, 5000.00),
-    (1002, bob_id, 5000.00),
-    (1002, charlie_id, 5000.00),
-    (1002, diana_id, 5000.00)
-  ON CONFLICT (transaction_id, user_id) DO NOTHING;
+  IF NOT EXISTS (SELECT 1 FROM transaction_splits WHERE transaction_id = 1002 AND participant_id = alice_vacation_pid) THEN
+    INSERT INTO transaction_splits (transaction_id, participant_id, amount) VALUES (1002, alice_vacation_pid, 5000.00);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM transaction_splits WHERE transaction_id = 1002 AND participant_id = bob_vacation_pid) THEN
+    INSERT INTO transaction_splits (transaction_id, participant_id, amount) VALUES (1002, bob_vacation_pid, 5000.00);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM transaction_splits WHERE transaction_id = 1002 AND participant_id = charlie_vacation_pid) THEN
+    INSERT INTO transaction_splits (transaction_id, participant_id, amount) VALUES (1002, charlie_vacation_pid, 5000.00);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM transaction_splits WHERE transaction_id = 1002 AND participant_id = diana_vacation_pid) THEN
+    INSERT INTO transaction_splits (transaction_id, participant_id, amount) VALUES (1002, diana_vacation_pid, 5000.00);
+  END IF;
 
   -- Car rental (Vacation group) - Charlie paid, split 4 ways
-  INSERT INTO transactions (id, amount, description, date, type, category, user_id, group_id, paid_by, split_among, currency, created_at)
+  INSERT INTO transactions (id, amount, description, date, type, category, user_id, group_id, paid_by_participant_id, currency, created_at)
   VALUES (
     1003,
     37500.00,
@@ -318,24 +355,28 @@ BEGIN
     'Transportation',
     charlie_id,
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-    charlie_id,
-    jsonb_build_array(alice_id::text, bob_id::text, charlie_id::text, diana_id::text),
+    charlie_vacation_pid,
     'INR',
     NOW()
   )
   ON CONFLICT (id) DO NOTHING;
 
   -- Transaction splits for car rental
-  INSERT INTO transaction_splits (transaction_id, user_id, amount)
-  VALUES
-    (1003, alice_id, 9375.00),
-    (1003, bob_id, 9375.00),
-    (1003, charlie_id, 9375.00),
-    (1003, diana_id, 9375.00)
-  ON CONFLICT (transaction_id, user_id) DO NOTHING;
+  IF NOT EXISTS (SELECT 1 FROM transaction_splits WHERE transaction_id = 1003 AND participant_id = alice_vacation_pid) THEN
+    INSERT INTO transaction_splits (transaction_id, participant_id, amount) VALUES (1003, alice_vacation_pid, 9375.00);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM transaction_splits WHERE transaction_id = 1003 AND participant_id = bob_vacation_pid) THEN
+    INSERT INTO transaction_splits (transaction_id, participant_id, amount) VALUES (1003, bob_vacation_pid, 9375.00);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM transaction_splits WHERE transaction_id = 1003 AND participant_id = charlie_vacation_pid) THEN
+    INSERT INTO transaction_splits (transaction_id, participant_id, amount) VALUES (1003, charlie_vacation_pid, 9375.00);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM transaction_splits WHERE transaction_id = 1003 AND participant_id = diana_vacation_pid) THEN
+    INSERT INTO transaction_splits (transaction_id, participant_id, amount) VALUES (1003, diana_vacation_pid, 9375.00);
+  END IF;
 
   -- Pizza night (Dinner group) - Bob paid, split 3 ways
-  INSERT INTO transactions (id, amount, description, date, type, category, user_id, group_id, paid_by, split_among, currency, created_at)
+  INSERT INTO transactions (id, amount, description, date, type, category, user_id, group_id, paid_by_participant_id, currency, created_at)
   VALUES (
     2001,
     6000.00,
@@ -345,23 +386,25 @@ BEGIN
     'Food',
     bob_id,
     'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-    bob_id,
-    jsonb_build_array(alice_id::text, bob_id::text, charlie_id::text),
+    bob_dinner_pid,
     'INR',
     NOW()
   )
   ON CONFLICT (id) DO NOTHING;
 
   -- Transaction splits for pizza
-  INSERT INTO transaction_splits (transaction_id, user_id, amount)
-  VALUES
-    (2001, alice_id, 2000.00),
-    (2001, bob_id, 2000.00),
-    (2001, charlie_id, 2000.00)
-  ON CONFLICT (transaction_id, user_id) DO NOTHING;
+  IF NOT EXISTS (SELECT 1 FROM transaction_splits WHERE transaction_id = 2001 AND participant_id = alice_dinner_pid) THEN
+    INSERT INTO transaction_splits (transaction_id, participant_id, amount) VALUES (2001, alice_dinner_pid, 2000.00);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM transaction_splits WHERE transaction_id = 2001 AND participant_id = bob_dinner_pid) THEN
+    INSERT INTO transaction_splits (transaction_id, participant_id, amount) VALUES (2001, bob_dinner_pid, 2000.00);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM transaction_splits WHERE transaction_id = 2001 AND participant_id = charlie_dinner_pid) THEN
+    INSERT INTO transaction_splits (transaction_id, participant_id, amount) VALUES (2001, charlie_dinner_pid, 2000.00);
+  END IF;
 
   -- Sushi dinner (Dinner group) - Alice paid, split 3 ways
-  INSERT INTO transactions (id, amount, description, date, type, category, user_id, group_id, paid_by, split_among, currency, created_at)
+  INSERT INTO transactions (id, amount, description, date, type, category, user_id, group_id, paid_by_participant_id, currency, created_at)
   VALUES (
     2002,
     15000.00,
@@ -371,32 +414,34 @@ BEGIN
     'Food',
     alice_id,
     'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-    alice_id,
-    jsonb_build_array(alice_id::text, bob_id::text, charlie_id::text),
+    alice_dinner_pid,
     'INR',
     NOW()
   )
   ON CONFLICT (id) DO NOTHING;
 
   -- Transaction splits for sushi
-  INSERT INTO transaction_splits (transaction_id, user_id, amount)
-  VALUES
-    (2002, alice_id, 5000.00),
-    (2002, bob_id, 5000.00),
-    (2002, charlie_id, 5000.00)
-  ON CONFLICT (transaction_id, user_id) DO NOTHING;
+  IF NOT EXISTS (SELECT 1 FROM transaction_splits WHERE transaction_id = 2002 AND participant_id = alice_dinner_pid) THEN
+    INSERT INTO transaction_splits (transaction_id, participant_id, amount) VALUES (2002, alice_dinner_pid, 5000.00);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM transaction_splits WHERE transaction_id = 2002 AND participant_id = bob_dinner_pid) THEN
+    INSERT INTO transaction_splits (transaction_id, participant_id, amount) VALUES (2002, bob_dinner_pid, 5000.00);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM transaction_splits WHERE transaction_id = 2002 AND participant_id = charlie_dinner_pid) THEN
+    INSERT INTO transaction_splits (transaction_id, participant_id, amount) VALUES (2002, charlie_dinner_pid, 5000.00);
+  END IF;
 
   -- ============================================================================
   -- CREATE SETTLEMENTS
   -- ============================================================================
 
   -- Bob settles up with Alice for vacation expenses
-  INSERT INTO settlements (id, group_id, from_user_id, to_user_id, amount, currency, notes, created_by, created_at)
+  INSERT INTO settlements (id, group_id, from_participant_id, to_participant_id, amount, currency, notes, created_by, created_at)
   VALUES (
     'cccccccc-cccc-cccc-cccc-cccccccccccc',
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-    bob_id,
-    alice_id,
+    bob_vacation_pid,
+    alice_vacation_pid,
     25000.00,
     'INR',
     'Paid via UPI',
@@ -406,12 +451,12 @@ BEGIN
   ON CONFLICT (id) DO NOTHING;
 
   -- Diana marks as received from Charlie
-  INSERT INTO settlements (id, group_id, from_user_id, to_user_id, amount, currency, notes, created_by, created_at)
+  INSERT INTO settlements (id, group_id, from_participant_id, to_participant_id, amount, currency, notes, created_by, created_at)
   VALUES (
     'dddddddd-dddd-dddd-dddd-dddddddddddd',
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-    diana_id,
-    charlie_id,
+    diana_vacation_pid,
+    charlie_vacation_pid,
     9375.00,
     'INR',
     'Received via GPay',

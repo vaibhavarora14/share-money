@@ -15,11 +15,20 @@ export async function fetchUserProfiles(
     return profileMap;
   }
 
+  // Filter out non-UUID values (emails, etc.) - only process valid UUIDs
+  // UUID pattern: 8-4-4-4-12 hexadecimal characters
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const validUserIds = userIds.filter(id => uuidPattern.test(id));
+
+  if (validUserIds.length === 0) {
+    return profileMap;
+  }
+
   try {
     const { data: profiles, error } = await supabase
       .from('profiles')
       .select('id, full_name, avatar_url')
-      .in('id', userIds);
+      .in('id', validUserIds);
 
     if (error) {
       log.error('Error fetching user profiles', 'user-profiles', {

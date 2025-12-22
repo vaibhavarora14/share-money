@@ -58,7 +58,12 @@ export function getActivityColor(type: ActivityItem['type']): string {
  */
 export function formatActivityTime(timestamp: string): string {
   try {
-    const date = parseISO(timestamp);
+    // Ensure timestamp is treated as UTC if it doesn't specify an offset
+    const safeTimestamp = (timestamp.endsWith('Z') || timestamp.includes('+')) 
+      ? timestamp 
+      : timestamp + 'Z';
+      
+    const date = parseISO(safeTimestamp);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
@@ -100,7 +105,11 @@ export function groupActivitiesByDate(activities: ActivityItem[]): {
   
   activities.forEach(activity => {
     try {
-      const date = parseISO(activity.changed_at);
+      const safeTimestamp = (activity.changed_at.endsWith('Z') || activity.changed_at.includes('+')) 
+        ? activity.changed_at 
+        : activity.changed_at + 'Z';
+        
+      const date = parseISO(safeTimestamp);
       const today = startOfDay(new Date());
       const activityDate = startOfDay(date);
       

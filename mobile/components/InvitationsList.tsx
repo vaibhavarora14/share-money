@@ -16,7 +16,7 @@ import { styles } from "./InvitationsList.styles";
 interface InvitationsListProps {
   invitations: GroupInvitation[];
   loading: boolean;
-  isOwner: boolean;
+  canManageInvites: boolean;
   cancellingInvitationId: string | null;
   onCancel: (invitationId: string) => void;
 }
@@ -24,7 +24,7 @@ interface InvitationsListProps {
 export const InvitationsList: React.FC<InvitationsListProps> = ({
   invitations,
   loading,
-  isOwner,
+  canManageInvites,
   cancellingInvitationId,
   onCancel,
 }) => {
@@ -97,9 +97,8 @@ export const InvitationsList: React.FC<InvitationsListProps> = ({
                 </Text>
               </View>
               <View style={styles.memberRight}>
-                {isOwner && (
-                  <>
-                    {isCancelling ? (
+                {canManageInvites &&
+                  (isCancelling ? (
                       <ActivityIndicator
                         size="small"
                         color={theme.colors.primary}
@@ -114,9 +113,7 @@ export const InvitationsList: React.FC<InvitationsListProps> = ({
                         style={styles.removeMemberButton}
                         disabled={cancellingInvitationId !== null}
                       />
-                    )}
-                  </>
-                )}
+                  ))}
               </View>
             </View>
             {index < invitations.length - 1 && <Divider />}

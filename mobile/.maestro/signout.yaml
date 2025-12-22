@@ -1,0 +1,7 @@
+appId: com.vaibhavarora.sharemoney
+---
+- tapOn: Profile
+- tapOn:
+    id: logout-button
+- waitForAnimationToEnd
+- assertVisible: Sign In

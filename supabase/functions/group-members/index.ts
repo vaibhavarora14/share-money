@@ -115,13 +115,13 @@ Deno.serve(async (req: Request) => {
 
       const { data: membership, error: membershipError } = await supabase
         .from('group_members')
-        .select('role')
+        .select('id')
         .eq('group_id', requestData.group_id)
         .eq('user_id', currentUser.id)
         .single();
 
-      if (membershipError || !membership || membership.role !== 'owner') {
-        return createErrorResponse(403, 'Only group owners can add members', 'PERMISSION_DENIED');
+      if (membershipError || !membership) {
+        return createErrorResponse(403, 'You must be a member of the group to add members', 'PERMISSION_DENIED');
       }
 
       const normalizedEmail = requestData.email.toLowerCase().trim();
@@ -225,14 +225,64 @@ Deno.serve(async (req: Request) => {
         }
       }
 
+      // Check if user is already an active member
       const { data: existingMember } = await supabase
         .from('group_members')
-        .select('id')
+        .select('id, status')
         .eq('group_id', requestData.group_id)
         .eq('user_id', targetUser.id)
         .single();
 
       if (existingMember) {
+        // Check if member has status column and if they're active
+        if ('status' in existingMember && existingMember.status === 'active') {
+          return createErrorResponse(400, 'User is already a member of this group', 'VALIDATION_ERROR');
+        }
+        
+        // If member exists but is inactive (status='left'), re-activate them
+        if ('status' in existingMember && existingMember.status === 'left') {
+          const { data: reactivatedMember, error: reactivateError } = await supabase
+            .from('group_members')
+            .update({
+              status: 'active',
+              left_at: null,
+              role: requestData.role || 'member',
+            })
+            .eq('group_id', requestData.group_id)
+            .eq('user_id', targetUser.id)
+            .select('id, group_id, user_id, role, joined_at')
+            .maybeSingle();
+
+          if (reactivateError) {
+            return handleError(reactivateError, 'reactivating member');
+          }
+
+          if (!reactivatedMember) {
+            // If update didn't return a row, fetch it separately
+            const { data: fetchedMember, error: fetchError } = await supabase
+              .from('group_members')
+              .select('id, group_id, user_id, role, joined_at')
+              .eq('group_id', requestData.group_id)
+              .eq('user_id', targetUser.id)
+              .single();
+
+            if (fetchError || !fetchedMember) {
+              return handleError(fetchError || new Error('Failed to fetch reactivated member'), 'reactivating member');
+            }
+
+            return createSuccessResponse({
+              ...fetchedMember,
+              email: normalizedEmail,
+            }, 200);
+          }
+
+          return createSuccessResponse({
+            ...reactivatedMember,
+            email: normalizedEmail,
+          }, 200);
+        }
+        
+        // If no status column exists, they're already a member
         return createErrorResponse(400, 'User is already a member of this group', 'VALIDATION_ERROR');
       }
 
@@ -313,10 +363,6 @@ Deno.serve(async (req: Request) => {
 
       if (rpcError) {
         const errorMessage = rpcError.message || 'Failed to remove member';
-        
-        if (errorMessage.includes('last owner')) {
-          return createErrorResponse(400, 'Cannot remove the last owner of the group', 'VALIDATION_ERROR');
-        }
         
         if (errorMessage.includes('not authenticated') || errorMessage.includes('Unauthorized')) {
           return createErrorResponse(401, 'Unauthorized', 'AUTH_ERROR');

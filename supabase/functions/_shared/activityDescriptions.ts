@@ -14,8 +14,10 @@ interface TransactionSnapshot {
   currency: string;
   user_id: string;
   group_id: string;
-  paid_by: string;
+  paid_by?: string;
+  paid_by_participant_id?: string;
   split_among?: string[];
+  split_among_participant_ids?: string[];
   created_at: string;
   updated_at?: string;
 }
@@ -23,8 +25,10 @@ interface TransactionSnapshot {
 interface SettlementSnapshot {
   id: string;
   group_id: string;
-  from_user_id: string;
-  to_user_id: string;
+  from_user_id?: string;
+  to_user_id?: string;
+  from_participant_id?: string;
+  to_participant_id?: string;
   amount: number;
   currency: string;
   notes?: string;
@@ -105,7 +109,9 @@ export function formatFieldName(field: string): string {
     'category': 'Category',
     'type': 'Type',
     'paid_by': 'Paid by',
+    'paid_by_participant_id': 'Paid by',
     'split_among': 'Splits',
+    'split_among_participant_ids': 'Splits',
     'currency': 'Currency',
     'notes': 'Notes',
     'from_user_id': 'From',
@@ -114,7 +120,23 @@ export function formatFieldName(field: string): string {
   return fieldMap[field] || field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' ');
 }
 
-export function formatValue(field: string, value: unknown, currencyCode?: string): string {
+interface Participant {
+  id: string;
+  group_id: string;
+  user_id?: string | null;
+  email?: string | null;
+  type: 'member' | 'invited' | 'former';
+  role?: 'owner' | 'member';
+  full_name?: string | null;
+  avatar_url?: string | null;
+}
+
+export function formatValue(
+  field: string, 
+  value: unknown, 
+  currencyCode?: string,
+  participantMap?: Map<string, Participant>
+): string {
   if (value === null || value === undefined) {
     return 'none';
   }
@@ -142,12 +164,37 @@ export function formatValue(field: string, value: unknown, currencyCode?: string
     }
   }
   
-  if (field === 'split_among' && Array.isArray(value)) {
-    return `${value.length} person${value.length !== 1 ? 's' : ''}`;
+  // Handle participant_id fields
+  if ((field === 'paid_by_participant_id' || field === 'paid_by') && typeof value === 'string') {
+    if (participantMap && participantMap.has(value)) {
+      const participant = participantMap.get(value)!;
+      // Try to get a meaningful display name
+      let displayName: string;
+      if (participant.full_name) {
+        displayName = participant.full_name;
+      } else if (participant.email) {
+        // Use email username part (before @) if no full_name
+        displayName = participant.email.split('@')[0] || participant.email;
+      } else if (participant.user_id) {
+        // Fallback: use user_id if we have it
+        displayName = participant.user_id.substring(0, 8) + '...';
+      } else {
+        displayName = 'Unknown';
+      }
+      const typeLabel = participant.type === 'former' ? ' (Former)' : 
+                       participant.type === 'invited' ? ' (Invited)' : '';
+      return `${displayName}${typeLabel}`;
+    }
+    // Fallback for legacy user_id
+    if (field === 'paid_by') {
+      return 'User';
+    }
+    // For participant_id without map, show shortened ID
+    return value.substring(0, 8) + '...';
   }
   
-  if (field === 'paid_by' && typeof value === 'string') {
-    return 'User';
+  if ((field === 'split_among_participant_ids' || field === 'split_among') && Array.isArray(value)) {
+    return `${value.length} person${value.length !== 1 ? 's' : ''}`;
   }
   
   if (Array.isArray(value)) {
@@ -165,7 +212,8 @@ export function formatValue(field: string, value: unknown, currencyCode?: string
 function formatSplitChanges(
   oldSplits: string[],
   newSplits: string[],
-  emailMap?: Map<string, string>
+  emailMap?: Map<string, string>,
+  participantMap?: Map<string, Participant>
 ): string {
   const oldSet = new Set(oldSplits);
   const newSet = new Set(newSplits);
@@ -179,16 +227,39 @@ function formatSplitChanges(
   
   const changes: string[] = [];
   
-  if (addedUsers.length > 0) {
-    const userNames = addedUsers.map((userId: string) => {
-      if (emailMap) {
-        const email = emailMap.get(userId);
-        if (email) {
-          return email.split('@')[0];
-        }
+  const getName = (id: string): string => {
+    // Try participant map first
+    if (participantMap && participantMap.has(id)) {
+      const participant = participantMap.get(id)!;
+      // Try to get a meaningful display name
+      let displayName: string;
+      if (participant.full_name) {
+        displayName = participant.full_name;
+      } else if (participant.email) {
+        // Use email username part (before @) if no full_name
+        displayName = participant.email.split('@')[0] || participant.email;
+      } else if (participant.user_id) {
+        // Fallback: use user_id if we have it
+        displayName = participant.user_id.substring(0, 8) + '...';
+      } else {
+        displayName = 'Unknown';
       }
-      return userId.substring(0, 8) + '...';
-    });
+      const typeLabel = participant.type === 'former' ? ' (Former)' : 
+                       participant.type === 'invited' ? ' (Invited)' : '';
+      return `${displayName}${typeLabel}`;
+    }
+    // Fallback to email map (for legacy user_ids)
+    if (emailMap) {
+      const email = emailMap.get(id);
+      if (email) {
+        return email.split('@')[0];
+      }
+    }
+    return id.substring(0, 8) + '...';
+  };
+  
+  if (addedUsers.length > 0) {
+    const userNames = addedUsers.map(getName);
     
     if (addedUsers.length === 1) {
       changes.push(`added ${userNames[0]} to splits`);
@@ -198,15 +269,7 @@ function formatSplitChanges(
   }
   
   if (removedUsers.length > 0) {
-    const userNames = removedUsers.map((userId: string) => {
-      if (emailMap) {
-        const email = emailMap.get(userId);
-        if (email) {
-          return email.split('@')[0];
-        }
-      }
-      return userId.substring(0, 8) + '...';
-    });
+    const userNames = removedUsers.map(getName);
     
     if (removedUsers.length === 1) {
       changes.push(`removed ${userNames[0]} from splits`);
@@ -218,7 +281,22 @@ function formatSplitChanges(
   return changes.join(', ');
 }
 
-function getUserName(userId: string, emailMap?: Map<string, string>): string {
+function getUserName(
+  userId: string, 
+  emailMap?: Map<string, string>,
+  participantMap?: Map<string, Participant>
+): string {
+  // Try participant map first (by user_id)
+  if (participantMap) {
+    for (const p of participantMap.values()) {
+      if (p.user_id === userId) {
+        if (p.full_name) return p.full_name;
+        if (p.email) return p.email.split('@')[0];
+        break;
+      }
+    }
+  }
+  
   if (emailMap) {
     const email = emailMap.get(userId);
     if (email) {
@@ -226,6 +304,19 @@ function getUserName(userId: string, emailMap?: Map<string, string>): string {
     }
   }
   return 'User';
+}
+
+function getParticipantDisplayName(
+  participantId: string,
+  participantMap?: Map<string, Participant>
+): string {
+  if (participantMap && participantMap.has(participantId)) {
+    const p = participantMap.get(participantId)!;
+    if (p.full_name) return p.full_name;
+    if (p.email) return p.email.split('@')[0];
+    if (p.user_id) return p.user_id.substring(0, 8) + '...';
+  }
+  return participantId.substring(0, 8) + '...';
 }
 
 function generateTransactionCreatedDescription(transaction: TransactionSnapshot): string {
@@ -241,7 +332,8 @@ function generateTransactionCreatedDescription(transaction: TransactionSnapshot)
 function generateTransactionUpdatedDescription(
   transaction: TransactionSnapshot | undefined,
   diff: ChangesDiff,
-  emailMap?: Map<string, string>
+  emailMap?: Map<string, string>,
+  participantMap?: Map<string, Participant>
 ): string {
   const userVisibleFields = Object.keys(diff).filter(field => 
     !['updated_at', 'created_at', 'id'].includes(field)
@@ -264,13 +356,13 @@ function generateTransactionUpdatedDescription(
     const { old: oldVal, new: newVal } = diff[field];
     const fieldDisplayName = formatFieldName(field);
     
-    if (field === 'split_among') {
+    if (field === 'split_among' || field === 'split_among_participant_ids') {
       const oldSplits = Array.isArray(oldVal) ? oldVal : [];
       const newSplits = Array.isArray(newVal) ? newVal : [];
-      fieldChanges.push(formatSplitChanges(oldSplits, newSplits, emailMap));
+      fieldChanges.push(formatSplitChanges(oldSplits, newSplits, emailMap, participantMap));
     } else {
       const currencyCode = field === 'amount' ? currency : undefined;
-      fieldChanges.push(`${fieldDisplayName}: ${formatValue(field, oldVal, currencyCode)} → ${formatValue(field, newVal, currencyCode)}`);
+      fieldChanges.push(`${fieldDisplayName}: ${formatValue(field, oldVal, currencyCode, participantMap)} → ${formatValue(field, newVal, currencyCode, participantMap)}`);
     }
   });
 
@@ -293,16 +385,17 @@ function generateTransactionDeletedDescription(transaction: TransactionSnapshot)
 
 function generateSettlementCreatedDescription(
   settlement: SettlementSnapshot,
-  emailMap?: Map<string, string>
+  emailMap?: Map<string, string>,
+  participantMap?: Map<string, Participant>
 ): string {
   const amount = settlement.amount || 0;
   const currency = settlement.currency || 'USD';
-  const fromUserId = settlement.from_user_id;
-  const toUserId = settlement.to_user_id;
+  const fromId = settlement.from_participant_id || settlement.from_user_id || '';
+  const toId = settlement.to_participant_id || settlement.to_user_id || '';
   const notes = settlement.notes;
   
-  const fromName = getUserName(fromUserId, emailMap);
-  const toName = getUserName(toUserId, emailMap);
+  const fromName = getParticipantDisplayName(fromId, participantMap);
+  const toName = getParticipantDisplayName(toId, participantMap);
   
   let description = `${fromName} paid ${toName} ${formatCurrency(amount, currency)}`;
   if (notes) {
@@ -315,7 +408,8 @@ function generateSettlementCreatedDescription(
 function generateSettlementUpdatedDescription(
   settlement: SettlementSnapshot | undefined,
   diff: ChangesDiff,
-  emailMap?: Map<string, string>
+  emailMap?: Map<string, string>,
+  participantMap?: Map<string, Participant>
 ): string {
   const userVisibleFields = Object.keys(diff).filter(field => 
     !['created_at', 'id'].includes(field)
@@ -327,11 +421,11 @@ function generateSettlementUpdatedDescription(
   
   const amount = settlement?.amount || 0;
   const currency = resolveCurrencyCode(settlement, diff);
-  const fromUserId = settlement?.from_user_id;
-  const toUserId = settlement?.to_user_id;
+  const fromId = (settlement as any)?.from_participant_id || (settlement as any)?.from_user_id || '';
+  const toId = (settlement as any)?.to_participant_id || (settlement as any)?.to_user_id || '';
   
-  const fromName = getUserName(fromUserId || '', emailMap);
-  const toName = getUserName(toUserId || '', emailMap);
+  const fromName = getParticipantDisplayName(fromId, participantMap);
+  const toName = getParticipantDisplayName(toId, participantMap);
   
   const fieldChanges: string[] = [];
   userVisibleFields.forEach(field => {
@@ -345,7 +439,7 @@ function generateSettlementUpdatedDescription(
       const newNotes = newVal || 'none';
       fieldChanges.push(`Notes: ${oldNotes} → ${newNotes}`);
     } else {
-      fieldChanges.push(`${fieldDisplayName}: ${formatValue(field, oldVal)} → ${formatValue(field, newVal)}`);
+      fieldChanges.push(`${fieldDisplayName}: ${formatValue(field, oldVal, undefined, participantMap)} → ${formatValue(field, newVal, undefined, participantMap)}`);
     }
   });
   
@@ -354,15 +448,16 @@ function generateSettlementUpdatedDescription(
 
 function generateSettlementDeletedDescription(
   settlement: SettlementSnapshot,
-  emailMap?: Map<string, string>
+  emailMap?: Map<string, string>,
+  participantMap?: Map<string, Participant>
 ): string {
   const amount = settlement.amount || 0;
   const currency = settlement.currency || 'USD';
-  const fromUserId = settlement.from_user_id;
-  const toUserId = settlement.to_user_id;
+  const fromId = settlement.from_participant_id || settlement.from_user_id || '';
+  const toId = settlement.to_participant_id || settlement.to_user_id || '';
   
-  const fromName = getUserName(fromUserId, emailMap);
-  const toName = getUserName(toUserId, emailMap);
+  const fromName = getParticipantDisplayName(fromId, participantMap);
+  const toName = getParticipantDisplayName(toId, participantMap);
   
   return `Deleted settlement: ${fromName} paid ${toName} ${formatCurrency(amount, currency)}`;
 }
@@ -382,7 +477,10 @@ function extractTransactionFromSnapshot(
       return (snapshot as any).settlement;
     }
     // Check if snapshot itself is a settlement (flat structure)
-    if ('from_user_id' in snapshot && 'to_user_id' in snapshot) {
+    if (
+      ('from_user_id' in snapshot && 'to_user_id' in snapshot) ||
+      ('from_participant_id' in snapshot && 'to_participant_id' in snapshot)
+    ) {
       return snapshot as unknown as SettlementSnapshot;
     }
   } else {
@@ -400,7 +498,8 @@ function extractTransactionFromSnapshot(
 
 export function generateActivityDescription(
   history: TransactionHistory,
-  emailMap?: Map<string, string>
+  emailMap?: Map<string, string>,
+  participantMap?: Map<string, Participant>
 ): string {
   const action = history.action;
   const changes = history.changes;
@@ -412,7 +511,7 @@ export function generateActivityDescription(
       if (activityType === 'settlement') {
         const settlement = extractTransactionFromSnapshot(snapshot, changes, 'settlement') as SettlementSnapshot | undefined;
         if (settlement) {
-          return generateSettlementCreatedDescription(settlement, emailMap);
+          return generateSettlementCreatedDescription(settlement, emailMap, participantMap);
         }
         return 'Created settlement';
       } else {
@@ -428,11 +527,11 @@ export function generateActivityDescription(
       if (activityType === 'settlement') {
         const diff = changes?.diff || {};
         const settlement = extractTransactionFromSnapshot(snapshot, changes, 'settlement') as SettlementSnapshot | undefined;
-        return generateSettlementUpdatedDescription(settlement, diff, emailMap);
+        return generateSettlementUpdatedDescription(settlement, diff, emailMap, participantMap);
       } else {
         const diff = changes?.diff || {};
         const transaction = extractTransactionFromSnapshot(snapshot, changes, 'transaction') as TransactionSnapshot | undefined;
-        return generateTransactionUpdatedDescription(transaction, diff, emailMap);
+        return generateTransactionUpdatedDescription(transaction, diff, emailMap, participantMap);
       }
     }
 
@@ -440,7 +539,7 @@ export function generateActivityDescription(
       if (activityType === 'settlement') {
         const settlement = extractTransactionFromSnapshot(snapshot, changes, 'settlement') as SettlementSnapshot | undefined;
         if (settlement) {
-          return generateSettlementDeletedDescription(settlement, emailMap);
+          return generateSettlementDeletedDescription(settlement, emailMap, participantMap);
         }
         return 'Deleted settlement';
       } else {
