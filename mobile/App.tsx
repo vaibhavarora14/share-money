@@ -1,19 +1,19 @@
 import * as Sentry from "@sentry/react-native";
 import { Session } from "@supabase/supabase-js";
 import {
-    QueryClient,
-    QueryClientProvider,
-    useQueryClient,
+  QueryClient,
+  QueryClientProvider,
+  useQueryClient,
 } from "@tanstack/react-query";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { Text as RNText, StyleSheet, useColorScheme, View } from "react-native";
 import {
-    ActivityIndicator,
-    Button,
-    Provider as PaperProvider,
-    useTheme,
+  ActivityIndicator,
+  Button,
+  Provider as PaperProvider,
+  useTheme,
 } from "react-native-paper";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BottomNavBar } from "./components/BottomNavBar";
@@ -25,17 +25,17 @@ import { queryKeys } from "./hooks/queryKeys";
 import { fetchActivity } from "./hooks/useActivity";
 import { fetchBalances } from "./hooks/useBalances";
 import {
-    useAddMember,
-    useCreateGroup,
-    useRemoveMember,
+  useAddMember,
+  useCreateGroup,
+  useRemoveMember,
 } from "./hooks/useGroupMutations";
 import { fetchGroupDetails, useGroupDetails } from "./hooks/useGroups";
 import { useProfile } from "./hooks/useProfile";
 import {
-    fetchTransactions,
-    useCreateTransaction,
-    useDeleteTransaction,
-    useUpdateTransaction,
+  fetchTransactions,
+  useCreateTransaction,
+  useDeleteTransaction,
+  useUpdateTransaction,
 } from "./hooks/useTransactions";
 import { AddMemberScreen } from "./screens/AddMemberScreen";
 import { AuthScreen } from "./screens/AuthScreen";
@@ -593,8 +593,10 @@ export default function App() {
           <PaperProvider theme={theme}>
             <UpgradeProvider>
               <AuthProvider>
-                <AppContent />
-                <ForceUpdateOverlay />
+                <View style={styles.appWrapper}>
+                  <AppContent />
+                  <ForceUpdateOverlay />
+                </View>
               </AuthProvider>
             </UpgradeProvider>
           </PaperProvider>
@@ -621,6 +623,25 @@ function ForceUpdateOverlay() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  appWrapper: {
+    flex: 1,
+    width: "100%",
+    maxWidth: 600,
+    alignSelf: "center",
+    borderWidth: 1,
+    borderColor: "rgba(0, 0, 0, 0.05)",
+    // Shadow for iOS and Web
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    // Elevation for Android
+    elevation: 5,
+    backgroundColor: "transparent", // Ensure shadow is visible
   },
   centerContainer: {
     flex: 1,

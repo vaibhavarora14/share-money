@@ -1,8 +1,8 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { verifyAuth } from '../_shared/auth.ts';
+import { SUPABASE_SERVICE_ROLE_KEY, SUPABASE_URL } from '../_shared/env.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from '../_shared/env.ts';
 import { fetchUserEmails } from '../_shared/user-email.ts';
 import { validateBodySize } from '../_shared/validation.ts';
 
@@ -132,7 +132,7 @@ function validateProfileUpdates(updates: ProfileUpdates): ValidationResult {
 
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') {
-    return createEmptyResponse(200);
+    return createEmptyResponse(200, req);
   }
 
   try {
@@ -140,14 +140,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const bodyValidation = validateBodySize(bodyText);
 
     if (!bodyValidation.valid) {
-      return createErrorResponse(413, bodyValidation.error || 'Request body too large', 'VALIDATION_ERROR');
+      return createErrorResponse(413, bodyValidation.error || 'Request body too large', 'VALIDATION_ERROR', undefined, req);
     }
 
     let authResult;
     try {
       authResult = await verifyAuth(req);
     } catch (authError) {
-      return handleError(authError, 'authentication');
+      return handleError(authError, 'authentication', req);
     }
 
     const { user, supabase } = authResult;
@@ -163,12 +163,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
           const userIds = JSON.parse(userIdsParam) as string[];
           
           if (!Array.isArray(userIds) || userIds.length === 0) {
-            return createErrorResponse(400, 'user_ids must be a non-empty array', 'VALIDATION_ERROR');
+            return createErrorResponse(400, 'user_ids must be a non-empty array', 'VALIDATION_ERROR', undefined, req);
           }
           
           // Limit batch size for performance
           if (userIds.length > 100) {
-            return createErrorResponse(400, 'Maximum 100 user_ids allowed per request', 'VALIDATION_ERROR');
+            return createErrorResponse(400, 'Maximum 100 user_ids allowed per request', 'VALIDATION_ERROR', undefined, req);
           }
           
           // Use service role client to bypass RLS for batch profile fetching
@@ -177,7 +177,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
             return createErrorResponse(
               500,
               'Server configuration error: Service role key not configured. This is required for batch profile fetching.',
-              'CONFIGURATION_ERROR'
+              'CONFIGURATION_ERROR',
+              undefined,
+              req
             );
           }
           
@@ -195,7 +197,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
             .in('id', userIds);
           
           if (error) {
-            return handleError(error, 'fetching profiles');
+            return handleError(error, 'fetching profiles', req);
           }
           
           // Enrich profiles with email addresses
@@ -231,9 +233,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
             }
           });
           
-          return createSuccessResponse(enrichedProfiles, 200, 0);
+          return createSuccessResponse(enrichedProfiles, 200, 0, req);
         } catch (parseError) {
-          return createErrorResponse(400, 'Invalid user_ids format. Expected JSON array.', 'VALIDATION_ERROR');
+          return createErrorResponse(400, 'Invalid user_ids format. Expected JSON array.', 'VALIDATION_ERROR', undefined, req);
         }
       }
       
@@ -256,39 +258,39 @@ Deno.serve(async (req: Request): Promise<Response> => {
             .single();
 
           if (insertError) {
-            return handleError(insertError, 'creating profile');
+            return handleError(insertError, 'creating profile', req);
           }
 
-          return createSuccessResponse(newProfile, 200, 0);
+          return createSuccessResponse(newProfile, 200, 0, req);
         }
 
-        return handleError(error, 'fetching profile');
+        return handleError(error, 'fetching profile', req);
       }
 
-      return createSuccessResponse(profile, 200, 0);
+      return createSuccessResponse(profile, 200, 0, req);
     }
 
     if (method === 'PUT') {
       if (!bodyText) {
-        return createErrorResponse(400, 'Request body is required', 'VALIDATION_ERROR');
+        return createErrorResponse(400, 'Request body is required', 'VALIDATION_ERROR', undefined, req);
       }
 
       let updates: ProfileUpdates;
       try {
         updates = JSON.parse(bodyText) as ProfileUpdates;
       } catch {
-        return createErrorResponse(400, 'Invalid JSON in request body', 'VALIDATION_ERROR');
+        return createErrorResponse(400, 'Invalid JSON in request body', 'VALIDATION_ERROR', undefined, req);
       }
 
       const validation = validateProfileUpdates(updates);
       if (!validation.valid) {
-        return createErrorResponse(400, validation.error || 'Invalid profile data', 'VALIDATION_ERROR');
+        return createErrorResponse(400, validation.error || 'Invalid profile data', 'VALIDATION_ERROR', undefined, req);
       }
 
       if (updates.profile_completed === true) {
         const fullName = trimOrUndefined(updates.full_name);
         if (!fullName) {
-          return createErrorResponse(400, 'Full name is required to complete profile', 'VALIDATION_ERROR');
+          return createErrorResponse(400, 'Full name is required to complete profile', 'VALIDATION_ERROR', undefined, req);
         }
       }
 
@@ -343,20 +345,20 @@ Deno.serve(async (req: Request): Promise<Response> => {
             .single();
 
           if (insertError) {
-            return handleError(insertError, 'creating profile');
+            return handleError(insertError, 'creating profile', req);
           }
 
-          return createSuccessResponse(newProfile, 201, 0);
+          return createSuccessResponse(newProfile, 201, 0, req);
         }
 
-        return handleError(error, 'updating profile');
+        return handleError(error, 'updating profile', req);
       }
 
-      return createSuccessResponse(updatedProfile, 200, 0);
+      return createSuccessResponse(updatedProfile, 200, 0, req);
     }
 
-    return createErrorResponse(405, 'Method not allowed', 'METHOD_NOT_ALLOWED');
+    return createErrorResponse(405, 'Method not allowed', 'METHOD_NOT_ALLOWED', undefined, req);
   } catch (error: unknown) {
-    return handleError(error, 'profile handler');
+    return handleError(error, 'profile handler', req);
   }
 });

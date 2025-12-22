@@ -44,7 +44,7 @@ interface GroupWithMembers extends Group {
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return createEmptyResponse(200);
+    return createEmptyResponse(200, req);
   }
 
   // Check app version - return 426 if outdated
@@ -58,7 +58,7 @@ Deno.serve(async (req: Request) => {
     const body = await req.text().catch(() => null);
     const bodySizeValidation = validateBodySize(body);
     if (!bodySizeValidation.valid) {
-      return createErrorResponse(413, bodySizeValidation.error || 'Request body too large', 'VALIDATION_ERROR');
+      return createErrorResponse(413, bodySizeValidation.error || 'Request body too large', 'VALIDATION_ERROR', undefined, req);
     }
 
     // Verify authentication
@@ -66,7 +66,7 @@ Deno.serve(async (req: Request) => {
     try {
       authResult = await verifyAuth(req);
     } catch (authError) {
-      return handleError(authError, 'authentication');
+      return handleError(authError, 'authentication', req);
     }
 
     const { user, supabase } = authResult;
@@ -95,7 +95,7 @@ Deno.serve(async (req: Request) => {
         .order('created_at', { ascending: false });
 
       if (error) {
-        return handleError(error, 'fetching groups');
+        return handleError(error, 'fetching groups', req);
       }
 
       // Flatten the response and extract status
@@ -113,14 +113,14 @@ Deno.serve(async (req: Request) => {
         return 0; // Keep DB order (created_at DESC) for same statuses
       });
 
-      return createSuccessResponse(flattenedGroups, 200, 0); // No caching - real-time data
+      return createSuccessResponse(flattenedGroups, 200, 0, req); // No caching - real-time data
     }
 
     // Handle GET /groups/:id - Get group details with members
     if (httpMethod === 'GET' && groupId) {
       // Validate group_id format
       if (!isValidUUID(groupId)) {
-        return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR');
+        return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR', undefined, req);
       }
 
       // Get group details
@@ -142,7 +142,7 @@ Deno.serve(async (req: Request) => {
         .order('joined_at', { ascending: true });
 
       if (membersError) {
-        return handleError(membersError, 'fetching group members');
+        return handleError(membersError, 'fetching group members', req);
       }
 
       // Enrich members with email addresses and profile data using shared utilities
@@ -185,18 +185,18 @@ Deno.serve(async (req: Request) => {
       try {
         groupData = body ? JSON.parse(body) : {};
       } catch {
-        return createErrorResponse(400, 'Invalid JSON in request body', 'VALIDATION_ERROR');
+        return createErrorResponse(400, 'Invalid JSON in request body', 'VALIDATION_ERROR', undefined, req);
       }
 
       // Validate required fields
       if (!groupData.name || !groupData.name.trim()) {
-        return createErrorResponse(400, 'Missing required field: name', 'VALIDATION_ERROR');
+        return createErrorResponse(400, 'Missing required field: name', 'VALIDATION_ERROR', undefined, req);
       }
 
       // Validate group data
       const validation = validateGroupData(groupData);
       if (!validation.valid) {
-        return createErrorResponse(400, validation.error || 'Invalid group data', 'VALIDATION_ERROR');
+        return createErrorResponse(400, validation.error || 'Invalid group data', 'VALIDATION_ERROR', undefined, req);
       }
 
       // Create group using SECURITY DEFINER function to bypass RLS issues
@@ -207,7 +207,7 @@ Deno.serve(async (req: Request) => {
       });
 
       if (error) {
-        return handleError(error, 'creating group');
+        return handleError(error, 'creating group', req);
       }
 
       // Fetch the created group to return full details
@@ -225,8 +225,8 @@ Deno.serve(async (req: Request) => {
     }
 
     // Method not allowed
-    return createErrorResponse(405, 'Method not allowed', 'METHOD_NOT_ALLOWED');
+    return createErrorResponse(405, 'Method not allowed', 'METHOD_NOT_ALLOWED', undefined, req);
   } catch (error: unknown) {
-    return handleError(error, 'groups handler');
+    return handleError(error, 'groups handler', req);
   }
 });
