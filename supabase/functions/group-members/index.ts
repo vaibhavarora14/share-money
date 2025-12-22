@@ -1,8 +1,8 @@
 import { verifyAuth } from '../_shared/auth.ts';
+import { SUPABASE_SERVICE_ROLE_KEY, SUPABASE_URL } from '../_shared/env.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
-import { createSuccessResponse } from '../_shared/response.ts';
-import { validateBodySize, isValidUUID, isValidEmail } from '../_shared/validation.ts';
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from '../_shared/env.ts';
+import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
+import { isValidEmail, isValidUUID, validateBodySize } from '../_shared/validation.ts';
 
 /**
  * Group Members Edge Function
@@ -77,21 +77,21 @@ async function createInvitation(
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 200 });
+    return createEmptyResponse(200, req);
   }
 
   try {
     const body = await req.text().catch(() => null);
     const bodySizeValidation = validateBodySize(body);
     if (!bodySizeValidation.valid) {
-      return createErrorResponse(413, bodySizeValidation.error || 'Request body too large', 'VALIDATION_ERROR');
+      return createErrorResponse(413, bodySizeValidation.error || 'Request body too large', 'VALIDATION_ERROR', undefined, req);
     }
 
     let authResult;
     try {
       authResult = await verifyAuth(req);
     } catch (authError) {
-      return handleError(authError, 'authentication');
+      return handleError(authError, 'authentication', req);
     }
 
     const { user: currentUser, supabase } = authResult;
@@ -102,15 +102,15 @@ Deno.serve(async (req: Request) => {
       try {
         requestData = body ? JSON.parse(body) : {};
       } catch {
-        return createErrorResponse(400, 'Invalid JSON in request body', 'VALIDATION_ERROR');
+        return createErrorResponse(400, 'Invalid JSON in request body', 'VALIDATION_ERROR', undefined, req);
       }
 
       if (!requestData.group_id || !requestData.email) {
-        return createErrorResponse(400, 'Missing required fields: group_id, email', 'VALIDATION_ERROR');
+        return createErrorResponse(400, 'Missing required fields: group_id, email', 'VALIDATION_ERROR', undefined, req);
       }
 
       if (!isValidUUID(requestData.group_id)) {
-        return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR');
+        return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR', undefined, req);
       }
 
       const { data: membership, error: membershipError } = await supabase
@@ -121,20 +121,22 @@ Deno.serve(async (req: Request) => {
         .single();
 
       if (membershipError || !membership) {
-        return createErrorResponse(403, 'You must be a member of the group to add members', 'PERMISSION_DENIED');
+        return createErrorResponse(403, 'You must be a member of the group to add members', 'PERMISSION_DENIED', undefined, req);
       }
 
       const normalizedEmail = requestData.email.toLowerCase().trim();
       
       if (!isValidEmail(normalizedEmail)) {
-        return createErrorResponse(400, 'Invalid email address format', 'VALIDATION_ERROR');
+        return createErrorResponse(400, 'Invalid email address format', 'VALIDATION_ERROR', undefined, req);
       }
 
       if (!SUPABASE_SERVICE_ROLE_KEY) {
         return createErrorResponse(
           500,
           'Server configuration error: Service role key not configured. This is required for user lookup by email. Please configure SUPABASE_SERVICE_ROLE_KEY in your environment variables.',
-          'CONFIGURATION_ERROR'
+          'CONFIGURATION_ERROR',
+          undefined,
+          req
         );
       }
       
@@ -165,7 +167,7 @@ Deno.serve(async (req: Request) => {
                 invitation: true,
                 message: 'An invitation has already been sent to this email address. The user will be added to the group when they sign up.',
                 email: normalizedEmail,
-              }, 200);
+              }, 200, 0, req);
             }
 
             return createSuccessResponse({
@@ -173,10 +175,10 @@ Deno.serve(async (req: Request) => {
               message: 'Invitation sent successfully. The user will be added to the group when they sign up.',
               email: normalizedEmail,
               invitation_id: invitation.id,
-            }, 201);
+            }, 201, 0, req);
           } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : 'Failed to create invitation';
-            return handleError(new Error(errorMessage), 'creating invitation');
+            return handleError(new Error(errorMessage), 'creating invitation', req);
           }
         }
         
@@ -184,11 +186,13 @@ Deno.serve(async (req: Request) => {
           return createErrorResponse(
             500,
             'Server configuration error: Invalid service role key. Please verify SUPABASE_SERVICE_ROLE_KEY is correctly configured in your environment variables.',
-            'CONFIGURATION_ERROR'
+            'CONFIGURATION_ERROR',
+            undefined,
+            req
           );
         }
         
-        return handleError(new Error(`Failed to search for user: ${errorText || 'Unknown error'}`), 'searching for user');
+        return handleError(new Error(`Failed to search for user: ${errorText || 'Unknown error'}`), 'searching for user', req);
       }
 
       const usersData = await findUserResponse.json() as UsersResponse;
@@ -210,7 +214,7 @@ Deno.serve(async (req: Request) => {
               invitation: true,
               message: 'An invitation has already been sent to this email address. The user will be added to the group when they sign up.',
               email: normalizedEmail,
-            }, 200);
+            }, 200, 0, req);
           }
 
           return createSuccessResponse({
@@ -218,10 +222,10 @@ Deno.serve(async (req: Request) => {
             message: 'Invitation sent successfully. The user will be added to the group when they sign up.',
             email: normalizedEmail,
             invitation_id: invitation.id,
-          }, 201);
+          }, 201, 0, req);
         } catch (error: unknown) {
           const errorMessage = error instanceof Error ? error.message : 'Failed to create invitation';
-          return handleError(new Error(errorMessage), 'creating invitation');
+          return handleError(new Error(errorMessage), 'creating invitation', req);
         }
       }
 
@@ -236,7 +240,7 @@ Deno.serve(async (req: Request) => {
       if (existingMember) {
         // Check if member has status column and if they're active
         if ('status' in existingMember && existingMember.status === 'active') {
-          return createErrorResponse(400, 'User is already a member of this group', 'VALIDATION_ERROR');
+          return createErrorResponse(400, 'User is already a member of this group', 'VALIDATION_ERROR', undefined, req);
         }
         
         // If member exists but is inactive (status='left'), re-activate them
@@ -254,7 +258,7 @@ Deno.serve(async (req: Request) => {
             .maybeSingle();
 
           if (reactivateError) {
-            return handleError(reactivateError, 'reactivating member');
+            return handleError(reactivateError, 'reactivating member', req);
           }
 
           if (!reactivatedMember) {
@@ -267,23 +271,23 @@ Deno.serve(async (req: Request) => {
               .single();
 
             if (fetchError || !fetchedMember) {
-              return handleError(fetchError || new Error('Failed to fetch reactivated member'), 'reactivating member');
+              return handleError(fetchError || new Error('Failed to fetch reactivated member'), 'reactivating member', req);
             }
 
             return createSuccessResponse({
               ...fetchedMember,
               email: normalizedEmail,
-            }, 200);
+            }, 200, 0, req);
           }
 
           return createSuccessResponse({
             ...reactivatedMember,
             email: normalizedEmail,
-          }, 200);
+          }, 200, 0, req);
         }
         
         // If no status column exists, they're already a member
-        return createErrorResponse(400, 'User is already a member of this group', 'VALIDATION_ERROR');
+        return createErrorResponse(400, 'User is already a member of this group', 'VALIDATION_ERROR', undefined, req);
       }
 
       const { data: pendingInvitation } = await supabase
@@ -312,7 +316,7 @@ Deno.serve(async (req: Request) => {
             return createSuccessResponse({
               ...member,
               email: normalizedEmail,
-            }, 201);
+            }, 201, 0, req);
           }
         }
       }
@@ -328,13 +332,13 @@ Deno.serve(async (req: Request) => {
         .single();
 
       if (addError) {
-        return handleError(addError, 'adding member');
+        return handleError(addError, 'adding member', req);
       }
 
       return createSuccessResponse({
         ...member,
         email: normalizedEmail,
-      }, 201);
+      }, 201, 0, req);
     }
 
     if (httpMethod === 'DELETE') {
@@ -345,15 +349,15 @@ Deno.serve(async (req: Request) => {
       const userId = providedUserId || currentUser.id;
 
       if (!groupId) {
-        return createErrorResponse(400, 'Missing group_id in query parameters', 'VALIDATION_ERROR');
+        return createErrorResponse(400, 'Missing group_id in query parameters', 'VALIDATION_ERROR', undefined, req);
       }
 
       if (!isValidUUID(groupId)) {
-        return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR');
+        return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR', undefined, req);
       }
 
       if (providedUserId && !isValidUUID(providedUserId)) {
-        return createErrorResponse(400, 'Invalid user_id format. Expected UUID.', 'VALIDATION_ERROR');
+        return createErrorResponse(400, 'Invalid user_id format. Expected UUID.', 'VALIDATION_ERROR', undefined, req);
       }
 
       const { data, error: rpcError } = await supabase.rpc('remove_group_member', {
@@ -365,25 +369,25 @@ Deno.serve(async (req: Request) => {
         const errorMessage = rpcError.message || 'Failed to remove member';
         
         if (errorMessage.includes('not authenticated') || errorMessage.includes('Unauthorized')) {
-          return createErrorResponse(401, 'Unauthorized', 'AUTH_ERROR');
+          return createErrorResponse(401, 'Unauthorized', 'AUTH_ERROR', undefined, req);
         }
         
         if (errorMessage.includes('not a member')) {
-          return createErrorResponse(404, 'User is not a member of this group', 'NOT_FOUND');
+          return createErrorResponse(404, 'User is not a member of this group', 'NOT_FOUND', undefined, req);
         }
         
         if (errorMessage.includes('Only group owners')) {
-          return createErrorResponse(403, 'You can only remove yourself or be removed by group owner', 'PERMISSION_DENIED');
+          return createErrorResponse(403, 'You can only remove yourself or be removed by group owner', 'PERMISSION_DENIED', undefined, req);
         }
 
-        return handleError(rpcError, 'removing member');
+        return handleError(rpcError, 'removing member', req);
       }
 
-      return createSuccessResponse({ success: true, message: 'Member removed successfully' }, 200);
+      return createSuccessResponse({ success: true, message: 'Member removed successfully' }, 200, 0, req);
     }
 
-    return createErrorResponse(405, 'Method not allowed', 'METHOD_NOT_ALLOWED');
+    return createErrorResponse(405, 'Method not allowed', 'METHOD_NOT_ALLOWED', undefined, req);
   } catch (error: unknown) {
-    return handleError(error, 'group-members handler');
+    return handleError(error, 'group-members handler', req);
   }
 });

@@ -6,10 +6,11 @@ import { getCorsHeaders } from './cors.ts';
 export function createSuccessResponse(
   data: unknown,
   statusCode: number = 200,
-  cacheMaxAge: number = 0
+  cacheMaxAge: number = 0,
+  req?: Request
 ): Response {
   const headers: Record<string, string> = {
-    ...getCorsHeaders(),
+    ...getCorsHeaders(req),
     'Content-Type': 'application/json',
   };
 
@@ -31,11 +32,11 @@ export function createSuccessResponse(
 /**
  * Creates an empty response (for DELETE, etc.)
  */
-export function createEmptyResponse(statusCode: number = 204): Response {
+export function createEmptyResponse(statusCode: number = 204, req?: Request): Response {
   return new Response(null, {
     status: statusCode,
     headers: {
-      ...getCorsHeaders(),
+      ...getCorsHeaders(req),
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Pragma': 'no-cache',
       'Expires': '0',

@@ -11,6 +11,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
+import { Platform } from "react-native";
 import { AUTH_TIMEOUTS } from "../constants/auth";
 import { supabase } from "../supabase";
 import { log, logError } from "../utils/logger";
@@ -302,11 +303,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const signInWithGoogle = useCallback(async () => {
     try {
       // For Expo Go, we MUST use the Expo proxy service
-      // Custom URL schemes don't work in Expo Go and may open email app
+      // For Web, we use the window origin
       const isExpoGo = Constants.appOwnership === "expo";
+      const isWeb = Platform.OS === "web";
 
       let redirectTo: string;
-      if (isExpoGo) {
+      if (isWeb) {
+        // For Web, AuthSession.makeRedirectUri() correctly gets the window.location.origin
+        redirectTo = AuthSession.makeRedirectUri();
+      } else if (isExpoGo) {
         // Use Expo's proxy service for Expo Go - this prevents email app from opening
         // useProxy is valid at runtime but not in types, so we use type assertion
         redirectTo = AuthSession.makeRedirectUri({
@@ -322,7 +327,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         provider: "google",
         options: {
           redirectTo,
-          skipBrowserRedirect: false,
+          skipBrowserRedirect: !isWeb,
         },
       });
 
@@ -334,7 +339,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         return { error: new Error("Failed to get OAuth URL") };
       }
 
-      // Open browser for authentication
+      if (isWeb) {
+        // On web, Supabase handles the redirect automatically if skipBrowserRedirect is false
+        return { error: null };
+      }
+
+      // Open browser for authentication (native platforms only)
       const result = await WebBrowser.openAuthSessionAsync(
         data.url,
         redirectTo

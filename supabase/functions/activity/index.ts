@@ -402,19 +402,19 @@ function transformHistoryToActivity(
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
-    return createEmptyResponse(200);
+    return createEmptyResponse(200, req);
   }
 
   try {
     if (req.method !== 'GET') {
-      return createErrorResponse(405, 'Method not allowed', 'METHOD_NOT_ALLOWED');
+      return createErrorResponse(405, 'Method not allowed', 'METHOD_NOT_ALLOWED', undefined, req);
     }
 
     let authResult;
     try {
       authResult = await verifyAuth(req);
     } catch (authError) {
-      return handleError(authError, 'authentication');
+      return handleError(authError, 'authentication', req);
     }
 
     const { user, supabase } = authResult;
@@ -423,11 +423,11 @@ Deno.serve(async (req: Request) => {
     const groupId = url.searchParams.get('group_id');
     
     if (!groupId) {
-      return createErrorResponse(400, 'Missing required parameter: group_id', 'VALIDATION_ERROR');
+      return createErrorResponse(400, 'Missing required parameter: group_id', 'VALIDATION_ERROR', undefined, req);
     }
 
     if (!isValidUUID(groupId)) {
-      return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR');
+      return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR', undefined, req);
     }
 
     const { data: membership, error: membershipError } = await supabase
@@ -439,7 +439,7 @@ Deno.serve(async (req: Request) => {
       .single();
 
     if (membershipError || !membership) {
-      return createErrorResponse(403, 'You must be a member of the group to view activity', 'PERMISSION_DENIED');
+      return createErrorResponse(403, 'You must be a member of the group to view activity', 'PERMISSION_DENIED', undefined, req);
     }
 
     const limit = Math.min(
@@ -456,7 +456,7 @@ Deno.serve(async (req: Request) => {
       .range(offset, offset + limit - 1);
 
     if (historyError) {
-      return handleError(historyError, 'fetching transaction history');
+      return handleError(historyError, 'fetching transaction history', req);
     }
 
     const { emailMap, profileMap, participantMap } = await buildEmailMapForHistory(
@@ -498,8 +498,8 @@ Deno.serve(async (req: Request) => {
       activities,
       total,
       has_more: hasMore,
-    }, 200, 0);
+    }, 200, 0, req);
   } catch (error: unknown) {
-    return handleError(error, 'activity handler');
+    return handleError(error, 'activity handler', req);
   }
 });

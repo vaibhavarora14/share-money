@@ -90,7 +90,8 @@ export function createErrorResponse(
   statusCode: number,
   error: string,
   code?: string,
-  details?: string
+  details?: string,
+  req?: Request
 ): Response {
   const errorResponse: ErrorResponse = {
     error,
@@ -108,7 +109,7 @@ export function createErrorResponse(
   return new Response(JSON.stringify(errorResponse), {
     status: statusCode,
     headers: {
-      ...getCorsHeaders(),
+      ...getCorsHeaders(req),
       'Content-Type': 'application/json',
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Pragma': 'no-cache',
@@ -121,34 +122,34 @@ export function createErrorResponse(
  * Handles errors and returns standardized error response
  * Logs sanitized error information
  */
-export function handleError(error: unknown, context?: string): Response {
+export function handleError(error: unknown, context?: string, req?: Request): Response {
   // Determine error type and create appropriate response
   if (error instanceof Error) {
     const message = error.message.toLowerCase();
     
     // Authentication errors
     if (message.includes('unauthorized') || message.includes('not authenticated')) {
-      return createErrorResponse(401, 'Unauthorized', 'AUTH_ERROR', error.message);
+      return createErrorResponse(401, 'Unauthorized', 'AUTH_ERROR', error.message, req);
     }
 
     // Validation errors
     if (message.includes('invalid') || message.includes('validation') || message.includes('missing')) {
-      return createErrorResponse(400, 'Invalid request', 'VALIDATION_ERROR', error.message);
+      return createErrorResponse(400, 'Invalid request', 'VALIDATION_ERROR', error.message, req);
     }
 
     // Not found errors
     if (message.includes('not found') || message.includes('404')) {
-      return createErrorResponse(404, 'Resource not found', 'NOT_FOUND', error.message);
+      return createErrorResponse(404, 'Resource not found', 'NOT_FOUND', error.message, req);
     }
 
     // Permission errors
     if (message.includes('forbidden') || message.includes('permission') || message.includes('403')) {
-      return createErrorResponse(403, 'Forbidden', 'PERMISSION_DENIED', error.message);
+      return createErrorResponse(403, 'Forbidden', 'PERMISSION_DENIED', error.message, req);
     }
 
     // Rate limiting
     if (message.includes('rate limit') || message.includes('too many requests')) {
-      return createErrorResponse(429, 'Too many requests', 'RATE_LIMIT', error.message);
+      return createErrorResponse(429, 'Too many requests', 'RATE_LIMIT', error.message, req);
     }
 
     // Server errors
@@ -156,7 +157,7 @@ export function handleError(error: unknown, context?: string): Response {
       error: error.message,
       stack: error.stack,
     });
-    return createErrorResponse(500, 'Internal server error', 'INTERNAL_ERROR', error.message);
+    return createErrorResponse(500, 'Internal server error', 'INTERNAL_ERROR', error.message, req);
   }
 
   // Unknown / non-Error (e.g. PostgREST error objects)
@@ -166,5 +167,5 @@ export function handleError(error: unknown, context?: string): Response {
     error: stringified,
   });
 
-  return createErrorResponse(500, 'Internal server error', 'UNKNOWN_ERROR', stringified);
+  return createErrorResponse(500, 'Internal server error', 'UNKNOWN_ERROR', stringified, req);
 }

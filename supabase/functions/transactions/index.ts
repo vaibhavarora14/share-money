@@ -119,7 +119,7 @@ function validateSplitSum(
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return createEmptyResponse(200);
+    return createEmptyResponse(200, req);
   }
 
   try {
@@ -127,7 +127,7 @@ Deno.serve(async (req: Request) => {
     const body = await req.text().catch(() => null);
     const bodySizeValidation = validateBodySize(body);
     if (!bodySizeValidation.valid) {
-      return createErrorResponse(413, bodySizeValidation.error || 'Request body too large', 'VALIDATION_ERROR');
+      return createErrorResponse(413, bodySizeValidation.error || 'Request body too large', 'VALIDATION_ERROR', undefined, req);
     }
 
     // Verify authentication
@@ -135,7 +135,7 @@ Deno.serve(async (req: Request) => {
     try {
       authResult = await verifyAuth(req);
     } catch (authError) {
-      return handleError(authError, 'authentication');
+      return handleError(authError, 'authentication', req);
     }
 
     const { user, supabase } = authResult;
@@ -147,7 +147,7 @@ Deno.serve(async (req: Request) => {
       const groupId = url.searchParams.get('group_id');
       
       if (groupId && !isValidUUID(groupId)) {
-        return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR');
+        return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR', undefined, req);
       }
       
       let query = supabase
