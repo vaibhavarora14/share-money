@@ -3,10 +3,7 @@ name: Deploy Supabase Edge Functions
 on:
   push:
     branches:
-      - main
-    paths:
-      - 'supabase/functions/**'
-      - '.github/workflows/deploy-edge-functions.yml'
+      - "main"
   workflow_dispatch:
     # Allow manual triggering
 
@@ -46,6 +43,46 @@ jobs:
             exit 1
           fi
           echo "✅ Required secrets are configured"
+          
+          # Validate environment variable configuration
+          echo ""
+          echo "⚠️  IMPORTANT: Ensure ALLOWED_ORIGIN is set in Supabase project settings"
+          echo "   This is critical for CORS security. Set it in:"
+          echo "   Supabase Dashboard > Project Settings > Edge Functions > Environment Variables"
+          echo ""
+          echo "   Example: https://yourdomain.com,https://www.yourdomain.com"
+          echo "   Never use '*' in production!"
+
+      - name: ✅ Pre-deployment validation
+        run: |
+          echo "🔍 Running pre-deployment checks..."
+          
+          # Verify edge functions directory exists
+          if [ ! -d "supabase/functions" ]; then
+            echo "❌ supabase/functions directory not found"
+            exit 1
+          fi
+          
+          # Check for required shared utilities
+          if [ ! -f "supabase/functions/_shared/cors.ts" ]; then
+            echo "❌ CORS utility not found. This is required for security."
+            exit 1
+          fi
+          
+          # Verify all edge functions have proper structure
+          echo "📋 Validating edge function structure..."
+          for func_dir in supabase/functions/*/; do
+            if [ -d "$func_dir" ] && [ "$(basename "$func_dir")" != "_shared" ]; then
+              func_name=$(basename "$func_dir")
+              if [ ! -f "$func_dir/index.ts" ]; then
+                echo "⚠️  Warning: $func_name/index.ts not found"
+              else
+                echo "  ✅ $func_name/index.ts exists"
+              fi
+            fi
+          done
+          
+          echo "✅ Pre-deployment validation passed"
 
       - name: Link to Supabase project
         run: |
@@ -59,6 +96,54 @@ jobs:
           supabase functions deploy --project-ref $SUPABASE_PROJECT_REF
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: 🏥 Post-deployment health check
+        run: |
+          echo "🏥 Running post-deployment health checks..."
+          
+          # Get Supabase project URL (construct from project ref)
+          SUPABASE_URL="https://$SUPABASE_PROJECT_REF.supabase.co"
+          
+          echo "📋 Testing deployed functions..."
+          echo "Project URL: $SUPABASE_URL"
+          echo ""
+          
+          # List of functions to check
+          FUNCTIONS=("groups" "transactions" "balances" "settlements" "invitations" "group-members" "activity" "profile")
+          
+          echo "**Function Health Status:**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          for func in "${FUNCTIONS[@]}"; do
+            echo "Testing $func..."
+            # Test OPTIONS preflight (should return 200/204)
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+              -X OPTIONS \
+              "$SUPABASE_URL/functions/v1/$func" \
+              -H "Origin: https://example.com" \
+              -H "Access-Control-Request-Method: GET" || echo "000")
+            
+            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "204" ]; then
+              echo "  ✅ $func: OPTIONS preflight working (HTTP $HTTP_CODE)"
+              echo "✅ $func - OPTIONS preflight: OK" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "  ⚠️  $func: OPTIONS preflight returned HTTP $HTTP_CODE (may need ALLOWED_ORIGIN configured)"
+              echo "⚠️  $func - OPTIONS preflight: HTTP $HTTP_CODE (check CORS config)" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Next steps:**" >> $GITHUB_STEP_SUMMARY
+          echo "1. Verify ALLOWED_ORIGIN is set in Supabase project settings" >> $GITHUB_STEP_SUMMARY
+          echo "2. Test actual API calls from your web app" >> $GITHUB_STEP_SUMMARY
+          echo "3. Check browser console for CORS errors" >> $GITHUB_STEP_SUMMARY
+          
+          echo ""
+          echo "✅ Health checks completed. Review results above."
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        continue-on-error: true
 
       - name: List deployed functions
         run: |

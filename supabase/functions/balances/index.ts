@@ -1,7 +1,7 @@
 import { verifyAuth } from '../_shared/auth.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { log } from '../_shared/logger.ts';
-import { createSuccessResponse } from '../_shared/response.ts';
+import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
 import { fetchUserEmails } from '../_shared/user-email.ts';
 import { fetchUserProfiles } from '../_shared/user-profiles.ts';
 import { isValidUUID } from '../_shared/validation.ts';
@@ -230,7 +230,7 @@ async function calculateGroupBalances(
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 200 });
+    return createEmptyResponse(200, req);
   }
 
   try {
@@ -238,7 +238,7 @@ Deno.serve(async (req: Request) => {
     try {
       authResult = await verifyAuth(req);
     } catch (authError) {
-      return handleError(authError, 'authentication');
+      return handleError(authError, 'authentication', req);
     }
 
     const { user, supabase } = authResult;
@@ -249,7 +249,7 @@ Deno.serve(async (req: Request) => {
     const groupId = url.searchParams.get('group_id');
     
     if (groupId && !isValidUUID(groupId)) {
-      return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR');
+      return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR', undefined, req);
     }
 
     const { data: memberships } = await supabase
@@ -383,8 +383,8 @@ Deno.serve(async (req: Request) => {
       overall_balances: overallBalances,
     };
 
-    return createSuccessResponse(response, 200, 0);
+    return createSuccessResponse(response, 200, 0, req);
   } catch (error: unknown) {
-    return handleError(error, 'balances handler');
+    return handleError(error, 'balances handler', req);
   }
 });

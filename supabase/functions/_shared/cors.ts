@@ -1,17 +1,52 @@
 import { ALLOWED_ORIGIN } from './env.ts';
 
+const IS_PROD = Deno.env.get('NODE_ENV') === 'production';
+
 /**
- * CORS headers utility for Supabase Edge Functions
- * Requires ALLOWED_ORIGIN environment variable to be set for security.
+ * CORS headers utility for Supabase Edge Functions.
+ * 
+ * Strategy:
+ * - Production: Strict matching against ALLOWED_ORIGIN. Wildcards are forbidden.
+ * - Development: Seamless mirroring of the request origin or fallback to localhost.
  */
-export function getCorsHeaders(): Record<string, string> {
-  if (!ALLOWED_ORIGIN) {
-    throw new Error('ALLOWED_ORIGIN environment variable must be set for security');
+export function getCorsHeaders(req?: Request): Record<string, string> {
+  const allowedOrigins = ALLOWED_ORIGIN 
+    ? ALLOWED_ORIGIN.split(',').map(o => o.trim()).filter(o => o.length > 0)
+    : [];
+  
+  const requestOrigin = req?.headers.get('Origin');
+  let originToAllow: string;
+
+  if (IS_PROD) {
+    // --- STRICTION PRODUCTION MODE ---
+    if (allowedOrigins.length === 0) {
+      throw new Error('CORS Error: ALLOWED_ORIGIN must be set in production.');
+    }
+    
+    if (allowedOrigins.includes('*')) {
+      throw new Error('CORS Error: Wildcard origin (*) is forbidden in production for security.');
+    }
+
+    if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
+      originToAllow = requestOrigin;
+    } else {
+      // Fallback to the primary production origin for mobile/server requests without 'Origin' header
+      originToAllow = allowedOrigins[0];
+    }
+  } else {
+    // --- SEAMLESS DEVELOPMENT MODE ---
+    // Mirror the request origin if present (allows any local dev port to work instantly)
+    // Otherwise fallback to the first configured origin or standard Expo dev port
+    originToAllow = requestOrigin || allowedOrigins[0] || 'http://localhost:8081';
   }
   
+  // Get requested headers for preflight
+  const requestedHeaders = req?.headers.get('Access-Control-Request-Headers');
+  
   return {
-    'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Origin': originToAllow,
+    'Access-Control-Allow-Headers': requestedHeaders || 'authorization, x-client-info, apikey, content-type, x-app-version, prefer',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Expose-Headers': 'Content-Length, X-JSON',
   };
 }

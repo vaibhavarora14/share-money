@@ -63,7 +63,7 @@ export function checkAppVersion(req: Request): VersionCheckResult {
 /**
  * Create an HTTP 426 response for outdated apps
  */
-export function createUpgradeRequiredResponse(): Response {
+export function createUpgradeRequiredResponse(req?: Request): Response {
   const details = JSON.stringify({
     minVersion: VERSION_CONFIG.MIN_SUPPORTED_VERSION,
     latestVersion: VERSION_CONFIG.LATEST_VERSION,
@@ -75,7 +75,8 @@ export function createUpgradeRequiredResponse(): Response {
     426,
     VERSION_CONFIG.UPDATE_MESSAGE,
     'UPGRADE_REQUIRED',
-    details
+    details,
+    req
   );
 }
 
@@ -87,7 +88,7 @@ export function requireMinVersion(req: Request): Response | null {
   const result = checkAppVersion(req);
   if (!result.valid) {
     console.log(`Rejecting request from outdated app: ${result.currentVersion} < ${result.minVersion}`);
-    return createUpgradeRequiredResponse();
+    return createUpgradeRequiredResponse(req);
   }
   return null;
 }

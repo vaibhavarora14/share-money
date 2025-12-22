@@ -96,6 +96,9 @@ const styles = StyleSheet.create({
     margin: 24,
     padding: 24,
     borderRadius: 28,
+    maxWidth: 600, // Matching WEB_MAX_WIDTH implicitly
+    alignSelf: "center",
+    width: "100%",
   },
   content: {
     alignItems: "center",

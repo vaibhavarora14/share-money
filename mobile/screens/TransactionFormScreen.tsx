@@ -30,6 +30,7 @@ import {
     SafeAreaView,
     useSafeAreaInsets,
 } from "react-native-safe-area-context";
+import { WEB_MAX_WIDTH } from "../constants/layout";
 import { useAuth } from "../contexts/AuthContext";
 import { useParticipants } from "../hooks/useParticipants";
 import { Participant, Transaction } from "../types";
@@ -1096,10 +1097,14 @@ const styles = StyleSheet.create({
   // Modals
   modalOverlay: {
     flex: 1,
+    width: "100%",
     backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "flex-end",
   },
   datePickerModal: {
+    width: "100%",
+    maxWidth: WEB_MAX_WIDTH,
+    alignSelf: "center",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingBottom: 24,
@@ -1113,6 +1118,9 @@ const styles = StyleSheet.create({
     borderBottomColor: "rgba(0,0,0,0.1)",
   },
   pickerModal: {
+    width: "100%",
+    maxWidth: WEB_MAX_WIDTH,
+    alignSelf: "center",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     maxHeight: "60%",
