@@ -3,13 +3,15 @@
   "version": "1.0.0",
   "private": true,
   "workspaces": [
-    "mobile"
+    "mobile",
+    "web"
   ],
   "scripts": {
     "postinstall": "patch-package",
     "bootstrap": "npm install --workspaces --include-workspace-root",
     "dev:mobile": "npm run start --workspace=mobile",
-    "dev:server": "supabase functions serve --env-file supabase/.env"
+    "dev:server": "supabase functions serve --env-file supabase/.env",
+    "dev:web": "npm run dev --workspace=web"
   },
   "devDependencies": {
     "imagemin": "^9.0.1",
