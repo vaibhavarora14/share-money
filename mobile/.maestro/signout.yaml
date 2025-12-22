@@ -1,0 +1,7 @@
+appId: com.sharemoney.app
+---
+- tapOn: Profile
+- tapOn:
+    id: logout-button
+- waitForAnimationToEnd
+- assertVisible: Sign In

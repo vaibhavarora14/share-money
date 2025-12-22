@@ -62,6 +62,7 @@ export interface Group {
   created_by: string;
   created_at: string;
   updated_at: string;
+  user_status?: 'active' | 'left' | 'invited';
 }
 
 export interface GroupMember {

@@ -1,42 +1,43 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
-  BackHandler,
-  FlatList,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  TextInput as RNTextInput,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  View,
+    Alert,
+    BackHandler,
+    FlatList,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    Pressable,
+    TextInput as RNTextInput,
+    ScrollView,
+    StyleSheet,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import {
-  Appbar,
-  Button,
-  Card,
-  Chip,
-  Divider,
-  IconButton,
-  Surface,
-  Text,
-  TextInput,
-  useTheme,
+    Appbar,
+    Button,
+    Card,
+    Chip,
+    Divider,
+    IconButton,
+    Surface,
+    Text,
+    TextInput,
+    useTheme,
 } from "react-native-paper";
 import {
-  SafeAreaView,
-  useSafeAreaInsets,
+    SafeAreaView,
+    useSafeAreaInsets,
 } from "react-native-safe-area-context";
+import { useAuth } from "../contexts/AuthContext";
 import { useParticipants } from "../hooks/useParticipants";
 import { Participant, Transaction } from "../types";
 import {
-  CURRENCIES,
-  formatCurrency,
-  getCurrencySymbol,
-  getDefaultCurrency,
+    CURRENCIES,
+    formatCurrency,
+    getCurrencySymbol,
+    getDefaultCurrency,
 } from "../utils/currency";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 
@@ -61,6 +62,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
 }) => {
   const effectiveDefaultCurrency = defaultCurrency || getDefaultCurrency();
   const theme = useTheme();
+  const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const amountInputRef = useRef<RNTextInput>(null);
 
@@ -194,14 +196,13 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     setCategory("");
     setCurrency(effectiveDefaultCurrency);
     setPaidBy("");
-    const canDefaultToAll = groupId && (activeParticipants.length > 0 || invitedParticipants.length > 0);
-    setSplitAmong(canDefaultToAll ? allParticipantIds : []);
+    setSplitAmong([]);
     setDescriptionError("");
     setAmountError("");
     setDateError("");
     setPaidByError("");
     setSplitAmongError("");
-  }, [effectiveDefaultCurrency, groupId, activeParticipants.length, invitedParticipants.length, allParticipantIds]);
+  }, [effectiveDefaultCurrency]);
 
   const loadTransactionData = useCallback(
     (tx: Transaction) => {
@@ -251,15 +252,29 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     if (!transaction) {
       resetFormToDefaults();
     }
-  }, [transaction === null, resetFormToDefaults]);
+  }, [transaction?.id, resetFormToDefaults]); 
+
 
   useEffect(() => {
     if (transaction) return;
     if (!isGroupExpense) {
       setSplitAmong([]);
       setPaidBy("");
+    } else {
+      // For a new group expense, default split to all members if currently empty
+      if (splitAmong.length === 0 && allParticipantIds.length > 0) {
+        setSplitAmong(allParticipantIds);
+      }
+      
+      // Default "Paid By" to the current user
+      if (!paidBy && user && participants) {
+        const currentUserParticipant = participants.find(p => p.user_id === user.id);
+        if (currentUserParticipant) {
+          setPaidBy(currentUserParticipant.id);
+        }
+      }
     }
-  }, [isGroupExpense, transaction]);
+  }, [isGroupExpense, transaction, allParticipantIds, splitAmong.length, user, participants, paidBy]);
 
   const formatDateForInput = (date: Date): string => {
     return date.toISOString().split("T")[0];
@@ -514,6 +529,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                     minWidth: amount ? undefined : 40,
                   }
                 ]}
+                testID="amount-input"
                 autoFocus={!transaction}
                 selectTextOnFocus
               />
@@ -624,6 +640,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                           ]}
                           disabled={loading}
                           showSelectedCheck={true}
+                          testID={`paid-by-chip-${p.email || p.id}`}
                         >
                           {displayName}
                           {isInvited && " (Invited)"}
@@ -688,6 +705,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                         ]}
                         disabled={loading}
                         showSelectedCheck={true}
+                        testID={`split-among-chip-${p.email || p.id}`}
                       >
                         {displayName}
                         {isFormer && " (Former)"}

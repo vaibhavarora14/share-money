@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import {
-    ActivityIndicator,
-    Appbar,
-    Button,
-    FAB,
-    IconButton,
-    Surface,
-    Text,
-    useTheme,
+  ActivityIndicator,
+  Appbar,
+  Button,
+  FAB,
+  IconButton,
+  Surface,
+  Text,
+  useTheme,
 } from "react-native-paper";
 import { GroupBalanceBadge } from "../components/GroupBalanceBadge";
 import { useAuth } from "../contexts/AuthContext";
@@ -17,8 +17,8 @@ import { useGroups } from "../hooks/useGroups";
 import { Group } from "../types";
 import { showErrorAlert } from "../utils/errorHandling";
 import {
-    getUserFriendlyErrorMessage,
-    isSessionExpiredError,
+  getUserFriendlyErrorMessage,
+  isSessionExpiredError,
 } from "../utils/errorMessages";
 import { CreateGroupScreen } from "./CreateGroupScreen";
 
@@ -230,27 +230,39 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                     <View style={styles.groupInfo}>
                       <Text
                         variant="titleMedium"
-                        style={styles.groupName}
+                        style={[
+                          styles.groupName,
+                          group.user_status === 'left' && { color: theme.colors.onSurfaceVariant }
+                        ]}
                         numberOfLines={1}
                       >
                         {group.name}
                       </Text>
-                      {group.description ? (
+                      <View style={styles.groupMetadata}>
+                        {group.user_status === 'left' && (
+                          <Text 
+                            variant="bodySmall"
+                            style={[styles.formerStatusText, { color: theme.colors.error }]}
+                          >
+                            Former Member
+                          </Text>
+                        )}
+                        {group.user_status === 'left' && (
+                          <Text
+                            variant="bodySmall"
+                            style={[styles.metadataSeparator, { color: theme.colors.onSurfaceVariant }]}
+                          >
+                            •
+                          </Text>
+                        )}
                         <Text
                           variant="bodySmall"
-                          style={{ color: theme.colors.onSurfaceVariant }}
+                          style={{ color: theme.colors.onSurfaceVariant, flex: 1 }}
                           numberOfLines={1}
                         >
-                          {group.description}
+                          {group.description || "No description"}
                         </Text>
-                      ) : (
-                        <Text
-                          variant="bodySmall"
-                          style={{ color: theme.colors.onSurfaceVariant }}
-                        >
-                          No description
-                        </Text>
-                      )}
+                      </View>
                     </View>
                   </View>
 
@@ -340,9 +352,15 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
   },
+  groupNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 4,
+  },
   groupName: {
-    fontWeight: "600",
-    marginBottom: 2,
+    fontWeight: "bold",
+    flexShrink: 1,
   },
   fab: {
     position: "absolute",
@@ -352,6 +370,16 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   // New Styles
+  groupMetadata: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  formerStatusText: {
+    fontWeight: "bold",
+  },
+  metadataSeparator: {
+    marginHorizontal: 4,
+  },
   groupMainContent: {
     flexDirection: "row",
     alignItems: "center",

@@ -79,16 +79,41 @@ Deno.serve(async (req: Request) => {
 
     // Handle GET /groups - List all groups user belongs to
     if (httpMethod === 'GET' && !groupId) {
+      // Get groups and include the user's membership status
       const { data: groups, error } = await supabase
         .from('groups')
-        .select('id, name, description, created_by, created_at, updated_at')
+        .select(`
+          id, 
+          name, 
+          description, 
+          created_by, 
+          created_at, 
+          updated_at,
+          group_members!inner(status)
+        `)
+        .eq('group_members.user_id', user.id)
         .order('created_at', { ascending: false });
 
       if (error) {
         return handleError(error, 'fetching groups');
       }
 
-      return createSuccessResponse(groups || [], 200, 0); // No caching - real-time data
+      // Flatten the response and extract status
+      const flattenedGroups = (groups || []).map((g: any) => ({
+        ...g,
+        user_status: g.group_members?.[0]?.status || 'active',
+        group_members: undefined // Remove nesting
+      }));
+
+      // Sort: active/invited first, left (former) last. 
+      // Secondary sort is created_at (already handled by DB query, but sort is stable)
+      flattenedGroups.sort((a: any, b: any) => {
+        if (a.user_status === 'left' && b.user_status !== 'left') return 1;
+        if (a.user_status !== 'left' && b.user_status === 'left') return -1;
+        return 0; // Keep DB order (created_at DESC) for same statuses
+      });
+
+      return createSuccessResponse(flattenedGroups, 200, 0); // No caching - real-time data
     }
 
     // Handle GET /groups/:id - Get group details with members

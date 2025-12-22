@@ -1,13 +1,13 @@
 import React from "react";
 import { View } from "react-native";
 import {
-    ActivityIndicator,
-    Avatar,
-    Divider,
-    IconButton,
-    Surface,
-    Text,
-    useTheme,
+  ActivityIndicator,
+  Avatar,
+  Divider,
+  IconButton,
+  Surface,
+  Text,
+  useTheme,
 } from "react-native-paper";
 import { GroupMember } from "../types";
 import { formatDate } from "../utils/date";
@@ -119,7 +119,7 @@ export const MembersList: React.FC<MembersListProps> = ({
                       {},
                     ]}
                   >
-                    {memberName} {isCurrentUser ? "(You)" : ""}
+                    {memberName}{isCurrentUser ? " (You)" : ""}
                     {!isActive ? " (Former)" : ""}
                   </Text>
                 </View>

@@ -10,8 +10,6 @@
     "update": "eas update --branch development",
     "update:production": "eas update --branch production",
     "test:e2e": "maestro test .maestro/",
-    "test:e2e:signin": "maestro test .maestro/sign-in-success.yaml",
-    "test:e2e:group-details": "maestro test .maestro/group-details.yaml",
     "ios": "expo run:ios",
     "version:patch": "node scripts/version.js patch",
     "version:minor": "node scripts/version.js minor",

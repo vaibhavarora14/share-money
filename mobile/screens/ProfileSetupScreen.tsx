@@ -1,32 +1,32 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  View
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    TouchableOpacity,
+    View
 } from "react-native";
 import {
-  Appbar,
-  Avatar,
-  Button,
-  Icon,
-  Surface,
-  Text,
-  TextInput,
-  useTheme,
+    Appbar,
+    Avatar,
+    Button,
+    Icon,
+    Surface,
+    Text,
+    TextInput,
+    useTheme,
 } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CountryCodePicker } from "../components/CountryCodePicker";
 import { useAuth } from "../contexts/AuthContext";
 import { useProfile } from "../hooks/useProfile";
 import {
-  CountryCode,
-  formatPhoneNumber,
-  getCountryByCode,
-  getDefaultCountry,
-  parsePhoneNumber,
+    CountryCode,
+    formatPhoneNumber,
+    getCountryByCode,
+    getDefaultCountry,
+    parsePhoneNumber,
 } from "../utils/countryCodes";
 import { showErrorAlert } from "../utils/errorHandling";
 
@@ -202,6 +202,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
           icon="logout"
           iconColor={theme.colors.error}
           onPress={signOut}
+          testID="logout-button"
         />
       </Appbar.Header>
       <KeyboardAvoidingView

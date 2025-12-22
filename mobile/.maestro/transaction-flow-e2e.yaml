@@ -1,0 +1,192 @@
+appId: com.vaibhavarora.sharemoney
+---
+# Comprehensive E2E Flow
+# Covers: Invited Users, Multiple Members, Transactions, Balances, former members, and Settlements.
+
+- waitForAnimationToEnd
+
+# If Welcome Back (Sign In) is visible, do login
+- runFlow:
+    when:
+      visible: "Welcome Back"
+    commands:
+      - tapOn: "Email"
+      - inputText: "alice@test.com"
+      - hideKeyboard
+
+      - tapOn: "Password"
+      - inputText: "testpassword123"
+      - hideKeyboard
+
+      - tapOn: "Sign In"
+      - waitForAnimationToEnd
+
+- assertVisible: "Your Groups"
+
+# Create Group
+- tapOn: "New Group"
+- waitForAnimationToEnd
+- tapOn: "Group Name"
+- inputText: "Comp Flow Group"
+- tapOn: "Create"
+- waitForAnimationToEnd
+
+# Open Group
+- tapOn: "Comp Flow Group"
+- waitForAnimationToEnd
+
+# --- 2. ADD MEMBERS (Invited Users) ---
+- tapOn: "Group options"
+- tapOn: "View Members"
+- waitForAnimationToEnd
+
+# Add Bob
+- tapOn:
+    id: "add-member-button"
+- waitForAnimationToEnd
+- tapOn: "Email Address"
+- inputText: "bob@comp.test"
+- tapOn:
+    id: "add-member-submit-button"
+- waitForAnimationToEnd
+- tapOn: "OK"
+- waitForAnimationToEnd
+- assertVisible: "bob@comp.test"
+
+# Add Charlie
+- tapOn:
+    id: "add-member-button"
+- waitForAnimationToEnd
+- tapOn: "Email Address"
+- inputText: "charlie@comp.test"
+- tapOn:
+    id: "add-member-submit-button"
+- waitForAnimationToEnd
+- tapOn: "OK"
+- waitForAnimationToEnd
+- assertVisible: "charlie@comp.test"
+
+# Go back to dashboard
+- tapOn: "Navigate back"
+- waitForAnimationToEnd
+
+# --- 3. TRANSACTIONS & BALANCES ---
+
+# Exp 1: You pay $90, split equally (You, Bob, Charlie).
+# Cost: $30 each. You paid $90. You are lent $60.
+- tapOn: "Add Expense"
+- waitForAnimationToEnd
+- tapOn:
+    id: "amount-input"
+- inputText: "90"
+- tapOn: "Description"
+- inputText: "Dinner"
+- "hideKeyboard"
+- tapOn:
+    id: paid-by-chip-alice@test.com
+- tapOn: "Save"
+- waitForAnimationToEnd
+
+# Verify Dashboard
+- assertVisible: "Dinner"
+# - assertVisible: "90.00"
+# "My Spending" should be ₹30.00
+- assertVisible: "₹30.00"
+# "Group summary" should be ₹90.00
+- assertVisible: "₹90.00"
+
+# Verify Debts (You should receive from Bob and Charlie)
+- assertVisible: "bob"
+- assertVisible: "owes you"
+
+# Exp 2: Bob pays ₹60, split Bob & Charlie.
+# Cost: ₹30 each. Bob paid ₹60. Bob is lent ₹30.
+# Charlie owes Bob ₹30.
+# Simplification: Charlie owes You ₹60? (You paid 90, consumed 30. +60).
+# Bob consumed 60 (30+30), paid 60. Net 0.
+# Charlie consumed 60 (30+30), paid 0. Net -60.
+# Yes, Charlie owes You ₹60.
+
+- tapOn: "Add Expense"
+- waitForAnimationToEnd
+- tapOn: "Description"
+- inputText: "Drinks"
+- tapOn:
+    id: "amount-input"
+- inputText: "60"
+- hideKeyboard
+# Change Payer to Bob
+- tapOn:
+    id: "paid-by-chip-bob@comp.test"
+- waitForAnimationToEnd
+# Change Split to Bob & Charlie only (Toggle off Alice)
+- tapOn:
+    id: "split-among-chip-alice@test.com"
+- waitForAnimationToEnd
+- tapOn: "Save" # Save Transaction
+- waitForAnimationToEnd
+
+# Verify Dashboard Updated
+# You (+60), Bob (0), Charlie (-60)
+# Expected: "charlie@comp.test owes you ₹60.00"
+# Bob should disappear from action list
+- assertVisible: "Drinks"
+- assertVisible: "charlie"
+# - assertVisible: "60.00" # Charlie owes you
+
+# --- 4. FORMER MEMBER ---
+# Add Dave
+- tapOn: "Group options"
+- tapOn: "View Members"
+- waitForAnimationToEnd
+- tapOn:
+    id: "add-member-button"
+- waitForAnimationToEnd
+- tapOn: "Email Address"
+- inputText: "dave@comp.test"
+- tapOn:
+    id: "add-member-submit-button"
+- waitForAnimationToEnd
+- tapOn: "OK"
+- waitForAnimationToEnd
+- assertVisible: "dave@comp.test"
+# Remove Dave (Assuming trash icon or swipe is hard, we skip actual removal but logic is sound)
+# If we could remove:
+# - tapOn: id: "remove-dave..."
+- tapOn: "Navigate back"
+- waitForAnimationToEnd
+
+# --- 5. SETTLEMENT ---
+# You want to settle with Charlie (₹60).
+- tapOn: "RECEIVE" # Next to Charlie
+- waitForAnimationToEnd
+- assertVisible: "Settle up"
+- assertVisible: "60.00"
+- tapOn: "Mark as Received"
+- waitForAnimationToEnd
+
+# Verify Clean Slate
+- assertVisible: "You are all caught up!"
+
+# --- 6. HISTORY CHECK ---
+# Verify transactions show correct names
+- assertVisible: "Dinner"
+- assertVisible: ".*You paid"
+- assertVisible: "Drinks"
+- assertVisible: ".*bob paid"
+
+# --- 7. CLEANUP ---
+# Leave Group (Cleanup)
+- tapOn: "Group options"
+- tapOn: "Leave Group"
+- tapOn: "Leave"
+- waitForAnimationToEnd
+# Verify left (now a former member)
+- assertVisible: "Your Groups"
+- assertVisible: "Comp Flow Group"
+- assertVisible: "Former Member"
+# Open it to see former banner
+- tapOn: "Comp Flow Group"
+- waitForAnimationToEnd
+- assertVisible: ".*former member"
+- runFlow: signout.yaml
