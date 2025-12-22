@@ -6,10 +6,10 @@ import { ACTIVITY_FEED_UI, ACTIVITY_ICONS } from "../constants/activityFeed";
 import { useAuth } from "../contexts/AuthContext";
 import { ActivityItem } from "../types";
 import {
-  formatActivityTime,
-  getActivityColor,
-  getUserDisplayName,
-  groupActivitiesByDate,
+    formatActivityTime,
+    getActivityColor,
+    getUserDisplayName,
+    groupActivitiesByDate,
 } from "../utils/activityDescriptions";
 import { styles } from "./ActivityFeed.styles";
 
@@ -32,7 +32,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
   try {
     if (loading) {
       return (
-        <View style={styles.section}>
+        <View>
           <ActivityIndicator size="small" style={{ marginVertical: 16 }} />
         </View>
       );
@@ -40,7 +40,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
 
     if (items.length === 0) {
       return (
-        <View style={styles.section}>
+        <View>
           <Card style={styles.emptyStateCard} mode="outlined">
             <Card.Content style={styles.emptyStateContent}>
               <MaterialCommunityIcons
@@ -171,7 +171,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
     // Error boundary - log and show user-friendly message
     console.error("Error rendering ActivityFeed:", error);
     return (
-      <View style={styles.section}>
+      <View>
         <Card style={styles.emptyStateCard} mode="outlined">
           <Card.Content style={styles.emptyStateContent}>
             <Text
