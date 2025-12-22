@@ -591,14 +591,16 @@ export default function App() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <PaperProvider theme={theme}>
-            <UpgradeProvider>
-              <AuthProvider>
-                <View style={styles.appWrapper}>
-                  <AppContent />
-                  <ForceUpdateOverlay />
-                </View>
-              </AuthProvider>
-            </UpgradeProvider>
+            <View style={[styles.mainContainer, { backgroundColor: theme.colors.background }]}>
+              <UpgradeProvider>
+                <AuthProvider>
+                  <View style={[styles.appWrapper, { backgroundColor: theme.colors.surface }]}>
+                    <AppContent />
+                    <ForceUpdateOverlay />
+                  </View>
+                </AuthProvider>
+              </UpgradeProvider>
+            </View>
           </PaperProvider>
         </QueryClientProvider>
       </SafeAreaProvider>
@@ -624,6 +626,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  mainContainer: {
+    flex: 1,
+    width: "100%",
+  },
   appWrapper: {
     flex: 1,
     width: "100%",
@@ -641,7 +647,6 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     // Elevation for Android
     elevation: 5,
-    backgroundColor: "transparent", // Ensure shadow is visible
   },
   centerContainer: {
     flex: 1,

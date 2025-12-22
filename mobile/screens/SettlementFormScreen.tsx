@@ -1,20 +1,20 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Alert,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  View,
+    Alert,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    View,
 } from "react-native";
 import { Appbar, Button, Text, TextInput, useTheme } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Balance, GroupMember, Participant, Settlement } from "../types";
 import {
-  formatCurrency,
-  getCurrencySymbol,
-  getDefaultCurrency,
+    formatCurrency,
+    getCurrencySymbol,
+    getDefaultCurrency,
 } from "../utils/currency";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 
@@ -510,6 +510,9 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    width: "100%",
+    maxWidth: 600,
+    alignSelf: "center",
   },
   scrollView: {
     flex: 1,

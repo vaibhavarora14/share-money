@@ -1100,6 +1100,9 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   datePickerModal: {
+    width: "100%",
+    maxWidth: 600,
+    alignSelf: "center",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingBottom: 24,
@@ -1113,6 +1116,9 @@ const styles = StyleSheet.create({
     borderBottomColor: "rgba(0,0,0,0.1)",
   },
   pickerModal: {
+    width: "100%",
+    maxWidth: 600,
+    alignSelf: "center",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     maxHeight: "60%",

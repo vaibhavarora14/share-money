@@ -209,6 +209,9 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
   bottomSheet: {
+    width: "100%",
+    maxWidth: 600,
+    alignSelf: "center",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     shadowColor: "#000",

@@ -1,16 +1,16 @@
 import React, { useRef, useState } from "react";
 import {
-  Alert,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
+    Alert,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
 } from "react-native";
 import { Appbar, Button, TextInput, useTheme } from "react-native-paper";
 import {
-  SafeAreaView,
-  useSafeAreaInsets,
+    SafeAreaView,
+    useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
 import { showErrorAlert } from "../utils/errorHandling";
@@ -143,6 +143,9 @@ export const CreateGroupScreen: React.FC<CreateGroupScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    width: "100%",
+    maxWidth: 600,
+    alignSelf: "center",
   },
   header: {
     elevation: 0,
