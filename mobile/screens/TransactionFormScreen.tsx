@@ -40,6 +40,7 @@ import {
     getDefaultCurrency,
 } from "../utils/currency";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
+import { WEB_MAX_WIDTH } from "../constants/layout";
 
 interface TransactionFormScreenProps {
   transaction?: Transaction | null;
@@ -1101,7 +1102,7 @@ const styles = StyleSheet.create({
   },
   datePickerModal: {
     width: "100%",
-    maxWidth: 600,
+    maxWidth: WEB_MAX_WIDTH,
     alignSelf: "center",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
@@ -1117,7 +1118,7 @@ const styles = StyleSheet.create({
   },
   pickerModal: {
     width: "100%",
-    maxWidth: 600,
+    maxWidth: WEB_MAX_WIDTH,
     alignSelf: "center",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,

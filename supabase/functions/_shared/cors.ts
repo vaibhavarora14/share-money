@@ -3,21 +3,54 @@ import { ALLOWED_ORIGIN } from './env.ts';
 /**
  * CORS headers utility for Supabase Edge Functions
  * Requires ALLOWED_ORIGIN environment variable to be set for security.
- */
-/**
- * CORS headers utility for Supabase Edge Functions
  * Supports a single origin or a comma-separated list of origins in ALLOWED_ORIGIN.
+ * 
+ * Security: Never allows wildcard '*' in production. ALLOWED_ORIGIN must be explicitly set.
  */
 export function getCorsHeaders(req?: Request): Record<string, string> {
-  // Use '*' as fallback if ALLOWED_ORIGIN is not set (useful for debugging preflight blocks)
-  const allowedOrigins = ALLOWED_ORIGIN ? ALLOWED_ORIGIN.split(',').map(o => o.trim()) : ['*'];
+  // Parse allowed origins from environment variable
+  const allowedOrigins = ALLOWED_ORIGIN 
+    ? ALLOWED_ORIGIN.split(',').map(o => o.trim()).filter(o => o.length > 0)
+    : [];
+  
+  // Security: Require explicit origin configuration
+  if (allowedOrigins.length === 0) {
+    throw new Error(
+      'ALLOWED_ORIGIN must be set for CORS security. ' +
+      'Set it in Supabase project settings: Settings > Edge Functions > Environment Variables'
+    );
+  }
+  
+  // Security: Always reject wildcard for maximum security
+  // Wildcard CORS is a security risk and should never be used
+  if (allowedOrigins.includes('*')) {
+    throw new Error(
+      'Wildcard CORS origin (*) is not allowed for security reasons. ' +
+      'Please set specific origins in ALLOWED_ORIGIN environment variable. ' +
+      'Example: https://yourdomain.com,https://www.yourdomain.com'
+    );
+  }
+  
   const requestOrigin = req?.headers.get('Origin');
-
-  let originToAllow = allowedOrigins[0];
+  let originToAllow: string | null = null;
+  
+  // Determine which origin to allow
   if (requestOrigin) {
-    if (allowedOrigins.includes('*') || allowedOrigins.includes(requestOrigin)) {
+    // Check if request origin is in allowed list
+    if (allowedOrigins.includes(requestOrigin)) {
       originToAllow = requestOrigin;
     }
+  } else if (allowedOrigins.length === 1) {
+    // Single specific origin, use it (for same-origin requests without Origin header)
+    originToAllow = allowedOrigins[0];
+  }
+  
+  // If no valid origin found, reject the request
+  if (!originToAllow) {
+    const errorMsg = requestOrigin
+      ? `Origin '${requestOrigin}' is not allowed. Allowed origins: ${allowedOrigins.join(', ')}`
+      : `No origin specified and multiple origins configured. Allowed origins: ${allowedOrigins.join(', ')}`;
+    throw new Error(errorMsg);
   }
 
   // Get requested headers for preflight

@@ -14,6 +14,7 @@ import {
 } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
 import { showErrorAlert } from "../utils/errorHandling";
+import { WEB_MAX_WIDTH } from "../constants/layout";
 
 interface CreateGroupScreenProps {
   visible: boolean;
@@ -144,7 +145,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     width: "100%",
-    maxWidth: 600,
+    maxWidth: WEB_MAX_WIDTH,
     alignSelf: "center",
   },
   header: {

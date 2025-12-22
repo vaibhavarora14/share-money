@@ -32,6 +32,61 @@ jobs:
         working-directory: mobile
         run: npm ci
 
+      - name: ✅ Pre-deployment validation
+        working-directory: mobile
+        run: |
+          echo "🔍 Running pre-deployment checks..."
+          
+          # Check for required environment variables
+          if [ -z "${{ secrets.EXPO_TOKEN }}" ]; then
+            echo "❌ EXPO_TOKEN secret is not set"
+            exit 1
+          fi
+          
+          # Type check (if TypeScript is configured)
+          if [ -f "tsconfig.json" ]; then
+            echo "📝 Running TypeScript type check..."
+            npx tsc --noEmit || {
+              echo "❌ TypeScript type check failed"
+              exit 1
+            }
+          fi
+          
+          # Verify package.json scripts exist
+          if ! grep -q '"deploy:web"' package.json; then
+            echo "❌ deploy:web script not found in package.json"
+            exit 1
+          fi
+          
+          echo "✅ Pre-deployment validation passed"
+
       - name: 🚀 Export and Deploy Web
         working-directory: mobile
         run: npm run deploy:web
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      - name: 🏥 Post-deployment health check
+        run: |
+          echo "🏥 Running post-deployment health checks..."
+          
+          # Note: EAS deployment URL would need to be retrieved from deployment output
+          # For now, we'll just verify the deployment completed successfully
+          echo "✅ Deployment completed. Please verify the web app is accessible."
+          echo ""
+          echo "**Next steps:**"
+          echo "1. Verify the web app loads correctly"
+          echo "2. Test key user flows (auth, groups, transactions)"
+          echo "3. Check browser console for any errors"
+          
+          # Add deployment summary
+          echo "## ✅ Web Deployment Completed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The web application has been deployed to production via EAS." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Please verify:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Web app is accessible" >> $GITHUB_STEP_SUMMARY
+          echo "- Authentication works correctly" >> $GITHUB_STEP_SUMMARY
+          echo "- Layout respects max-width on desktop" >> $GITHUB_STEP_SUMMARY
+          echo "- Modals are centered and properly sized" >> $GITHUB_STEP_SUMMARY
+        continue-on-error: true

@@ -21,6 +21,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
 import { showErrorAlert } from "../utils/errorHandling";
+import { WEB_MAX_WIDTH } from "../constants/layout";
 
 interface AddMemberScreenProps {
   visible: boolean;
@@ -210,7 +211,7 @@ const styles = StyleSheet.create({
   },
   bottomSheet: {
     width: "100%",
-    maxWidth: 600,
+    maxWidth: WEB_MAX_WIDTH,
     alignSelf: "center",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,

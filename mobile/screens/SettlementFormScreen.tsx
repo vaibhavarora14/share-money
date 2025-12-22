@@ -17,6 +17,7 @@ import {
     getDefaultCurrency,
 } from "../utils/currency";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
+import { WEB_MAX_WIDTH } from "../constants/layout";
 
 interface SettlementFormScreenProps {
   visible: boolean;
@@ -511,7 +512,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     width: "100%",
-    maxWidth: 600,
+    maxWidth: WEB_MAX_WIDTH,
     alignSelf: "center",
   },
   scrollView: {

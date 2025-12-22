@@ -8,7 +8,7 @@ import {
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
-import { Text as RNText, StyleSheet, useColorScheme, View } from "react-native";
+import { Platform, Text as RNText, StyleSheet, useColorScheme, View } from "react-native";
 import {
   ActivityIndicator,
   Button,
@@ -48,6 +48,7 @@ import { darkTheme, lightTheme } from "./theme";
 import { Group, GroupWithMembers } from "./types";
 import { getDefaultCurrency } from "./utils/currency";
 import { log, logError } from "./utils/logger";
+import { WEB_MAX_WIDTH } from "./constants/layout";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -633,20 +634,21 @@ const styles = StyleSheet.create({
   appWrapper: {
     flex: 1,
     width: "100%",
-    maxWidth: 600,
+    maxWidth: WEB_MAX_WIDTH,
     alignSelf: "center",
-    borderWidth: 1,
-    borderColor: "rgba(0, 0, 0, 0.05)",
-    // Shadow for iOS and Web
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    // Elevation for Android
-    elevation: 5,
+    // Border and shadow only on web for premium desktop experience
+    ...(Platform.OS === 'web' && {
+      borderWidth: 1,
+      borderColor: "rgba(0, 0, 0, 0.05)",
+      shadowColor: "#000",
+      shadowOffset: {
+        width: 0,
+        height: 4,
+      },
+      shadowOpacity: 0.1,
+      shadowRadius: 12,
+      elevation: 5,
+    }),
   },
   centerContainer: {
     flex: 1,
