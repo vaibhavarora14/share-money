@@ -27,6 +27,7 @@ export async function fetchTransactions(groupId?: string | null): Promise<Transa
 function invalidateTransactionAdjacents(queryClient: QueryClient, groupId?: string | null) {
   if (!groupId) return;
   queryClient.invalidateQueries({ queryKey: queryKeys.transactions(groupId) });
+  queryClient.invalidateQueries({ queryKey: ["balances"] }); // Invalidate all balances (including global)
   queryClient.invalidateQueries({ queryKey: queryKeys.balances(groupId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.activity(groupId) });
 }
@@ -65,7 +66,7 @@ type UpdateTransactionInput = BaseTransactionInput;
 export function useCreateTransaction(onSuccess?: () => void) {
   const queryClient = useQueryClient();
 
-  const mutation = useMutation<Transaction | null, Error, CreateTransactionInput>({
+  const mutation = useMutation<Transaction | null, Error, CreateTransactionInput, { previous?: Transaction[], groupId: string }>({
     mutationFn: async (transactionData) => {
       const response = await fetchWithAuth("/transactions", {
         method: "POST",
@@ -133,7 +134,7 @@ export function useCreateTransaction(onSuccess?: () => void) {
 export function useUpdateTransaction(onSuccess?: () => void) {
   const queryClient = useQueryClient();
 
-  const mutation = useMutation<Transaction | null, Error, UpdateTransactionInput>({
+  const mutation = useMutation<Transaction | null, Error, UpdateTransactionInput, { previous?: Transaction[], groupId: string }>({
     mutationFn: async (transactionData) => {
       const response = await fetchWithAuth("/transactions", {
         method: "PUT",
@@ -198,7 +199,8 @@ export function useDeleteTransaction(onSuccess?: () => void) {
   const mutation = useMutation<
     { id: number; group_id?: string },
     Error,
-    { id: number; group_id?: string }
+    { id: number; group_id?: string },
+    { previous?: Transaction[], groupId?: string }
   >({
     mutationFn: async (variables) => {
       const response = await fetchWithAuth(`/transactions?id=${variables.id}`, {

@@ -1,33 +1,32 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  View,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    TouchableOpacity,
+    View
 } from "react-native";
 import {
-  Appbar,
-  Avatar,
-  Button,
-  Icon,
-  Surface,
-  Text,
-  TextInput,
-  useTheme,
+    Appbar,
+    Avatar,
+    Button,
+    Icon,
+    Surface,
+    Text,
+    TextInput,
+    useTheme,
 } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CountryCodePicker } from "../components/CountryCodePicker";
 import { useAuth } from "../contexts/AuthContext";
 import { useProfile } from "../hooks/useProfile";
 import {
-  CountryCode,
-  formatPhoneNumber,
-  getCountryByCode,
-  getDefaultCountry,
-  parsePhoneNumber,
+    CountryCode,
+    formatPhoneNumber,
+    getCountryByCode,
+    getDefaultCountry,
+    parsePhoneNumber,
 } from "../utils/countryCodes";
 import { showErrorAlert } from "../utils/errorHandling";
 
@@ -51,7 +50,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { data: profile, updateProfile } = useProfile();
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
 
   useEffect(() => {
     if (profile) {
@@ -135,19 +134,21 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     const currentPhone = phone.trim();
     const currentCountryCode = selectedCountry.code.toUpperCase();
 
+    // Only consider country code changed if there is a phone number
+    // This prevents "Save" from being enabled just because of the default country selection
+    const countryChanged =
+      currentPhone !== "" && originalCountryCode !== currentCountryCode;
+
     return (
       originalFullName !== currentFullName ||
       originalPhone !== currentPhone ||
-      originalCountryCode !== currentCountryCode
+      countryChanged
     );
   }, [profile, fullName, phone, selectedCountry]);
 
   const handleComplete = async () => {
     // Validation
-    if (!fullName.trim()) {
-      Alert.alert("Error", "Please enter your full name");
-      return;
-    }
+
 
     setLoading(true);
     try {
@@ -201,6 +202,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
           icon="logout"
           iconColor={theme.colors.error}
           onPress={signOut}
+          testID="logout-button"
         />
       </Appbar.Header>
       <KeyboardAvoidingView
@@ -248,6 +250,15 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             style={[styles.formCard, { backgroundColor: theme.colors.surface }]}
             elevation={2}
           >
+            <TextInput
+              label="Email"
+              value={user?.email || ""}
+              mode="outlined"
+              disabled
+              style={[styles.input, { opacity: 0.7 }]}
+              left={<TextInput.Icon icon="email" />}
+            />
+
             <TextInput
               label="Full Name"
               value={fullName}
@@ -302,7 +313,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             <Button
               mode="contained"
               onPress={handleComplete}
-              disabled={loading || !fullName.trim() || !hasChanges}
+              disabled={loading || !hasChanges}
               loading={loading}
               style={styles.button}
               contentStyle={styles.buttonContent}

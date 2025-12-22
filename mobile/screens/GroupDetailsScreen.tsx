@@ -1,14 +1,16 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Alert, BackHandler, ScrollView, StyleSheet, View } from "react-native";
 import {
-  ActivityIndicator,
-  Appbar,
-  Button,
-  FAB,
-  Menu,
-  SegmentedButtons,
-  Text,
-  useTheme,
+    ActivityIndicator,
+    Appbar,
+    Avatar,
+    Button,
+    Chip,
+    FAB,
+    Menu,
+    SegmentedButtons,
+    Text,
+    useTheme
 } from "react-native-paper";
 import { ActivityFeed } from "../components/ActivityFeed";
 import { GroupDashboard } from "../components/GroupDashboard";
@@ -19,34 +21,31 @@ import { useAuth } from "../contexts/AuthContext";
 import { useActivity } from "../hooks/useActivity";
 import { useBalances } from "../hooks/useBalances";
 import {
-  useCancelInvitation,
-  useGroupInvitations,
+    useCancelInvitation,
+    useGroupInvitations,
 } from "../hooks/useGroupInvitations";
-import {
-  useAddMember,
-  useDeleteGroup,
-  useRemoveMember,
-} from "../hooks/useGroupMutations";
+import { useAddMember, useRemoveMember } from "../hooks/useGroupMutations";
 import { useGroupDetails } from "../hooks/useGroups";
+import { useParticipants } from "../hooks/useParticipants";
 import {
-  useCreateSettlement,
-  useDeleteSettlement,
-  useSettlements,
-  useUpdateSettlement,
+    useCreateSettlement,
+    useDeleteSettlement,
+    useSettlements,
+    useUpdateSettlement,
 } from "../hooks/useSettlements";
 import { useTransactions } from "../hooks/useTransactions";
 import {
-  Balance,
-  GroupInvitation,
-  GroupWithMembers,
-  Settlement,
-  Transaction,
+    Balance,
+    GroupInvitation,
+    GroupWithMembers,
+    Settlement,
+    Transaction,
 } from "../types";
-import { formatCurrency, getDefaultCurrency } from "../utils/currency";
+import { getDefaultCurrency } from "../utils/currency";
 import { showErrorAlert } from "../utils/errorHandling";
 import {
-  getUserFriendlyErrorMessage,
-  isSessionExpiredError,
+    getUserFriendlyErrorMessage,
+    isSessionExpiredError,
 } from "../utils/errorMessages";
 import { GroupStatsMode } from "./GroupStatsScreen";
 import { SettlementFormScreen } from "./SettlementFormScreen";
@@ -57,7 +56,6 @@ interface GroupDetailsScreenProps {
   onAddMember: () => void;
   onRemoveMember?: (userId: string) => Promise<void>;
   onLeaveGroup?: () => void;
-  onDeleteGroup?: () => void;
   onAddTransaction: () => void;
   onEditTransaction: (transaction: Transaction) => void;
   refreshTrigger?: number; // When this changes, refresh invitations
@@ -71,7 +69,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   onAddMember,
   onRemoveMember,
   onLeaveGroup,
-  onDeleteGroup,
   onAddTransaction,
   onEditTransaction,
   refreshTrigger,
@@ -90,6 +87,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [listMode, setListMode] = useState<"transactions" | "activity">(
     "transactions"
   );
+  const [showActivityFilters, setShowActivityFilters] = useState(false);
+  const [activityFilterType, setActivityFilterType] = useState<"all" | "expenses" | "settlements">("all");
+  const [activityFilterParticipantId, setActivityFilterParticipantId] = useState<string>("all");
 
   // Stable handler for closing menu
   const handleCloseMenu = () => {
@@ -131,6 +131,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     refetch: refetchInvites,
   } = useGroupInvitations(initialGroup.id);
   const {
+    data: participants = [],
+  } = useParticipants(initialGroup.id);
+  const {
     data: balancesData,
     isLoading: balancesLoading,
     refetch: refetchBalances,
@@ -150,6 +153,58 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   >(null);
   const { session, signOut } = useAuth();
   const theme = useTheme();
+
+
+  // Map user_id to participant_id for involvement filtering
+  const userIdToParticipantId = useMemo(() => {
+    const map = new Map<string, string>();
+    participants.forEach(p => {
+      if (p.user_id) map.set(p.user_id, p.id);
+    });
+    return map;
+  }, [participants]);
+
+  // Filter activity items
+  const filteredActivities = useMemo(() => {
+    let items = activityData?.activities || [];
+    
+    // Filter by type
+    if (activityFilterType !== "all") {
+      items = items.filter(item => {
+        if (activityFilterType === "expenses") return item.type.startsWith("transaction");
+        if (activityFilterType === "settlements") return item.type.startsWith("settlement");
+        return true;
+      });
+    }
+    
+    // Filter by participant involvement
+    if (activityFilterParticipantId !== "all") {
+      items = items.filter(item => {
+        // 1. Check if they are the actor (the one who made the change)
+        const actorParticipantId = userIdToParticipantId.get(item.changed_by.id);
+        if (actorParticipantId === activityFilterParticipantId) return true;
+
+        // 2. Check transaction details
+        if (item.details?.transaction) {
+          const t = item.details.transaction;
+          if (t.paid_by_participant_id === activityFilterParticipantId) return true;
+          if (t.split_among_participant_ids?.includes(activityFilterParticipantId)) return true;
+          if (t.splits?.some(s => s.participant_id === activityFilterParticipantId)) return true;
+        }
+
+        // 3. Check settlement details
+        if (item.details?.settlement) {
+          const s = item.details.settlement;
+          if (s.from_participant_id === activityFilterParticipantId) return true;
+          if (s.to_participant_id === activityFilterParticipantId) return true;
+        }
+
+        return false;
+      });
+    }
+    
+    return items;
+  }, [activityData?.activities, activityFilterType, activityFilterParticipantId, userIdToParticipantId]);
 
   // Auto sign-out on session expiration with alert
   useEffect(() => {
@@ -187,7 +242,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
   // Mutations
 
-  const deleteGroupMutation = useDeleteGroup(refetchGroup);
   const addMemberMutation = useAddMember(() => {
     refetchGroup();
     refetchInvites();
@@ -221,36 +275,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     }
   }, [groupRefreshTrigger, refetchGroup]);
 
-  const handleDeleteGroup = async () => {
-    Alert.alert(
-      "Delete Group",
-      `Are you sure you want to delete "${group.name}"? This action cannot be undone.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setLeaving(true);
-              await deleteGroupMutation.mutate(group.id);
-              if (onDeleteGroup) {
-                onDeleteGroup();
-              } else {
-                onBack();
-              }
-            } catch (err) {
-              Alert.alert("Error", getUserFriendlyErrorMessage(err));
-            } finally {
-              setLeaving(false);
-              setMenuVisible(false);
-            }
-          },
-        },
-      ]
-    );
-  };
-
   const handleLeaveGroup = async () => {
     Alert.alert(
       "Leave Group",
@@ -280,19 +304,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 onBack();
               }
             } catch (err) {
-              const errorMessage = getUserFriendlyErrorMessage(err);
-
-              // Show user-friendly error messages for specific cases
-              if (errorMessage.includes("last owner")) {
-                Alert.alert(
-                  "Cannot Leave Group",
-                  "You cannot leave the group because you are the last owner. Please transfer ownership to another member first or delete the group.",
-                  [{ text: "OK" }]
-                );
-                return;
-              }
-
-              Alert.alert("Error", errorMessage);
+              Alert.alert("Error", getUserFriendlyErrorMessage(err));
             } finally {
               setLeaving(false);
               setMenuVisible(false);
@@ -309,21 +321,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   ) => {
     const memberName = memberEmail || `User ${memberUserId.substring(0, 8)}...`;
     const isRemovingSelf = memberUserId === session?.user?.id;
-    const ownerCount =
-      group.members?.filter((m) => m.role === "owner").length || 0;
-    const memberToRemove = group.members?.find(
-      (m) => m.user_id === memberUserId
-    );
-    const isRemovingOwner = memberToRemove?.role === "owner";
-
-    // Check if trying to remove the last owner
-    if (isRemovingOwner && ownerCount === 1) {
-      Alert.alert(
-        "Cannot Remove Member",
-        "Cannot remove the last owner of the group. Please transfer ownership first or delete the group."
-      );
-      return;
-    }
 
     Alert.alert(
       isRemovingSelf ? "Leave Group" : "Remove Member",
@@ -365,8 +362,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
   const handleSettlementSave = async (settlementData: {
     group_id: string;
-    from_user_id: string;
-    to_user_id: string;
+    from_participant_id: string;
+    to_participant_id: string;
     amount: number;
     currency: string;
     notes?: string;
@@ -381,6 +378,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     amount?: number;
     currency?: string;
     notes?: string;
+    from_participant_id?: string;
+    to_participant_id?: string;
   }) => {
     await updateSettlement.mutate(updateData);
     setShowSettlementForm(false);
@@ -388,60 +387,26 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   };
 
   const handleEditSettlement = (settlement: Settlement) => {
-    setEditingSettlement(settlement);
+    // Ensure settlement has group_id (may be missing from activity snapshot)
+    const settlementWithGroupId = {
+      ...settlement,
+      group_id: settlement.group_id || group.id,
+    };
+    setEditingSettlement(settlementWithGroupId);
     setShowSettlementForm(true);
   };
 
-  const handleDeleteSettlement = async (settlement: Settlement) => {
-    Alert.alert(
-      "Delete Settlement",
-      `Are you sure you want to delete this settlement of ${formatCurrency(
-        settlement.amount,
-        settlement.currency || getDefaultCurrency()
-      )}?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteSettlement.mutate({
-                id: settlement.id,
-                groupId: settlement.group_id,
-              });
-            } catch (err) {
-              Alert.alert("Error", getUserFriendlyErrorMessage(err));
-            }
-          },
-        },
-      ]
-    );
-  };
-
   const currentUserId = session?.user?.id;
-  const isOwner = Boolean(
-    currentUserId &&
-      (group.created_by === currentUserId ||
-        group.members?.some(
-          (m) => m.user_id === currentUserId && m.role === "owner"
-        ))
-  );
+  // isMember checks if the user exists in the group list at all (includes active and left)
   const isMember =
     group.members?.some((m) => m.user_id === currentUserId) ?? false;
+  
+  // isActiveMember checks if the user is currently active
+  const isActiveMember =
+    group.members?.some((m) => m.user_id === currentUserId && m.status === 'active') ?? false;
 
-  // Memoize isOwner to prevent unnecessary re-renders
-  const memoizedIsOwner = React.useMemo(
-    () => isOwner,
-    [
-      group.created_by,
-      currentUserId,
-      group.members?.length,
-      group.members?.find(
-        (m) => m.user_id === currentUserId && m.role === "owner"
-      )?.id,
-    ]
-  );
+  const canManageMembers = isActiveMember;
+  const canManageInvites = isActiveMember;
 
   const handleCancelInvitation = async (invitationId: string) => {
     Alert.alert(
@@ -570,9 +535,11 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           title={showMembers ? "Group Members" : group.name}
           titleStyle={{ fontWeight: "bold" }}
         />
+        
 
-        {/* Always render Menu when member to prevent unmounting - control visibility via visible prop */}
-        {isMember && (
+
+        {/* Group options (active members only) */}
+        {isActiveMember && (
           <Menu
             visible={menuVisible && !showMembers}
             onDismiss={handleCloseMenu}
@@ -598,19 +565,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               title="View Members"
               leadingIcon="account-group"
             />
-            {isOwner && (
-              <Menu.Item
-                onPress={() => {
-                  handleCloseMenu();
-                  handleDeleteGroup();
-                }}
-                title="Delete Group"
-                leadingIcon="delete"
-                titleStyle={{ color: theme.colors.error }}
-                disabled={leaving}
-              />
-            )}
-            {!isOwner && (
               <Menu.Item
                 onPress={() => {
                   handleCloseMenu();
@@ -621,22 +575,18 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 titleStyle={{ color: theme.colors.error }}
                 disabled={leaving}
               />
-            )}
-            {isOwner && (
-              <Menu.Item
-                onPress={() => {
-                  handleCloseMenu();
-                  handleLeaveGroup();
-                }}
-                title="Leave Group"
-                leadingIcon="exit-run"
-                titleStyle={{ color: theme.colors.error }}
-                disabled={leaving}
-              />
-            )}
           </Menu>
         )}
       </Appbar.Header>
+
+      {/* Banner for former members */}
+      {!isActiveMember && isMember && !showMembers && (
+          <View style={{ backgroundColor: theme.colors.errorContainer, paddingHorizontal: 16, paddingVertical: 8, alignItems: 'center', width: '100%' }}>
+            <Text style={{ color: theme.colors.onErrorContainer, fontSize: 12, fontWeight: 'bold' }}>
+              You are viewing this group as a former member
+            </Text>
+          </View>
+      )}
 
       <ScrollView
         style={styles.scrollView}
@@ -649,7 +599,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             <MembersList
               members={group.members || []}
               currentUserId={session?.user?.id}
-              isOwner={isOwner}
+              canManageMembers={canManageMembers}
               removingMemberId={removingMemberId}
               onRemove={handleRemoveMember}
             />
@@ -659,16 +609,17 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             <InvitationsList
               invitations={invitations}
               loading={invitationsLoading}
-              isOwner={memoizedIsOwner}
+              canManageInvites={canManageInvites}
               cancellingInvitationId={cancellingInvitationId}
               onCancel={handleCancelInvitation}
             />
-            {memoizedIsOwner && (
+            {canManageMembers && (
               <Button
                 mode="contained"
                 onPress={onAddMember}
                 icon="account-plus"
                 style={{ marginTop: 24 }}
+                testID="add-member-button"
               >
                 Add Member
               </Button>
@@ -678,19 +629,22 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           // DASHBOARD & LIST VIEW
           <>
             <GroupDashboard
-              balances={balancesData?.overall_balances || []}
+              balances={balancesData?.group_balances?.[0]?.balances || []}
               transactions={transactions || []}
               currentUserId={session?.user?.id}
-              loading={balancesLoading || txLoading}
+              currentUserParticipantId={group.members?.find(m => m.user_id === session?.user?.id)?.participant_id}
+              loading={balancesLoading}
               defaultCurrency={getDefaultCurrency()}
-              onOwePress={() => handleStatNavigation("i-owe")}
-              onOwedPress={() => handleStatNavigation("im-owed")}
+              onSettlePress={(balance) => {
+                  setSettlingBalance(balance);
+                  setShowSettlementForm(true);
+              }}
               onMyCostsPress={() => handleStatNavigation("my-costs")}
               onTotalCostsPress={() => handleStatNavigation("total-costs")}
             />
 
             <View
-              style={{ paddingHorizontal: 16, marginTop: 24, marginBottom: 8 }}
+              style={{ paddingHorizontal: 16, marginTop: 16, marginBottom: 0 }}
             >
               <SegmentedButtons
                 value={listMode}
@@ -716,13 +670,93 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               <TransactionsSection
                 items={transactions}
                 loading={txLoading}
-                onEdit={onEditTransaction}
+                onEdit={isActiveMember ? onEditTransaction : () => {}}
+                members={group.members || []}
+                participants={participants}
               />
             ) : (
-              <View style={styles.sectionContent}>
+              <View style={[styles.sectionContent, styles.activitySection]}>
+
+                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 0, paddingHorizontal: 4, marginTop: -8 }}>
+                   <Button 
+                     mode={showActivityFilters ? "contained-tonal" : "text"}
+                     onPress={() => setShowActivityFilters(!showActivityFilters)} 
+                     icon={showActivityFilters ? "filter-variant-remove" : "filter-variant"}
+                     compact
+                     style={{ borderRadius: 20 }}
+                     contentStyle={{ flexDirection: 'row-reverse' }}
+                   >
+                     Filters {(activityFilterType !== "all" || activityFilterParticipantId !== "all") && "•"}
+                   </Button>
+                </View>
+
+                {showActivityFilters && (
+                  <View style={styles.filterContainer}>
+                    <Text variant="labelLarge" style={styles.filterLabel}>Filter by Type</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
+                      <Chip 
+                        selected={activityFilterType === "all"} 
+                        onPress={() => setActivityFilterType("all")}
+                        style={[styles.filterChip, activityFilterType === "all" && { backgroundColor: theme.colors.primaryContainer }]}
+                        showSelectedCheck={true}
+                        mode={activityFilterType === "all" ? "flat" : "outlined"}
+                      >
+                        All Types
+                      </Chip>
+                      <Chip 
+                        selected={activityFilterType === "expenses"} 
+                        onPress={() => setActivityFilterType("expenses")}
+                        style={[styles.filterChip, activityFilterType === "expenses" && { backgroundColor: theme.colors.primaryContainer }]}
+                        showSelectedCheck={true}
+                        icon="format-list-bulleted"
+                        mode={activityFilterType === "expenses" ? "flat" : "outlined"}
+                      >
+                        Expenses
+                      </Chip>
+                      <Chip 
+                        selected={activityFilterType === "settlements"} 
+                        onPress={() => setActivityFilterType("settlements")}
+                        style={[styles.filterChip, activityFilterType === "settlements" && { backgroundColor: theme.colors.primaryContainer }]}
+                        showSelectedCheck={true}
+                        icon="hand-coin"
+                        mode={activityFilterType === "settlements" ? "flat" : "outlined"}
+                      >
+                        Settlements
+                      </Chip>
+                    </ScrollView>
+
+                    <Text variant="labelLarge" style={[styles.filterLabel, { marginTop: 4 }]}>Filter by Person</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
+                      <Chip 
+                        selected={activityFilterParticipantId === "all"} 
+                        onPress={() => setActivityFilterParticipantId("all")}
+                        style={[styles.filterChip, activityFilterParticipantId === "all" && { backgroundColor: theme.colors.primaryContainer }]}
+                        showSelectedCheck={true}
+                        mode={activityFilterParticipantId === "all" ? "flat" : "outlined"}
+                      >
+                        Everyone
+                      </Chip>
+                      {participants.map(participant => (
+                        <Chip
+                          key={participant.id}
+                          selected={activityFilterParticipantId === participant.id}
+                          onPress={() => setActivityFilterParticipantId(participant.id)}
+                          style={[styles.filterChip, activityFilterParticipantId === participant.id && { backgroundColor: theme.colors.primaryContainer }]}
+                          showSelectedCheck={true}
+                          avatar={participant.avatar_url ? <Avatar.Image size={24} source={{ uri: participant.avatar_url }} /> : undefined}
+                          mode={activityFilterParticipantId === participant.id ? "flat" : "outlined"}
+                        >
+                          {participant.full_name || participant.email?.split('@')[0] || "User"}
+                        </Chip>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+
                 <ActivityFeed
-                  items={activityData?.activities || []}
+                  items={filteredActivities}
                   loading={activityLoading}
+                  isFiltered={activityFilterType !== "all" || activityFilterParticipantId !== "all"}
                 />
               </View>
             )}
@@ -733,7 +767,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         <View style={{ height: 80 }} />
       </ScrollView>
 
-      {!showMembers && (
+      {!showMembers && isActiveMember && (
         <FAB
           icon="plus"
           style={[
@@ -762,10 +796,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               ...data,
             });
           } else {
-            await handleSettlementSave({
-              ...data,
-              group_id: group.id,
-            });
+            await handleSettlementSave(data);
           }
         }}
         onDismiss={() => {
@@ -792,7 +823,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 16,
+    paddingHorizontal: 0,
+    paddingBottom: 16,
   },
   sectionSurface: {
     borderRadius: 16,
@@ -922,5 +954,28 @@ const styles = StyleSheet.create({
   emptyStateMessage: {
     textAlign: "center",
     lineHeight: 20,
+  },
+  activitySection: {
+    paddingBottom: 16,
+    paddingTop: 12, 
+  },
+  filterContainer: {
+    marginBottom: 12, 
+    paddingTop: 0,
+  },
+  filterLabel: {
+    marginBottom: 2,
+    opacity: 0.7,
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  filterRow: {
+    marginBottom: 0,
+  },
+  filterChip: {
+    marginRight: 8,
+    height: 32,
   },
 });

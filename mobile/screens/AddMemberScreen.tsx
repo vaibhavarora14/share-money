@@ -187,6 +187,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                 disabled={loading}
                 loading={loading}
                 style={styles.addButton}
+                testID="add-member-submit-button"
               >
                 Add Member
               </Button>

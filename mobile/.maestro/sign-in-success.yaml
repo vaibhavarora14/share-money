@@ -13,7 +13,7 @@ appId: com.vaibhavarora.sharemoney
 - assertVisible: "Sign in to continue"
 
 # Enter email
-- tapOn: 
+- tapOn:
     text: "Email"
 - inputText: "alice@test.com"
 
@@ -32,5 +32,5 @@ appId: com.vaibhavarora.sharemoney
 - assertVisible: "Your Groups"
 - assertNotVisible: "Welcome Back"
 # Also verify the bottom nav bar is visible
-- assertVisible: "Groups"
-
+- assertVisible: "Home"
+- runFlow: signout.yaml

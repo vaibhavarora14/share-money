@@ -16,11 +16,13 @@ import { styles } from "./ActivityFeed.styles";
 interface ActivityFeedProps {
   items: ActivityItem[];
   loading: boolean;
+  isFiltered?: boolean;
 }
 
 export const ActivityFeed: React.FC<ActivityFeedProps> = ({
   items,
   loading,
+  isFiltered,
 }) => {
   const theme = useTheme();
   const { session } = useAuth();
@@ -42,7 +44,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
           <Card style={styles.emptyStateCard} mode="outlined">
             <Card.Content style={styles.emptyStateContent}>
               <MaterialCommunityIcons
-                name={ACTIVITY_ICONS.EMPTY_STATE}
+                name={isFiltered ? "filter-variant-remove" : ACTIVITY_ICONS.EMPTY_STATE}
                 size={ACTIVITY_FEED_UI.EMPTY_STATE_ICON_SIZE}
                 color={theme.colors.onSurfaceVariant}
               />
@@ -53,7 +55,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                   { color: theme.colors.onSurface },
                 ]}
               >
-                No Activity Yet
+                {isFiltered ? "No matching activity" : "No Activity Yet"}
               </Text>
               <Text
                 variant="bodyMedium"
@@ -62,8 +64,9 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                   { color: theme.colors.onSurfaceVariant },
                 ]}
               >
-                Activity feed will show all transaction changes made in this
-                group.
+                {isFiltered 
+                  ? "Try adjusting your filters to see more activity."
+                  : "Activity feed will show all transaction changes made in this group."}
               </Text>
             </Card.Content>
           </Card>
@@ -76,13 +79,13 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
     const dateKeys = Object.keys(groupedActivities);
 
     return (
-      <View style={styles.section}>
+      <View>
         {dateKeys.map((dateKey, dateIndex) => {
           const activitiesForDate = groupedActivities[dateKey];
           return (
-            <React.Fragment key={dateKey}>
+            <View key={dateKey}>
               {dateIndex > 0 && <View style={{ height: 16 }} />}
-              <View style={styles.dateHeaderContainer}>
+              <View style={[styles.dateHeaderContainer, dateIndex === 0 && { marginTop: 0 }]}>
                 <Text
                   variant="labelMedium"
                   style={[
@@ -99,7 +102,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                   ]}
                 />
               </View>
-              {activitiesForDate.map((activity, activityIndex) => {
+              {activitiesForDate.map((activity) => {
                 const userDisplayName = getUserDisplayName(
                   activity.changed_by.id,
                   activity.changed_by.email,
@@ -119,75 +122,47 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                 };
 
                 const activityIcon = getActivityIcon(activity.type);
-
+                
                 return (
-                  <React.Fragment key={activity.id}>
-                    {activityIndex > 0 && <View style={{ height: 8 }} />}
-                    <Card style={styles.activityCard}>
-                      <Card.Content style={{ padding: 16 }}>
-                        <View style={styles.activityRow}>
-                          {/* Left: Circular Icon */}
-                          <View
-                            style={[
-                              styles.iconContainer,
-                              {
-                                backgroundColor:
-                                  activityColor + ACTIVITY_FEED_UI.ICON_OPACITY,
-                              },
-                            ]}
-                          >
-                            <MaterialCommunityIcons
-                              name={activityIcon}
-                              size={ACTIVITY_FEED_UI.ACTIVITY_ICON_SIZE}
-                              color={activityColor}
-                            />
-                          </View>
+                  <View key={activity.id} style={styles.activityItem}>
+                      {/* Left: Tonal Icon */}
+                      <View
+                        style={[
+                          styles.iconContainer,
+                          {
+                            backgroundColor: activityColor + "20",
+                          },
+                        ]}
+                      >
+                        <MaterialCommunityIcons
+                          name={activityIcon}
+                          size={20}
+                          color={activityColor}
+                        />
+                      </View>
 
-                          {/* Right: Content */}
-                          <View style={styles.activityContent}>
-                            {/* Header: User and Time */}
-                            <View style={styles.activityHeader}>
-                              <Text
-                                variant="bodyMedium"
-                                style={[
-                                  styles.activityUser,
-                                  { color: theme.colors.onSurface },
-                                ]}
-                              >
+                      {/* Right: Content */}
+                      <View style={styles.activityContent}>
+                         <View style={styles.activityHeader}>
+                            <Text variant="bodyLarge" style={[styles.activityUser, { color: theme.colors.onSurface }]}>
                                 {userDisplayName}
-                              </Text>
-                              <Text
-                                variant="bodySmall"
-                                style={[
-                                  styles.activityTime,
-                                  { color: theme.colors.outline },
-                                ]}
-                              >
-                                {formatActivityTime(activity.changed_at)}
-                              </Text>
-                            </View>
-
-                            {/* Description */}
-                            <Text
-                              variant="bodyMedium"
-                              style={[
-                                styles.activityDescription,
-                                { color: theme.colors.onSurfaceVariant },
-                              ]}
-                              numberOfLines={
-                                ACTIVITY_FEED_UI.MAX_DESCRIPTION_LINES
-                              }
-                            >
-                              {activity.description}
                             </Text>
-                          </View>
-                        </View>
-                      </Card.Content>
-                    </Card>
-                  </React.Fragment>
+                            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                                {formatActivityTime(activity.changed_at)}
+                            </Text>
+                         </View>
+                         
+                         <Text 
+                            variant="bodyMedium" 
+                            style={[styles.activityDescription, { color: theme.colors.onSurfaceVariant }]}
+                         >
+                             {activity.description}
+                         </Text>
+                      </View>
+                  </View>
                 );
               })}
-            </React.Fragment>
+            </View>
           );
         })}
       </View>

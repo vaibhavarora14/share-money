@@ -1,0 +1,102 @@
+appId: com.vaibhavarora.sharemoney
+---
+# Core E2E Flow: Create Group -> Add Member -> Expense -> Settle -> Cleanup
+# Covers: Participant Mgmt, Transactions, Settlements, RLS
+
+- waitForAnimationToEnd
+
+# 1. Login if needed
+- runFlow:
+    when:
+      visible: "Welcome Back"
+    commands:
+      - tapOn: "Email"
+      - inputText: "alice@test.com"
+      - tapOn: "Password"
+      - inputText: "testpassword123"
+      - tapOn: "Sign In"
+      - waitForAnimationToEnd
+
+- assertVisible: "Your Groups"
+
+# 2. Create Group
+- tapOn: "New Group"
+- waitForAnimationToEnd
+- assertVisible: "Create New Group"
+- tapOn: "Group Name"
+- inputText: "E2E Test Group"
+- tapOn: "Description (Optional)"
+- inputText: "Automated Test Group"
+- tapOn: "Create"
+- waitForAnimationToEnd
+
+# 3. Add Member
+- assertVisible: "E2E Test Group"
+- tapOn: "E2E Test Group"
+- waitForAnimationToEnd
+- assertVisible: "Transactions"
+
+# Go to Members
+- tapOn:
+    id: "group-menu-button"
+- tapOn: "View Members"
+- waitForAnimationToEnd
+- assertVisible: "Group Members"
+- tapOn: "Add Member"
+- waitForAnimationToEnd
+# Input email for new member
+- tapOn: "Email address"
+- inputText: "bob@test.com"
+- tapOn:
+    id: "add-member-submit-button"
+- waitForAnimationToEnd
+- tapOn: "OK"
+- waitForAnimationToEnd
+- assertVisible: "bob@test.com"
+- tapOn: "Navigate back"
+- waitForAnimationToEnd
+
+# 4. Create Expense
+- tapOn: "Add Expense"
+- waitForAnimationToEnd
+- tapOn: "Description"
+- inputText: "Team Lunch"
+- tapOn:
+    id: "amount-input"
+- inputText: "100"
+# Alice is the logged in user, so by default she is the payer.
+# We ensure she stays the payer so she can "RECEIVE" from Bob later.
+- tapOn: "Save"
+- waitForAnimationToEnd
+# Verify transaction listed
+- assertVisible: "Team Lunch"
+- assertVisible: "₹100.00"
+
+# 5. Verify Balance
+# Alice paid, Bob owes her half. "Bob owes you" -> "RECEIVE" button.
+- assertVisible: "RECEIVE"
+- assertVisible: "₹50.00"
+
+# 6. Settle Up
+- tapOn: "RECEIVE"
+- waitForAnimationToEnd
+# Settlement form opens. Default should be "Bob pays You ₹50".
+- assertVisible: "bob@test.com"
+- assertVisible: "paying"
+- assertVisible: "You"
+- assertVisible: "Settlement amount"
+- tapOn: "Mark as Received"
+- waitForAnimationToEnd
+
+# 7. Verify Settle
+# Dashboard should now be clear
+- assertVisible: "You are all caught up!"
+
+# 8. Cleanup
+# Go back to list
+- tapOn: "Navigate back"
+- waitForAnimationToEnd
+- assertVisible: "Your Groups"
+
+- assertVisible: "Your Groups"
+- runFlow: signout.yaml

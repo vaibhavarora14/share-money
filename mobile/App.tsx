@@ -1,43 +1,44 @@
 import * as Sentry from "@sentry/react-native";
 import { Session } from "@supabase/supabase-js";
 import {
-  QueryClient,
-  QueryClientProvider,
-  useQueryClient,
+    QueryClient,
+    QueryClientProvider,
+    useQueryClient,
 } from "@tanstack/react-query";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { Text as RNText, StyleSheet, useColorScheme, View } from "react-native";
 import {
-  ActivityIndicator,
-  Button,
-  Provider as PaperProvider,
-  useTheme,
+    ActivityIndicator,
+    Button,
+    Provider as PaperProvider,
+    useTheme,
 } from "react-native-paper";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BottomNavBar } from "./components/BottomNavBar";
+import { ForceUpdateModal } from "./components/ForceUpdateModal";
 import { AUTH_TIMEOUTS } from "./constants/auth";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { UpgradeProvider, useUpgrade } from "./contexts/UpgradeContext";
 import { queryKeys } from "./hooks/queryKeys";
 import { fetchActivity } from "./hooks/useActivity";
 import { fetchBalances } from "./hooks/useBalances";
 import {
-  useAddMember,
-  useCreateGroup,
-  useRemoveMember,
+    useAddMember,
+    useCreateGroup,
+    useRemoveMember,
 } from "./hooks/useGroupMutations";
 import { fetchGroupDetails, useGroupDetails } from "./hooks/useGroups";
 import { useProfile } from "./hooks/useProfile";
 import {
-  fetchTransactions,
-  useCreateTransaction,
-  useDeleteTransaction,
-  useUpdateTransaction,
+    fetchTransactions,
+    useCreateTransaction,
+    useDeleteTransaction,
+    useUpdateTransaction,
 } from "./hooks/useTransactions";
 import { AddMemberScreen } from "./screens/AddMemberScreen";
 import { AuthScreen } from "./screens/AuthScreen";
-import { BalancesScreen } from "./screens/BalancesScreen";
 import { GroupDetailsScreen } from "./screens/GroupDetailsScreen";
 import { GroupStatsMode, GroupStatsScreen } from "./screens/GroupStatsScreen";
 import { GroupsListScreen } from "./screens/GroupsListScreen";
@@ -309,33 +310,9 @@ function AppContent() {
     );
   }
 
-  // Check if profile is incomplete
-  const isProfileIncomplete =
-    !profile || !profile.profile_completed || !profile.full_name;
 
-  // Show balances screen (with bottom nav)
-  if (currentRoute === "balances") {
-    return (
-      <>
-        <BalancesScreen />
-        <BottomNavBar
-          currentRoute={currentRoute}
-          onGroupsPress={() => {
-            setCurrentRoute("groups");
-          }}
-          onBalancesPress={() => {
-            setCurrentRoute("balances");
-          }}
-          onProfilePress={() => {
-            setCurrentRoute("profile");
-          }}
-          onLogoutPress={signOut}
-          isProfileIncomplete={isProfileIncomplete}
-        />
-        <StatusBar style={theme.dark ? "light" : "dark"} />
-      </>
-    );
-  }
+
+
 
   // Show profile screen
   if (currentRoute === "profile") {
@@ -345,21 +322,20 @@ function AppContent() {
           onComplete={() => {
             refetchProfile();
             setCurrentRoute("groups");
+            setGroupRefreshTrigger((prev) => prev + 1);
           }}
         />
         <BottomNavBar
           currentRoute={currentRoute}
           onGroupsPress={() => {
             setCurrentRoute("groups");
-          }}
-          onBalancesPress={() => {
-            setCurrentRoute("balances");
+            setGroupRefreshTrigger((prev) => prev + 1);
           }}
           onProfilePress={() => {
             setCurrentRoute("profile");
           }}
           onLogoutPress={signOut}
-          isProfileIncomplete={isProfileIncomplete}
+
         />
         <StatusBar style={theme.dark ? "light" : "dark"} />
       </>
@@ -379,7 +355,7 @@ function AppContent() {
           }}
           onDelete={editingTransaction ? handleDeleteTransaction : undefined}
           defaultCurrency={getDefaultCurrency()}
-          groupMembers={selectedGroupDetails?.members || []}
+
           groupId={selectedGroup.id}
         />
         <StatusBar style={theme.dark ? "light" : "dark"} />
@@ -424,6 +400,7 @@ function AppContent() {
             setSelectedGroup(null);
             setCurrentRoute("groups");
             setStatsContext(null);
+            setGroupRefreshTrigger((prev) => prev + 1);
           }}
           onAddMember={() => setShowAddMember(true)}
           onRemoveMember={async (userId: string) => {
@@ -433,11 +410,7 @@ function AppContent() {
             setSelectedGroup(null);
             setCurrentRoute("groups");
             setStatsContext(null);
-          }}
-          onDeleteGroup={() => {
-            setSelectedGroup(null);
-            setCurrentRoute("groups");
-            setStatsContext(null);
+            setGroupRefreshTrigger((prev) => prev + 1);
           }}
           onAddTransaction={() => {
             setEditingTransaction(null);
@@ -459,15 +432,11 @@ function AppContent() {
             setSelectedGroup(null);
             setCurrentRoute("groups");
             setStatsContext(null);
-          }}
-          onBalancesPress={() => {
-            setSelectedGroup(null);
-            setCurrentRoute("balances");
-            setStatsContext(null);
+            setGroupRefreshTrigger((prev) => prev + 1);
           }}
           onLogoutPress={signOut}
           onProfilePress={() => setCurrentRoute("profile")}
-          isProfileIncomplete={isProfileIncomplete}
+
         />
         {showAddMember && selectedGroup && (
           <AddMemberScreen
@@ -497,15 +466,17 @@ function AppContent() {
         onRefetchReady={(refetch: () => Promise<void>) => {
           groupsListRefetchRef.current = refetch;
         }}
+        refetchTrigger={groupRefreshTrigger}
       />
-      <BottomNavBar
-        currentRoute={currentRoute}
-        onGroupsPress={() => setCurrentRoute("groups")}
-        onBalancesPress={() => setCurrentRoute("balances")}
-        onProfilePress={() => setCurrentRoute("profile")}
-        onLogoutPress={signOut}
-        isProfileIncomplete={isProfileIncomplete}
-      />
+        <BottomNavBar
+          currentRoute={currentRoute}
+          onGroupsPress={() => {
+            setCurrentRoute("groups");
+            setGroupRefreshTrigger((prev) => prev + 1);
+          }}
+          onProfilePress={() => setCurrentRoute("profile")}
+          onLogoutPress={signOut}
+        />
       <StatusBar style={theme.dark ? "light" : "dark"} />
     </>
   );
@@ -620,13 +591,30 @@ export default function App() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <PaperProvider theme={theme}>
-            <AuthProvider>
-              <AppContent />
-            </AuthProvider>
+            <UpgradeProvider>
+              <AuthProvider>
+                <AppContent />
+                <ForceUpdateOverlay />
+              </AuthProvider>
+            </UpgradeProvider>
           </PaperProvider>
         </QueryClientProvider>
       </SafeAreaProvider>
     </ErrorBoundary>
+  );
+}
+
+// Force Update Overlay - shows modal when upgrade is required
+function ForceUpdateOverlay() {
+  const { isUpgradeRequired, upgradeMessage, upgradeDetails } = useUpgrade();
+  
+  return (
+    <ForceUpdateModal
+      visible={isUpgradeRequired}
+      message={upgradeMessage || undefined}
+      storeUrlIos={upgradeDetails?.storeUrlIos}
+      storeUrlAndroid={upgradeDetails?.storeUrlAndroid}
+    />
   );
 }
 

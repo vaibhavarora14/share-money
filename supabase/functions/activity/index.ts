@@ -98,6 +98,8 @@ interface ActivityItem {
   changed_by: {
     id: string;
     email: string;
+    full_name: string | null;
+    avatar_url: string | null;
   };
   changed_at: string;
   description: string;
@@ -111,61 +113,202 @@ function collectUserIdsFromHistory(historyRecords: TransactionHistory[]): Set<st
   
   historyRecords.forEach((h: TransactionHistory) => {
     userIds.add(h.changed_by);
-    
-    if (h.action === 'updated' && h.changes?.diff?.split_among) {
-      const splitDiff = h.changes.diff.split_among;
-      const oldSplits = Array.isArray(splitDiff.old) ? splitDiff.old : [];
-      const newSplits = Array.isArray(splitDiff.new) ? splitDiff.new : [];
-      oldSplits.forEach((userId: string) => userIds.add(userId));
-      newSplits.forEach((userId: string) => userIds.add(userId));
-    }
-    
-    if (h.activity_type === 'settlement') {
-      const settlement = h.snapshot?.settlement || h.changes?.settlement;
-      if (settlement) {
-        if (settlement.from_user_id) userIds.add(settlement.from_user_id);
-        if (settlement.to_user_id) userIds.add(settlement.to_user_id);
-      }
-    }
   });
   
   return userIds;
+}
+
+interface Participant {
+  id: string;
+  group_id: string;
+  user_id?: string | null;
+  email?: string | null;
+  type: 'member' | 'invited' | 'former';
+  role?: 'owner' | 'member';
+  full_name?: string | null;
+  avatar_url?: string | null;
+}
+
+async function buildParticipantMapForHistory(
+  supabase: any, // Use 'any' for SupabaseClient to avoid import issues if not explicitly defined
+  historyRecords: TransactionHistory[]
+): Promise<Map<string, Participant>> {
+  const participantIds = new Set<string>();
+  const userIds = new Set<string>();
+  
+  historyRecords.forEach((h: TransactionHistory) => {
+    userIds.add(h.changed_by);
+    
+    // Collect from diffs
+    if (h.changes?.diff) {
+      const diff = h.changes.diff;
+      ['paid_by_participant_id', 'paid_by'].forEach(field => {
+        if (diff[field]) {
+          if (diff[field].old) participantIds.add(diff[field].old as string);
+          if (diff[field].new) participantIds.add(diff[field].new as string);
+        }
+      });
+      ['split_among_participant_ids', 'split_among'].forEach(field => {
+        if (diff[field]) {
+          if (Array.isArray(diff[field].old)) diff[field].old.forEach((id: string) => participantIds.add(id));
+          if (Array.isArray(diff[field].new)) diff[field].new.forEach((id: string) => participantIds.add(id));
+        }
+      });
+      // Settlements
+      ['from_participant_id', 'to_participant_id', 'from_user_id', 'to_user_id'].forEach(field => {
+        if (diff[field]) {
+          if (diff[field].old) participantIds.add(diff[field].old as string);
+          if (diff[field].new) participantIds.add(diff[field].new as string);
+        }
+      });
+    }
+    
+    
+    // Collect from snapshots
+    const extracted = extractSnapshot(h);
+    let s: any = extracted.transaction || extracted.settlement;
+    
+    if (!s) {
+       s = h.changes?.transaction || h.changes?.settlement;
+    }
+
+    if (s) {
+      if (s.paid_by_participant_id) participantIds.add(s.paid_by_participant_id);
+      if (s.paid_by) participantIds.add(s.paid_by);
+      if (Array.isArray(s.split_among_participant_ids)) s.split_among_participant_ids.forEach((id: string) => participantIds.add(id));
+      if (Array.isArray(s.split_among)) s.split_among.forEach((id: string) => participantIds.add(id));
+      if (s.from_participant_id) participantIds.add(s.from_participant_id);
+      if (s.to_participant_id) participantIds.add(s.to_participant_id);
+      if (s.from_user_id) participantIds.add(s.from_user_id);
+      if (s.to_user_id) participantIds.add(s.to_user_id);
+    }
+  });
+
+  const participantMap = new Map<string, Participant>();
+  if (participantIds.size === 0) return participantMap;
+
+  // Resolve participant IDs (could be participant_id or user_id in legacy)
+  const { data: participants } = await supabase
+    .from('participants')
+    .select('*')
+    .or(`id.in.(${Array.from(participantIds).filter(isValidUUID).join(',') || '00000000-0000-0000-0000-000000000000'}),user_id.in.(${Array.from(participantIds).filter(isValidUUID).join(',') || '00000000-0000-0000-0000-000000000000'})`);
+
+  if (participants) {
+    participants.forEach((p: Participant) => {
+      participantMap.set(p.id, p);
+      if (p.user_id) participantMap.set(p.user_id, p); // Map user_id to participant as well for easier lookup
+    });
+  }
+
+  return participantMap;
 }
 
 async function buildEmailMapForHistory(
   historyRecords: TransactionHistory[],
   currentUserId: string,
   currentUserEmail: string | null,
-  supabase: any
-): Promise<{ emailMap: Map<string, string>; profileMap: Map<string, { full_name: string | null; avatar_url: string | null }> }> {
+  supabase: any,
+  groupId: string
+): Promise<{ 
+  emailMap: Map<string, string>; 
+  profileMap: Map<string, { full_name: string | null; avatar_url: string | null }>;
+  participantMap: Map<string, Participant>;
+}> {
   const emailMap = new Map<string, string>();
   const profileMap = new Map<string, { full_name: string | null; avatar_url: string | null }>();
+  const participantMap = new Map<string, Participant>();
   
   if (historyRecords.length === 0) {
-    return { emailMap, profileMap };
+    return { emailMap, profileMap, participantMap };
   }
 
   const userIds = collectUserIdsFromHistory(historyRecords);
-  const userIdsArray = Array.from(userIds);
-  
-  if (userIdsArray.length === 0) {
-    return { emailMap, profileMap };
+  const participantIds = new Set<string>();
+
+  historyRecords.forEach((h: TransactionHistory) => {
+    // Collect from diffs
+    if (h.changes?.diff) {
+      const diff = h.changes.diff;
+      ['paid_by_participant_id', 'paid_by', 'from_participant_id', 'to_participant_id'].forEach(field => {
+        if (diff[field]) {
+          if (diff[field].old) participantIds.add(diff[field].old as string);
+          if (diff[field].new) participantIds.add(diff[field].new as string);
+        }
+      });
+      ['split_among_participant_ids', 'split_among'].forEach(field => {
+        if (diff[field]) {
+          if (Array.isArray(diff[field].old)) diff[field].old.forEach((id: string) => participantIds.add(id));
+          if (Array.isArray(diff[field].new)) diff[field].new.forEach((id: string) => participantIds.add(id));
+        }
+      });
+    }
+    
+    
+    // Collect from snapshots
+    const extracted = extractSnapshot(h);
+    let s: any = extracted.transaction || extracted.settlement;
+    
+    if (!s) {
+       s = h.changes?.transaction || h.changes?.settlement;
+    }
+
+    if (s) {
+      if (s.paid_by_participant_id) participantIds.add(s.paid_by_participant_id);
+      if (s.paid_by) participantIds.add(s.paid_by);
+      if (Array.isArray(s.split_among_participant_ids)) s.split_among_participant_ids.forEach((id: string) => participantIds.add(id));
+      if (Array.isArray(s.split_among)) s.split_among.forEach((id: string) => participantIds.add(id));
+      if (s.from_participant_id) participantIds.add(s.from_participant_id);
+      if (s.to_participant_id) participantIds.add(s.to_participant_id);
+      if (s.from_user_id) participantIds.add(s.from_user_id);
+      if (s.to_user_id) participantIds.add(s.to_user_id);
+    }
+  });
+
+  // Resolve participants
+  if (participantIds.size > 0) {
+    const { data: participants } = await supabase
+      .from('participants')
+      .select('*')
+      .in('id', Array.from(participantIds).filter(isValidUUID));
+
+    if (participants) {
+      participants.forEach((p: Participant) => {
+        participantMap.set(p.id, p);
+        if (p.user_id) userIds.add(p.user_id);
+      });
+    }
   }
 
-  const [fetchedEmailMap, fetchedProfileMap] = await Promise.all([
-    fetchUserEmails(userIdsArray, currentUserId, currentUserEmail),
-    fetchUserProfiles(supabase, userIdsArray),
-  ]);
+  // Fetch all user details
+  const userIdsArray = Array.from(userIds);
+  if (userIdsArray.length > 0) {
+    const [fetchedEmailMap, fetchedProfileMap] = await Promise.all([
+      fetchUserEmails(userIdsArray, currentUserId, currentUserEmail),
+      fetchUserProfiles(supabase, userIdsArray),
+    ]);
 
-  fetchedEmailMap.forEach((email, userId) => {
-    emailMap.set(userId, email);
-  });
+    fetchedEmailMap.forEach((email, userId) => emailMap.set(userId, email));
+    fetchedProfileMap.forEach((profile, userId) => profileMap.set(userId, profile));
+
+    // Enrich participant map with profile data if available
+    participantMap.forEach((p) => {
+      if (p.user_id) {
+        // Try profile first
+        const profile = profileMap.get(p.user_id);
+        if (profile) {
+          if (!p.full_name && profile.full_name) p.full_name = profile.full_name;
+          if (!p.avatar_url && profile.avatar_url) p.avatar_url = profile.avatar_url;
+        }
+        // Try email map
+        if (!p.email) {
+          const email = emailMap.get(p.user_id);
+          if (email) p.email = email;
+        }
+      }
+    });
+  }
   
-  fetchedProfileMap.forEach((profile, userId) => {
-    profileMap.set(userId, profile);
-  });
-  
-  return { emailMap, profileMap };
+  return { emailMap, profileMap, participantMap };
 }
 
 function extractSnapshot(
@@ -180,7 +323,10 @@ function extractSnapshot(
     if ((snapshot as any).settlement) {
       return { settlement: (snapshot as any).settlement as SettlementSnapshot };
     }
-    if ('from_user_id' in snapshot && 'to_user_id' in snapshot) {
+    if (
+      ('from_user_id' in snapshot && 'to_user_id' in snapshot) ||
+      ('from_participant_id' in snapshot && 'to_participant_id' in snapshot)
+    ) {
       return { settlement: snapshot as unknown as SettlementSnapshot };
     }
     return {};
@@ -199,10 +345,13 @@ function extractSnapshot(
 
 function transformHistoryToActivity(
   history: TransactionHistory,
-  emailMap?: Map<string, string>,
-  profileMap?: Map<string, { full_name: string | null; avatar_url: string | null }>
+  emailMap: Map<string, string>,
+  profileMap: Map<string, { full_name: string | null; avatar_url: string | null }>,
+  participantMap: Map<string, Participant>
 ): ActivityItem {
   const activityType = history.activity_type || 'transaction';
+  const action = history.action;
+  
   const typeMap: Record<string, ActivityItem['type']> = {
     'created': activityType === 'settlement' ? 'settlement_created' : 'transaction_created',
     'updated': activityType === 'settlement' ? 'settlement_updated' : 'transaction_updated',
@@ -210,10 +359,10 @@ function transformHistoryToActivity(
   };
 
   const details: ActivityItemDetails = {
-    action: history.action,
+    action: action,
   };
 
-  if (history.action === 'updated' && history.changes?.diff) {
+  if (action === 'updated' && history.changes?.diff) {
     details.changes = history.changes.diff;
   }
 
@@ -235,18 +384,18 @@ function transformHistoryToActivity(
 
   return {
     id: history.id,
-    type: typeMap[history.action] || 'transaction_updated',
+    type: typeMap[action] || 'transaction_updated',
     transaction_id: history.transaction_id || undefined,
     settlement_id: history.settlement_id || undefined,
     group_id: history.group_id,
     changed_by: {
       id: history.changed_by,
-      email: emailMap?.get(history.changed_by) || 'Unknown User',
-      full_name: profileMap?.get(history.changed_by)?.full_name || null,
-      avatar_url: profileMap?.get(history.changed_by)?.avatar_url || null,
+      email: emailMap.get(history.changed_by) || 'Unknown User',
+      full_name: profileMap.get(history.changed_by)?.full_name || null,
+      avatar_url: profileMap.get(history.changed_by)?.avatar_url || null,
     },
     changed_at: history.changed_at,
-    description: generateActivityDescription(history, emailMap),
+    description: generateActivityDescription(history, emailMap, participantMap),
     details,
   };
 }
@@ -286,6 +435,7 @@ Deno.serve(async (req: Request) => {
       .select('id')
       .eq('group_id', groupId)
       .eq('user_id', user.id)
+      .eq('status', 'active')
       .single();
 
     if (membershipError || !membership) {
@@ -309,15 +459,16 @@ Deno.serve(async (req: Request) => {
       return handleError(historyError, 'fetching transaction history');
     }
 
-    const { emailMap, profileMap } = await buildEmailMapForHistory(
+    const { emailMap, profileMap, participantMap } = await buildEmailMapForHistory(
       historyRecords || [],
       user.id,
       user.email || null,
-      supabase
+      supabase,
+      groupId
     );
 
     const activities: ActivityItem[] = (historyRecords || []).map((h: TransactionHistory) => 
-      transformHistoryToActivity(h, emailMap, profileMap)
+      transformHistoryToActivity(h, emailMap, profileMap, participantMap)
     );
 
     const countQuery = supabase
