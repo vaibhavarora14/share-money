@@ -82,15 +82,26 @@ jobs:
             version: newVersion,
             buildNumber: newBuild,
           };
+          
+          // Update mobile/version.json
           fs.writeFileSync('mobile/version.json', JSON.stringify(output, null, 2) + '\n');
           console.log(`Computed version ${newVersion} (build ${newBuild}) from ${mainData.version}`);
-          console.log(`Previous file on branch was ${currentData.version} (build ${currentData.buildNumber})`);
+          
+          // Sync with supabase/functions/_shared/version-config.ts
+          const configPath = 'supabase/functions/_shared/version-config.ts';
+          if (fs.existsSync(configPath)) {
+            let configContent = fs.readFileSync(configPath, 'utf8');
+            // Update LATEST_VERSION
+            configContent = configContent.replace(/LATEST_VERSION:\s*["'][^"']+["']/, `LATEST_VERSION: "${newVersion}"`);
+            fs.writeFileSync(configPath, configContent);
+            console.log(`Updated LATEST_VERSION in ${configPath} to ${newVersion}`);
+          }
           NODE
 
       - name: Check diff
         id: diff
         run: |
-          if git diff --quiet -- mobile/version.json; then
+          if git diff --quiet -- mobile/version.json supabase/functions/_shared/version-config.ts; then
             echo "changed=false" >> $GITHUB_OUTPUT
             echo "Version is already up to date."
           else
@@ -104,7 +115,7 @@ jobs:
         run: |
           git config user.name "share-money-version-bot"
           git config user.email "version-bot@users.noreply.github.com"
-          git add mobile/version.json
+          git add mobile/version.json supabase/functions/_shared/version-config.ts
           git commit -m "chore: auto-sync version with PR title [skip ci]"
           git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }} HEAD:${{ github.head_ref }}
 
