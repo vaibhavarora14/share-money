@@ -16,7 +16,8 @@
     "version:major": "node scripts/version.js major",
     "version:build": "node scripts/version.js build",
     "version:show": "node scripts/version.js show",
-    "android:release": "eas submit --platform android --profile internal"
+    "android:release": "eas submit --platform android --profile internal",
+    "deploy:web": "npx expo export -p web && npx eas deploy --prod"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -38,11 +39,13 @@
     "expo-updates": "~29.0.15",
     "expo-web-browser": "~15.0.10",
     "react": "19.1.0",
+    "react-dom": "19.1.0",
     "react-error-boundary": "^6.0.0",
     "react-native": "0.81.5",
     "react-native-paper": "^5.14.5",
     "react-native-safe-area-context": "^5.6.2",
-    "react-native-vector-icons": "^10.3.0"
+    "react-native-vector-icons": "^10.3.0",
+    "react-native-web": "^0.21.0"
   },
   "private": true,
   "devDependencies": {
