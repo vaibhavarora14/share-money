@@ -1,14 +1,10 @@
-
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createErrorResponse } from '../_shared/error-handler.ts';
+import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-Deno.serve(async (req) => {
+Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return createEmptyResponse(200, req);
   }
 
   try {
@@ -28,16 +24,8 @@ Deno.serve(async (req) => {
 
     if (error) throw error;
 
-    return new Response(
-      JSON.stringify({ participants }, null, 2),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    );
-  } catch (error) {
-    return new Response(JSON.stringify({ error: error.message, stack: error.stack }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 400,
-    });
+    return createSuccessResponse({ participants }, 200, 0, req);
+  } catch (error: any) {
+    return createErrorResponse(400, error.message, 'DEBUG_ERROR', error.stack, req);
   }
 });

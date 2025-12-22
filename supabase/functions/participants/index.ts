@@ -33,7 +33,7 @@ interface Participant {
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return createEmptyResponse(200);
+    return createEmptyResponse(200, req);
   }
 
   try {
@@ -44,11 +44,11 @@ Deno.serve(async (req: Request) => {
     const groupId = url.searchParams.get('group_id');
 
     if (!groupId) {
-      return createErrorResponse(400, 'group_id query parameter is required', 'VALIDATION_ERROR');
+      return createErrorResponse(400, 'group_id query parameter is required', 'VALIDATION_ERROR', undefined, req);
     }
 
     if (!isValidUUID(groupId)) {
-      return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR');
+      return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR', undefined, req);
     }
 
     // Verify user is a member of the group or is the group owner
@@ -68,7 +68,7 @@ Deno.serve(async (req: Request) => {
         .single();
 
       if (groupError || !group || group.created_by !== user.id) {
-        return createErrorResponse(403, 'You must be a member of the group to view participants', 'PERMISSION_DENIED');
+        return createErrorResponse(403, 'You must be a member of the group to view participants', 'PERMISSION_DENIED', undefined, req);
       }
     }
 
@@ -117,9 +117,9 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    return createSuccessResponse(participants || [], 200, 0);
+    return createSuccessResponse(participants || [], 200, 0, req);
   } catch (error: unknown) {
-    return handleError(error, 'participants handler');
+    return handleError(error, 'participants handler', req);
   }
 });
 

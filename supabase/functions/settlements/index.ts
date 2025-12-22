@@ -95,21 +95,21 @@ async function enrichSettlementsWithParticipants(
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
-    return createEmptyResponse(200);
+    return createEmptyResponse(200, req);
   }
 
   try {
     const body = await req.text().catch(() => null);
     const bodySizeValidation = validateBodySize(body);
     if (!bodySizeValidation.valid) {
-      return createErrorResponse(413, bodySizeValidation.error || 'Request body too large', 'VALIDATION_ERROR');
+      return createErrorResponse(413, bodySizeValidation.error || 'Request body too large', 'VALIDATION_ERROR', undefined, req);
     }
 
     let authResult;
     try {
       authResult = await verifyAuth(req);
     } catch (authError) {
-      return handleError(authError, 'authentication');
+      return handleError(authError, 'authentication', req);
     }
 
     const { user, supabase } = authResult;
@@ -121,7 +121,7 @@ Deno.serve(async (req: Request) => {
       const groupId = url.searchParams.get('group_id');
       
       if (groupId && !isValidUUID(groupId)) {
-        return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR');
+        return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR', undefined, req);
       }
 
       let query = supabase
@@ -152,7 +152,7 @@ Deno.serve(async (req: Request) => {
       const { data: settlements, error } = await query;
 
       if (error) {
-        return handleError(error, 'fetching settlements');
+        return handleError(error, 'fetching settlements', req);
       }
 
       const enrichedSettlements = (settlements || []) as Settlement[];
@@ -184,7 +184,7 @@ Deno.serve(async (req: Request) => {
       }
 
       if (!settlementData.group_id || !settlementData.from_participant_id || !settlementData.to_participant_id || !settlementData.amount) {
-        return createErrorResponse(400, 'Missing required fields: group_id, from_participant_id, to_participant_id, amount', 'VALIDATION_ERROR');
+        return createErrorResponse(400, 'Missing required fields: group_id, from_participant_id, to_participant_id, amount', 'VALIDATION_ERROR', undefined, req);
       }
 
       // Verify group membership of the creator
@@ -218,7 +218,7 @@ Deno.serve(async (req: Request) => {
         .single();
 
       if (error) {
-        return handleError(error, 'creating settlement');
+        return handleError(error, 'creating settlement', req);
       }
 
       const enrichedSettlement = settlement as Settlement;
@@ -275,7 +275,7 @@ Deno.serve(async (req: Request) => {
         .single();
 
       if (updateError) {
-        return handleError(updateError, 'updating settlement');
+        return handleError(updateError, 'updating settlement', req);
       }
 
       const enrichedSettlement = updatedSettlement as Settlement;
@@ -317,7 +317,7 @@ Deno.serve(async (req: Request) => {
         .eq('id', settlementId);
 
       if (deleteError) {
-        return handleError(deleteError, 'deleting settlement');
+        return handleError(deleteError, 'deleting settlement', req);
       }
 
       return createEmptyResponse(204);

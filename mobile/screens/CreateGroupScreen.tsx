@@ -1,17 +1,19 @@
 import React, { useRef, useState } from "react";
 import {
-  Alert,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
+    Alert,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    View,
 } from "react-native";
 import { Appbar, Button, TextInput, useTheme } from "react-native-paper";
 import {
-  SafeAreaView,
-  useSafeAreaInsets,
+    SafeAreaView,
+    useSafeAreaInsets,
 } from "react-native-safe-area-context";
+import { WEB_MAX_WIDTH } from "../constants/layout";
 import { useAuth } from "../contexts/AuthContext";
 import { showErrorAlert } from "../utils/errorHandling";
 
@@ -73,76 +75,85 @@ export const CreateGroupScreen: React.FC<CreateGroupScreenProps> = ({
       onRequestClose={handleDismiss}
       presentationStyle="fullScreen"
     >
-      <SafeAreaView
-        style={[styles.container, { backgroundColor: theme.colors.background }]}
-        edges={["top", "left", "right"]}
-      >
-        <Appbar.Header
-          style={[styles.header, { backgroundColor: theme.colors.surface }]}
-          elevated
+      <View style={[styles.rootContainer, { backgroundColor: theme.colors.background }]}>
+        <SafeAreaView
+          style={styles.container}
+          edges={["top", "left", "right"]}
         >
-          <Appbar.BackAction onPress={handleDismiss} />
-          <Appbar.Content
-            title="Create New Group"
-            titleStyle={{ fontWeight: "bold" }}
-          />
-        </Appbar.Header>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.keyboardView}
-          keyboardVerticalOffset={0}
-        >
-          <ScrollView
-            ref={scrollViewRef}
-            style={styles.scrollView}
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            nestedScrollEnabled={true}
+          <Appbar.Header
+            style={[styles.header, { backgroundColor: theme.colors.surface }]}
+            elevated
           >
-            <TextInput
-              label="Group Name"
-              value={name}
-              onChangeText={setName}
-              mode="outlined"
-              disabled={loading}
-              style={styles.input}
-              left={<TextInput.Icon icon="account-group" />}
-              placeholder="e.g., Weekend Trip, Roommates"
+            <Appbar.BackAction onPress={handleDismiss} />
+            <Appbar.Content
+              title="Create New Group"
+              titleStyle={{ fontWeight: "bold" }}
             />
-
-            <TextInput
-              label="Description (Optional)"
-              value={description}
-              onChangeText={setDescription}
-              mode="outlined"
-              disabled={loading}
-              style={styles.input}
-              multiline
-              numberOfLines={3}
-              left={<TextInput.Icon icon="text" />}
-              placeholder="Add a description for this group"
-            />
-
-            <Button
-              mode="contained"
-              onPress={handleCreate}
-              disabled={loading}
-              loading={loading}
-              style={styles.createButton}
+          </Appbar.Header>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={styles.keyboardView}
+            keyboardVerticalOffset={0}
+          >
+            <ScrollView
+              ref={scrollViewRef}
+              style={styles.scrollView}
+              contentContainerStyle={styles.scrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled={true}
             >
-              Create
-            </Button>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
+              <TextInput
+                label="Group Name"
+                value={name}
+                onChangeText={setName}
+                mode="outlined"
+                disabled={loading}
+                style={styles.input}
+                left={<TextInput.Icon icon="account-group" />}
+                placeholder="e.g., Weekend Trip, Roommates"
+              />
+
+              <TextInput
+                label="Description (Optional)"
+                value={description}
+                onChangeText={setDescription}
+                mode="outlined"
+                disabled={loading}
+                style={styles.input}
+                multiline
+                numberOfLines={3}
+                left={<TextInput.Icon icon="text" />}
+                placeholder="Add a description for this group"
+              />
+
+              <Button
+                mode="contained"
+                onPress={handleCreate}
+                disabled={loading}
+                loading={loading}
+                style={styles.createButton}
+              >
+                Create
+              </Button>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </View>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
+  rootContainer: {
+    flex: 1,
+    width: "100%",
+  },
   container: {
     flex: 1,
+    width: "100%",
+    maxWidth: WEB_MAX_WIDTH,
+    alignSelf: "center",
   },
   header: {
     elevation: 0,
