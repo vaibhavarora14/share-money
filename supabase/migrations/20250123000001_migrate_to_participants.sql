@@ -126,7 +126,7 @@ WHERE p.user_id IS NOT NULL;
 INSERT INTO participant_mapping (group_id, old_email, participant_id)
 SELECT DISTINCT
   p.group_id,
-  NULL::UUID,
+  p.email,
   p.id
 FROM participants p
 WHERE p.email IS NOT NULL;
