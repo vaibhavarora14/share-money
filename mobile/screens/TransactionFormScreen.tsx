@@ -30,6 +30,7 @@ import {
     SafeAreaView,
     useSafeAreaInsets,
 } from "react-native-safe-area-context";
+import { WEB_MAX_WIDTH } from "../constants/layout";
 import { useAuth } from "../contexts/AuthContext";
 import { useParticipants } from "../hooks/useParticipants";
 import { Participant, Transaction } from "../types";
@@ -40,7 +41,6 @@ import {
     getDefaultCurrency,
 } from "../utils/currency";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
-import { WEB_MAX_WIDTH } from "../constants/layout";
 
 interface TransactionFormScreenProps {
   transaction?: Transaction | null;
@@ -1097,6 +1097,7 @@ const styles = StyleSheet.create({
   // Modals
   modalOverlay: {
     flex: 1,
+    width: "100%",
     backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "flex-end",
   },

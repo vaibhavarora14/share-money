@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { Appbar, Button, Text, TextInput, useTheme } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { WEB_MAX_WIDTH } from "../constants/layout";
 import { Balance, GroupMember, Participant, Settlement } from "../types";
 import {
     formatCurrency,
@@ -17,7 +18,6 @@ import {
     getDefaultCurrency,
 } from "../utils/currency";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
-import { WEB_MAX_WIDTH } from "../constants/layout";
 
 interface SettlementFormScreenProps {
   visible: boolean;
@@ -307,208 +307,214 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
       onRequestClose={onDismiss}
       presentationStyle="pageSheet"
     >
-      <KeyboardAvoidingView
-        style={[styles.container, { backgroundColor: theme.colors.background }]}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={insets.top}
-      >
-        <Appbar.Header>
-          <Appbar.Action icon="close" onPress={onDismiss} />
-          <Appbar.Content title={isEditing ? "Edit Settlement" : "Settle Up"} />
-        </Appbar.Header>
-
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
+      <View style={[styles.rootContainer, { backgroundColor: theme.colors.background }]}>
+        <KeyboardAvoidingView
+          style={styles.container}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={insets.top}
         >
-          {/* Unified Settlement Header: Shows Who is Paying Who */}
-          <View
-            style={[
-              styles.balanceInfo,
-              { backgroundColor: theme.colors.secondaryContainer },
-            ]}
+          <Appbar.Header>
+            <Appbar.Action icon="close" onPress={onDismiss} />
+            <Appbar.Content title={isEditing ? "Edit Settlement" : "Settle Up"} />
+          </Appbar.Header>
+
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
           >
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
-              {(() => {
-                let fromName = "";
-                let toName = "";
+            {/* Unified Settlement Header: Shows Who is Paying Who */}
+            <View
+              style={[
+                styles.balanceInfo,
+                { backgroundColor: theme.colors.secondaryContainer },
+              ]}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+                {(() => {
+                  let fromName = "";
+                  let toName = "";
 
-                if (isEditing && settlement) {
-                  const currentMember = groupMembers.find(m => m.user_id === currentUserId);
-                  const currentParticipantId = currentMember?.participant_id;
-                  
-                  if (settlement.from_participant_id === currentParticipantId) {
-                    fromName = "You";
-                    toName = getParticipantDisplayName(settlement.to_participant_id || "");
+                  if (isEditing && settlement) {
+                    const currentMember = groupMembers.find(m => m.user_id === currentUserId);
+                    const currentParticipantId = currentMember?.participant_id;
+                    
+                    if (settlement.from_participant_id === currentParticipantId) {
+                      fromName = "You";
+                      toName = getParticipantDisplayName(settlement.to_participant_id || "");
+                    } else {
+                      fromName = getParticipantDisplayName(settlement.from_participant_id || "");
+                      toName = "You";
+                    }
+                  } else if (isAdminMode) {
+                    fromName = adminPayer?.full_name || adminPayer?.email || "Payer";
+                    toName = adminReceiver?.full_name || adminReceiver?.email || "Receiver";
+                    if (adminPayer?.user_id === currentUserId) fromName = "You";
+                    if (adminReceiver?.user_id === currentUserId) toName = "You";
+                  } else if (balance) {
+                    if (isPaying) {
+                      fromName = "You";
+                      toName = balance.full_name || balance.email || "Member";
+                    } else {
+                      fromName = balance.full_name || balance.email || "Member";
+                      toName = "You";
+                    }
+                  } else if (selectedToParticipantId) {
+                     // Manual entry
+                     fromName = "You";
+                     const member = availableUsers.find(u => u.participant_id === selectedToParticipantId);
+                     toName = member?.full_name || member?.email || "Member";
                   } else {
-                    fromName = getParticipantDisplayName(settlement.from_participant_id || "");
-                    toName = "You";
+                    return (
+                      <Text variant="titleMedium" style={{ color: theme.colors.onSecondaryContainer, opacity: 0.6 }}>
+                        Select a member to settle with
+                      </Text>
+                    );
                   }
-                } else if (isAdminMode) {
-                  fromName = adminPayer?.full_name || adminPayer?.email || "Payer";
-                  toName = adminReceiver?.full_name || adminReceiver?.email || "Receiver";
-                  if (adminPayer?.user_id === currentUserId) fromName = "You";
-                  if (adminReceiver?.user_id === currentUserId) toName = "You";
-                } else if (balance) {
-                  if (isPaying) {
-                    fromName = "You";
-                    toName = balance.full_name || balance.email || "Member";
-                  } else {
-                    fromName = balance.full_name || balance.email || "Member";
-                    toName = "You";
-                  }
-                } else if (selectedToParticipantId) {
-                   // Manual entry
-                   fromName = "You";
-                   const member = availableUsers.find(u => u.participant_id === selectedToParticipantId);
-                   toName = member?.full_name || member?.email || "Member";
-                } else {
+
                   return (
-                    <Text variant="titleMedium" style={{ color: theme.colors.onSecondaryContainer, opacity: 0.6 }}>
-                      Select a member to settle with
-                    </Text>
+                    <>
+                      <Text variant="titleMedium" style={{ color: theme.colors.onSecondaryContainer, fontWeight: 'bold' }}>
+                        {fromName}
+                      </Text>
+                      <Text variant="titleMedium" style={{ color: theme.colors.onSecondaryContainer, marginHorizontal: 8, opacity: 0.7 }}>
+                        paying
+                      </Text>
+                      <Text variant="titleMedium" style={{ color: theme.colors.onSecondaryContainer, fontWeight: 'bold' }}>
+                        {toName}
+                      </Text>
+                    </>
                   );
-                }
-
-                return (
-                  <>
-                    <Text variant="titleMedium" style={{ color: theme.colors.onSecondaryContainer, fontWeight: 'bold' }}>
-                      {fromName}
-                    </Text>
-                    <Text variant="titleMedium" style={{ color: theme.colors.onSecondaryContainer, marginHorizontal: 8, opacity: 0.7 }}>
-                      paying
-                    </Text>
-                    <Text variant="titleMedium" style={{ color: theme.colors.onSecondaryContainer, fontWeight: 'bold' }}>
-                      {toName}
-                    </Text>
-                  </>
-                );
-              })()}
+                })()}
+              </View>
+              
+              {(amount || isEditing || isAdminMode) && (
+                <Text
+                  variant="bodyMedium"
+                  style={[
+                    styles.balanceAmount,
+                    { color: theme.colors.onSecondaryContainer, marginTop: 8, opacity: 0.8 },
+                  ]}
+                >
+                  {formatCurrency(
+                    parseFloat(amount) || initialAmount || settlement?.amount || 0,
+                    effectiveDefaultCurrency
+                  )}
+                </Text>
+              )}
             </View>
-            
-            {(amount || isEditing || isAdminMode) && (
-              <Text
-                variant="bodyMedium"
-                style={[
-                  styles.balanceAmount,
-                  { color: theme.colors.onSecondaryContainer, marginTop: 8, opacity: 0.8 },
-                ]}
-              >
-                {formatCurrency(
-                  parseFloat(amount) || initialAmount || settlement?.amount || 0,
-                  effectiveDefaultCurrency
-                )}
-              </Text>
-            )}
-          </View>
 
-          {!isEditing && !balance && !isAdminMode && (
+            {!isEditing && !balance && !isAdminMode && (
+              <View style={styles.section}>
+                <Text variant="labelLarge" style={styles.label}>
+                  Settle with
+                </Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.userPicker}
+                >
+                  {availableUsers.map((member) => (
+                    <Button
+                      key={member.participant_id}
+                      mode={
+                        selectedToParticipantId === member.participant_id
+                          ? "contained"
+                          : "outlined"
+                      }
+                      onPress={() => setSelectedToParticipantId(member.participant_id || "")}
+                      style={styles.userButton}
+                    >
+                      {member.full_name ||
+                        member.email ||
+                        `Member ${member.participant_id?.substring(0, 8)}...`}
+                    </Button>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
             <View style={styles.section}>
               <Text variant="labelLarge" style={styles.label}>
-                Settle with
+                Amount ({getCurrencySymbol(effectiveDefaultCurrency)})
               </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.userPicker}
-              >
-                {availableUsers.map((member) => (
-                  <Button
-                    key={member.participant_id}
-                    mode={
-                      selectedToParticipantId === member.participant_id
-                        ? "contained"
-                        : "outlined"
-                    }
-                    onPress={() => setSelectedToParticipantId(member.participant_id || "")}
-                    style={styles.userButton}
-                  >
-                    {member.full_name ||
-                      member.email ||
-                      `Member ${member.participant_id?.substring(0, 8)}...`}
-                  </Button>
-                ))}
-              </ScrollView>
+              <TextInput
+                label="Settlement amount"
+                value={amount}
+                onChangeText={(text) => {
+                  setAmount(text);
+                  if (amountError) setAmountError("");
+                }}
+                keyboardType="decimal-pad"
+                error={!!amountError}
+                mode="outlined"
+                left={
+                  <TextInput.Affix
+                    text={getCurrencySymbol(effectiveDefaultCurrency)}
+                  />
+                }
+              />
+              {amountError ? (
+                <Text
+                  variant="bodySmall"
+                  style={[styles.errorText, { color: theme.colors.error }]}
+                >
+                  {amountError}
+                </Text>
+              ) : null}
             </View>
-          )}
 
-          <View style={styles.section}>
-            <Text variant="labelLarge" style={styles.label}>
-              Amount ({getCurrencySymbol(effectiveDefaultCurrency)})
-            </Text>
-            <TextInput
-              label="Settlement amount"
-              value={amount}
-              onChangeText={(text) => {
-                setAmount(text);
-                if (amountError) setAmountError("");
-              }}
-              keyboardType="decimal-pad"
-              error={!!amountError}
-              mode="outlined"
-              left={
-                <TextInput.Affix
-                  text={getCurrencySymbol(effectiveDefaultCurrency)}
-                />
-              }
-            />
-            {amountError ? (
-              <Text
-                variant="bodySmall"
-                style={[styles.errorText, { color: theme.colors.error }]}
-              >
-                {amountError}
+            <View style={styles.section}>
+              <Text variant="labelLarge" style={styles.label}>
+                Notes (optional)
               </Text>
-            ) : null}
-          </View>
+              <TextInput
+                label="Add a note about this settlement"
+                value={notes}
+                onChangeText={setNotes}
+                mode="outlined"
+                multiline
+                numberOfLines={3}
+                placeholder="e.g., Paid via Venmo"
+              />
+            </View>
 
-          <View style={styles.section}>
-            <Text variant="labelLarge" style={styles.label}>
-              Notes (optional)
-            </Text>
-            <TextInput
-              label="Add a note about this settlement"
-              value={notes}
-              onChangeText={setNotes}
-              mode="outlined"
-              multiline
-              numberOfLines={3}
-              placeholder="e.g., Paid via Venmo"
-            />
-          </View>
-
-          <View style={styles.buttonContainer}>
-            <Button
-              mode="contained"
-              onPress={handleSave}
-              loading={loading}
-              disabled={loading || !amount || (!isEditing && !isAdminMode && !selectedToParticipantId)}
-              style={styles.saveButton}
-            >
-              {isEditing
-                ? "Update Settlement"
-                : isAdminMode && !isEditing ? "" : isPaying
-                ? "Mark as Paid"
-                : "Mark as Received"}
-               {isAdminMode && !isEditing && "Record Payment"}
-            </Button>
-            <Button
-              mode="outlined"
-              onPress={onDismiss}
-              disabled={loading}
-              style={styles.cancelButton}
-            >
-              Cancel
-            </Button>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+            <View style={styles.buttonContainer}>
+              <Button
+                mode="contained"
+                onPress={handleSave}
+                loading={loading}
+                disabled={loading || !amount || (!isEditing && !isAdminMode && !selectedToParticipantId)}
+                style={styles.saveButton}
+              >
+                {isEditing
+                  ? "Update Settlement"
+                  : isAdminMode && !isEditing ? "" : isPaying
+                  ? "Mark as Paid"
+                  : "Mark as Received"}
+                 {isAdminMode && !isEditing && "Record Payment"}
+              </Button>
+              <Button
+                mode="outlined"
+                onPress={onDismiss}
+                disabled={loading}
+                style={styles.cancelButton}
+              >
+                Cancel
+              </Button>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
+  rootContainer: {
+    flex: 1,
+    width: "100%",
+  },
   container: {
     flex: 1,
     width: "100%",

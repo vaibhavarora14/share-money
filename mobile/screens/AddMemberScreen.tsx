@@ -19,9 +19,9 @@ import {
     useTheme,
 } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { WEB_MAX_WIDTH } from "../constants/layout";
 import { useAuth } from "../contexts/AuthContext";
 import { showErrorAlert } from "../utils/errorHandling";
-import { WEB_MAX_WIDTH } from "../constants/layout";
 
 interface AddMemberScreenProps {
   visible: boolean;
@@ -203,6 +203,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
+    width: "100%",
     justifyContent: "flex-end",
   },
   backdrop: {
