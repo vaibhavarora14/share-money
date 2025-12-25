@@ -1,16 +1,16 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Alert, BackHandler, ScrollView, StyleSheet, View } from "react-native";
 import {
-    ActivityIndicator,
-    Appbar,
-    Avatar,
-    Button,
-    Chip,
-    FAB,
-    Menu,
-    SegmentedButtons,
-    Text,
-    useTheme
+  ActivityIndicator,
+  Appbar,
+  Avatar,
+  Button,
+  Chip,
+  FAB,
+  Menu,
+  SegmentedButtons,
+  Text,
+  useTheme
 } from "react-native-paper";
 import { ActivityFeed } from "../components/ActivityFeed";
 import { GroupDashboard } from "../components/GroupDashboard";
@@ -21,31 +21,31 @@ import { useAuth } from "../contexts/AuthContext";
 import { useActivity } from "../hooks/useActivity";
 import { useBalances } from "../hooks/useBalances";
 import {
-    useCancelInvitation,
-    useGroupInvitations,
+  useCancelInvitation,
+  useGroupInvitations,
 } from "../hooks/useGroupInvitations";
 import { useAddMember, useRemoveMember } from "../hooks/useGroupMutations";
 import { useGroupDetails } from "../hooks/useGroups";
 import { useParticipants } from "../hooks/useParticipants";
 import {
-    useCreateSettlement,
-    useDeleteSettlement,
-    useSettlements,
-    useUpdateSettlement,
+  useCreateSettlement,
+  useDeleteSettlement,
+  useSettlements,
+  useUpdateSettlement,
 } from "../hooks/useSettlements";
 import { useTransactions } from "../hooks/useTransactions";
 import {
-    Balance,
-    GroupInvitation,
-    GroupWithMembers,
-    Settlement,
-    Transaction,
+  Balance,
+  GroupInvitation,
+  GroupWithMembers,
+  Settlement,
+  Transaction,
 } from "../types";
 import { getDefaultCurrency } from "../utils/currency";
 import { showErrorAlert } from "../utils/errorHandling";
 import {
-    getUserFriendlyErrorMessage,
-    isSessionExpiredError,
+  getUserFriendlyErrorMessage,
+  isSessionExpiredError,
 } from "../utils/errorMessages";
 import { GroupStatsMode } from "./GroupStatsScreen";
 import { SettlementFormScreen } from "./SettlementFormScreen";
@@ -607,7 +607,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               group.members.length > 0 &&
               invitations.length > 0 && <View style={{ height: 16 }} />}
             <InvitationsList
-              invitations={invitations}
+              invitations={invitations.filter((i) => i.status === 'pending')}
               loading={invitationsLoading}
               canManageInvites={canManageInvites}
               cancellingInvitationId={cancellingInvitationId}
