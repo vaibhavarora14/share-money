@@ -17,7 +17,9 @@
     "version:build": "node scripts/version.js build",
     "version:show": "node scripts/version.js show",
     "android:release": "eas submit --platform android --profile internal",
-    "deploy:web": "npx expo export -p web && npx eas deploy --prod"
+    "deploy:web": "npx expo export -p web && npx eas deploy --prod",
+    "deploy:web:dev": "npx expo export -p web && npx eas deploy --alias development",
+    "deploy:web:preview": "npx expo export -p web && npx eas deploy --alias preview"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

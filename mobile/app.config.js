@@ -50,6 +50,18 @@ module.exports = ({ config }) => {
   const isDevelopmentBuild = !!process.env.EAS_BUILD_PROFILE || 
                              process.env.EXPO_PUBLIC_USE_DEV_CLIENT === 'true';
 
+  // Get hostname for Universal Links / App Links configuration
+  let appUrlHostname = null;
+  try {
+    if (process.env.EXPO_PUBLIC_APP_URL) {
+      const url = new URL(process.env.EXPO_PUBLIC_APP_URL);
+      appUrlHostname = url.hostname;
+    }
+  } catch (e) {
+    // Invalid URL, will skip Universal Links/App Links config
+    console.warn('Warning: EXPO_PUBLIC_APP_URL is invalid, Universal Links/App Links will not be configured');
+  }
+
   return {
     ...config,
     expo: {
@@ -72,7 +84,13 @@ module.exports = ({ config }) => {
         supportsTablet: true,
         bundleIdentifier: "com.vaibhavarora.sharemoney",
         scheme: "com.vaibhavarora.sharemoney",
-        buildNumber: versionConfig.buildNumber.toString()
+        buildNumber: versionConfig.buildNumber.toString(),
+        // Universal Links configuration
+        // Note: You need to configure associatedDomains in your Apple Developer account
+        // and host apple-app-site-association file on your web server
+        associatedDomains: appUrlHostname 
+          ? [`applinks:${appUrlHostname}`]
+          : []
       },
       android: {
         package: "com.vaibhavarora.sharemoney",
@@ -82,7 +100,31 @@ module.exports = ({ config }) => {
           foregroundImage: "./assets/adaptive-icon.png",
           backgroundColor: "#14B8A6"
         },
-        edgeToEdgeEnabled: true
+        edgeToEdgeEnabled: true,
+        // App Links configuration
+        // Note: You need to host assetlinks.json file on your web server
+        // at https://yourdomain.com/.well-known/assetlinks.json
+        intentFilters: appUrlHostname
+          ? [
+              {
+                action: "VIEW",
+                autoVerify: true,
+                data: [
+                  {
+                    scheme: "https",
+                    host: appUrlHostname,
+                    pathPrefix: "/join"
+                  },
+                  {
+                    scheme: "http",
+                    host: appUrlHostname,
+                    pathPrefix: "/join"
+                  }
+                ],
+                category: ["BROWSABLE", "DEFAULT"]
+              }
+            ]
+          : []
       },
       web: {
         favicon: "./assets/favicon.png"
