@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.vaibhavarora.sharemoney",
+      "sha256_cert_fingerprints": [
+        "07:3E:E0:4E:73:51:F4:A5:A9:B8:6A:AC:BB:93:50:D5:07:88:9A:56:E0:83:AD:8F:FB:36:41:EE:85:1A:27:46"
+      ]
+    }
+  }
+]

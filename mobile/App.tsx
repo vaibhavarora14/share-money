@@ -8,7 +8,13 @@ import {
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
-import { Platform, Text as RNText, StyleSheet, useColorScheme, View } from "react-native";
+import {
+  Platform,
+  Text as RNText,
+  StyleSheet,
+  useColorScheme,
+  View,
+} from "react-native";
 import {
   ActivityIndicator,
   Button,
@@ -19,6 +25,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BottomNavBar } from "./components/BottomNavBar";
 import { ForceUpdateModal } from "./components/ForceUpdateModal";
 import { AUTH_TIMEOUTS } from "./constants/auth";
+import { WEB_MAX_WIDTH } from "./constants/layout";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { UpgradeProvider, useUpgrade } from "./contexts/UpgradeContext";
 import { queryKeys } from "./hooks/queryKeys";
@@ -48,7 +55,6 @@ import { darkTheme, lightTheme } from "./theme";
 import { Group, GroupWithMembers } from "./types";
 import { getDefaultCurrency } from "./utils/currency";
 import { log, logError } from "./utils/logger";
-import { WEB_MAX_WIDTH } from "./constants/layout";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -311,10 +317,6 @@ function AppContent() {
     );
   }
 
-
-
-
-
   // Show profile screen
   if (currentRoute === "profile") {
     return (
@@ -336,7 +338,6 @@ function AppContent() {
             setCurrentRoute("profile");
           }}
           onLogoutPress={signOut}
-
         />
         <StatusBar style={theme.dark ? "light" : "dark"} />
       </>
@@ -356,7 +357,6 @@ function AppContent() {
           }}
           onDelete={editingTransaction ? handleDeleteTransaction : undefined}
           defaultCurrency={getDefaultCurrency()}
-
           groupId={selectedGroup.id}
         />
         <StatusBar style={theme.dark ? "light" : "dark"} />
@@ -437,7 +437,6 @@ function AppContent() {
           }}
           onLogoutPress={signOut}
           onProfilePress={() => setCurrentRoute("profile")}
-
         />
         {showAddMember && selectedGroup && (
           <AddMemberScreen
@@ -469,15 +468,15 @@ function AppContent() {
         }}
         refetchTrigger={groupRefreshTrigger}
       />
-        <BottomNavBar
-          currentRoute={currentRoute}
-          onGroupsPress={() => {
-            setCurrentRoute("groups");
-            setGroupRefreshTrigger((prev) => prev + 1);
-          }}
-          onProfilePress={() => setCurrentRoute("profile")}
-          onLogoutPress={signOut}
-        />
+      <BottomNavBar
+        currentRoute={currentRoute}
+        onGroupsPress={() => {
+          setCurrentRoute("groups");
+          setGroupRefreshTrigger((prev) => prev + 1);
+        }}
+        onProfilePress={() => setCurrentRoute("profile")}
+        onLogoutPress={signOut}
+      />
       <StatusBar style={theme.dark ? "light" : "dark"} />
     </>
   );
@@ -592,10 +591,20 @@ export default function App() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <PaperProvider theme={theme}>
-            <View style={[styles.mainContainer, { backgroundColor: theme.colors.background }]}>
+            <View
+              style={[
+                styles.mainContainer,
+                { backgroundColor: theme.colors.background },
+              ]}
+            >
               <UpgradeProvider>
                 <AuthProvider>
-                  <View style={[styles.appWrapper, { backgroundColor: theme.colors.surface }]}>
+                  <View
+                    style={[
+                      styles.appWrapper,
+                      { backgroundColor: theme.colors.surface },
+                    ]}
+                  >
                     <AppContent />
                     <ForceUpdateOverlay />
                   </View>
@@ -612,7 +621,7 @@ export default function App() {
 // Force Update Overlay - shows modal when upgrade is required
 function ForceUpdateOverlay() {
   const { isUpgradeRequired, upgradeMessage, upgradeDetails } = useUpgrade();
-  
+
   return (
     <ForceUpdateModal
       visible={isUpgradeRequired}
@@ -637,7 +646,7 @@ const styles = StyleSheet.create({
     maxWidth: WEB_MAX_WIDTH,
     alignSelf: "center",
     // Border and shadow only on web for premium desktop experience
-    ...(Platform.OS === 'web' && {
+    ...(Platform.OS === "web" && {
       borderWidth: 1,
       borderColor: "rgba(0, 0, 0, 0.05)",
       shadowColor: "#000",

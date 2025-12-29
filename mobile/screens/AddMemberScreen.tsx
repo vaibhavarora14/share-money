@@ -1,23 +1,17 @@
 import React, { useEffect, useState } from "react";
 import {
-    Alert,
-    Animated,
-    Dimensions,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    TouchableOpacity,
-    View,
+  Alert,
+  Animated,
+  Dimensions,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import {
-    Appbar,
-    Button,
-    Text,
-    TextInput,
-    useTheme,
-} from "react-native-paper";
+import { Appbar, Button, Text, TextInput, useTheme } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WEB_MAX_WIDTH } from "../constants/layout";
 import { useAuth } from "../contexts/AuthContext";
@@ -85,18 +79,22 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
     try {
       const result = await onAddMember(email.trim());
       // Check if result indicates an invitation was created
-      if (result && typeof result === 'object' && 'invitation' in result && result.invitation) {
+      if (
+        result &&
+        typeof result === "object" &&
+        "invitation" in result &&
+        result.invitation
+      ) {
         Alert.alert(
           "Invitation Sent",
-          result.message || "Invitation sent successfully! The user will be added to the group when they sign up.",
+          result.message ||
+            "Invitation sent successfully! The user will be added to the group when they sign up.",
           [{ text: "OK", onPress: handleDismiss }]
         );
       } else {
-        Alert.alert(
-          "Success",
-          "Member added successfully!",
-          [{ text: "OK", onPress: handleDismiss }]
-        );
+        Alert.alert("Success", "Member added successfully!", [
+          { text: "OK", onPress: handleDismiss },
+        ]);
       }
     } catch (error) {
       showErrorAlert(error, signOut, "Error");
@@ -144,7 +142,10 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
             />
           </View>
           <Appbar.Header style={styles.header}>
-            <Appbar.Content title="Add Member" titleStyle={{ fontWeight: 'bold' }} />
+            <Appbar.Content
+              title="Add Member"
+              titleStyle={{ fontWeight: "bold" }}
+            />
             <Appbar.Action icon="close" onPress={handleDismiss} />
           </Appbar.Header>
           <KeyboardAvoidingView
@@ -165,7 +166,10 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                   { color: theme.colors.onSurfaceVariant },
                 ]}
               >
-                Enter the email address of the user you want to add to this group. If the user doesn't have an account yet, an invitation will be sent and they'll be added automatically when they sign up.
+                Enter the email address of the user you want to add to this
+                group. If the user doesn't have an account yet, an invitation
+                will be sent and they'll be added automatically when they sign
+                up.
               </Text>
 
               <TextInput
