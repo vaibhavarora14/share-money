@@ -8,7 +8,14 @@ import {
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
-import { Platform, Text as RNText, StyleSheet, useColorScheme, View } from "react-native";
+import {
+  Dimensions,
+  Platform,
+  Text as RNText,
+  StyleSheet,
+  useColorScheme,
+  View,
+} from "react-native";
 import {
   ActivityIndicator,
   Button,
@@ -19,6 +26,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BottomNavBar } from "./components/BottomNavBar";
 import { ForceUpdateModal } from "./components/ForceUpdateModal";
 import { AUTH_TIMEOUTS } from "./constants/auth";
+import { WEB_MAX_WIDTH } from "./constants/layout";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { UpgradeProvider, useUpgrade } from "./contexts/UpgradeContext";
 import { queryKeys } from "./hooks/queryKeys";
@@ -48,7 +56,6 @@ import { darkTheme, lightTheme } from "./theme";
 import { Group, GroupWithMembers } from "./types";
 import { getDefaultCurrency } from "./utils/currency";
 import { log, logError } from "./utils/logger";
-import { WEB_MAX_WIDTH } from "./constants/layout";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -311,10 +318,6 @@ function AppContent() {
     );
   }
 
-
-
-
-
   // Show profile screen
   if (currentRoute === "profile") {
     return (
@@ -336,7 +339,6 @@ function AppContent() {
             setCurrentRoute("profile");
           }}
           onLogoutPress={signOut}
-
         />
         <StatusBar style={theme.dark ? "light" : "dark"} />
       </>
@@ -356,7 +358,6 @@ function AppContent() {
           }}
           onDelete={editingTransaction ? handleDeleteTransaction : undefined}
           defaultCurrency={getDefaultCurrency()}
-
           groupId={selectedGroup.id}
         />
         <StatusBar style={theme.dark ? "light" : "dark"} />
@@ -437,7 +438,6 @@ function AppContent() {
           }}
           onLogoutPress={signOut}
           onProfilePress={() => setCurrentRoute("profile")}
-
         />
         {showAddMember && selectedGroup && (
           <AddMemberScreen
@@ -469,15 +469,15 @@ function AppContent() {
         }}
         refetchTrigger={groupRefreshTrigger}
       />
-        <BottomNavBar
-          currentRoute={currentRoute}
-          onGroupsPress={() => {
-            setCurrentRoute("groups");
-            setGroupRefreshTrigger((prev) => prev + 1);
-          }}
-          onProfilePress={() => setCurrentRoute("profile")}
-          onLogoutPress={signOut}
-        />
+      <BottomNavBar
+        currentRoute={currentRoute}
+        onGroupsPress={() => {
+          setCurrentRoute("groups");
+          setGroupRefreshTrigger((prev) => prev + 1);
+        }}
+        onProfilePress={() => setCurrentRoute("profile")}
+        onLogoutPress={signOut}
+      />
       <StatusBar style={theme.dark ? "light" : "dark"} />
     </>
   );
@@ -575,6 +575,82 @@ if (!process.env.EXPO_PUBLIC_SENTRY_DSN) {
 export default function App() {
   const colorScheme = useColorScheme();
   const theme = colorScheme === "dark" ? darkTheme : lightTheme;
+  const [screenWidth, setScreenWidth] = useState(
+    Dimensions.get("window").width
+  );
+  const isWideScreen = screenWidth > 800; // Show decorative background on screens wider than 800px
+
+  // Update screen width on dimension changes
+  useEffect(() => {
+    const subscription = Dimensions.addEventListener("change", ({ window }) => {
+      setScreenWidth(window.width);
+    });
+    return () => subscription?.remove();
+  }, []);
+
+  // Inject decorative background CSS for web on wide screens
+  useEffect(() => {
+    if (
+      Platform.OS === "web" &&
+      typeof document !== "undefined" &&
+      isWideScreen
+    ) {
+      const styleId = "decorative-background-style";
+      // Remove existing style if present
+      const existingStyle = document.getElementById(styleId);
+      if (existingStyle) {
+        existingStyle.remove();
+      }
+
+      // Get theme colors for gradient
+      const isDark = colorScheme === "dark";
+      const primaryColor = isDark ? "#8ab4f8" : "#1a73e8"; // Theme primary color
+      const secondaryColor = isDark ? "#aecbfa" : "#4285f4"; // Slightly lighter variant
+      const backgroundColor = theme.colors.background;
+
+      // Convert hex to rgba for gradient
+      const hexToRgba = (hex: string, alpha: number) => {
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+      };
+
+      const primaryRgba = hexToRgba(primaryColor, isDark ? 0.05 : 0.08);
+      const secondaryRgba = hexToRgba(secondaryColor, isDark ? 0.05 : 0.08);
+
+      const style = document.createElement("style");
+      style.id = styleId;
+      style.textContent = `
+        html, body {
+          background: radial-gradient(circle at 20% 50%, ${primaryRgba} 0%, transparent 50%),
+                      radial-gradient(circle at 80% 50%, ${secondaryRgba} 0%, transparent 50%),
+                      ${backgroundColor} !important;
+          background-attachment: fixed;
+        }
+      `;
+      document.head.appendChild(style);
+
+      return () => {
+        const styleToRemove = document.getElementById(styleId);
+        if (styleToRemove) {
+          styleToRemove.remove();
+        }
+      };
+    } else if (
+      Platform.OS === "web" &&
+      typeof document !== "undefined" &&
+      !isWideScreen
+    ) {
+      // Remove style when screen becomes narrow
+      const styleToRemove = document.getElementById(
+        "decorative-background-style"
+      );
+      if (styleToRemove) {
+        styleToRemove.remove();
+      }
+    }
+  }, [isWideScreen, colorScheme, theme.colors.background]);
 
   return (
     <ErrorBoundary
@@ -592,10 +668,57 @@ export default function App() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <PaperProvider theme={theme}>
-            <View style={[styles.mainContainer, { backgroundColor: theme.colors.background }]}>
+            <View
+              style={[
+                styles.mainContainer,
+                { backgroundColor: theme.colors.background },
+                Platform.OS === "web" &&
+                  isWideScreen && { backgroundColor: "transparent" },
+              ]}
+            >
+              {/* Decorative background for native platforms on wide screens */}
+              {isWideScreen && Platform.OS !== "web" && (
+                <View style={StyleSheet.absoluteFill} pointerEvents="none">
+                  <View
+                    style={{
+                      position: "absolute",
+                      left: "20%",
+                      top: "50%",
+                      width: screenWidth * 0.4,
+                      height: screenWidth * 0.4,
+                      borderRadius: screenWidth * 0.2,
+                      backgroundColor:
+                        colorScheme === "dark"
+                          ? "rgba(138, 180, 248, 0.03)" // Dark theme primary color
+                          : "rgba(26, 115, 232, 0.03)", // Light theme primary color
+                      transform: [{ translateY: -(screenWidth * 0.2) }],
+                    }}
+                  />
+                  <View
+                    style={{
+                      position: "absolute",
+                      right: "20%",
+                      top: "50%",
+                      width: screenWidth * 0.4,
+                      height: screenWidth * 0.4,
+                      borderRadius: screenWidth * 0.2,
+                      backgroundColor:
+                        colorScheme === "dark"
+                          ? "rgba(174, 203, 250, 0.03)" // Dark theme secondary color
+                          : "rgba(66, 133, 244, 0.03)", // Light theme secondary color
+                      transform: [{ translateY: -(screenWidth * 0.2) }],
+                    }}
+                  />
+                </View>
+              )}
               <UpgradeProvider>
                 <AuthProvider>
-                  <View style={[styles.appWrapper, { backgroundColor: theme.colors.surface }]}>
+                  <View
+                    style={[
+                      styles.appWrapper,
+                      { backgroundColor: theme.colors.surface },
+                    ]}
+                  >
                     <AppContent />
                     <ForceUpdateOverlay />
                   </View>
@@ -612,7 +735,7 @@ export default function App() {
 // Force Update Overlay - shows modal when upgrade is required
 function ForceUpdateOverlay() {
   const { isUpgradeRequired, upgradeMessage, upgradeDetails } = useUpgrade();
-  
+
   return (
     <ForceUpdateModal
       visible={isUpgradeRequired}
@@ -636,8 +759,9 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: WEB_MAX_WIDTH,
     alignSelf: "center",
+    zIndex: 1,
     // Border and shadow only on web for premium desktop experience
-    ...(Platform.OS === 'web' && {
+    ...(Platform.OS === "web" && {
       borderWidth: 1,
       borderColor: "rgba(0, 0, 0, 0.05)",
       shadowColor: "#000",
