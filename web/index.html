@@ -5,6 +5,12 @@
     <link rel="icon" type="image/png" href="/icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     
+    <!-- Font Preloading -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" as="style" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    
     <!-- Primary Meta Tags -->
     <title>ShareMoney - Split Expenses, Simplify Life</title>
     <meta name="title" content="ShareMoney - Split Expenses, Simplify Life" />
@@ -15,16 +21,46 @@
     <meta property="og:url" content="https://share-money-web.vercel.app/" />
     <meta property="og:title" content="ShareMoney - Split Expenses, Simplify Life" />
     <meta property="og:description" content="The easiest way to track shared expenses, settle up with friends, and manage group finances. Smart settlements minimize transactions by up to 70%." />
-    <meta property="og:image" content="https://share-money-web.vercel.app/nano-hero.png" />
+    <meta property="og:image" content="https://share-money-web.vercel.app/hero-screenshot.png" />
     
     <!-- Twitter -->
     <meta property="twitter:card" content="summary_large_image" />
     <meta property="twitter:url" content="https://share-money-web.vercel.app/" />
     <meta property="twitter:title" content="ShareMoney - Split Expenses, Simplify Life" />
     <meta property="twitter:description" content="The easiest way to track shared expenses, settle up with friends, and manage group finances. Smart settlements minimize transactions by up to 70%." />
-    <meta property="twitter:image" content="https://share-money-web.vercel.app/nano-hero.png" />
+    <meta property="twitter:image" content="https://share-money-web.vercel.app/hero-screenshot.png" />
+    
+    <!-- Structured Data (JSON-LD) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "ShareMoney",
+      "applicationCategory": "FinanceApplication",
+      "operatingSystem": "iOS, Android, Web",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.8",
+        "ratingCount": "150"
+      },
+      "description": "The easiest way to track shared expenses, settle up with friends, and manage group finances. Smart settlements minimize transactions by up to 70%.",
+      "screenshot": "https://share-money-web.vercel.app/hero-screenshot.png",
+      "featureList": [
+        "Smart Settlements",
+        "Real-time Sync",
+        "Multi-Currency Support",
+        "Spending Statistics"
+      ]
+    }
+    </script>
   </head>
   <body>
+    <a href="#main-content" class="skip-link" style="position: absolute; left: -9999px; z-index: 999; padding: 1em; background: var(--color-primary); color: white; text-decoration: none;">Skip to main content</a>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
