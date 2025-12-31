@@ -20,10 +20,6 @@ import { useScrollAnimation } from "./hooks/useScrollAnimation";
 import { detectDevice } from "./utils/deviceDetection";
 
 function App() {
-  const device = detectDevice();
-  const isIOS = device === "ios";
-  const isAndroid = device === "android";
-  const isMobile = isIOS || isAndroid;
   const { isDark, toggleTheme } = useTheme();
   const heroAnimation = useScrollAnimation();
   const featuresAnimation = useScrollAnimation();
@@ -154,33 +150,44 @@ function App() {
                 padding: "0",
               }}
             >
-              {/* iOS Button - Show prominently if iOS or desktop */}
-              {(isIOS || !isMobile) && (
-                <a
-                  href="https://testflight.apple.com/join/j23pnEmX"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn"
-                  aria-label="Download ShareMoney iOS beta app via TestFlight"
-                  onClick={() =>
-                    track("iOS Beta Click", { location: "hero", device })
-                  }
+              {/* iOS Button */}
+              <a
+                href="https://testflight.apple.com/join/j23pnEmX"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-ios"
+                aria-label="Download ShareMoney iOS beta app via TestFlight"
+                onClick={() =>
+                  track("iOS Beta Click", { location: "hero", device: detectDevice() })
+                }
+              >
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  style={{ flexShrink: 0 }}
+                >
+                  <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C1.79 15.25 4.96 6.39 12.05 6.39c2.25 0 3.86.88 5.18 1.56-1.19 1.65-1.7 3.75-1.35 5.95.43 2.73 1.95 4.08 3.86 4.88-.3.85-.68 1.67-1.24 2.4zM12.03.01c-.83 0-1.87.5-2.5 1.17-.65.68-1.2 1.76-1.05 2.8.9.05 1.93-.4 2.58-1.05.65-.68 1.2-1.77 1.05-2.8-.05-.05-.05-.1-.08-.12z" />
+                </svg>
+                <span style={{ whiteSpace: "nowrap" }}>Try iOS Beta</span>
+              </a>
+
+              {/* Android Button */}
+              <a
+                href="mailto:varora1406@gmail.com?subject=ShareMoney Android Beta Access Request&body=Hi! I'd like to request access to the ShareMoney Android beta app. Thank you!"
+                className="btn btn-android"
+                aria-label="Request access to ShareMoney Android beta app via email"
+                onClick={() =>
+                  track("Android Beta Request", { location: "hero", device: detectDevice() })
+                }
+                title="Android beta requires email request"
+              >
+                <div
                   style={{
-                    backgroundColor: "white",
-                    color: "var(--color-primary)",
-                    fontWeight: "700",
-                    padding: isMobile ? "0.75rem 0.75rem" : "1rem 2rem",
-                    fontSize: isMobile ? "0.8125rem" : "1.125rem",
                     display: "flex",
                     alignItems: "center",
-                    justifyContent: "center",
                     gap: "0.5rem",
-                    minHeight: "48px",
-                    boxShadow: "var(--shadow-lg)",
-                    flex: isMobile ? "1 1 0" : "0 1 auto",
-                    minWidth: isMobile ? "0" : "200px",
-                    maxWidth: isMobile ? "calc(33.333% - 0.5rem)" : "none",
-                    boxSizing: "border-box",
                   }}
                 >
                   <svg
@@ -190,103 +197,31 @@ function App() {
                     fill="currentColor"
                     style={{ flexShrink: 0 }}
                   >
-                    <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C1.79 15.25 4.96 6.39 12.05 6.39c2.25 0 3.86.88 5.18 1.56-1.19 1.65-1.7 3.75-1.35 5.95.43 2.73 1.95 4.08 3.86 4.88-.3.85-.68 1.67-1.24 2.4zM12.03.01c-.83 0-1.87.5-2.5 1.17-.65.68-1.2 1.76-1.05 2.8.9.05 1.93-.4 2.58-1.05.65-.68 1.2-1.77 1.05-2.8-.05-.05-.05-.1-.08-.12z" />
+                    <path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993s-.4482.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.551 0 .9993.4482.9993.9993s-.4483.9997-.9993.9997m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.2439 13.8533 7.8508 12 7.8508s-3.5902.3931-5.1349 1.1357L4.8429 5.4834a.4161.4161 0 00-.5676-.1521.4157.4157 0 00-.1521.5676l1.9973 3.4592C2.6889 11.186.8535 12.3074.8535 13.8508c0 2.6998 4.9702 4.1495 11.1465 4.1495 6.1763 0 11.1465-1.4492 11.1465-4.1495 0-1.5434-1.8354-2.6648-4.523-3.5294" />
                   </svg>
-                  <span style={{ whiteSpace: "nowrap" }}>
-                    {isIOS ? "Download for iOS" : "Try iOS Beta"}
-                  </span>
-                </a>
-              )}
-
-              {/* Android Button - Show prominently if Android or desktop */}
-              {(isAndroid || !isMobile) && (
-                <a
-                  href="mailto:varora1406@gmail.com?subject=ShareMoney Android Beta Access Request&body=Hi! I'd like to request access to the ShareMoney Android beta app. Thank you!"
-                  className="btn"
-                  aria-label="Request access to ShareMoney Android beta app via email"
-                  onClick={() =>
-                    track("Android Beta Request", { location: "hero", device })
-                  }
+                  <span style={{ whiteSpace: "nowrap" }}>Request Android</span>
+                </div>
+                <span
                   style={{
-                    backgroundColor: "white",
-                    color: "#3DDC84",
-                    fontWeight: "700",
-                    padding: isMobile ? "0.75rem 0.75rem" : "1rem 2rem",
-                    fontSize: isMobile ? "0.8125rem" : "1.125rem",
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "0.125rem",
-                    minHeight: "48px",
-                    boxShadow: "var(--shadow-lg)",
-                    border: "2px solid rgba(61, 220, 132, 0.3)",
-                    flex: isMobile ? "1 1 0" : "0 1 auto",
-                    minWidth: isMobile ? "0" : "200px",
-                    maxWidth: isMobile ? "calc(33.333% - 0.5rem)" : "none",
-                    boxSizing: "border-box",
+                    fontSize: "0.7rem",
+                    opacity: 0.7,
+                    fontWeight: "500",
+                    color: "var(--color-text-secondary)",
+                    whiteSpace: "nowrap",
                   }}
-                  title="Android beta requires email request"
                 >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.5rem",
-                    }}
-                  >
-                    <svg
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
-                      style={{ flexShrink: 0 }}
-                    >
-                      <path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993s-.4482.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.551 0 .9993.4482.9993.9993s-.4483.9997-.9993.9997m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.2439 13.8533 7.8508 12 7.8508s-3.5902.3931-5.1349 1.1357L4.8429 5.4834a.4161.4161 0 00-.5676-.1521.4157.4157 0 00-.1521.5676l1.9973 3.4592C2.6889 11.186.8535 12.3074.8535 13.8508c0 2.6998 4.9702 4.1495 11.1465 4.1495 6.1763 0 11.1465-1.4492 11.1465-4.1495 0-1.5434-1.8354-2.6648-4.523-3.5294" />
-                    </svg>
-                    <span style={{ whiteSpace: "nowrap" }}>
-                      {isAndroid ? "Request Access" : "Request Android"}
-                    </span>
-                  </div>
-                  <span
-                    style={{
-                      fontSize: "0.7rem",
-                      opacity: 0.7,
-                      fontWeight: "500",
-                      color: "var(--color-text-secondary)",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    (On Request)
-                  </span>
-                </a>
-              )}
+                  (On Request)
+                </span>
+              </a>
 
-              {/* Web Button - Always visible alongside mobile apps */}
+              {/* Web Button */}
               <a
                 href="https://share-money.expo.app"
-                className="btn"
+                className="btn btn-web"
                 aria-label="Try ShareMoney web app beta"
                 onClick={() =>
-                  track("Web Beta Click", { location: "hero", device })
+                  track("Web Beta Click", { location: "hero", device: detectDevice() })
                 }
-                style={{
-                  backgroundColor: "white",
-                  color: "var(--color-primary)",
-                  fontWeight: "700",
-                  padding: isMobile ? "0.75rem 0.75rem" : "1rem 2rem",
-                  fontSize: isMobile ? "0.8125rem" : "1.125rem",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "0.5rem",
-                  minHeight: "48px",
-                  boxShadow: "var(--shadow-lg)",
-                  flex: isMobile ? "1 1 0" : "0 1 auto",
-                  minWidth: isMobile ? "0" : "200px",
-                  maxWidth: isMobile ? "calc(33.333% - 0.5rem)" : "none",
-                  boxSizing: "border-box",
-                }}
               >
                 <svg
                   width="20"
@@ -406,6 +341,13 @@ function App() {
                 margin: 0 auto;
               }
               
+              /* Small screens - all cards full width */
+              .bento-card-large,
+              .bento-card-tall {
+                grid-column: 1;
+                grid-row: auto;
+              }
+              
               /* Tablet & Up */
               @media (min-width: 768px) {
                 .bento-grid {
@@ -419,8 +361,14 @@ function App() {
                   grid-template-columns: repeat(3, 1fr);
                   grid-template-rows: repeat(2, auto);
                 }
-                .bento-large { grid-column: span 2; }
-                .bento-tall { grid-row: span 2; }
+                .bento-card-large { 
+                  grid-column: span 2; 
+                  grid-row: auto;
+                }
+                .bento-card-tall { 
+                  grid-row: span 2;
+                  grid-column: auto;
+                }
               }
             `}
             </style>
@@ -548,28 +496,45 @@ function App() {
                   margin: "0 auto",
                 }}
               >
-                {/* iOS Button - Show if not iOS (already shown in hero) */}
-                {!isIOS && (
-                  <a
-                    href="https://testflight.apple.com/join/j23pnEmX"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn"
-                    onClick={() =>
-                      track("iOS Beta Click", { location: "download", device })
-                    }
+                {/* iOS Button */}
+                <a
+                  href="https://testflight.apple.com/join/j23pnEmX"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-ios-download"
+                  onClick={() =>
+                    track("iOS Beta Click", { location: "download", device: detectDevice() })
+                  }
+                >
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    style={{ flexShrink: 0 }}
+                  >
+                    <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C1.79 15.25 4.96 6.39 12.05 6.39c2.25 0 3.86.88 5.18 1.56-1.19 1.65-1.7 3.75-1.35 5.95.43 2.73 1.95 4.08 3.86 4.88-.3.85-.68 1.67-1.24 2.4zM12.03.01c-.83 0-1.87.5-2.5 1.17-.65.68-1.2 1.76-1.05 2.8.9.05 1.93-.4 2.58-1.05.65-.68 1.2-1.77 1.05-2.8-.05-.05-.05-.1-.08-.12z" />
+                  </svg>
+                  <span>Try iOS Beta</span>
+                </a>
+
+                {/* Android Button */}
+                <a
+                  href="mailto:varora1406@gmail.com?subject=ShareMoney Android Beta Access Request&body=Hi! I'd like to request access to the ShareMoney Android beta app. Thank you!"
+                  className="btn btn-android-download"
+                  onClick={() =>
+                    track("Android Beta Request", {
+                      location: "download",
+                      device: detectDevice(),
+                    })
+                  }
+                  title="Android beta requires email request"
+                >
+                  <div
                     style={{
-                      backgroundColor: "white",
-                      color: "var(--color-primary)",
-                      fontWeight: "700",
-                      padding: "1rem 2rem",
-                      fontSize: "1.125rem",
                       display: "flex",
                       alignItems: "center",
-                      justifyContent: "center",
                       gap: "0.75rem",
-                      minWidth: "200px",
-                      boxShadow: "var(--shadow-lg)",
                     }}
                   >
                     <svg
@@ -579,92 +544,29 @@ function App() {
                       fill="currentColor"
                       style={{ flexShrink: 0 }}
                     >
-                      <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C1.79 15.25 4.96 6.39 12.05 6.39c2.25 0 3.86.88 5.18 1.56-1.19 1.65-1.7 3.75-1.35 5.95.43 2.73 1.95 4.08 3.86 4.88-.3.85-.68 1.67-1.24 2.4zM12.03.01c-.83 0-1.87.5-2.5 1.17-.65.68-1.2 1.76-1.05 2.8.9.05 1.93-.4 2.58-1.05.65-.68 1.2-1.77 1.05-2.8-.05-.05-.05-.1-.08-.12z" />
+                      <path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993s-.4482.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.551 0 .9993.4482.9993.9993s-.4483.9997-.9993.9997m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.2439 13.8533 7.8508 12 7.8508s-3.5902.3931-5.1349 1.1357L4.8429 5.4834a.4161.4161 0 00-.5676-.1521.4157.4157 0 00-.1521.5676l1.9973 3.4592C2.6889 11.186.8535 12.3074.8535 13.8508c0 2.6998 4.9702 4.1495 11.1465 4.1495 6.1763 0 11.1465-1.4492 11.1465-4.1495 0-1.5434-1.8354-2.6648-4.523-3.5294" />
                     </svg>
-                    <span>Try iOS Beta</span>
-                  </a>
-                )}
-
-                {/* Android Button - Show if not Android (already shown in hero) */}
-                {!isAndroid && (
-                  <a
-                    href="mailto:varora1406@gmail.com?subject=ShareMoney Android Beta Access Request&body=Hi! I'd like to request access to the ShareMoney Android beta app. Thank you!"
-                    className="btn"
-                    onClick={() =>
-                      track("Android Beta Request", {
-                        location: "download",
-                        device,
-                      })
-                    }
+                    <span>Request Android</span>
+                  </div>
+                  <span
                     style={{
-                      backgroundColor: "white",
-                      color: "#3DDC84",
-                      fontWeight: "700",
-                      padding: "1rem 2rem",
-                      fontSize: "1.125rem",
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "0.25rem",
-                      minWidth: "200px",
-                      boxShadow: "var(--shadow-lg)",
-                      border: "2px solid rgba(61, 220, 132, 0.3)",
+                      fontSize: "0.75rem",
+                      opacity: 0.7,
+                      fontWeight: "500",
+                      color: "var(--color-text-secondary)",
                     }}
-                    title="Android beta requires email request"
                   >
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.75rem",
-                      }}
-                    >
-                      <svg
-                        width="24"
-                        height="24"
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                        style={{ flexShrink: 0 }}
-                      >
-                        <path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993s-.4482.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.551 0 .9993.4482.9993.9993s-.4483.9997-.9993.9997m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.2439 13.8533 7.8508 12 7.8508s-3.5902.3931-5.1349 1.1357L4.8429 5.4834a.4161.4161 0 00-.5676-.1521.4157.4157 0 00-.1521.5676l1.9973 3.4592C2.6889 11.186.8535 12.3074.8535 13.8508c0 2.6998 4.9702 4.1495 11.1465 4.1495 6.1763 0 11.1465-1.4492 11.1465-4.1495 0-1.5434-1.8354-2.6648-4.523-3.5294" />
-                      </svg>
-                      <span>Request Android</span>
-                    </div>
-                    <span
-                      style={{
-                        fontSize: "0.75rem",
-                        opacity: 0.7,
-                        fontWeight: "500",
-                        color: "var(--color-text-secondary)",
-                      }}
-                    >
-                      (On Request)
-                    </span>
-                  </a>
-                )}
+                    (On Request)
+                  </span>
+                </a>
 
-                {/* Web Button - Secondary (Priority 3) */}
+                {/* Web Button */}
                 <a
                   href="https://share-money.expo.app"
-                  className="btn"
+                  className="btn btn-web-download"
                   onClick={() =>
-                    track("Web Beta Click", { location: "download", device })
+                    track("Web Beta Click", { location: "download", device: detectDevice() })
                   }
-                  style={{
-                    backgroundColor: "rgba(255,255,255,0.15)",
-                    color: "white",
-                    border: "2px solid rgba(255,255,255,0.4)",
-                    fontWeight: "600",
-                    padding: "0.875rem 1.75rem",
-                    fontSize: "1rem",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "0.75rem",
-                    minWidth: "180px",
-                    opacity: 0.9,
-                  }}
                 >
                   <svg
                     width="20"
