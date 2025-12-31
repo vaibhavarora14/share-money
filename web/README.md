@@ -1,6 +1,8 @@
-# React + TypeScript + Vite
+# ShareMoney Landing Page
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+**This is a landing page only** - a marketing/onboarding site for ShareMoney. The actual web application is located elsewhere.
+
+This landing page is built with React + TypeScript + Vite and serves as the entry point for users to learn about ShareMoney and download the mobile apps (iOS/Android) or access the web beta.
 
 Currently, two official plugins are available:
 
