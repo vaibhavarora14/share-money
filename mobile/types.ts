@@ -82,7 +82,7 @@ export interface GroupMember {
 export interface GroupInvitation {
   id: string;
   group_id: string;
-  email: string;
+  email?: string | null;
   invited_by: string;
   status: 'pending' | 'accepted' | 'expired' | 'cancelled';
   token?: string;

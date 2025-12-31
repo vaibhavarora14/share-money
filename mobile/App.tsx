@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Sentry from "@sentry/react-native";
 import { Session } from "@supabase/supabase-js";
 import {
@@ -5,10 +6,18 @@ import {
   QueryClientProvider,
   useQueryClient,
 } from "@tanstack/react-query";
+import * as Linking from "expo-linking";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
-import { Platform, Text as RNText, StyleSheet, useColorScheme, View } from "react-native";
+import {
+  Alert,
+  Platform,
+  Text as RNText,
+  StyleSheet,
+  useColorScheme,
+  View,
+} from "react-native";
 import {
   ActivityIndicator,
   Button,
@@ -18,12 +27,18 @@ import {
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BottomNavBar } from "./components/BottomNavBar";
 import { ForceUpdateModal } from "./components/ForceUpdateModal";
+import { JoinGroupPreview } from "./components/JoinGroupPreview";
 import { AUTH_TIMEOUTS } from "./constants/auth";
+import { WEB_MAX_WIDTH } from "./constants/layout";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { UpgradeProvider, useUpgrade } from "./contexts/UpgradeContext";
 import { queryKeys } from "./hooks/queryKeys";
 import { fetchActivity } from "./hooks/useActivity";
 import { fetchBalances } from "./hooks/useBalances";
+import {
+  acceptGroupInvitationRPC,
+  getGroupInfoFromTokenRPC,
+} from "./hooks/useGroupInvitations";
 import {
   useAddMember,
   useCreateGroup,
@@ -47,8 +62,8 @@ import { TransactionFormScreen } from "./screens/TransactionFormScreen";
 import { darkTheme, lightTheme } from "./theme";
 import { Group, GroupWithMembers } from "./types";
 import { getDefaultCurrency } from "./utils/currency";
+import { showErrorAlert } from "./utils/errorHandling";
 import { log, logError } from "./utils/logger";
-import { WEB_MAX_WIDTH } from "./constants/layout";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -79,6 +94,7 @@ function AppContent() {
     useState<number>(0);
   const [groupRefreshTrigger, setGroupRefreshTrigger] = useState<number>(0);
   const [editingTransaction, setEditingTransaction] = useState<any>(null);
+  const [joinToken, setJoinToken] = useState<string | null>(null);
   const [statsContext, setStatsContext] = useState<{
     groupId: string;
     mode: GroupStatsMode;
@@ -110,6 +126,163 @@ function AppContent() {
     },
     [queryClientInstance]
   );
+
+  const handleJoinGroup = React.useCallback(
+    async (token: string, autoJoin: boolean = false) => {
+      try {
+        const info = await getGroupInfoFromTokenRPC(token);
+        if (!info || !info.is_valid) {
+          Alert.alert(
+            "Invalid Link",
+            "This invite link is invalid or expired."
+          );
+          return;
+        }
+
+        // Auto-join without confirmation (e.g., after signup from invite link)
+        if (autoJoin) {
+          try {
+            if (!session?.user?.id) {
+              logError(
+                new Error("No session user ID available"),
+                "Auto-join failed - no user ID"
+              );
+              return;
+            }
+            await acceptGroupInvitationRPC(token, session.user.id);
+            if (groupsListRefetchRef.current) groupsListRefetchRef.current();
+            setGroupRefreshTrigger((p) => p + 1); // Trigger updates
+
+            // Clear the join token from state
+            setJoinToken(null);
+
+            // Update URL on web to remove /join/... path
+            if (Platform.OS === "web" && typeof window !== "undefined") {
+              const baseUrl = window.location.origin;
+              window.history.replaceState({}, "", baseUrl);
+            }
+
+            Alert.alert("Success", `You've joined "${info.group_name}"!`);
+          } catch (e) {
+            logError(e, "Error auto-joining group after signup");
+            showErrorAlert(e, null, "Failed to join group");
+          }
+          return;
+        }
+
+        // Show confirmation dialog for manual joins
+        Alert.alert(
+          "Join Group",
+          `Do you want to join "${info.group_name}"? (${info.member_count} members)`,
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Join",
+              onPress: async () => {
+                try {
+                  if (!session?.user?.id) return;
+                  await acceptGroupInvitationRPC(token, session.user.id);
+                  if (groupsListRefetchRef.current)
+                    groupsListRefetchRef.current();
+                  setGroupRefreshTrigger((p) => p + 1); // Trigger updates
+
+                  // Clear the join token from state
+                  setJoinToken(null);
+
+                  // Update URL on web to remove /join/... path
+                  if (Platform.OS === "web" && typeof window !== "undefined") {
+                    const baseUrl = window.location.origin;
+                    window.history.replaceState({}, "", baseUrl);
+                  }
+
+                  Alert.alert("Success", "You have joined the group!");
+                } catch (e) {
+                  showErrorAlert(e, null, "Failed to join");
+                }
+              },
+            },
+          ]
+        );
+      } catch (e) {
+        logError(e, "Error handling join group link");
+        Alert.alert(
+          "Error",
+          "Failed to process invite link. Please try again."
+        );
+      }
+    },
+    [session?.user?.id]
+  );
+
+  useEffect(() => {
+    const handleDeepLink = async (event: { url: string }) => {
+      // Regex to match "join/<UUID>" in the URL
+      const match = event.url.match(/join\/([a-f0-9-]{36})/i);
+      if (match && match[1]) {
+        const token = match[1];
+        try {
+          if (session?.user?.id) {
+            await handleJoinGroup(token, false);
+            setJoinToken(null);
+          } else {
+            await AsyncStorage.setItem("pending_invite_token", token);
+            setJoinToken(token); // Show preview
+          }
+        } catch (error) {
+          logError(error, "Error handling deep link");
+        }
+      }
+    };
+
+    const sub = Linking.addEventListener("url", handleDeepLink);
+
+    // On web, Linking.getInitialURL might not include the path accurately sometimes
+    // so we provide a fallback for web specifically
+    const getInitial = async () => {
+      try {
+        let url = await Linking.getInitialURL();
+        if (Platform.OS === "web" && !url && typeof window !== "undefined") {
+          url = window.location.href;
+        }
+        if (url) handleDeepLink({ url });
+      } catch (error) {
+        logError(error, "Error getting initial URL");
+      }
+    };
+
+    getInitial();
+    return () => sub.remove();
+  }, [session?.user?.id, handleJoinGroup]);
+
+  // Check pending token on session init (auto-join after signup)
+  useEffect(() => {
+    if (session?.user?.id) {
+      // Small delay to ensure session is fully initialized
+      const timeoutId = setTimeout(async () => {
+        try {
+          const token = await AsyncStorage.getItem("pending_invite_token");
+          if (token) {
+            // Clear joinToken state first to hide preview screen
+            setJoinToken(null);
+
+            // Update URL on web to remove /join/... path before joining
+            if (Platform.OS === "web" && typeof window !== "undefined") {
+              const baseUrl = window.location.origin;
+              window.history.replaceState({}, "", baseUrl);
+            }
+
+            // Auto-join without confirmation since user came from invite link
+            await handleJoinGroup(token, true);
+            await AsyncStorage.removeItem("pending_invite_token");
+          }
+        } catch (error) {
+          logError(error, "Error processing pending invite token");
+        }
+      }, 500); // 500ms delay to ensure session is ready
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [session?.user?.id, handleJoinGroup]);
 
   // Clear and isolate cache on logout
   useEffect(() => {
@@ -300,6 +473,23 @@ function AppContent() {
   }
 
   if (!session) {
+    if (joinToken) {
+      return (
+        <>
+          <JoinGroupPreview
+            token={joinToken}
+            onLogin={() => {
+              // Keep the token stored so we can use it after login
+              // The token will be processed in the session effect
+              setJoinToken(null);
+            }}
+            onCancel={() => setJoinToken(null)}
+          />
+          <StatusBar style={theme.dark ? "light" : "dark"} />
+        </>
+      );
+    }
+
     return (
       <>
         <AuthScreen
@@ -310,10 +500,6 @@ function AppContent() {
       </>
     );
   }
-
-
-
-
 
   // Show profile screen
   if (currentRoute === "profile") {
@@ -336,7 +522,6 @@ function AppContent() {
             setCurrentRoute("profile");
           }}
           onLogoutPress={signOut}
-
         />
         <StatusBar style={theme.dark ? "light" : "dark"} />
       </>
@@ -356,7 +541,6 @@ function AppContent() {
           }}
           onDelete={editingTransaction ? handleDeleteTransaction : undefined}
           defaultCurrency={getDefaultCurrency()}
-
           groupId={selectedGroup.id}
         />
         <StatusBar style={theme.dark ? "light" : "dark"} />
@@ -437,7 +621,6 @@ function AppContent() {
           }}
           onLogoutPress={signOut}
           onProfilePress={() => setCurrentRoute("profile")}
-
         />
         {showAddMember && selectedGroup && (
           <AddMemberScreen
@@ -469,15 +652,15 @@ function AppContent() {
         }}
         refetchTrigger={groupRefreshTrigger}
       />
-        <BottomNavBar
-          currentRoute={currentRoute}
-          onGroupsPress={() => {
-            setCurrentRoute("groups");
-            setGroupRefreshTrigger((prev) => prev + 1);
-          }}
-          onProfilePress={() => setCurrentRoute("profile")}
-          onLogoutPress={signOut}
-        />
+      <BottomNavBar
+        currentRoute={currentRoute}
+        onGroupsPress={() => {
+          setCurrentRoute("groups");
+          setGroupRefreshTrigger((prev) => prev + 1);
+        }}
+        onProfilePress={() => setCurrentRoute("profile")}
+        onLogoutPress={signOut}
+      />
       <StatusBar style={theme.dark ? "light" : "dark"} />
     </>
   );
@@ -592,10 +775,20 @@ export default function App() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <PaperProvider theme={theme}>
-            <View style={[styles.mainContainer, { backgroundColor: theme.colors.background }]}>
+            <View
+              style={[
+                styles.mainContainer,
+                { backgroundColor: theme.colors.background },
+              ]}
+            >
               <UpgradeProvider>
                 <AuthProvider>
-                  <View style={[styles.appWrapper, { backgroundColor: theme.colors.surface }]}>
+                  <View
+                    style={[
+                      styles.appWrapper,
+                      { backgroundColor: theme.colors.surface },
+                    ]}
+                  >
                     <AppContent />
                     <ForceUpdateOverlay />
                   </View>
@@ -612,7 +805,7 @@ export default function App() {
 // Force Update Overlay - shows modal when upgrade is required
 function ForceUpdateOverlay() {
   const { isUpgradeRequired, upgradeMessage, upgradeDetails } = useUpgrade();
-  
+
   return (
     <ForceUpdateModal
       visible={isUpgradeRequired}
@@ -637,7 +830,7 @@ const styles = StyleSheet.create({
     maxWidth: WEB_MAX_WIDTH,
     alignSelf: "center",
     // Border and shadow only on web for premium desktop experience
-    ...(Platform.OS === 'web' && {
+    ...(Platform.OS === "web" && {
       borderWidth: 1,
       borderColor: "rgba(0, 0, 0, 0.05)",
       shadowColor: "#000",

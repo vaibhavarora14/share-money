@@ -1,8 +1,60 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
+import { supabase } from "../supabase";
 import { GroupInvitation } from "../types";
 import { fetchWithAuth } from "../utils/api";
 import { queryKeys } from "./queryKeys";
+
+// ... imports
+
+export async function createGroupShareLinkRPC(groupId: string): Promise<string> {
+  const { data, error } = await supabase.rpc('create_group_share_link', {
+    p_group_id: groupId
+  });
+  
+  if (error) throw error;
+  return data; // Returns UUID string
+}
+
+export interface GroupInfoFromToken {
+    group_name: string | null;
+    member_count: number | null;
+    is_valid: boolean;
+}
+
+export async function getGroupInfoFromTokenRPC(token: string): Promise<GroupInfoFromToken> {
+    const { data, error } = await supabase.rpc('get_group_info_from_token', {
+        p_token: token
+    });
+    if (error) throw error;
+    
+    // Handle case where function returns empty result or null
+    if (!data || data.length === 0 || !data[0]) {
+        return {
+            group_name: null,
+            member_count: null,
+            is_valid: false
+        };
+    }
+    
+    return data[0] as GroupInfoFromToken;
+}
+
+export async function acceptGroupInvitationRPC(invitationId: string, userId: string) {
+    const { data, error } = await supabase.rpc('accept_group_invitation', {
+        invitation_id: invitationId,
+        accepting_user_id: userId
+    });
+    if (error) throw error;
+    return data;
+}
+
+export function useCreateGroupShareLink() {
+  return useMutation({
+    mutationFn: createGroupShareLinkRPC,
+  });
+}
+
 
 export async function fetchGroupInvitations(
   groupId: string
