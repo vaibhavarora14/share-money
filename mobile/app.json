@@ -19,7 +19,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.vaibhavarora.sharemoney",
       "scheme": "com.vaibhavarora.sharemoney",
-      "buildNumber": "15",
+      "buildNumber": "21",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -34,7 +34,8 @@
       "edgeToEdgeEnabled": true
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "output": "static"
     },
     "extra": {
       "eas": {
