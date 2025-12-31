@@ -1,42 +1,118 @@
+/**
+ * ShareMoney Landing Page
+ *
+ * NOTE: This is a LANDING PAGE ONLY - a marketing/onboarding site.
+ * The actual ShareMoney web application is located elsewhere.
+ *
+ * This landing page serves to:
+ * - Introduce ShareMoney to new users
+ * - Provide download links for iOS/Android apps
+ * - Link to the web beta application
+ * - Display features, FAQs, and trust indicators
+ */
+import { track } from "@vercel/analytics";
+import { Analytics } from "@vercel/analytics/react";
+import { FAQ } from "./components/FAQ";
+import { ChartIcon, GlobeIcon, MoneyIcon, SyncIcon } from "./components/Icons";
+import { TrustBadges } from "./components/TrustBadges";
+import { useTheme } from "./contexts/ThemeContext";
+import { useScrollAnimation } from "./hooks/useScrollAnimation";
+import { detectDevice } from "./utils/deviceDetection";
+
 function App() {
+  const device = detectDevice();
+  const isIOS = device === "ios";
+  const isAndroid = device === "android";
+  const isMobile = isIOS || isAndroid;
+  const { isDark, toggleTheme } = useTheme();
+  const heroAnimation = useScrollAnimation();
+  const featuresAnimation = useScrollAnimation();
+  const trustAnimation = useScrollAnimation();
+  const faqAnimation = useScrollAnimation();
+
+  // Extract visibility states to avoid linter false positives
+  const heroVisible = heroAnimation.isVisible;
+  const featuresVisible = featuresAnimation.isVisible;
+  const trustVisible = trustAnimation.isVisible;
+  const faqVisible = faqAnimation.isVisible;
+
   return (
-    <div className="app">
-      {/* Navigation */}
-      <nav style={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 50,
-        backdropFilter: 'blur(12px)',
-        backgroundColor: 'var(--gradient-nav)',
-        borderBottom: '1px solid var(--color-border)'
-      }}>
-        <div className="container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '80px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <img 
-              src="/icon.png" 
-              alt="ShareMoney Logo" 
-              style={{ 
-                width: '48px', 
-                height: '48px',
-                borderRadius: '8px'
-              }} 
-            />
-            <span style={{ fontSize: '1.25rem', fontWeight: 700 }}>ShareMoney</span>
+    <>
+      <div className="app" id="main-content">
+        {/* Navigation */}
+        <nav
+          style={{
+            position: "sticky",
+            top: 0,
+            zIndex: 50,
+            backdropFilter: "blur(12px)",
+            backgroundColor: "var(--gradient-nav)",
+            borderBottom: "1px solid var(--color-border)",
+          }}
+        >
+          <div className="container nav-container">
+            <div className="nav-brand">
+              <img
+                src="/icon.png"
+                alt="ShareMoney - Split expenses and simplify group finances"
+                width="48"
+                height="48"
+                className="nav-logo"
+              />
+              <span className="nav-title">ShareMoney</span>
+            </div>
+            <button
+              onClick={toggleTheme}
+              className="theme-toggle"
+              aria-label={
+                isDark ? "Switch to light mode" : "Switch to dark mode"
+              }
+            >
+              {isDark ? (
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <circle cx="12" cy="12" r="5" />
+                  <line x1="12" y1="1" x2="12" y2="3" />
+                  <line x1="12" y1="21" x2="12" y2="23" />
+                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                  <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                  <line x1="1" y1="12" x2="3" y2="12" />
+                  <line x1="21" y1="12" x2="23" y2="12" />
+                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                  <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+                </svg>
+              ) : (
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                </svg>
+              )}
+            </button>
           </div>
+        </nav>
 
-          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-            <a href="https://share-money.expo.app" className="btn btn-primary">
-              Launch Web App
-            </a>
-          </div>
-        </div>
-      </nav>
-
-      {/* Hero Section */}
-      <section className="section" style={{ textAlign: 'center', overflow: 'hidden' }}>
-        <div className="container">
-          <style>
-            {`
+        {/* Hero Section */}
+        <section
+          className="section hero-section"
+          ref={heroAnimation.ref as React.RefObject<HTMLElement>}
+        >
+          <div
+            className={`container scroll-fade ${heroVisible ? "visible" : ""}`}
+          >
+            <style>
+              {`
               @keyframes float {
                 0% { transform: translateY(0px); }
                 50% { transform: translateY(-20px); }
@@ -51,95 +127,277 @@ function App() {
                 -webkit-text-fill-color: transparent;
               }
             `}
-          </style>
-          <h1 style={{ marginBottom: '1.5rem', maxWidth: '800px', margin: '0 auto 1.5rem' }}>
-             Split Expenses. <br/>
-            <span className="hero-gradient-text">Simplify Life.</span>
-          </h1>
-          <p style={{ fontSize: '1.25rem', maxWidth: '600px', margin: '0 auto 2.5rem' }}>
-            The easiest way to track shared expenses, settle up with friends, and manage group finances without the headache.
-          </p>
-          
-          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginBottom: '4rem', position: 'relative', zIndex: 10 }}>
-            <a href="https://share-money.expo.app" className="btn btn-primary" style={{ padding: '1rem 2rem', fontSize: '1.125rem' }}>
-              Get Started for Free
-            </a>
-            <a href="mailto:varora1406@gmail.com?subject=ShareMoney Early Access Request" className="btn btn-secondary" style={{ padding: '1rem 2rem', fontSize: '1.125rem' }}>
-              Email for Early Access
-            </a>
-          </div>
+            </style>
+            <h1 className="hero-headline">
+              Split Expenses. <br />
+              <span className="hero-gradient-text">Simplify Life.</span>
+            </h1>
+            <p className="hero-description">
+              The easiest way to track shared expenses, settle up with friends,
+              and manage group finances without the headache.
+            </p>
 
-          <div className="float-animation" style={{ 
-            marginTop: '2rem',
-            position: 'relative',
-            borderRadius: '24px',
-            overflow: 'hidden',
-            boxShadow: 'var(--shadow-xl)',
-            maxWidth: '600px',
-            margin: '0 auto',
-            zIndex: 1
-          }}>
-            <img 
-              src="/nano-hero.png" 
-              alt="Nano Finance Abstract" 
-              style={{ width: '100%', display: 'block' }}
-            />
-          </div>
-        </div>
-      </section>
+            {/* All Platform CTAs - Hero Section */}
+            <div
+              className="hero-cta-container"
+              style={{
+                display: "flex",
+                gap: "0.75rem",
+                justifyContent: "center",
+                flexWrap: "wrap",
+                marginBottom: "3rem",
+                position: "relative",
+                zIndex: 10,
+                width: "100%",
+                maxWidth: "100%",
+                boxSizing: "border-box",
+                padding: "0",
+              }}
+            >
+              {/* iOS Button - Show prominently if iOS or desktop */}
+              {(isIOS || !isMobile) && (
+                <a
+                  href="https://testflight.apple.com/join/j23pnEmX"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn"
+                  aria-label="Download ShareMoney iOS beta app via TestFlight"
+                  onClick={() =>
+                    track("iOS Beta Click", { location: "hero", device })
+                  }
+                  style={{
+                    backgroundColor: "white",
+                    color: "var(--color-primary)",
+                    fontWeight: "700",
+                    padding: isMobile ? "0.75rem 0.75rem" : "1rem 2rem",
+                    fontSize: isMobile ? "0.8125rem" : "1.125rem",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "0.5rem",
+                    minHeight: "48px",
+                    boxShadow: "var(--shadow-lg)",
+                    flex: isMobile ? "1 1 0" : "0 1 auto",
+                    minWidth: isMobile ? "0" : "200px",
+                    maxWidth: isMobile ? "calc(33.333% - 0.5rem)" : "none",
+                    boxSizing: "border-box",
+                  }}
+                >
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    style={{ flexShrink: 0 }}
+                  >
+                    <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C1.79 15.25 4.96 6.39 12.05 6.39c2.25 0 3.86.88 5.18 1.56-1.19 1.65-1.7 3.75-1.35 5.95.43 2.73 1.95 4.08 3.86 4.88-.3.85-.68 1.67-1.24 2.4zM12.03.01c-.83 0-1.87.5-2.5 1.17-.65.68-1.2 1.76-1.05 2.8.9.05 1.93-.4 2.58-1.05.65-.68 1.2-1.77 1.05-2.8-.05-.05-.05-.1-.08-.12z" />
+                  </svg>
+                  <span style={{ whiteSpace: "nowrap" }}>
+                    {isIOS ? "Download for iOS" : "Try iOS Beta"}
+                  </span>
+                </a>
+              )}
 
-      {/* How it Works - Timeline */}
-      <section className="section" style={{ backgroundColor: 'white' }}>
-        <div className="container">
-          <div style={{ textAlign: 'center', marginBottom: '3rem' }}>
-             <h2 style={{ marginBottom: '1rem' }}>How it Works</h2>
-             <p style={{ fontSize: '1.125rem' }}>Three steps to financial peace of mind.</p>
-          </div>
+              {/* Android Button - Show prominently if Android or desktop */}
+              {(isAndroid || !isMobile) && (
+                <a
+                  href="mailto:varora1406@gmail.com?subject=ShareMoney Android Beta Access Request&body=Hi! I'd like to request access to the ShareMoney Android beta app. Thank you!"
+                  className="btn"
+                  aria-label="Request access to ShareMoney Android beta app via email"
+                  onClick={() =>
+                    track("Android Beta Request", { location: "hero", device })
+                  }
+                  style={{
+                    backgroundColor: "white",
+                    color: "#3DDC84",
+                    fontWeight: "700",
+                    padding: isMobile ? "0.75rem 0.75rem" : "1rem 2rem",
+                    fontSize: isMobile ? "0.8125rem" : "1.125rem",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "0.125rem",
+                    minHeight: "48px",
+                    boxShadow: "var(--shadow-lg)",
+                    border: "2px solid rgba(61, 220, 132, 0.3)",
+                    flex: isMobile ? "1 1 0" : "0 1 auto",
+                    minWidth: isMobile ? "0" : "200px",
+                    maxWidth: isMobile ? "calc(33.333% - 0.5rem)" : "none",
+                    boxSizing: "border-box",
+                  }}
+                  title="Android beta requires email request"
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      style={{ flexShrink: 0 }}
+                    >
+                      <path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993s-.4482.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.551 0 .9993.4482.9993.9993s-.4483.9997-.9993.9997m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.2439 13.8533 7.8508 12 7.8508s-3.5902.3931-5.1349 1.1357L4.8429 5.4834a.4161.4161 0 00-.5676-.1521.4157.4157 0 00-.1521.5676l1.9973 3.4592C2.6889 11.186.8535 12.3074.8535 13.8508c0 2.6998 4.9702 4.1495 11.1465 4.1495 6.1763 0 11.1465-1.4492 11.1465-4.1495 0-1.5434-1.8354-2.6648-4.523-3.5294" />
+                    </svg>
+                    <span style={{ whiteSpace: "nowrap" }}>
+                      {isAndroid ? "Request Access" : "Request Android"}
+                    </span>
+                  </div>
+                  <span
+                    style={{
+                      fontSize: "0.7rem",
+                      opacity: 0.7,
+                      fontWeight: "500",
+                      color: "var(--color-text-secondary)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    (On Request)
+                  </span>
+                </a>
+              )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '2rem', maxWidth: '1000px', margin: '0 auto', position: 'relative' }}>
-             {/* Connector Line (Desktop only) */}
-             <div className="timeline-connector" style={{ 
-               position: 'absolute', 
-               top: '24px', 
-               left: '16%', 
-               right: '16%', 
-               height: '2px', 
-               backgroundColor: 'var(--color-border)', 
-               zIndex: 0,
-               display: 'none' // Hidden by default, shown in media query via style tag below
-             }}></div>
-             <style>{`@media (min-width: 768px) { .timeline-connector { display: block !important; } }`}</style>
-             
-             <TimelineItem 
-               step="1" 
-               title="Create a Group" 
-               description="Start a group for your trip, house, or project. Invite friends instantly."
-             />
-              <TimelineItem 
-               step="2" 
-               title="Add Expenses" 
-               description="Log costs as they happen. We handle the math for you."
-             />
-              <TimelineItem 
-               step="3" 
-               title="Settle Up" 
-               description="Our smart algorithm minimizes transactions so everyone gets paid back fast."
-             />
-          </div>
-        </div>
-      </section>
+              {/* Web Button - Always visible alongside mobile apps */}
+              <a
+                href="https://share-money.expo.app"
+                className="btn"
+                aria-label="Try ShareMoney web app beta"
+                onClick={() =>
+                  track("Web Beta Click", { location: "hero", device })
+                }
+                style={{
+                  backgroundColor: "white",
+                  color: "var(--color-primary)",
+                  fontWeight: "700",
+                  padding: isMobile ? "0.75rem 0.75rem" : "1rem 2rem",
+                  fontSize: isMobile ? "0.8125rem" : "1.125rem",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "0.5rem",
+                  minHeight: "48px",
+                  boxShadow: "var(--shadow-lg)",
+                  flex: isMobile ? "1 1 0" : "0 1 auto",
+                  minWidth: isMobile ? "0" : "200px",
+                  maxWidth: isMobile ? "calc(33.333% - 0.5rem)" : "none",
+                  boxSizing: "border-box",
+                }}
+              >
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  style={{ flexShrink: 0 }}
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="2" y1="12" x2="22" y2="12" />
+                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                </svg>
+                <span style={{ whiteSpace: "nowrap" }}>Try Web Beta</span>
+              </a>
+            </div>
 
-      {/* Bento Grid Features */}
-      <section className="section">
-        <div className="container">
-          <div style={{ textAlign: 'center', marginBottom: '4rem' }}>
-            <h2 style={{ marginBottom: '1rem' }}>Everything you need</h2>
-            <p style={{ fontSize: '1.125rem' }}>Powerful features packed into a simple design.</p>
+            <div className="float-animation hero-image-container">
+              <img
+                src={
+                  isDark ? "/hero-screenshot-dark.png" : "/hero-screenshot.png"
+                }
+                alt="ShareMoney app dashboard showing expense tracking, group management, and smart settlement features"
+                loading="lazy"
+                width="1200"
+                height="800"
+                style={{ width: "100%", height: "auto", display: "block" }}
+              />
+            </div>
           </div>
+        </section>
 
-          {/* Responsive Bento Grid */}
-          <style>
-            {`
+        {/* How it Works - Timeline */}
+        <section
+          className="section"
+          style={{ backgroundColor: "var(--color-surface)" }}
+        >
+          <div className="container">
+            <div className="section-title" style={{ marginBottom: "3rem" }}>
+              <h2 style={{ marginBottom: "1rem" }}>How it Works</h2>
+              <p className="section-subtitle">
+                Three steps to financial peace of mind.
+              </p>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                gap: "2rem",
+                maxWidth: "1000px",
+                margin: "0 auto",
+                position: "relative",
+              }}
+            >
+              {/* Connector Line (Desktop only) */}
+              <div
+                className="timeline-connector"
+                style={{
+                  position: "absolute",
+                  top: "24px",
+                  left: "16%",
+                  right: "16%",
+                  height: "2px",
+                  backgroundColor: "var(--color-border)",
+                  zIndex: 0,
+                  display: "none", // Hidden by default, shown in media query via style tag below
+                }}
+              ></div>
+              <style>{`@media (min-width: 768px) { .timeline-connector { display: block !important; } }`}</style>
+
+              <TimelineItem
+                step="1"
+                title="Create a Group"
+                description="Start a group for your trip, house, or project. Invite friends instantly."
+              />
+              <TimelineItem
+                step="2"
+                title="Add Expenses"
+                description="Log costs as they happen. We handle the math for you."
+              />
+              <TimelineItem
+                step="3"
+                title="Settle Up"
+                description="Our smart algorithm minimizes transactions so everyone gets paid back fast."
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* Bento Grid Features */}
+        <section
+          className="section"
+          ref={featuresAnimation.ref as React.RefObject<HTMLElement>}
+        >
+          <div
+            className={`container scroll-fade ${
+              featuresVisible ? "visible" : ""
+            }`}
+          >
+            <div className="section-title" style={{ marginBottom: "4rem" }}>
+              <h2 style={{ marginBottom: "1rem" }}>Everything you need</h2>
+              <p className="section-subtitle">
+                Powerful features packed into a simple design.
+              </p>
+            </div>
+
+            {/* Responsive Bento Grid */}
+            <style>
+              {`
               .bento-grid {
                 display: grid;
                 grid-template-columns: 1fr;
@@ -165,160 +423,433 @@ function App() {
                 .bento-tall { grid-row: span 2; }
               }
             `}
-          </style>
+            </style>
 
-          <div className="bento-grid">
-             {/* Large Card: Smart Settlements */}
-            <div className="bento-large" style={{ 
-              backgroundColor: 'white', 
-              padding: '2.5rem', 
-              borderRadius: '24px', 
-              boxShadow: 'var(--shadow-md)',
-              border: '1px solid var(--color-border)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center'
-            }}>
-               <div style={{ fontSize: '3rem', marginBottom: '1rem', color: 'var(--color-primary)' }}>💸</div>
-               <h3 style={{ fontSize: '1.75rem', marginBottom: '0.5rem' }}>Smart Settlements</h3>
-               <p style={{ fontSize: '1.125rem' }}>Our proprietary algorithm calculates the most efficient way to pay everyone back, minimizing the number of transactions by up to 70%.</p>
-            </div>
+            <div className="bento-grid">
+              {/* Large Card: Smart Settlements */}
+              <div className="bento-card bento-card-large">
+                <div className="bento-icon bento-icon-large">
+                  <MoneyIcon size={48} />
+                </div>
+                <h3 className="bento-title">Smart Settlements</h3>
+                <p className="bento-text">
+                  Our proprietary algorithm calculates the most efficient way to
+                  pay everyone back, minimizing the number of transactions by up
+                  to 70%.
+                </p>
+              </div>
 
-            {/* Tall Card: Real-time Sync */}
-            <div className="bento-tall" style={{ 
-              backgroundColor: 'var(--color-primary)', 
-              color: 'white',
-              padding: '2.5rem', 
-              borderRadius: '24px', 
-              boxShadow: 'var(--shadow-lg)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center'
-            }}>
-               <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔄</div>
-               <h3 style={{ fontSize: '1.75rem', marginBottom: '0.5rem', color: 'white' }}>Real-time Sync</h3>
-               <p style={{ fontSize: '1.125rem', opacity: 0.9, color: 'white' }}>Changes update instantly across all your devices. Never wonder if you're looking at old data.</p>
-            </div>
-
-            {/* Small Card: Multi-Currency */}
-             <div style={{ 
-              backgroundColor: 'white', 
-              padding: '2rem', 
-              borderRadius: '24px', 
-              boxShadow: 'var(--shadow-md)',
-              border: '1px solid var(--color-border)'
-            }}>
-               <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>🌍</div>
-               <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>Multi-Currency</h3>
-               <p>Add expenses in any currency.</p>
-            </div>
-
-             {/* Small Card: Stats */}
-             <div style={{ 
-              backgroundColor: 'white', 
-              padding: '2rem', 
-              borderRadius: '24px', 
-              boxShadow: 'var(--shadow-md)',
-              border: '1px solid var(--color-border)'
-            }}>
-               <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>📊</div>
-               <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>Spending Stats</h3>
-               <p>Visualize where your money goes.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Download Section */}
-      <section id="download" className="section" style={{ textAlign: 'center' }}>
-        <div className="container">
-          <div style={{ 
-            backgroundColor: 'var(--color-primary)', 
-            borderRadius: '24px',
-            padding: '4rem 2rem',
-            color: 'white',
-            backgroundImage: 'var(--gradient-primary)'
-          }}>
-            <h2 style={{ marginBottom: '1rem', color: 'white' }}>Start Sharing Today</h2>
-            <p style={{ fontSize: '1.25rem', marginBottom: '2.5rem', opacity: 0.9, color: 'white' }}>
-              Web is live! Mobile apps coming soon.
-            </p>
-            
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap', flexDirection: 'column', alignItems: 'center' }}>
-               <a 
-                href="https://share-money.expo.app" 
-                className="btn" 
-                style={{ 
-                  backgroundColor: 'white', 
-                  color: 'var(--color-primary)', 
-                  fontWeight: '700',
-                  padding: '1rem 3rem',
-                  fontSize: '1.25rem'
+              {/* Tall Card: Real-time Sync */}
+              <div
+                className="bento-card bento-card-tall"
+                style={{
+                  backgroundColor: "var(--color-primary)",
+                  color: "white",
                 }}
               >
-                Launch Web App Now
-              </a>
-
-              <div style={{ marginTop: '1rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                <span style={{ opacity: 0.9, color: 'white' }}>Want the mobile app?</span>
-                <a 
-                  href="mailto:varora1406@gmail.com?subject=ShareMoney Mobile Early Access Request" 
-                  className="btn"
-                  style={{ 
-                    backgroundColor: 'rgba(255,255,255,0.15)', 
-                    color: 'white', 
-                    border: '1px solid rgba(255,255,255,0.3)',
-                    fontSize: '0.9rem',
-                    padding: '0.5rem 1rem'
-                  }}
+                <div
+                  className="bento-icon bento-icon-large"
+                  style={{ color: "white" }}
                 >
-                  Request Early Access (iOS/Android)
-                </a>
+                  <SyncIcon size={48} />
+                </div>
+                <h3 className="bento-title" style={{ color: "white" }}>
+                  Real-time Sync
+                </h3>
+                <p
+                  className="bento-text"
+                  style={{ opacity: 0.9, color: "white" }}
+                >
+                  Changes update instantly across all your devices. Never wonder
+                  if you're looking at old data.
+                </p>
+              </div>
+
+              {/* Small Card: Multi-Currency */}
+              <div className="bento-card bento-card-small">
+                <div className="bento-icon bento-icon-small">
+                  <GlobeIcon size={40} />
+                </div>
+                <h3 className="bento-title-small">Multi-Currency</h3>
+                <p>Add expenses in any currency.</p>
+              </div>
+
+              {/* Small Card: Stats */}
+              <div className="bento-card bento-card-small">
+                <div className="bento-icon bento-icon-small">
+                  <ChartIcon size={40} />
+                </div>
+                <h3 className="bento-title-small">Spending Stats</h3>
+                <p>Visualize where your money goes.</p>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Footer */}
-      <footer style={{ padding: '4rem 0', borderTop: '1px solid var(--color-border)', backgroundColor: '#f8fafc' }}>
-        <div className="container" style={{ textAlign: 'center' }}>
-          <div style={{ marginBottom: '2rem', fontWeight: 700, fontSize: '1.5rem', color: 'var(--color-primary)' }}>ShareMoney</div>
-          <div style={{ display: 'flex', gap: '2rem', justifyContent: 'center', marginBottom: '2rem', color: 'var(--color-text-main)' }}>
-            <a href="mailto:varora1406@gmail.com" style={{ color: 'inherit', textDecoration: 'none', fontWeight: 500 }}>Contact Support</a>
+        {/* Trust Badges */}
+        <section
+          className="section"
+          style={{ backgroundColor: "var(--color-surface)", padding: "2rem 0" }}
+          ref={trustAnimation.ref as React.RefObject<HTMLElement>}
+        >
+          <div
+            className={`container scroll-fade ${trustVisible ? "visible" : ""}`}
+          >
+            <TrustBadges />
           </div>
-          <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>© {new Date().getFullYear()} ShareMoney. All rights reserved.</p>
+        </section>
+
+        {/* FAQ Section */}
+        <div ref={faqAnimation.ref as React.RefObject<HTMLDivElement>}>
+          <div className={`scroll-fade ${faqVisible ? "visible" : ""}`}>
+            <FAQ />
+          </div>
         </div>
-      </footer>
-    </div>
-  )
+
+        {/* Download Section */}
+        <section
+          id="download"
+          className="section"
+          style={{ textAlign: "center" }}
+        >
+          <div className="container">
+            <div
+              style={{
+                backgroundColor: "var(--color-primary)",
+                borderRadius: "24px",
+                padding: "4rem 2rem",
+                color: "white",
+                backgroundImage: "var(--gradient-primary)",
+              }}
+            >
+              <h2 style={{ marginBottom: "1rem", color: "white" }}>
+                Start Sharing Today
+              </h2>
+              <p
+                style={{
+                  fontSize: "1.25rem",
+                  marginBottom: "2.5rem",
+                  opacity: 0.9,
+                  color: "white",
+                }}
+              >
+                All platforms in beta testing: iOS (open), Android (on request),
+                and Web
+              </p>
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: "1rem",
+                  justifyContent: "center",
+                  flexWrap: "wrap",
+                  alignItems: "stretch",
+                  maxWidth: "900px",
+                  margin: "0 auto",
+                }}
+              >
+                {/* iOS Button - Show if not iOS (already shown in hero) */}
+                {!isIOS && (
+                  <a
+                    href="https://testflight.apple.com/join/j23pnEmX"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn"
+                    onClick={() =>
+                      track("iOS Beta Click", { location: "download", device })
+                    }
+                    style={{
+                      backgroundColor: "white",
+                      color: "var(--color-primary)",
+                      fontWeight: "700",
+                      padding: "1rem 2rem",
+                      fontSize: "1.125rem",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "0.75rem",
+                      minWidth: "200px",
+                      boxShadow: "var(--shadow-lg)",
+                    }}
+                  >
+                    <svg
+                      width="24"
+                      height="24"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      style={{ flexShrink: 0 }}
+                    >
+                      <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C1.79 15.25 4.96 6.39 12.05 6.39c2.25 0 3.86.88 5.18 1.56-1.19 1.65-1.7 3.75-1.35 5.95.43 2.73 1.95 4.08 3.86 4.88-.3.85-.68 1.67-1.24 2.4zM12.03.01c-.83 0-1.87.5-2.5 1.17-.65.68-1.2 1.76-1.05 2.8.9.05 1.93-.4 2.58-1.05.65-.68 1.2-1.77 1.05-2.8-.05-.05-.05-.1-.08-.12z" />
+                    </svg>
+                    <span>Try iOS Beta</span>
+                  </a>
+                )}
+
+                {/* Android Button - Show if not Android (already shown in hero) */}
+                {!isAndroid && (
+                  <a
+                    href="mailto:varora1406@gmail.com?subject=ShareMoney Android Beta Access Request&body=Hi! I'd like to request access to the ShareMoney Android beta app. Thank you!"
+                    className="btn"
+                    onClick={() =>
+                      track("Android Beta Request", {
+                        location: "download",
+                        device,
+                      })
+                    }
+                    style={{
+                      backgroundColor: "white",
+                      color: "#3DDC84",
+                      fontWeight: "700",
+                      padding: "1rem 2rem",
+                      fontSize: "1.125rem",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "0.25rem",
+                      minWidth: "200px",
+                      boxShadow: "var(--shadow-lg)",
+                      border: "2px solid rgba(61, 220, 132, 0.3)",
+                    }}
+                    title="Android beta requires email request"
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.75rem",
+                      }}
+                    >
+                      <svg
+                        width="24"
+                        height="24"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                        style={{ flexShrink: 0 }}
+                      >
+                        <path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993s-.4482.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.551 0 .9993.4482.9993.9993s-.4483.9997-.9993.9997m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.2439 13.8533 7.8508 12 7.8508s-3.5902.3931-5.1349 1.1357L4.8429 5.4834a.4161.4161 0 00-.5676-.1521.4157.4157 0 00-.1521.5676l1.9973 3.4592C2.6889 11.186.8535 12.3074.8535 13.8508c0 2.6998 4.9702 4.1495 11.1465 4.1495 6.1763 0 11.1465-1.4492 11.1465-4.1495 0-1.5434-1.8354-2.6648-4.523-3.5294" />
+                      </svg>
+                      <span>Request Android</span>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: "0.75rem",
+                        opacity: 0.7,
+                        fontWeight: "500",
+                        color: "var(--color-text-secondary)",
+                      }}
+                    >
+                      (On Request)
+                    </span>
+                  </a>
+                )}
+
+                {/* Web Button - Secondary (Priority 3) */}
+                <a
+                  href="https://share-money.expo.app"
+                  className="btn"
+                  onClick={() =>
+                    track("Web Beta Click", { location: "download", device })
+                  }
+                  style={{
+                    backgroundColor: "rgba(255,255,255,0.15)",
+                    color: "white",
+                    border: "2px solid rgba(255,255,255,0.4)",
+                    fontWeight: "600",
+                    padding: "0.875rem 1.75rem",
+                    fontSize: "1rem",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "0.75rem",
+                    minWidth: "180px",
+                    opacity: 0.9,
+                  }}
+                >
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    style={{ flexShrink: 0 }}
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="2" y1="12" x2="22" y2="12" />
+                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                  </svg>
+                  <span>Try Web Beta</span>
+                </a>
+              </div>
+
+              <div
+                style={{
+                  marginTop: "2rem",
+                  fontSize: "0.875rem",
+                  opacity: 0.85,
+                  color: "white",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.75rem",
+                  alignItems: "center",
+                  maxWidth: "600px",
+                  margin: "2rem auto 0",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    flexWrap: "wrap",
+                    justifyContent: "center",
+                  }}
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    style={{ opacity: 0.8 }}
+                  >
+                    <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C1.79 15.25 4.96 6.39 12.05 6.39c2.25 0 3.86.88 5.18 1.56-1.19 1.65-1.7 3.75-1.35 5.95.43 2.73 1.95 4.08 3.86 4.88-.3.85-.68 1.67-1.24 2.4zM12.03.01c-.83 0-1.87.5-2.5 1.17-.65.68-1.2 1.76-1.05 2.8.9.05 1.93-.4 2.58-1.05.65-.68 1.2-1.77 1.05-2.8-.05-.05-.05-.1-.08-.12z" />
+                  </svg>
+                  <span>
+                    iOS: Requires TestFlight app (free from App Store)
+                  </span>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    flexWrap: "wrap",
+                    justifyContent: "center",
+                  }}
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    style={{ opacity: 0.8 }}
+                  >
+                    <path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993s-.4482.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.551 0 .9993.4482.9993.9993s-.4483.9997-.9993.9997m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.2439 13.8533 7.8508 12 7.8508s-3.5902.3931-5.1349 1.1357L4.8429 5.4834a.4161.4161 0 00-.5676-.1521.4157.4157 0 00-.1521.5676l1.9973 3.4592C2.6889 11.186.8535 12.3074.8535 13.8508c0 2.6998 4.9702 4.1495 11.1465 4.1495 6.1763 0 11.1465-1.4492 11.1465-4.1495 0-1.5434-1.8354-2.6648-4.523-3.5294" />
+                  </svg>
+                  <span>Android: Available upon request via email</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Footer */}
+        <footer
+          style={{
+            padding: "4rem 0",
+            borderTop: "1px solid var(--color-border)",
+            backgroundColor: "var(--color-background)",
+          }}
+        >
+          <div className="container" style={{ textAlign: "center" }}>
+            <div
+              style={{
+                marginBottom: "2rem",
+                fontWeight: 700,
+                fontSize: "1.5rem",
+                color: "var(--color-primary)",
+              }}
+            >
+              ShareMoney
+            </div>
+            <div
+              style={{
+                display: "flex",
+                gap: "2rem",
+                justifyContent: "center",
+                marginBottom: "2rem",
+              }}
+            >
+              <a
+                href="mailto:varora1406@gmail.com"
+                style={{
+                  color: "var(--color-text-main)",
+                  textDecoration: "none",
+                  fontWeight: 500,
+                }}
+              >
+                Contact Support
+              </a>
+            </div>
+            <p
+              style={{
+                fontSize: "0.875rem",
+                color: "var(--color-text-secondary)",
+              }}
+            >
+              © {new Date().getFullYear()} ShareMoney. All rights reserved.
+            </p>
+          </div>
+        </footer>
+      </div>
+      <Analytics />
+    </>
+  );
 }
 
-function TimelineItem({ step, title, description }: { step: string, title: string, description: string }) {
+function TimelineItem({
+  step,
+  title,
+  description,
+}: {
+  step: string;
+  title: string;
+  description: string;
+}) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', position: 'relative', zIndex: 1 }}>
-      <div style={{ 
-        width: '48px', 
-        height: '48px', 
-        borderRadius: '50%', 
-        backgroundColor: 'var(--color-primary)', 
-        color: 'white',
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center',
-        fontWeight: 'bold',
-        fontSize: '1.25rem',
-        marginBottom: '1rem',
-        boxShadow: '0 0 0 8px white' // Creates space around the line
-      }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        textAlign: "center",
+        position: "relative",
+        zIndex: 1,
+      }}
+    >
+      <div
+        style={{
+          width: "48px",
+          height: "48px",
+          borderRadius: "50%",
+          backgroundColor: "var(--color-primary)",
+          color: "white",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontWeight: "bold",
+          fontSize: "1.25rem",
+          marginBottom: "1rem",
+          boxShadow: "0 0 0 8px white", // Creates space around the line
+        }}
+      >
         {step}
       </div>
       <div>
-        <h3 style={{ marginBottom: '0.5rem', fontSize: '1.25rem' }}>{title}</h3>
-        <p style={{ fontSize: '1rem', color: 'var(--color-text-secondary)', lineHeight: '1.5' }}>{description}</p>
+        <h3 style={{ marginBottom: "0.5rem", fontSize: "1.25rem" }}>{title}</h3>
+        <p
+          style={{
+            fontSize: "1rem",
+            color: "var(--color-text-secondary)",
+            lineHeight: "1.5",
+          }}
+        >
+          {description}
+        </p>
       </div>
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
