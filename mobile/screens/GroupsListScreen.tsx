@@ -6,6 +6,7 @@ import {
   Button,
   FAB,
   IconButton,
+  List,
   Surface,
   Text,
   useTheme,
@@ -40,6 +41,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   refetchTrigger,
 }) => {
   const [showCreateGroup, setShowCreateGroup] = useState<boolean>(false);
+  const [formerGroupsExpanded, setFormerGroupsExpanded] = useState<boolean>(false);
   const theme = useTheme();
   const { signOut, user } = useAuth();
   const { data: groups, isLoading: loading, error, refetch } = useGroups();
@@ -73,6 +75,98 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   }, [error, signOut]);
 
   const isInitialLoading = loading && groups.length === 0;
+
+  // Separate groups into active and former
+  const activeGroups = groups.filter(
+    (group) => group.user_status !== "left"
+  );
+  const formerGroups = groups.filter(
+    (group) => group.user_status === "left"
+  );
+
+  // Helper function to render a group item
+  const renderGroupItem = (group: Group) => (
+    <Surface
+      key={group.id}
+      style={[
+        styles.groupItem,
+        { backgroundColor: theme.colors.surface },
+      ]}
+      elevation={1}
+    >
+      <TouchableOpacity
+        style={styles.groupTouchable}
+        onPress={() => onGroupPress(group)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.groupMainContent}>
+          <View style={styles.groupIconContainer}>
+            <Surface
+              style={[
+                styles.groupIcon,
+                { backgroundColor: theme.colors.primaryContainer },
+              ]}
+              elevation={0}
+            >
+              <Text
+                style={{
+                  fontSize: 20,
+                  fontWeight: "bold",
+                  color: theme.colors.onPrimaryContainer,
+                }}
+              >
+                {group.name.charAt(0).toUpperCase()}
+              </Text>
+            </Surface>
+          </View>
+
+          <View style={styles.groupInfo}>
+            <Text
+              variant="titleMedium"
+              style={[
+                styles.groupName,
+                group.user_status === 'left' && { color: theme.colors.onSurfaceVariant }
+              ]}
+              numberOfLines={1}
+            >
+              {group.name}
+            </Text>
+            <View style={styles.groupMetadata}>
+              {group.user_status === 'left' && (
+                <Text 
+                  variant="bodySmall"
+                  style={[styles.formerStatusText, { color: theme.colors.error }]}
+                >
+                  Former Member
+                </Text>
+              )}
+              {group.user_status === 'left' && (
+                <Text
+                  variant="bodySmall"
+                  style={[styles.metadataSeparator, { color: theme.colors.onSurfaceVariant }]}
+                >
+                  •
+                </Text>
+              )}
+              <Text
+                variant="bodySmall"
+                style={{ color: theme.colors.onSurfaceVariant, flex: 1 }}
+                numberOfLines={1}
+              >
+                {group.description || "No description"}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Balance Badge */}
+        <GroupBalanceBadge 
+          balanceData={balancesData?.group_balances?.find(gb => gb.group_id === group.id)} 
+          currentUserId={user?.id}
+        />
+      </TouchableOpacity>
+    </Surface>
+  );
 
   if (error) {
     // Don't show Retry button for session expiration - user will be signed out automatically
@@ -192,88 +286,31 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
               </Surface>
             </View>
           ) : (
-            groups.map((group) => (
-              <Surface
-                key={group.id}
-                style={[
-                  styles.groupItem,
-                  { backgroundColor: theme.colors.surface },
-                ]}
-                elevation={1}
-              >
-                <TouchableOpacity
-                  style={styles.groupTouchable}
-                  onPress={() => onGroupPress(group)}
-                  activeOpacity={0.7}
+            <>
+              {/* Active Groups */}
+              {activeGroups.map((group) => renderGroupItem(group))}
+
+              {/* Former Groups in Accordion */}
+              {formerGroups.length > 0 && (
+                <List.Accordion
+                  title={`Former Groups (${formerGroups.length})`}
+                  titleStyle={styles.accordionTitle}
+                  style={[
+                    styles.accordion,
+                    { backgroundColor: theme.colors.surface },
+                  ]}
+                  left={(props) => (
+                    <List.Icon {...props} icon="history" />
+                  )}
+                  expanded={formerGroupsExpanded}
+                  onPress={() => setFormerGroupsExpanded(!formerGroupsExpanded)}
                 >
-                  <View style={styles.groupMainContent}>
-                    <View style={styles.groupIconContainer}>
-                      <Surface
-                        style={[
-                          styles.groupIcon,
-                          { backgroundColor: theme.colors.primaryContainer },
-                        ]}
-                        elevation={0}
-                      >
-                        <Text
-                          style={{
-                            fontSize: 20,
-                            fontWeight: "bold",
-                            color: theme.colors.onPrimaryContainer,
-                          }}
-                        >
-                          {group.name.charAt(0).toUpperCase()}
-                        </Text>
-                      </Surface>
-                    </View>
-
-                    <View style={styles.groupInfo}>
-                      <Text
-                        variant="titleMedium"
-                        style={[
-                          styles.groupName,
-                          group.user_status === 'left' && { color: theme.colors.onSurfaceVariant }
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {group.name}
-                      </Text>
-                      <View style={styles.groupMetadata}>
-                        {group.user_status === 'left' && (
-                          <Text 
-                            variant="bodySmall"
-                            style={[styles.formerStatusText, { color: theme.colors.error }]}
-                          >
-                            Former Member
-                          </Text>
-                        )}
-                        {group.user_status === 'left' && (
-                          <Text
-                            variant="bodySmall"
-                            style={[styles.metadataSeparator, { color: theme.colors.onSurfaceVariant }]}
-                          >
-                            •
-                          </Text>
-                        )}
-                        <Text
-                          variant="bodySmall"
-                          style={{ color: theme.colors.onSurfaceVariant, flex: 1 }}
-                          numberOfLines={1}
-                        >
-                          {group.description || "No description"}
-                        </Text>
-                      </View>
-                    </View>
+                  <View style={styles.accordionContent}>
+                    {formerGroups.map((group) => renderGroupItem(group))}
                   </View>
-
-                  {/* Balance Badge */}
-                  <GroupBalanceBadge 
-                    balanceData={balancesData?.group_balances?.find(gb => gb.group_id === group.id)} 
-                    currentUserId={user?.id}
-                  />
-                </TouchableOpacity>
-              </Surface>
-            ))
+                </List.Accordion>
+              )}
+            </>
           )}
 
           {/* Bottom padding for FAB */}
@@ -388,5 +425,17 @@ const styles = StyleSheet.create({
   groupInfo: {
     flex: 1,
     paddingRight: 8,
+  },
+  accordion: {
+    marginTop: 12,
+    marginBottom: 12,
+    borderRadius: 16,
+    overflow: "hidden",
+  },
+  accordionTitle: {
+    fontWeight: "600",
+  },
+  accordionContent: {
+    paddingHorizontal: 0,
   },
 });
