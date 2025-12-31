@@ -122,7 +122,7 @@ interface AuthContextType {
   /** Signs in a user with Google OAuth */
   signInWithGoogle: () => Promise<{ error: Error | null }>;
   /** Signs out the current user */
-  signOut: () => void;
+  signOut: () => void | Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -416,9 +416,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
    * Clears the session state and signs out from Supabase
    */
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
-    updateAuthState(null);
-  }, []);
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        logError(error, { context: "signOut" });
+      }
+      // Update state immediately - the auth state change listener will also fire
+      // but we update immediately to ensure UI responds quickly, especially on web
+      updateAuthState(null);
+      
+      // On web, ensure we wait a bit for the auth state change to propagate
+      // This helps ensure the session is fully cleared
+      if (Platform.OS === "web") {
+        // Small delay to ensure auth state change listener processes the signOut
+        await new Promise(resolve => setTimeout(resolve, 100));
+        // Force another state update after delay to ensure UI reflects logout
+        updateAuthState(null);
+      }
+    } catch (error) {
+      logError(error, { context: "signOut", errorType: "exception" });
+      // Even if signOut fails, clear local state
+      updateAuthState(null);
+    }
+  }, [updateAuthState]);
 
   // Memoize context value to prevent unnecessary re-renders
   const contextValue = useMemo(
