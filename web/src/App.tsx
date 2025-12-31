@@ -1,3 +1,15 @@
+/**
+ * ShareMoney Landing Page
+ *
+ * NOTE: This is a LANDING PAGE ONLY - a marketing/onboarding site.
+ * The actual ShareMoney web application is located elsewhere.
+ *
+ * This landing page serves to:
+ * - Introduce ShareMoney to new users
+ * - Provide download links for iOS/Android apps
+ * - Link to the web beta application
+ * - Display features, FAQs, and trust indicators
+ */
 import { track } from "@vercel/analytics";
 import { Analytics } from "@vercel/analytics/react";
 import { FAQ } from "./components/FAQ";
