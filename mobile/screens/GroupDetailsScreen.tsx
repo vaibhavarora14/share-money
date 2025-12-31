@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Alert, BackHandler, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, BackHandler, Platform, ScrollView, StyleSheet, View } from "react-native";
 import {
   ActivityIndicator,
   Appbar,
   Avatar,
   Button,
   Chip,
+  Dialog,
   FAB,
   Menu,
+  Portal,
   SegmentedButtons,
   Text,
   useTheme
@@ -90,6 +92,16 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [showActivityFilters, setShowActivityFilters] = useState(false);
   const [activityFilterType, setActivityFilterType] = useState<"all" | "expenses" | "settlements">("all");
   const [activityFilterParticipantId, setActivityFilterParticipantId] = useState<string>("all");
+  
+  // Web-compatible confirmation dialog state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    onConfirm: () => void;
+    destructive?: boolean;
+  } | null>(null);
 
   // Stable handler for closing menu
   const handleCloseMenu = () => {
@@ -276,43 +288,79 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   }, [groupRefreshTrigger, refetchGroup]);
 
   const handleLeaveGroup = async () => {
-    Alert.alert(
-      "Leave Group",
-      `Are you sure you want to leave "${group.name}"?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Leave",
-          style: "destructive",
-          onPress: async () => {
-            const currentUserId = session?.user?.id;
-            if (!currentUserId) {
-              Alert.alert("Error", "Unable to identify user");
-              return;
-            }
+    const currentUserId = session?.user?.id;
+    if (!currentUserId) {
+      if (Platform.OS === "web") {
+        setConfirmDialog({
+          visible: true,
+          title: "Error",
+          message: "Unable to identify user",
+          confirmText: "OK",
+          onConfirm: () => setConfirmDialog(null),
+        });
+      } else {
+        Alert.alert("Error", "Unable to identify user");
+      }
+      return;
+    }
 
-            try {
-              setLeaving(true);
-              await removeMemberMutation.mutate({
-                groupId: group.id,
-                userId: currentUserId,
-              });
-              // Call the onLeaveGroup callback if provided, otherwise just go back
-              if (onLeaveGroup) {
-                onLeaveGroup();
-              } else {
-                onBack();
-              }
-            } catch (err) {
-              Alert.alert("Error", getUserFriendlyErrorMessage(err));
-            } finally {
-              setLeaving(false);
-              setMenuVisible(false);
-            }
-          },
+    const performLeave = async () => {
+      try {
+        setLeaving(true);
+        await removeMemberMutation.mutate({
+          groupId: group.id,
+          userId: currentUserId,
+        });
+        // Call the onLeaveGroup callback if provided, otherwise just go back
+        if (onLeaveGroup) {
+          onLeaveGroup();
+        } else {
+          onBack();
+        }
+      } catch (err) {
+        if (Platform.OS === "web") {
+          setConfirmDialog({
+            visible: true,
+            title: "Error",
+            message: getUserFriendlyErrorMessage(err),
+            confirmText: "OK",
+            onConfirm: () => setConfirmDialog(null),
+          });
+        } else {
+          Alert.alert("Error", getUserFriendlyErrorMessage(err));
+        }
+      } finally {
+        setLeaving(false);
+        setMenuVisible(false);
+      }
+    };
+
+    if (Platform.OS === "web") {
+      setConfirmDialog({
+        visible: true,
+        title: "Leave Group",
+        message: `Are you sure you want to leave "${group.name}"?`,
+        confirmText: "Leave",
+        destructive: true,
+        onConfirm: () => {
+          setConfirmDialog(null);
+          void performLeave();
         },
-      ]
-    );
+      });
+    } else {
+      Alert.alert(
+        "Leave Group",
+        `Are you sure you want to leave "${group.name}"?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Leave",
+            style: "destructive",
+            onPress: performLeave,
+          },
+        ]
+      );
+    }
   };
 
   const handleRemoveMember = async (
@@ -322,37 +370,65 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     const memberName = memberEmail || `User ${memberUserId.substring(0, 8)}...`;
     const isRemovingSelf = memberUserId === session?.user?.id;
 
-    Alert.alert(
-      isRemovingSelf ? "Leave Group" : "Remove Member",
-      isRemovingSelf
-        ? `Are you sure you want to leave "${group.name}"?`
-        : `Are you sure you want to remove "${memberName}" from this group?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: isRemovingSelf ? "Leave" : "Remove",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setRemovingMemberId(memberUserId);
-              // Use the local mutation which will refetch group data
-              await removeMemberMutation.mutate({
-                groupId: group.id,
-                userId: memberUserId,
-              });
-              // If removing self, navigate back
-              if (isRemovingSelf && onLeaveGroup) {
-                onLeaveGroup();
-              }
-            } catch (error) {
-              Alert.alert("Error", getUserFriendlyErrorMessage(error));
-            } finally {
-              setRemovingMemberId(null);
-            }
-          },
+    const performRemove = async () => {
+      try {
+        setRemovingMemberId(memberUserId);
+        // Use the local mutation which will refetch group data
+        await removeMemberMutation.mutate({
+          groupId: group.id,
+          userId: memberUserId,
+        });
+        // If removing self, navigate back
+        if (isRemovingSelf && onLeaveGroup) {
+          onLeaveGroup();
+        }
+      } catch (error) {
+        if (Platform.OS === "web") {
+          setConfirmDialog({
+            visible: true,
+            title: "Error",
+            message: getUserFriendlyErrorMessage(error),
+            confirmText: "OK",
+            onConfirm: () => setConfirmDialog(null),
+          });
+        } else {
+          Alert.alert("Error", getUserFriendlyErrorMessage(error));
+        }
+      } finally {
+        setRemovingMemberId(null);
+      }
+    };
+
+    if (Platform.OS === "web") {
+      setConfirmDialog({
+        visible: true,
+        title: isRemovingSelf ? "Leave Group" : "Remove Member",
+        message: isRemovingSelf
+          ? `Are you sure you want to leave "${group.name}"?`
+          : `Are you sure you want to remove "${memberName}" from this group?`,
+        confirmText: isRemovingSelf ? "Leave" : "Remove",
+        destructive: true,
+        onConfirm: () => {
+          setConfirmDialog(null);
+          void performRemove();
         },
-      ]
-    );
+      });
+    } else {
+      Alert.alert(
+        isRemovingSelf ? "Leave Group" : "Remove Member",
+        isRemovingSelf
+          ? `Are you sure you want to leave "${group.name}"?`
+          : `Are you sure you want to remove "${memberName}" from this group?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: isRemovingSelf ? "Leave" : "Remove",
+            style: "destructive",
+            onPress: performRemove,
+          },
+        ]
+      );
+    }
   };
 
   const handleSettleUp = (balance: Balance) => {
@@ -409,30 +485,56 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const canManageInvites = isActiveMember;
 
   const handleCancelInvitation = async (invitationId: string) => {
-    Alert.alert(
-      "Cancel Invitation",
-      "Are you sure you want to cancel this invitation?",
-      [
-        { text: "No", style: "cancel" },
-        {
-          text: "Yes",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setCancellingInvitationId(invitationId);
-              await cancelInvite.mutate({
-                invitationId,
-                groupId: group.id,
-              });
-            } catch (err) {
-              Alert.alert("Error", getUserFriendlyErrorMessage(err));
-            } finally {
-              setCancellingInvitationId(null);
-            }
-          },
+    const performCancel = async () => {
+      try {
+        setCancellingInvitationId(invitationId);
+        await cancelInvite.mutate({
+          invitationId,
+          groupId: group.id,
+        });
+      } catch (err) {
+        if (Platform.OS === "web") {
+          setConfirmDialog({
+            visible: true,
+            title: "Error",
+            message: getUserFriendlyErrorMessage(err),
+            confirmText: "OK",
+            onConfirm: () => setConfirmDialog(null),
+          });
+        } else {
+          Alert.alert("Error", getUserFriendlyErrorMessage(err));
+        }
+      } finally {
+        setCancellingInvitationId(null);
+      }
+    };
+
+    if (Platform.OS === "web") {
+      setConfirmDialog({
+        visible: true,
+        title: "Cancel Invitation",
+        message: "Are you sure you want to cancel this invitation?",
+        confirmText: "Yes",
+        destructive: true,
+        onConfirm: () => {
+          setConfirmDialog(null);
+          void performCancel();
         },
-      ]
-    );
+      });
+    } else {
+      Alert.alert(
+        "Cancel Invitation",
+        "Are you sure you want to cancel this invitation?",
+        [
+          { text: "No", style: "cancel" },
+          {
+            text: "Yes",
+            style: "destructive",
+            onPress: performCancel,
+          },
+        ]
+      );
+    }
   };
 
   const handleStatNavigation = (mode: GroupStatsMode) => {
@@ -805,6 +907,32 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           setEditingSettlement(null);
         }}
       />
+
+      {/* Web-compatible confirmation dialog */}
+      {Platform.OS === "web" && confirmDialog && (
+        <Portal>
+          <Dialog
+            visible={confirmDialog.visible}
+            onDismiss={() => setConfirmDialog(null)}
+          >
+            <Dialog.Title>{confirmDialog.title}</Dialog.Title>
+            <Dialog.Content>
+              <Text variant="bodyMedium">{confirmDialog.message}</Text>
+            </Dialog.Content>
+            <Dialog.Actions>
+              <Button onPress={() => setConfirmDialog(null)}>Cancel</Button>
+              <Button
+                onPress={confirmDialog.onConfirm}
+                mode={confirmDialog.destructive ? "contained" : "text"}
+                buttonColor={confirmDialog.destructive ? theme.colors.error : undefined}
+                textColor={confirmDialog.destructive ? theme.colors.onError : undefined}
+              >
+                {confirmDialog.confirmText}
+              </Button>
+            </Dialog.Actions>
+          </Dialog>
+        </Portal>
+      )}
     </View>
   );
 };
