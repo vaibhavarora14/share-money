@@ -158,7 +158,10 @@ function App() {
                 className="btn btn-ios"
                 aria-label="Download ShareMoney iOS beta app via TestFlight"
                 onClick={() =>
-                  track("iOS Beta Click", { location: "hero", device: detectDevice() })
+                  track("iOS Beta Click", {
+                    location: "hero",
+                    device: detectDevice(),
+                  })
                 }
               >
                 <svg
@@ -179,7 +182,10 @@ function App() {
                 className="btn btn-android"
                 aria-label="Request access to ShareMoney Android beta app via email"
                 onClick={() =>
-                  track("Android Beta Request", { location: "hero", device: detectDevice() })
+                  track("Android Beta Request", {
+                    location: "hero",
+                    device: detectDevice(),
+                  })
                 }
                 title="Android beta requires email request"
               >
@@ -220,7 +226,10 @@ function App() {
                 className="btn btn-web"
                 aria-label="Try ShareMoney web app beta"
                 onClick={() =>
-                  track("Web Beta Click", { location: "hero", device: detectDevice() })
+                  track("Web Beta Click", {
+                    location: "hero",
+                    device: detectDevice(),
+                  })
                 }
               >
                 <svg
@@ -503,7 +512,10 @@ function App() {
                   rel="noopener noreferrer"
                   className="btn btn-ios-download"
                   onClick={() =>
-                    track("iOS Beta Click", { location: "download", device: detectDevice() })
+                    track("iOS Beta Click", {
+                      location: "download",
+                      device: detectDevice(),
+                    })
                   }
                 >
                   <svg
@@ -565,7 +577,10 @@ function App() {
                   href="https://share-money.expo.app"
                   className="btn btn-web-download"
                   onClick={() =>
-                    track("Web Beta Click", { location: "download", device: detectDevice() })
+                    track("Web Beta Click", {
+                      location: "download",
+                      device: detectDevice(),
+                    })
                   }
                 >
                   <svg
@@ -671,6 +686,7 @@ function App() {
                 gap: "2rem",
                 justifyContent: "center",
                 marginBottom: "2rem",
+                flexWrap: "wrap",
               }}
             >
               <a
@@ -682,6 +698,18 @@ function App() {
                 }}
               >
                 Contact Support
+              </a>
+              <a
+                href="https://vaibhavarora14.github.io/share-money/privacy.html"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  color: "var(--color-text-main)",
+                  textDecoration: "none",
+                  fontWeight: 500,
+                }}
+              >
+                Privacy
               </a>
             </div>
             <p
