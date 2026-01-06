@@ -70,8 +70,8 @@ Create `.env` in the root directory:
 ```env
 # For Local Development
 SUPABASE_URL=http://127.0.0.1:54321
-SUPABASE_ANON_KEY=sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
-SUPABASE_SERVICE_ROLE_KEY=sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz
+SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
 
 # CORS Configuration for Edge Functions
 ALLOWED_ORIGIN=http://localhost:19000
@@ -82,7 +82,7 @@ Create `mobile/.env` (must use `EXPO_PUBLIC_` prefix):
 ```env
 # For iOS Simulator
 EXPO_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
-EXPO_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
+EXPO_PUBLIC_SUPABASE_ANON_KEY=
 EXPO_PUBLIC_API_URL=http://localhost:8888/api
 
 # For Android Emulator (uncomment and comment iOS settings above)
