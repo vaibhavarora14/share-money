@@ -7,7 +7,8 @@ import { Platform } from 'react-native';
 // Create a .env file in the mobile directory with:
 // EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
 // EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
+// EXPO_PUBLIC_SUPABASE_PROXY_URL=your_worker_url (optional, for regional blocks)
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_PROXY_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
 if (!SUPABASE_URL || SUPABASE_URL === 'YOUR_SUPABASE_URL' || !SUPABASE_ANON_KEY || SUPABASE_ANON_KEY === 'YOUR_SUPABASE_ANON_KEY') {
