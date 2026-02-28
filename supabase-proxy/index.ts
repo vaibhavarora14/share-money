@@ -33,6 +33,8 @@ export default {
     // 4. Fix Response Headers for CORS and Redirects
     const newHeaders = new Headers(response.headers);
     newHeaders.set("Access-Control-Allow-Origin", "*");
+    newHeaders.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    newHeaders.set("Access-Control-Allow-Headers", "Content-Type, Authorization, apikey, x-client-info");
     
     // For Auth redirects, we might need to fix the Location header if it points to Supabase instead of the proxy
     const location = newHeaders.get("Location");
@@ -40,7 +42,10 @@ export default {
       newHeaders.set("Location", location.replace(supabaseUrl.hostname, new URL(request.url).hostname));
     }
 
-    return new Response(response.body, {
+    // De-chunk if it's a redirect or small response to ensure headers are clean
+    const body = (response.status >= 300 && response.status < 400) ? null : response.body;
+
+    return new Response(body, {
       status: response.status,
       statusText: response.statusText,
       headers: newHeaders,
