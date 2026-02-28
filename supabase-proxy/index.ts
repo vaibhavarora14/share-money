@@ -47,9 +47,10 @@ export default {
     if (csp) {
       // Relax base-uri and other directives to allow google.com and gstatic.com
       let newCsp = csp
-        .replace("base-uri 'self'", "base-uri 'self' https://accounts.google.com")
-        .replace("script-src", "script-src https://www.gstatic.com https://apis.google.com")
-        .replace("frame-src", "frame-src https://accounts.google.com");
+        .replace(/base-uri 'self'/g, "base-uri 'self' https://accounts.google.com")
+        .replace(/script-src/g, "script-src https://www.gstatic.com https://apis.google.com")
+        .replace(/frame-src/g, "frame-src https://accounts.google.com")
+        .replace(/connect-src/g, "connect-src https://accounts.google.com https://play.google.com");
       newHeaders.set("Content-Security-Policy", newCsp);
     }
 
