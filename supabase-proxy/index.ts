@@ -45,8 +45,12 @@ export default {
     // Fix CSP if present to allow Google Sign-in to set its base-uri
     const csp = newHeaders.get("Content-Security-Policy");
     if (csp) {
-      // Relax base-uri to allow accounts.google.com
-      newHeaders.set("Content-Security-Policy", csp.replace("base-uri 'self'", "base-uri 'self' https://accounts.google.com"));
+      // Relax base-uri and other directives to allow google.com and gstatic.com
+      let newCsp = csp
+        .replace("base-uri 'self'", "base-uri 'self' https://accounts.google.com")
+        .replace("script-src", "script-src https://www.gstatic.com https://apis.google.com")
+        .replace("frame-src", "frame-src https://accounts.google.com");
+      newHeaders.set("Content-Security-Policy", newCsp);
     }
 
     // De-chunk if it's a redirect or small response to ensure headers are clean
