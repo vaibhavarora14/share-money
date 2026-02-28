@@ -53,6 +53,18 @@ export default {
       newHeaders.set("Content-Security-Policy", newCsp);
     }
 
+    // Proxy Google's logging endpoint to avoid CORS issues
+    if (url.pathname === "/_/OAuthUi/browserinfo" || url.pathname === "/_/OAuthUi/jserror") {
+      const googleUrl = new URL(request.url);
+      googleUrl.hostname = "accounts.google.com";
+      return fetch(new Request(googleUrl.toString(), {
+        method: request.method,
+        headers: request.headers,
+        body: request.body,
+        redirect: 'follow',
+      }));
+    }
+
     // De-chunk if it's a redirect or small response to ensure headers are clean
     const body = (response.status >= 300 && response.status < 400) ? null : response.body;
 
