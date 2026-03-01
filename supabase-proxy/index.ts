@@ -45,16 +45,23 @@ export default {
     // Fix CSP if present to allow Google Sign-in to set its base-uri
     const csp = newHeaders.get("Content-Security-Policy");
     if (csp) {
-      console.log("Original CSP:", csp);
       // Relax base-uri and other directives to allow google.com and gstatic.com
       let newCsp = csp
         .replace(/base-uri 'self'/g, "base-uri 'self' https://accounts.google.com")
         .replace(/script-src/g, "script-src https://www.gstatic.com https://apis.google.com")
         .replace(/frame-src/g, "frame-src https://accounts.google.com")
         .replace(/connect-src/g, "connect-src https://accounts.google.com https://play.google.com");
+      
+      // CRITICAL: Ensure frame-ancestors doesn't block the proxy domain
+      if (newCsp.includes("frame-ancestors")) {
+        newCsp = newCsp.replace(/frame-ancestors [^;]*/, "frame-ancestors *");
+      }
+      
       newHeaders.set("Content-Security-Policy", newCsp);
-      console.log("Modified CSP:", newCsp);
     }
+
+    // Remove X-Frame-Options to prevent embedding blocks
+    newHeaders.delete("X-Frame-Options");
 
     // Proxy Google's logging endpoint to avoid CORS issues
     if (url.pathname === "/_/OAuthUi/browserinfo" || url.pathname === "/_/OAuthUi/jserror") {
