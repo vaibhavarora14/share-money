@@ -317,6 +317,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         redirectTo = AuthSession.makeRedirectUri({
           useProxy: true,
         } as Parameters<typeof AuthSession.makeRedirectUri>[0]);
+        console.log("Expo Go Redirect URI:", redirectTo);
       } else {
         // Use custom scheme for development/production builds
         redirectTo = "com.vaibhavarora.sharemoney://auth/callback";
@@ -332,6 +333,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       });
 
       if (urlError) {
+        console.error("Supabase OAuth Error:", urlError);
         return { error: urlError };
       }
 
