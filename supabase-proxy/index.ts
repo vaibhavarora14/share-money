@@ -45,6 +45,7 @@ export default {
     // Fix CSP if present to allow Google Sign-in to set its base-uri
     const csp = newHeaders.get("Content-Security-Policy");
     if (csp) {
+      console.log("Original CSP:", csp);
       // Relax base-uri and other directives to allow google.com and gstatic.com
       let newCsp = csp
         .replace(/base-uri 'self'/g, "base-uri 'self' https://accounts.google.com")
@@ -52,6 +53,7 @@ export default {
         .replace(/frame-src/g, "frame-src https://accounts.google.com")
         .replace(/connect-src/g, "connect-src https://accounts.google.com https://play.google.com");
       newHeaders.set("Content-Security-Policy", newCsp);
+      console.log("Modified CSP:", newCsp);
     }
 
     // Proxy Google's logging endpoint to avoid CORS issues
