@@ -141,8 +141,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Helper to update auth state and sync with Sentry
-  // Wrapped in useCallback to maintain stable reference for useEffect dependency
+import { registerForPushNotificationsAsync } from "../utils/notifications";
+
+// ... (existing code)
+
   const updateAuthState = useCallback((nextSession: Session | null) => {
     setSession(nextSession);
     setUser(nextSession?.user ?? null);
@@ -150,14 +152,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
     // Sync with Sentry
     const user = nextSession?.user;
-    Sentry.setUser(
-      user
-        ? {
-            id: user.id,
-            email: user.email ?? undefined,
-          }
-        : null
-    );
+    if (user) {
+      Sentry.setUser({
+        id: user.id,
+        email: user.email ?? undefined,
+      });
+      // Register for push notifications on login
+      registerForPushNotificationsAsync(user.id).catch(err => 
+        console.error("Push registration failed", err)
+      );
+    } else {
+      Sentry.setUser(null);
+    }
   }, []);
 
   useEffect(() => {
