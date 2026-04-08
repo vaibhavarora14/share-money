@@ -410,28 +410,19 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   };
 
   const handleDelete = () => {
-    if (!onDelete || !transaction) return;
-    Alert.alert(
-      "Delete Transaction",
-      `Are you sure you want to delete "${transaction.description || "this transaction"}"?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            setLoading(true);
-            try {
-              await onDelete();
-            } catch (error) {
-              Alert.alert("Error", getUserFriendlyErrorMessage(error));
-            } finally {
-              setLoading(false);
-            }
-          },
-        },
-      ]
-    );
+    if (!onDelete || !transaction || loading) return;
+    const deleteTransaction = async () => {
+      setLoading(true);
+      try {
+        await onDelete();
+      } catch (error) {
+        Alert.alert("Error", getUserFriendlyErrorMessage(error));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void deleteTransaction();
   };
 
   const handleHardwareBack = useCallback(() => {
