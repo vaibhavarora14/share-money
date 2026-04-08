@@ -30,6 +30,7 @@ import {
     SafeAreaView,
     useSafeAreaInsets,
 } from "react-native-safe-area-context";
+import { TransactionWebDateField } from "../components/TransactionWebDateField";
 import { WEB_MAX_WIDTH } from "../constants/layout";
 import { useAuth } from "../contexts/AuthContext";
 import { useParticipants } from "../hooks/useParticipants";
@@ -443,7 +444,10 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       setShowPaidByPicker(false);
       return true;
     }
-    if (showDatePicker && Platform.OS === "android") {
+    if (
+      showDatePicker &&
+      (Platform.OS === "android" || Platform.OS === "web")
+    ) {
       setShowDatePicker(false);
       return true;
     }
@@ -830,6 +834,51 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
               onChange={handleDateChange}
               maximumDate={new Date()}
             />
+          )}
+          {Platform.OS === "web" && (
+            <Modal visible={showDatePicker} transparent animationType="slide">
+              <View style={styles.modalOverlay}>
+                <Pressable
+                  style={StyleSheet.absoluteFillObject}
+                  onPress={() => setShowDatePicker(false)}
+                />
+                <View
+                  style={[
+                    styles.datePickerModal,
+                    {
+                      backgroundColor: theme.colors.surface,
+                      zIndex: 1,
+                    },
+                  ]}
+                >
+                  <View style={styles.datePickerHeader}>
+                    <Button onPress={() => setShowDatePicker(false)}>Cancel</Button>
+                    <Text variant="titleMedium">Select Date</Text>
+                    <Button
+                      onPress={() => {
+                        setDate(formatDateForInput(selectedDate));
+                        setShowDatePicker(false);
+                        if (dateError) setDateError("");
+                      }}
+                    >
+                      Done
+                    </Button>
+                  </View>
+                  <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
+                    <TransactionWebDateField
+                      value={formatDateForInput(selectedDate)}
+                      max={formatDateForInput(new Date())}
+                      onChange={(iso) => {
+                        setSelectedDate(new Date(`${iso}T12:00:00`));
+                      }}
+                      textColor={theme.colors.onSurface}
+                      outlineColor={theme.colors.outline}
+                      backgroundColor={theme.colors.surface}
+                    />
+                  </View>
+                </View>
+              </View>
+            </Modal>
           )}
         </>
       )}
