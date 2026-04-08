@@ -411,24 +411,43 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   };
 
   const handleDelete = () => {
-    if (!onDelete || !transaction) return;
+    if (!onDelete || !transaction || loading) return;
+    const targetDescription = transaction.description || "this transaction";
+    const confirmAndDelete = async () => {
+      setLoading(true);
+      try {
+        await onDelete();
+      } catch (error) {
+        Alert.alert("Error", getUserFriendlyErrorMessage(error));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (
+      Platform.OS === "web" &&
+      typeof (globalThis as { confirm?: (message?: string) => boolean }).confirm === "function"
+    ) {
+      const confirmed = (
+        globalThis as { confirm?: (message?: string) => boolean }
+      ).confirm?.(
+        `Are you sure you want to delete "${targetDescription}"?`
+      );
+      if (!confirmed) return;
+      void confirmAndDelete();
+      return;
+    }
+
     Alert.alert(
       "Delete Transaction",
-      `Are you sure you want to delete "${transaction.description || "this transaction"}"?`,
+      `Are you sure you want to delete "${targetDescription}"?`,
       [
         { text: "Cancel", style: "cancel" },
         {
           text: "Delete",
           style: "destructive",
-          onPress: async () => {
-            setLoading(true);
-            try {
-              await onDelete();
-            } catch (error) {
-              Alert.alert("Error", getUserFriendlyErrorMessage(error));
-            } finally {
-              setLoading(false);
-            }
+          onPress: () => {
+            void confirmAndDelete();
           },
         },
       ]
