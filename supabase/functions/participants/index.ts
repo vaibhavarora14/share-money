@@ -67,13 +67,14 @@ Deno.serve(async (req: Request) => {
         .eq('id', groupId)
         .single();
 
-      if (groupError || !group || group.created_by !== user.id) {
+      const owner = group as { created_by: string } | null;
+      if (groupError || !owner || owner.created_by !== user.id) {
         return createErrorResponse(403, 'You must be a member of the group to view participants', 'PERMISSION_DENIED', undefined, req);
       }
     }
 
     // Fetch all participants for the group
-    let { data: participants, error: participantsError } = await supabase
+    const { data: participantsRaw, error: participantsError } = await supabase
       .from('participants')
       .select('*')
       .eq('group_id', groupId)
@@ -83,8 +84,11 @@ Deno.serve(async (req: Request) => {
       return handleError(participantsError, 'fetching participants');
     }
 
+    let participants: Participant[] =
+      (participantsRaw as Participant[] | null) ?? [];
+
     // Enrich participants with profile data and emails
-    if (participants && participants.length > 0) {
+    if (participants.length > 0) {
       // Collect all user_ids from participants (members and former members)
       const userIds: string[] = [];
       participants.forEach((p: Participant) => {
