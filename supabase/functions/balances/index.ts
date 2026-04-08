@@ -1,4 +1,5 @@
 import { verifyAuth } from '../_shared/auth.ts';
+import { buildParticipantCanonicalResolver } from '../_shared/participant-canonical.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { log } from '../_shared/logger.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
@@ -68,7 +69,8 @@ interface TransactionWithSplits {
 async function calculateGroupBalances(
   supabase: any,
   groupId: string,
-  currentUserId: string
+  currentUserId: string,
+  currentUserEmail: string | null
 ): Promise<Balance[]> {
   const { data: transactions, error } = await supabase
     .from('transactions')
@@ -113,21 +115,65 @@ async function calculateGroupBalances(
   // 1. Fetch all participants to resolve user_ids and names
   const { data: participants } = await supabase
     .from('participants')
-    .select('id, user_id, email, full_name, avatar_url')
+    .select('id, user_id, email, full_name, avatar_url, type')
     .eq('group_id', groupId);
-  
+
+  const participantUserIds: string[] = Array.from(
+    new Set(
+      (participants || [])
+        .map((p: { user_id?: string | null }) => p.user_id)
+        .filter(
+          (id: string | null | undefined): id is string =>
+            typeof id === 'string' && id.length > 0
+        )
+    )
+  );
+  const userIdToEmail = await fetchUserEmails(
+    participantUserIds,
+    currentUserId,
+    currentUserEmail
+  );
+
+  const canonicalParticipantId = buildParticipantCanonicalResolver(
+    (participants || []) as {
+      id: string;
+      user_id: string | null;
+      email: string | null;
+      type: string;
+    }[],
+    userIdToEmail
+  );
+
   const participantToUserMap = new Map<string, string>();
   const participantToEmailMap = new Map<string, string>();
   const participantToFullNameMap = new Map<string, string>();
   const participantToAvatarMap = new Map<string, string>();
 
   if (participants) {
-    participants.forEach((p: any) => {
-      if (p.user_id) participantToUserMap.set(p.id, p.user_id);
-      if (p.email) participantToEmailMap.set(p.id, p.email);
-      if (p.full_name) participantToFullNameMap.set(p.id, p.full_name);
-      if (p.avatar_url) participantToAvatarMap.set(p.id, p.avatar_url);
-    });
+    const rowsByCanonical = new Map<string, any[]>();
+    for (const p of participants as any[]) {
+      const cid = canonicalParticipantId(p.id);
+      if (!rowsByCanonical.has(cid)) rowsByCanonical.set(cid, []);
+      rowsByCanonical.get(cid)!.push(p);
+    }
+    for (const [cid, rows] of rowsByCanonical) {
+      const withUser = rows.find((r) => r.user_id);
+      if (withUser?.user_id) participantToUserMap.set(cid, withUser.user_id);
+      const emailSource =
+        rows.find((r) => r.user_id && r.email) || rows.find((r) => r.email);
+      if (emailSource?.email) participantToEmailMap.set(cid, emailSource.email);
+      const nameSource =
+        rows.find((r) => r.user_id && r.full_name) || rows.find((r) => r.full_name);
+      if (nameSource?.full_name) {
+        participantToFullNameMap.set(cid, nameSource.full_name);
+      }
+      const avatarSource =
+        rows.find((r) => r.user_id && r.avatar_url) ||
+        rows.find((r) => r.avatar_url);
+      if (avatarSource?.avatar_url) {
+        participantToAvatarMap.set(cid, avatarSource.avatar_url);
+      }
+    }
   }
 
   // Process Transactions
@@ -139,9 +185,8 @@ async function calculateGroupBalances(
 
     const paidByPid = tx.paid_by_participant_id;
     if (!paidByPid) continue;
-    
-    // Use Participant ID as the key for strict correctness
-    const paidByKey = paidByPid;
+
+    const paidByKey = canonicalParticipantId(paidByPid);
 
       if (tx.transaction_splits && Array.isArray(tx.transaction_splits)) {
         const splits = tx.transaction_splits
@@ -150,7 +195,7 @@ async function calculateGroupBalances(
             const amount = typeof s.amount === 'string' ? parseFloat(s.amount) : s.amount;
             if (!s.participant_id || isNaN(amount)) return undefined;
             
-            return { pid: s.participant_id, amount };
+            return { pid: canonicalParticipantId(s.participant_id), amount };
           })
           .filter((s): s is { pid: string; amount: number } => !!s);
 
@@ -179,9 +224,12 @@ async function calculateGroupBalances(
 
   // Process Settlements
   for (const settlement of (settlements || [])) {
-    // strict PID usage
-    const fromKey = settlement.from_participant_id;
-    const toKey = settlement.to_participant_id;
+    const fromKey = settlement.from_participant_id
+      ? canonicalParticipantId(settlement.from_participant_id)
+      : null;
+    const toKey = settlement.to_participant_id
+      ? canonicalParticipantId(settlement.to_participant_id)
+      : null;
 
     if (!fromKey || !toKey) continue; 
     
@@ -282,7 +330,12 @@ Deno.serve(async (req: Request) => {
 
     const balancePromises = targetGroupIds.map(async (gId: string) => {
       try {
-        const balances = await calculateGroupBalances(supabase, gId, currentUserId);
+        const balances = await calculateGroupBalances(
+          supabase,
+          gId,
+          currentUserId,
+          currentUserEmail ?? null
+        );
         const groupName = groupMap.get(gId) || 'Unknown Group';
         return {
           group_id: gId,
