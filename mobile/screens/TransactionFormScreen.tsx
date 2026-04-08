@@ -837,17 +837,19 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
           )}
           {Platform.OS === "web" && (
             <Modal visible={showDatePicker} transparent animationType="slide">
-              <TouchableOpacity
-                style={styles.modalOverlay}
-                activeOpacity={1}
-                onPress={() => setShowDatePicker(false)}
-              >
+              <View style={styles.modalOverlay}>
+                <Pressable
+                  style={StyleSheet.absoluteFillObject}
+                  onPress={() => setShowDatePicker(false)}
+                />
                 <View
                   style={[
                     styles.datePickerModal,
-                    { backgroundColor: theme.colors.surface },
+                    {
+                      backgroundColor: theme.colors.surface,
+                      zIndex: 1,
+                    },
                   ]}
-                  onStartShouldSetResponder={() => true}
                 >
                   <View style={styles.datePickerHeader}>
                     <Button onPress={() => setShowDatePicker(false)}>Cancel</Button>
@@ -875,7 +877,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                     />
                   </View>
                 </View>
-              </TouchableOpacity>
+              </View>
             </Modal>
           )}
         </>
