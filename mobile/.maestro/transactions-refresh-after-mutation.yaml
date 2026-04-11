@@ -1,0 +1,38 @@
+appId: com.sharemoney.app
+---
+# Test: Transactions Refresh After Mutation
+# Purpose: Ensure list refresh and stats navigation still work after creating a transaction.
+
+- runFlow: _helpers/ensure-groups.yaml
+
+# Open seeded group and create a transaction
+- tapOn: "Summer Vacation 2024"
+- waitForAnimationToEnd
+- tapOn: "Add Expense"
+- waitForAnimationToEnd
+- tapOn:
+    id: "amount-input"
+- inputText: "123"
+- tapOn: "Description"
+- inputText: "E2E Mutation Refresh"
+- hideKeyboard
+- tapOn: "Save"
+- waitForAnimationToEnd
+
+# Verify transaction appears in refreshed list
+- assertVisible: "E2E Mutation Refresh"
+- assertVisible: "₹123.00"
+
+# Navigate to stats and ensure page is still healthy after mutation
+- tapOn: "Group summary"
+- waitForAnimationToEnd
+- assertVisible: "Group Summary"
+- assertVisible: "Totals"
+
+# Return and sign out
+- pressKey: "Back"
+- waitForAnimationToEnd
+- pressKey: "Back"
+- waitForAnimationToEnd
+- assertVisible: "Your Groups"
+- runFlow: signout.yaml

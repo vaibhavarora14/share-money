@@ -7,7 +7,8 @@ function invalidateGroupAdjacents(queryClient: QueryClient, groupId?: string) {
   queryClient.invalidateQueries({ queryKey: queryKeys.groups });
   if (!groupId) return;
   queryClient.invalidateQueries({ queryKey: queryKeys.group(groupId) });
-  queryClient.invalidateQueries({ queryKey: queryKeys.transactions(groupId) });
+  queryClient.invalidateQueries({ queryKey: queryKeys.transactionsFeed(groupId) });
+  queryClient.invalidateQueries({ queryKey: queryKeys.groupStats(groupId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.balances(groupId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.activity(groupId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.invitations(groupId) });

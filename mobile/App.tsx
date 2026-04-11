@@ -40,7 +40,9 @@ import {
 import { fetchGroupDetails, useGroupDetails } from "./hooks/useGroups";
 import { useProfile } from "./hooks/useProfile";
 import {
-  fetchTransactions,
+  fetchTransactionsPage,
+  TransactionsCursor,
+  TransactionsPageResponse,
   useCreateTransaction,
   useDeleteTransaction,
   useUpdateTransaction,
@@ -101,9 +103,13 @@ function AppContent() {
           queryKey: queryKeys.group(groupId),
           queryFn: () => fetchGroupDetails(groupId),
         }),
-        queryClientInstance.prefetchQuery({
-          queryKey: queryKeys.transactions(groupId),
-          queryFn: () => fetchTransactions(groupId),
+        queryClientInstance.prefetchInfiniteQuery({
+          queryKey: queryKeys.transactionsFeed(groupId),
+          queryFn: ({ pageParam }) =>
+            fetchTransactionsPage({ groupId, cursor: pageParam ?? null }),
+          initialPageParam: null as TransactionsCursor | null,
+          getNextPageParam: (lastPage: TransactionsPageResponse) =>
+            lastPage.has_more ? lastPage.next_cursor : null,
         }),
         queryClientInstance.prefetchQuery({
           queryKey: queryKeys.balances(groupId),
