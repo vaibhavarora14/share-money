@@ -17,7 +17,7 @@
     "version:build": "node scripts/version.js build",
     "version:show": "node scripts/version.js show",
     "android:release": "eas submit --platform android --profile internal",
-    "deploy:web": "npx expo export -p web && npx eas deploy --prod"
+    "deploy:web": "npx expo export -p web && npx eas-cli deploy --prod"
   },
   "dependencies": {
     "@expo/cli": "^54.0.19",
