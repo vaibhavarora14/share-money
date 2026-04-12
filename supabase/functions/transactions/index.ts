@@ -272,15 +272,17 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      const hasMore = fetchedTransactions.length > limit || !sourceExhausted;
       const transactions = fetchedTransactions.slice(0, limit);
       const lastVisibleTransaction = transactions[transactions.length - 1];
-      const nextCursor: TransactionCursor | null = hasMore && lastVisibleTransaction
+      const moreInSource = fetchedTransactions.length > limit || !sourceExhausted;
+      const nextCursor: TransactionCursor | null = moreInSource && lastVisibleTransaction
         ? {
           date: lastVisibleTransaction.date,
           id: lastVisibleTransaction.id,
         }
         : null;
+      // Former-participant filtering can drop an entire page; never signal has_more without a cursor.
+      const hasMore = nextCursor !== null;
 
       // Collect all participant IDs from splits and paid_by to enrich with participant data
       const allParticipantIds = new Set<string>();
