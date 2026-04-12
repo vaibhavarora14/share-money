@@ -9,6 +9,9 @@ import { styles } from "./TransactionsSection.styles";
 interface TransactionsSectionProps {
   items: Transaction[];
   loading: boolean;
+  hasNextPage?: boolean;
+  isFetchingNextPage?: boolean;
+  onLoadMore?: () => void;
   onEdit: (t: Transaction) => void;
   members: any[]; // Using any[] temporarily if GroupMember import has issues, but ideally GroupMember[]
   participants?: Participant[];
@@ -17,6 +20,9 @@ interface TransactionsSectionProps {
 export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
   items,
   loading,
+  hasNextPage = false,
+  isFetchingNextPage = false,
+  onLoadMore,
   onEdit,
   members = [],
   participants = [],
@@ -77,7 +83,7 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
         <ActivityIndicator size="small" style={{ marginVertical: 24 }} />
       ) : items.length > 0 ? (
         <View style={styles.list}>
-          {items.map((transaction, index) => {
+          {items.map((transaction) => {
             const currency = transaction.currency || getDefaultCurrency();
             const categoryIcon = getCategoryIcon(transaction.category || "");
             const date = new Date(transaction.date);
@@ -142,6 +148,28 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
               </Surface>
             );
           })}
+          {(isFetchingNextPage || hasNextPage) && (
+            <View style={{ alignItems: "center", paddingVertical: 16 }}>
+              {isFetchingNextPage ? (
+                <ActivityIndicator size="small" />
+              ) : (
+                <Pressable
+                  onPress={onLoadMore}
+                  style={({ pressed }) => ({
+                    paddingHorizontal: 14,
+                    paddingVertical: 8,
+                    borderRadius: 18,
+                    opacity: pressed ? 0.7 : 1,
+                    backgroundColor: theme.colors.surfaceVariant,
+                  })}
+                >
+                  <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                    Load more transactions
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          )}
         </View>
       ) : (
         <View style={[styles.emptyState, { backgroundColor: theme.colors.surfaceVariant }]}>

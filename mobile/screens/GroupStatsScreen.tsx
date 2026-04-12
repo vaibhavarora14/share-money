@@ -13,18 +13,16 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BalancesSection } from "../components/BalancesSection";
 import { useAuth } from "../contexts/AuthContext";
-import { useBalances } from "../hooks/useBalances";
+import { useBalances, useGroupStats } from "../hooks/useBalances";
 import { useGroupDetails } from "../hooks/useGroups";
 import { useParticipants } from "../hooks/useParticipants";
 import { useCreateSettlement } from "../hooks/useSettlements";
-import { useTransactions } from "../hooks/useTransactions";
 import { Balance, GroupMember, Participant, Transaction } from "../types";
 import {
   formatCurrency,
   formatTotals,
   getDefaultCurrency,
 } from "../utils/currency";
-import { simplifyDebts } from "../utils/debt";
 import { SettlementFormScreen } from "./SettlementFormScreen";
 
 export type GroupStatsMode = "my-costs" | "total-costs" | "settlement-plan" | "i-owe" | "im-owed";
@@ -112,17 +110,17 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
 
   const { data: groupData } = useGroupDetails(groupId);
   const {
-    data: transactions,
-    isLoading: transactionsLoading,
-    refetch: refetchTransactions,
-  } = useTransactions(groupId);
-  const {
     data: balancesData,
     isLoading: balancesLoading,
     refetch: refetchBalances,
   } = useBalances(groupId);
+  const {
+    data: groupStats,
+    isLoading: groupStatsLoading,
+    refetch: refetchGroupStats,
+  } = useGroupStats(groupId);
   const createSettlement = useCreateSettlement(async () => {
-    await Promise.all([refetchBalances(), refetchTransactions()]);
+    await Promise.all([refetchBalances(), refetchGroupStats()]);
   });
 
   // Handle Android hardware back button
@@ -156,210 +154,58 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
     return map;
   }, [members]);
 
+  const toMap = (source?: Record<string, number>) => {
+    const map = new Map<string, number>();
+    Object.entries(source || {}).forEach(([currency, amount]) => {
+      map.set(currency, amount);
+    });
+    return map;
+  };
+
   const costBreakdown = useMemo(() => {
-    if (!transactions || transactions.length === 0) {
-      return [];
-    }
+    const entries = groupStats?.member_breakdown || [];
+    return entries
+      .map((entry) => {
+        const member = entry.user_id ? memberLookup.get(entry.user_id) : null;
+        const participant = participants.find((p) => p.id === entry.participant_id);
+        const amounts = toMap(entry.share_totals);
 
-    type Entry = {
-      amounts: Map<string, number>;
-      full_name?: string | null;
-      email?: string;
-      userId?: string;
-      participantId?: string; // Cache the key
-    };
-    const map = new Map<string, Entry>(); // Keyed by participant_id
-
-    const upsertEntry = (
-      participantId: string | undefined,
-      userId: string | undefined,
-      amount: number,
-      currency: string,
-      full_name?: string | null,
-      email?: string
-    ) => {
-      if (!participantId || !Number.isFinite(amount)) return;
-      const existing = map.get(participantId) || {
-        amounts: new Map<string, number>(),
-        userId,
-        participantId,
-        full_name,
-        email,
-      };
-
-      // Preserve full_name if it exists
-      if (full_name) {
-        existing.full_name = full_name;
-      }
-      if (email && !existing.email) {
-        existing.email = email;
-      }
-
-      const currentAmount = existing.amounts.get(currency) || 0;
-      existing.amounts.set(currency, currentAmount + amount);
-
-      map.set(participantId, existing);
-    };
-
-    transactions
-      .filter((transaction) => transaction.type !== "income")
-      .forEach((transaction) => {
-        const currency = transaction.currency || defaultCurrency;
-        if (transaction.splits && transaction.splits.length > 0) {
-          transaction.splits.forEach((split) => {
-            upsertEntry(
-              split.participant_id,
-              split.user_id || undefined,
-              split.amount,
-              currency,
-              split.full_name || undefined,
-              split.email || undefined
-            );
-          });
-          return;
-        }
-
-        if (transaction.split_among_participant_ids && transaction.split_among_participant_ids.length > 0) {
-          const share = transaction.amount / transaction.split_among_participant_ids.length;
-          transaction.split_among_participant_ids.forEach((pId) => {
-             // We don't have user_id here but we have pId
-             upsertEntry(pId, undefined, share, currency);
-          });
-          return;
-        }
-
-        if (transaction.split_among && transaction.split_among.length > 0) {
-          const share = transaction.amount / transaction.split_among.length;
-          transaction.split_among.forEach((uId) => {
-             // Legacy mode: uId is used as both PID and UID if PID missing
-             upsertEntry(uId, uId, share, currency);
-          });
-          return;
-        }
-
-        // Fallback: attribute to payer or creator
-        const pId = transaction.paid_by_participant_id || transaction.paid_by || transaction.user_id;
-        const uId = transaction.paid_by || transaction.user_id;
-        upsertEntry(
-          pId,
-          uId,
-          transaction.amount,
-          currency
-        );
-      });
-
-    return Array.from(map.entries())
-      .map(([participantId, entry]) => {
-        // Get full_name from member lookup or participants if not in entry
-        const member = entry.userId ? memberLookup.get(entry.userId) : null;
-        const participant = participants.find(p => p.id === participantId);
-        
         return {
-          participantId,
-          userId: entry.userId,
-          amounts: entry.amounts,
+          participantId: entry.participant_id,
+          userId: entry.user_id,
+          amounts,
           full_name: entry.full_name || participant?.full_name || member?.full_name || null,
-          email: entry.email || participant?.email || member?.email,
-          // Calculate total value for sorting (simplified, assumes 1:1 for sorting only)
-          totalValue: Array.from(entry.amounts.values()).reduce(
-            (a, b) => a + b,
-            0
-          ),
+          email: entry.email || participant?.email || member?.email || undefined,
+          totalValue: Array.from(amounts.values()).reduce((a, b) => a + b, 0),
         };
       })
       .sort((a, b) => b.totalValue - a.totalValue);
-
-  }, [transactions, defaultCurrency]);
+  }, [groupStats, participants, memberLookup]);
 
   const paymentsBreakdown = useMemo(() => {
-     if (!transactions) return new Map<string, Map<string, number>>();
-     const map = new Map<string, Map<string, number>>();
-
-     transactions
-        .filter(t => t.type !== 'income')
-        .forEach(t => {
-            const payerPid = t.paid_by_participant_id || t.paid_by || t.user_id;
-            if (!payerPid) return;
-            
-            const currency = t.currency || defaultCurrency;
-            const userMap = map.get(payerPid) || new Map<string, number>();
-            const current = userMap.get(currency) || 0;
-            userMap.set(currency, current + t.amount);
-            map.set(payerPid, userMap);
-        });
-     return map;
-  }, [transactions, defaultCurrency]);
+    const map = new Map<string, Map<string, number>>();
+    (groupStats?.member_breakdown || []).forEach((entry) => {
+      map.set(entry.participant_id, toMap(entry.paid_totals));
+    });
+    return map;
+  }, [groupStats]);
 
   const totalCosts = useMemo(() => {
-    const totals = new Map<string, number>();
-    costBreakdown.forEach((entry) => {
-      entry.amounts.forEach((amount, currency) => {
-        const current = totals.get(currency) || 0;
-        totals.set(currency, current + amount);
-      });
-    });
-    return totals;
-  }, [costBreakdown]);
+    return toMap(groupStats?.totals?.group_total);
+  }, [groupStats]);
 
   const myShare = useMemo(() => {
-    if (!currentUserId) return new Map<string, number>();
-    return (
-      costBreakdown.find((entry) => entry.userId === currentUserId)?.amounts ||
-      new Map<string, number>()
-    );
-  }, [costBreakdown, currentUserId]);
+    return toMap(groupStats?.totals?.my_share);
+  }, [groupStats]);
 
   const myTransactionBreakdown = useMemo(() => {
-    if (!transactions || !currentUserId) return [];
-
-    return transactions
-      .filter((transaction) => transaction.type !== "income")
-      .map((transaction) => {
-        let shareAmount: number | null = null;
-
-        if (transaction.splits && transaction.splits.length > 0) {
-          const mySplit = transaction.splits.find(
-            (split) => split.user_id === currentUserId
-          );
-          if (mySplit) {
-            shareAmount = mySplit.amount;
-          }
-        } else if (
-          transaction.split_among &&
-          transaction.split_among.length > 0 &&
-          transaction.split_among.includes(currentUserId)
-        ) {
-          shareAmount = transaction.amount / transaction.split_among.length;
-        }
-
-        const isPayer = transaction.paid_by === currentUserId;
-        const involved = isPayer || shareAmount !== null;
-
-        if (!involved) return null;
-
-        const netReceivable =
-          isPayer && transaction.amount
-            ? transaction.amount - (shareAmount ?? 0)
-            : null;
-
-        return {
-          transaction,
-          shareAmount,
-          isPayer,
-          netReceivable,
-        };
-      })
-      .filter(
-        (
-          entry
-        ): entry is {
-          transaction: Transaction;
-          shareAmount: number | null;
-          isPayer: boolean;
-          netReceivable: number | null;
-        } => entry !== null
-      );
-  }, [transactions, currentUserId]);
+    return (groupStats?.my_transactions || []).map((entry) => ({
+      transaction: entry.transaction as Transaction,
+      shareAmount: entry.share_amount,
+      isPayer: entry.is_payer,
+      netReceivable: entry.net_receivable,
+    }));
+  }, [groupStats]);
 
   const filteredBalances = useMemo(() => {
     const balances = balancesData?.group_balances?.[0]?.balances || balancesData?.overall_balances || [];
@@ -382,10 +228,29 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
   }, [filteredBalances]);
 
   const settlementEdges = useMemo(() => {
-    if ((activeMode !== "total-costs" && activeMode !== "settlement-plan") || filteredBalances.length === 0) return [];
-    // Calculate full graph of settlements
-    return simplifyDebts(filteredBalances, currentUserId, defaultCurrency, currentUserParticipantId);
-  }, [filteredBalances, activeMode, currentUserId, defaultCurrency, currentUserParticipantId]);
+    return (groupStats?.settlement_plan || []).map((edge) => ({
+      fromUser: {
+        user_id: edge.from_user_id || "",
+        participant_id: edge.from_participant_id,
+        full_name: edge.from_full_name || null,
+        email: edge.from_email || undefined,
+        avatar_url: edge.from_avatar_url || null,
+        amount: -Math.abs(edge.amount),
+        currency: edge.currency,
+      } as Balance,
+      toUser: {
+        user_id: edge.to_user_id || "",
+        participant_id: edge.to_participant_id,
+        full_name: edge.to_full_name || null,
+        email: edge.to_email || undefined,
+        avatar_url: edge.to_avatar_url || null,
+        amount: Math.abs(edge.amount),
+        currency: edge.currency,
+      } as Balance,
+      amount: edge.amount,
+      currency: edge.currency,
+    }));
+  }, [groupStats]);
 
   const resolveUserLabel = (userId: string | undefined, fallback?: string) => {
     if (userId) {
@@ -398,7 +263,7 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
   };
 
   const renderMemberBreakdown = () => {
-    if (transactionsLoading) {
+    if (groupStatsLoading) {
       return <ActivityIndicator style={{ marginTop: 24 }} />;
     }
 
@@ -541,7 +406,7 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
   };
 
   const renderMyTransactions = () => {
-    if (transactionsLoading) {
+    if (groupStatsLoading) {
       return <ActivityIndicator style={{ marginTop: 24 }} />;
     }
 
@@ -719,7 +584,7 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
             variant="headlineSmall"
             style={[styles.summaryValue, colorStyles.summaryValue]}
           >
-            {transactionsLoading ? "..." : formatTotals(summaryValue)}
+            {groupStatsLoading ? "..." : formatTotals(summaryValue)}
           </Text>
           <Text style={[styles.summaryHelpText, colorStyles.summaryHelpText]}>
             {MODE_COPY[activeMode].subtitle}

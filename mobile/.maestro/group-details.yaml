@@ -1,34 +1,11 @@
-appId: com.vaibhavarora.sharemoney
+appId: com.sharemoney.app
 ---
 # Test: Group Details
 # This test verifies that a user can view group details after signing in
 # Prerequisites: User must be signed in and have at least one group
 # Note: App should be launched manually or already running before running this test
 
-# Skip launchApp if app is already running - Maestro has issues with TCP forwarding timeout
-# - launchApp
-# Instead, we'll assume the app is already running or will be launched manually
-- waitForAnimationToEnd
-
-# Check if already signed in, if not sign in first
-- runFlow:
-    when:
-      visible: "Welcome Back"
-    commands:
-      - tapOn:
-          text: "Email"
-      - inputText: "alice@test.com"
-      - tapOn:
-          text: "Password"
-      - inputText: "testpassword123"
-      - tapOn:
-          text: "Sign In"
-      - waitForAnimationToEnd
-
-# Wait for groups list to load
-- waitForAnimationToEnd
-# The groups screen shows "Your Groups" as the main title
-- assertVisible: "Your Groups"
+- runFlow: _helpers/ensure-groups.yaml
 
 # Wait for groups to load
 - waitForAnimationToEnd

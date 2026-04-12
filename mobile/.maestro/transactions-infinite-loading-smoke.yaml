@@ -1,0 +1,42 @@
+appId: com.sharemoney.app
+---
+# Test: Transactions Infinite Loading (Smoke)
+# Purpose: Guard the infinite-loading UI path without relying on large fixture volume.
+
+- runFlow: _helpers/ensure-groups.yaml
+
+# Open seeded group
+- tapOn: "Summer Vacation 2024"
+- waitForAnimationToEnd
+- assertVisible: "Transactions"
+
+# Exercise transaction list scrolling
+- swipe:
+    direction: UP
+    duration: 700
+- waitForAnimationToEnd
+
+# If pagination affordance is visible, trigger it
+- runFlow:
+    when:
+      visible: "Load more transactions"
+    commands:
+      - tapOn: "Load more transactions"
+      - waitForAnimationToEnd
+
+# Ensure list remains usable after scroll/load interaction
+- assertVisible: "Transactions"
+- assertVisible: "Activity"
+
+# Verify an older seeded transaction can still be reached
+- scrollUntilVisible:
+    element:
+      text: "Car rental for the week"
+    direction: DOWN
+    timeout: 10000
+
+# Navigate back and sign out
+- tapOn: "Navigate back"
+- waitForAnimationToEnd
+- assertVisible: "Your Groups"
+- runFlow: signout.yaml
