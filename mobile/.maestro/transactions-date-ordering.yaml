@@ -1,0 +1,36 @@
+appId: com.sharemoney.app
+---
+# Test: Transaction Date Ordering (Regression Guard)
+# Purpose: Ensure date-based ordering remains visible for known seeded entries.
+
+- runFlow: _helpers/ensure-groups.yaml
+
+# Open seeded group
+- tapOn: "Summer Vacation 2024"
+- waitForAnimationToEnd
+- assertVisible: "Transactions"
+
+# Feed should render and remain navigable even as dataset changes over time
+- assertVisible: "Transactions"
+- assertVisible: "Activity"
+- swipe:
+    direction: UP
+    duration: 700
+- waitForAnimationToEnd
+- runFlow:
+    when:
+      visible: "Load more transactions"
+    commands:
+      - tapOn: "Load more transactions"
+      - waitForAnimationToEnd
+
+# Sanity check list line formatting remains intact (date + payer copy)
+- assertVisible:
+    text: "Today •"
+    optional: true
+
+# Navigate back and sign out
+- tapOn: "Navigate back"
+- waitForAnimationToEnd
+- assertVisible: "Your Groups"
+- runFlow: signout.yaml

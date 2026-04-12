@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Alert, BackHandler, Platform, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, BackHandler, NativeScrollEvent, NativeSyntheticEvent, Platform, ScrollView, StyleSheet, View } from "react-native";
 import {
   ActivityIndicator,
   Appbar,
@@ -135,6 +135,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const {
     data: txData,
     isLoading: txLoading,
+    hasNextPage: txHasNextPage,
+    isFetchingNextPage: txIsFetchingNextPage,
+    fetchNextPage: fetchNextTransactionsPage,
     refetch: refetchTx,
   } = useTransactions(initialGroup.id);
   const {
@@ -272,6 +275,22 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
   // API already filters by group_id, so no need for client-side filtering
   const transactions = txData;
+
+  const handleLoadMoreTransactions = React.useCallback(() => {
+    if (!txHasNextPage || txIsFetchingNextPage) return;
+    void fetchNextTransactionsPage();
+  }, [txHasNextPage, txIsFetchingNextPage, fetchNextTransactionsPage]);
+
+  const handleMainScroll = React.useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (listMode !== "transactions" || !txHasNextPage || txIsFetchingNextPage) return;
+
+    const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+    const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+
+    if (distanceFromBottom < 220) {
+      void fetchNextTransactionsPage();
+    }
+  }, [listMode, txHasNextPage, txIsFetchingNextPage, fetchNextTransactionsPage]);
 
   // Refresh invitations when refreshTrigger changes (e.g., after adding a member)
   useEffect(() => {
@@ -694,6 +713,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        onScroll={handleMainScroll}
+        scrollEventThrottle={16}
       >
         {showMembers ? (
           // MEMBERS VIEW
@@ -772,6 +793,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               <TransactionsSection
                 items={transactions}
                 loading={txLoading}
+                hasNextPage={!!txHasNextPage}
+                isFetchingNextPage={txIsFetchingNextPage}
+                onLoadMore={handleLoadMoreTransactions}
                 onEdit={isActiveMember ? onEditTransaction : () => {}}
                 members={group.members || []}
                 participants={participants}

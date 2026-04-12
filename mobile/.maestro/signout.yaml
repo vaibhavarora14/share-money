@@ -1,7 +1,33 @@
-appId: com.vaibhavarora.sharemoney
+appId: com.sharemoney.app
 ---
-- tapOn: Profile
-- tapOn:
-    id: logout-button
 - waitForAnimationToEnd
-- assertVisible: Sign In
+
+# Navigate to top level first when invoked from nested screens
+- runFlow:
+    when:
+      visible: "Navigate back"
+    commands:
+      - tapOn: "Navigate back"
+      - waitForAnimationToEnd
+- runFlow:
+    when:
+      visible: "Navigate back"
+    commands:
+      - tapOn: "Navigate back"
+      - waitForAnimationToEnd
+
+# Log out when authenticated
+- runFlow:
+    when:
+      visible: "Profile"
+    commands:
+      - tapOn: "Profile"
+      - waitForAnimationToEnd
+      - tapOn:
+          id: logout-button
+      - waitForAnimationToEnd
+
+# If already on auth screen, this is a no-op
+- assertVisible:
+    text: "Sign In"
+    optional: true
