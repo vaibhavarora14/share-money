@@ -60,6 +60,14 @@ interface TransactionWithSplits extends Transaction {
   splits?: TransactionSplit[];
 }
 
+interface TransactionCursor {
+  date: string;
+  id: number;
+}
+
+const TRANSACTION_PAGE_DEFAULT_LIMIT = 30;
+const TRANSACTION_PAGE_MAX_LIMIT = 100;
+
 /**
  * Calculates equal split amounts for a given total amount.
  * Now uses participant_ids instead of user_ids/emails.
@@ -116,6 +124,13 @@ function validateSplitSum(
   return { valid: true };
 }
 
+function parsePositiveInt(input: string | null): number | null {
+  if (!input) return null;
+  const parsed = Number.parseInt(input, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -145,79 +160,129 @@ Deno.serve(async (req: Request) => {
     // Handle GET - Fetch transactions (optionally filtered by group_id)
     if (httpMethod === 'GET') {
       const groupId = url.searchParams.get('group_id');
+      const rawLimit = parsePositiveInt(url.searchParams.get('limit'));
+      const limit = Math.min(
+        rawLimit ?? TRANSACTION_PAGE_DEFAULT_LIMIT,
+        TRANSACTION_PAGE_MAX_LIMIT
+      );
+      const cursorDate = url.searchParams.get('cursor_date');
+      const cursorId = parsePositiveInt(url.searchParams.get('cursor_id'));
       
       if (groupId && !isValidUUID(groupId)) {
         return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR', undefined, req);
       }
+
+      if ((cursorDate && !cursorId) || (!cursorDate && cursorId)) {
+        return createErrorResponse(400, 'Both cursor_date and cursor_id are required when paginating.', 'VALIDATION_ERROR', undefined, req);
+      }
       
-      let query = supabase
-        .from('transactions')
-        .select(`
-          *,
-          transaction_splits (
-            id,
-            participant_id,
-            amount,
-            created_at
-          )
-        `);
+      let participantData: { id: string; type: string } | null = null;
 
       if (groupId) {
-        query = query.eq('group_id', groupId);
-
         // Fetch user's participant record to check status and ID
-        const { data: participantData, error: participantAuthError } = await supabase
+        const { data: participantRecord, error: participantAuthError } = await supabase
           .from('participants')
           .select('id, type')
           .eq('group_id', groupId)
           .eq('user_id', user.id)
           .single();
 
-        if (participantAuthError || !participantData) {
+        if (participantAuthError || !participantRecord) {
           return createErrorResponse(403, 'Forbidden: You are not a participant in this group', 'PERMISSION_DENIED');
         }
 
-        // If user is not active (e.g. 'former'), restrict visibility
-        // Showing only transactions they are involved in (Personal Relevance View)
-        if (participantData.type === 'former') {
-          // We can't easily filter by "split inclusion" in the main query without complex RPC
-          // So we'll fetch broader range and filter in memory.
-          // Note: This might miss older transactions if limit(100) cuts them off.
-          // For now, this tradeoff is acceptable or we could increase limit for former members.
+        participantData = participantRecord;
+      }
+
+      const buildTransactionsQuery = (
+        pageCursorDate?: string | null,
+        pageCursorId?: number | null
+      ) => {
+        let query = supabase
+          .from('transactions')
+          .select(`
+            *,
+            transaction_splits (
+              id,
+              participant_id,
+              amount,
+              created_at
+            )
+          `);
+
+        if (groupId) {
+          query = query.eq('group_id', groupId);
+        }
+
+        if (pageCursorDate && pageCursorId) {
+          query = query.or(
+            `date.lt.${pageCursorDate},and(date.eq.${pageCursorDate},id.lt.${pageCursorId})`
+          );
+        }
+
+        return query
+          .order('date', { ascending: false })
+          .order('id', { ascending: false });
+      };
+
+      const isFormerParticipant = participantData?.type === 'former' && !!groupId;
+      const formerParticipantId = participantData?.id ?? null;
+
+      let fetchedTransactions: any[] = [];
+      let sourceExhausted = false;
+      let rollingCursorDate = cursorDate;
+      let rollingCursorId = cursorId;
+      let safetyIterations = 0;
+
+      while (fetchedTransactions.length < limit + 1 && !sourceExhausted && safetyIterations < 20) {
+        safetyIterations += 1;
+        const { data: transactionsData, error } = await buildTransactionsQuery(rollingCursorDate, rollingCursorId)
+          .limit(limit + 1);
+
+        if (error) {
+          return handleError(error, 'fetching transactions');
+        }
+
+        const pageRows = transactionsData || [];
+        if (pageRows.length === 0) {
+          sourceExhausted = true;
+          break;
+        }
+
+        if (isFormerParticipant && formerParticipantId) {
+          const formerVisible = pageRows.filter((tx: any) => {
+            const isPayer = tx.paid_by_participant_id === formerParticipantId;
+            const isInSplits = tx.transaction_splits?.some((s: any) => s.participant_id === formerParticipantId);
+            const isLegacyPayer = tx.paid_by === user.id || tx.user_id === user.id;
+            const isLegacySplit = tx.split_among?.includes(user.id);
+
+            return isPayer || isInSplits || isLegacyPayer || isLegacySplit;
+          });
+          fetchedTransactions.push(...formerVisible);
+        } else {
+          fetchedTransactions.push(...pageRows);
+        }
+
+        const lastRow = pageRows[pageRows.length - 1];
+        rollingCursorDate = lastRow?.date ?? null;
+        rollingCursorId = lastRow?.id ?? null;
+
+        if (pageRows.length < limit + 1) {
+          sourceExhausted = true;
         }
       }
 
-      const { data: transactionsData, error } = await query
-        .order('date', { ascending: false })
-        .limit(200); // Increased limit to accommodate filtering
-
-      if (error) {
-        return handleError(error, 'fetching transactions');
-      }
-
-      let transactions = transactionsData || [];
-      if (groupId) {
-         const { data: participantCheck } = await supabase
-          .from('participants')
-          .select('id, type')
-          .eq('group_id', groupId)
-          .eq('user_id', user.id)
-          .maybeSingle();
-         
-         if (participantCheck && participantCheck.type === 'former') {
-             const pId = participantCheck.id;
-             transactions = transactions.filter((tx: any) => {
-                 const isPayer = tx.paid_by_participant_id === pId;
-                 // Check splits (fetched via join as transaction_splits)
-                 const isInSplits = tx.transaction_splits?.some((s: any) => s.participant_id === pId);
-                 // Check legacy fields just in case
-                 const isLegacyPayer = tx.paid_by === user.id || tx.user_id === user.id;
-                 const isLegacySplit = tx.split_among?.includes(user.id);
-                 
-                 return isPayer || isInSplits || isLegacyPayer || isLegacySplit;
-             });
-         }
-      }
+      const transactions = fetchedTransactions.slice(0, limit);
+      const lastVisibleTransaction = transactions[transactions.length - 1];
+      const moreInSource = fetchedTransactions.length > limit || !sourceExhausted;
+      const nextCursor: TransactionCursor | null = moreInSource && lastVisibleTransaction
+        ? {
+          date: lastVisibleTransaction.date,
+          id: lastVisibleTransaction.id,
+        }
+        : null;
+      // Former-participant filtering can drop an entire page; never signal has_more without a cursor.
+      const hasMore = nextCursor !== null;
 
       // Collect all participant IDs from splits and paid_by to enrich with participant data
       const allParticipantIds = new Set<string>();
@@ -278,7 +343,11 @@ Deno.serve(async (req: Request) => {
         return tx;
       });
 
-      return createSuccessResponse(parsedTransactions, 200, 0);
+      return createSuccessResponse({
+        items: parsedTransactions,
+        has_more: hasMore,
+        next_cursor: nextCursor,
+      }, 200, 0);
     }
 
     // Handle POST - Create new transaction

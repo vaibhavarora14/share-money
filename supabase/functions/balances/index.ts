@@ -26,6 +26,7 @@ interface GroupBalance {
 interface BalancesResponse {
   group_balances: GroupBalance[];
   overall_balances: Balance[];
+  group_stats?: GroupStatsResponse;
 }
 
 interface GroupMember {
@@ -47,11 +48,59 @@ interface TransactionSplit {
 interface TransactionWithSplits {
   id: number;
   amount: number | string;
+  description?: string;
+  date?: string;
+  type?: string;
   paid_by: string | null; // Legacy
   paid_by_participant_id?: string | null; // New
   currency: string;
   split_among?: string[] | null;
   transaction_splits?: TransactionSplit[];
+}
+
+interface StatsMemberBreakdownEntry {
+  participant_id: string;
+  user_id?: string;
+  email?: string | null;
+  full_name?: string | null;
+  avatar_url?: string | null;
+  share_totals: Record<string, number>;
+  paid_totals: Record<string, number>;
+  net_balances: Record<string, number>;
+}
+
+interface StatsMyTransactionEntry {
+  transaction: TransactionWithSplits;
+  share_amount: number | null;
+  is_payer: boolean;
+  net_receivable: number | null;
+}
+
+interface StatsSettlementEdge {
+  from_participant_id?: string;
+  from_user_id?: string;
+  from_full_name?: string | null;
+  from_email?: string | null;
+  from_avatar_url?: string | null;
+  to_participant_id?: string;
+  to_user_id?: string;
+  to_full_name?: string | null;
+  to_email?: string | null;
+  to_avatar_url?: string | null;
+  amount: number;
+  currency: string;
+}
+
+interface GroupStatsResponse {
+  member_breakdown: StatsMemberBreakdownEntry[];
+  my_transactions: StatsMyTransactionEntry[];
+  totals: {
+    my_share: Record<string, number>;
+    group_total: Record<string, number>;
+    i_owe: Record<string, number>;
+    im_owed: Record<string, number>;
+  };
+  settlement_plan: StatsSettlementEdge[];
 }
 
 /**
@@ -276,6 +325,207 @@ async function calculateGroupBalances(
   return balances;
 }
 
+function addCurrencyAmount(
+  target: Record<string, number>,
+  currency: string,
+  amount: number
+) {
+  if (!Number.isFinite(amount)) return;
+  target[currency] = Math.round(((target[currency] || 0) + amount) * 100) / 100;
+}
+
+async function calculateGroupStats(
+  supabase: any,
+  groupId: string,
+  currentUserId: string,
+  balances: Balance[]
+): Promise<GroupStatsResponse> {
+  const { data: participants } = await supabase
+    .from('participants')
+    .select('id, user_id, email, full_name, avatar_url')
+    .eq('group_id', groupId);
+
+  const participantMap = new Map<string, {
+    id: string;
+    user_id?: string | null;
+    email?: string | null;
+    full_name?: string | null;
+    avatar_url?: string | null;
+  }>();
+  (participants || []).forEach((p: any) => participantMap.set(p.id, p));
+
+  const currentParticipantId = (participants || []).find((p: any) => p.user_id === currentUserId)?.id;
+
+  const { data: transactions } = await supabase
+    .from('transactions')
+    .select(`
+      id,
+      amount,
+      description,
+      date,
+      type,
+      paid_by_participant_id,
+      currency,
+      transaction_splits (
+        participant_id,
+        amount
+      )
+    `)
+    .eq('group_id', groupId)
+    .eq('type', 'expense')
+    .order('date', { ascending: false })
+    .order('id', { ascending: false });
+
+  const memberBreakdownMap = new Map<string, StatsMemberBreakdownEntry>();
+  const groupTotal: Record<string, number> = {};
+  const myShareTotals: Record<string, number> = {};
+  const myTransactions: StatsMyTransactionEntry[] = [];
+
+  const ensureMember = (participantId: string): StatsMemberBreakdownEntry => {
+    const existing = memberBreakdownMap.get(participantId);
+    if (existing) return existing;
+
+    const participant = participantMap.get(participantId);
+    const created: StatsMemberBreakdownEntry = {
+      participant_id: participantId,
+      user_id: participant?.user_id || undefined,
+      email: participant?.email || null,
+      full_name: participant?.full_name || null,
+      avatar_url: participant?.avatar_url || null,
+      share_totals: {},
+      paid_totals: {},
+      net_balances: {},
+    };
+    memberBreakdownMap.set(participantId, created);
+    return created;
+  };
+
+  for (const tx of (transactions || []) as TransactionWithSplits[]) {
+    const amount = typeof tx.amount === 'string' ? Number.parseFloat(tx.amount) : tx.amount;
+    const currency = tx.currency || 'USD';
+    if (!Number.isFinite(amount)) continue;
+
+    addCurrencyAmount(groupTotal, currency, amount);
+
+    if (tx.paid_by_participant_id) {
+      const payerEntry = ensureMember(tx.paid_by_participant_id);
+      addCurrencyAmount(payerEntry.paid_totals, currency, amount);
+    }
+
+    const splits = (tx.transaction_splits || [])
+      .map((split) => ({
+        participant_id: split.participant_id || null,
+        amount: typeof split.amount === 'string'
+          ? Number.parseFloat(split.amount)
+          : split.amount,
+      }))
+      .filter((split) => split.participant_id && Number.isFinite(split.amount)) as Array<{ participant_id: string; amount: number }>;
+
+    for (const split of splits) {
+      const splitEntry = ensureMember(split.participant_id);
+      addCurrencyAmount(splitEntry.share_totals, currency, split.amount);
+    }
+
+    const mySplitAmount = currentParticipantId
+      ? (splits.find((split) => split.participant_id === currentParticipantId)?.amount ?? null)
+      : null;
+    const isPayer = !!(currentParticipantId && tx.paid_by_participant_id === currentParticipantId);
+    const involved = isPayer || mySplitAmount !== null;
+
+    if (involved) {
+      if (mySplitAmount !== null) {
+        addCurrencyAmount(myShareTotals, currency, mySplitAmount);
+      }
+      myTransactions.push({
+        transaction: tx,
+        share_amount: mySplitAmount,
+        is_payer: isPayer,
+        net_receivable: isPayer ? Math.round((amount - (mySplitAmount || 0)) * 100) / 100 : null,
+      });
+    }
+  }
+
+  for (const balance of balances) {
+    if (!balance.participant_id) continue;
+    const entry = ensureMember(balance.participant_id);
+    addCurrencyAmount(entry.net_balances, balance.currency, balance.amount);
+  }
+
+  const iOwe: Record<string, number> = {};
+  const imOwed: Record<string, number> = {};
+  const myBalances = balances.filter((balance) => (
+    (currentParticipantId && balance.participant_id === currentParticipantId)
+    || balance.user_id === currentUserId
+  ));
+  for (const balance of myBalances) {
+    if (balance.amount < 0) {
+      addCurrencyAmount(iOwe, balance.currency, Math.abs(balance.amount));
+    } else if (balance.amount > 0) {
+      addCurrencyAmount(imOwed, balance.currency, balance.amount);
+    }
+  }
+
+  const settlementPlan: StatsSettlementEdge[] = [];
+  const balancesByCurrency = new Map<string, Balance[]>();
+  for (const balance of balances) {
+    if (!balancesByCurrency.has(balance.currency)) {
+      balancesByCurrency.set(balance.currency, []);
+    }
+    balancesByCurrency.get(balance.currency)!.push(balance);
+  }
+
+  for (const [currency, currencyBalances] of balancesByCurrency) {
+    const debtors = currencyBalances
+      .filter((balance) => balance.amount < -0.01)
+      .map((balance) => ({ ...balance, amount: Math.abs(balance.amount) }))
+      .sort((a, b) => b.amount - a.amount);
+    const creditors = currencyBalances
+      .filter((balance) => balance.amount > 0.01)
+      .map((balance) => ({ ...balance }))
+      .sort((a, b) => b.amount - a.amount);
+
+    let debtorIndex = 0;
+    let creditorIndex = 0;
+    while (debtorIndex < debtors.length && creditorIndex < creditors.length) {
+      const debtor = debtors[debtorIndex];
+      const creditor = creditors[creditorIndex];
+      const amount = Math.min(debtor.amount, creditor.amount);
+
+      settlementPlan.push({
+        from_participant_id: debtor.participant_id,
+        from_user_id: debtor.user_id,
+        from_full_name: debtor.full_name || null,
+        from_email: debtor.email || null,
+        from_avatar_url: debtor.avatar_url || null,
+        to_participant_id: creditor.participant_id,
+        to_user_id: creditor.user_id,
+        to_full_name: creditor.full_name || null,
+        to_email: creditor.email || null,
+        to_avatar_url: creditor.avatar_url || null,
+        amount: Math.round(amount * 100) / 100,
+        currency,
+      });
+
+      debtor.amount = Math.round((debtor.amount - amount) * 100) / 100;
+      creditor.amount = Math.round((creditor.amount - amount) * 100) / 100;
+      if (debtor.amount <= 0.01) debtorIndex += 1;
+      if (creditor.amount <= 0.01) creditorIndex += 1;
+    }
+  }
+
+  return {
+    member_breakdown: Array.from(memberBreakdownMap.values()),
+    my_transactions: myTransactions,
+    totals: {
+      my_share: myShareTotals,
+      group_total: groupTotal,
+      i_owe: iOwe,
+      im_owed: imOwed,
+    },
+    settlement_plan: settlementPlan,
+  };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return createEmptyResponse(200, req);
@@ -295,9 +545,14 @@ Deno.serve(async (req: Request) => {
 
     const url = new URL(req.url);
     const groupId = url.searchParams.get('group_id');
+    const includeStats = url.searchParams.get('include_stats') === 'true';
     
     if (groupId && !isValidUUID(groupId)) {
       return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR', undefined, req);
+    }
+
+    if (includeStats && !groupId) {
+      return createErrorResponse(400, 'group_id is required when include_stats=true', 'VALIDATION_ERROR', undefined, req);
     }
 
     const { data: memberships } = await supabase
@@ -435,6 +690,16 @@ Deno.serve(async (req: Request) => {
       group_balances: groupBalances,
       overall_balances: overallBalances,
     };
+
+    if (includeStats && groupId) {
+      const targetGroup = groupBalances.find((gb) => gb.group_id === groupId);
+      response.group_stats = await calculateGroupStats(
+        supabase,
+        groupId,
+        currentUserId,
+        targetGroup?.balances || []
+      );
+    }
 
     return createSuccessResponse(response, 200, 0, req);
   } catch (error: unknown) {

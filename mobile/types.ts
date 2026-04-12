@@ -118,6 +118,52 @@ export interface GroupBalance {
 export interface BalancesResponse {
   group_balances: GroupBalance[];
   overall_balances: Balance[];
+  group_stats?: GroupStatsResponse;
+}
+
+export interface GroupStatsMemberBreakdown {
+  participant_id: string;
+  user_id?: string;
+  email?: string | null;
+  full_name?: string | null;
+  avatar_url?: string | null;
+  share_totals: Record<string, number>;
+  paid_totals: Record<string, number>;
+  net_balances: Record<string, number>;
+}
+
+export interface GroupStatsMyTransaction {
+  transaction: Transaction;
+  share_amount: number | null;
+  is_payer: boolean;
+  net_receivable: number | null;
+}
+
+export interface GroupStatsSettlementEdge {
+  from_participant_id?: string;
+  from_user_id?: string;
+  from_full_name?: string | null;
+  from_email?: string | null;
+  from_avatar_url?: string | null;
+  to_participant_id?: string;
+  to_user_id?: string;
+  to_full_name?: string | null;
+  to_email?: string | null;
+  to_avatar_url?: string | null;
+  amount: number;
+  currency: string;
+}
+
+export interface GroupStatsResponse {
+  member_breakdown: GroupStatsMemberBreakdown[];
+  my_transactions: GroupStatsMyTransaction[];
+  totals: {
+    my_share: Record<string, number>;
+    group_total: Record<string, number>;
+    i_owe: Record<string, number>;
+    im_owed: Record<string, number>;
+  };
+  settlement_plan: GroupStatsSettlementEdge[];
 }
 
 export interface Settlement {
