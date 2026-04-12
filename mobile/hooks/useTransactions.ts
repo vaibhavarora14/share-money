@@ -1,32 +1,88 @@
-import type { QueryClient } from "@tanstack/react-query";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { InfiniteData, QueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
 import { Transaction } from "../types";
 import { fetchWithAuth } from "../utils/api";
 import { queryKeys } from "./queryKeys";
 
-export async function fetchTransactions(groupId?: string | null): Promise<Transaction[]> {
-  const endpoint = groupId ? `/transactions?group_id=${groupId}` : "/transactions";
+export interface TransactionsCursor {
+  date: string;
+  id: number;
+}
+
+export interface TransactionsPageResponse {
+  items: Transaction[];
+  has_more: boolean;
+  next_cursor: TransactionsCursor | null;
+}
+
+interface FetchTransactionsPageArgs {
+  groupId?: string | null;
+  cursor?: TransactionsCursor | null;
+  limit?: number;
+}
+
+const TRANSACTIONS_PAGE_SIZE = 30;
+
+export async function fetchTransactionsPage({
+  groupId,
+  cursor,
+  limit = TRANSACTIONS_PAGE_SIZE,
+}: FetchTransactionsPageArgs): Promise<TransactionsPageResponse> {
+  const params = new URLSearchParams();
+  if (groupId) {
+    params.set("group_id", groupId);
+  }
+  params.set("limit", String(limit));
+  if (cursor) {
+    params.set("cursor_date", cursor.date);
+    params.set("cursor_id", String(cursor.id));
+  }
+
+  const endpoint = `/transactions?${params.toString()}`;
   const response = await fetchWithAuth(endpoint);
   if (!response.ok) {
     throw new Error(`Failed to fetch transactions: ${response.status}`);
   }
-  const transactions: Transaction[] = await response.json();
+  const payload = await response.json();
+  return {
+    items: Array.isArray(payload?.items) ? payload.items : [],
+    has_more: payload?.has_more === true,
+    next_cursor:
+      payload?.next_cursor &&
+      typeof payload.next_cursor.date === "string" &&
+      typeof payload.next_cursor.id === "number"
+        ? payload.next_cursor
+        : null,
+  };
+}
 
-  return transactions.sort((a, b) => {
-    const dateA = a.created_at
-      ? new Date(a.created_at).getTime()
-      : new Date(a.date).getTime();
-    const dateB = b.created_at
-      ? new Date(b.created_at).getTime()
-      : new Date(b.date).getTime();
-    return dateB - dateA;
-  });
+export async function fetchTransactions(groupId?: string | null): Promise<Transaction[]> {
+  const firstPage = await fetchTransactionsPage({ groupId });
+  return firstPage.items;
+}
+
+function mapInfiniteTransactions(
+  data: InfiniteData<TransactionsPageResponse> | undefined,
+  mapper: (tx: Transaction) => Transaction | null
+): InfiniteData<TransactionsPageResponse> | undefined {
+  if (!data) return data;
+  return {
+    ...data,
+    pages: data.pages.map((page) => ({
+      ...page,
+      items: page.items
+        .map((tx) => mapper(tx))
+        .filter((tx): tx is Transaction => tx !== null),
+    })),
+  };
 }
 
 function invalidateTransactionAdjacents(queryClient: QueryClient, groupId?: string | null) {
   if (!groupId) return;
+  queryClient.invalidateQueries({ queryKey: queryKeys.transactionsFeed(groupId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.transactions(groupId) });
+  queryClient.invalidateQueries({ queryKey: queryKeys.groupStats(groupId) });
   queryClient.invalidateQueries({ queryKey: ["balances"] }); // Invalidate all balances (including global)
   queryClient.invalidateQueries({ queryKey: queryKeys.balances(groupId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.activity(groupId) });
@@ -35,20 +91,30 @@ function invalidateTransactionAdjacents(queryClient: QueryClient, groupId?: stri
 export function useTransactions(groupId?: string | null) {
   const { user } = useAuth();
 
-  const query = useQuery<Transaction[], Error>({
-    // Guarded by `enabled`, so groupId is always defined inside queryFn
-    queryKey: groupId ? queryKeys.transactions(groupId) : queryKeys.transactions(""),
-    queryFn: () => fetchTransactions(groupId),
+  const query = useInfiniteQuery({
+    queryKey: groupId ? queryKeys.transactionsFeed(groupId) : queryKeys.transactionsFeed(""),
+    queryFn: ({ pageParam }: { pageParam: TransactionsCursor | null }) =>
+      fetchTransactionsPage({ groupId, cursor: pageParam }),
+    initialPageParam: null as TransactionsCursor | null,
+    getNextPageParam: (lastPage) => (
+      lastPage?.has_more && lastPage?.next_cursor ? lastPage.next_cursor : null
+    ),
     enabled: !!user?.id && (!!groupId || groupId === null || groupId === undefined),
-    // Use placeholderData so initial load still reports isLoading=true
-    placeholderData: [],
     staleTime: 30_000,
   });
 
+  const pages = Array.isArray(query.data?.pages) ? query.data.pages : [];
+  const flattenedData = pages.flatMap((page) =>
+    Array.isArray(page?.items) ? page.items : []
+  );
+
   return {
-    data: query.data ?? [],
+    data: flattenedData,
     isLoading: query.isLoading,
     isFetching: query.isFetching,
+    isFetchingNextPage: query.isFetchingNextPage,
+    hasNextPage: query.hasNextPage,
+    fetchNextPage: query.fetchNextPage,
     error: query.error ?? null,
     refetch: query.refetch,
   };
@@ -66,7 +132,12 @@ type UpdateTransactionInput = BaseTransactionInput;
 export function useCreateTransaction(onSuccess?: () => void) {
   const queryClient = useQueryClient();
 
-  const mutation = useMutation<Transaction | null, Error, CreateTransactionInput, { previous?: Transaction[], groupId: string }>({
+  const mutation = useMutation<
+    Transaction | null,
+    Error,
+    CreateTransactionInput,
+    { previous?: InfiniteData<TransactionsPageResponse>; groupId: string }
+  >({
     mutationFn: async (transactionData) => {
       const response = await fetchWithAuth("/transactions", {
         method: "POST",
@@ -83,9 +154,9 @@ export function useCreateTransaction(onSuccess?: () => void) {
       const groupId = variables.group_id;
       if (!groupId) return { groupId, previous: undefined };
 
-      await queryClient.cancelQueries({ queryKey: queryKeys.transactions(groupId) });
-      const previous = queryClient.getQueryData<Transaction[]>(
-        queryKeys.transactions(groupId)
+      await queryClient.cancelQueries({ queryKey: queryKeys.transactionsFeed(groupId) });
+      const previous = queryClient.getQueryData<InfiniteData<TransactionsPageResponse>>(
+        queryKeys.transactionsFeed(groupId)
       );
 
       const optimisticEntry: Transaction = {
@@ -94,11 +165,24 @@ export function useCreateTransaction(onSuccess?: () => void) {
         created_at: new Date().toISOString(),
       };
 
-      queryClient.setQueryData<Transaction[]>(
-        queryKeys.transactions(groupId),
+      queryClient.setQueryData<InfiniteData<TransactionsPageResponse>>(
+        queryKeys.transactionsFeed(groupId),
         (old) => {
-          const current = old ?? [];
-          return [optimisticEntry, ...current];
+          if (!old || old.pages.length === 0) {
+            return {
+              pages: [{ items: [optimisticEntry], has_more: false, next_cursor: null }],
+              pageParams: [null],
+            };
+          }
+
+          return {
+            ...old,
+            pages: old.pages.map((page, index) => (
+              index === 0
+                ? { ...page, items: [optimisticEntry, ...page.items] }
+                : page
+            )),
+          };
         }
       );
 
@@ -107,7 +191,7 @@ export function useCreateTransaction(onSuccess?: () => void) {
     onError: (_error, _variables, context) => {
       if (context?.groupId && context.previous) {
         queryClient.setQueryData(
-          queryKeys.transactions(context.groupId),
+          queryKeys.transactionsFeed(context.groupId),
           context.previous
         );
       }
@@ -117,7 +201,7 @@ export function useCreateTransaction(onSuccess?: () => void) {
       invalidateTransactionAdjacents(queryClient, groupId);
       if (context?.groupId) {
         queryClient.invalidateQueries({
-          queryKey: queryKeys.transactions(context.groupId),
+          queryKey: queryKeys.transactionsFeed(context.groupId),
         });
       }
       onSuccess?.();
@@ -134,7 +218,12 @@ export function useCreateTransaction(onSuccess?: () => void) {
 export function useUpdateTransaction(onSuccess?: () => void) {
   const queryClient = useQueryClient();
 
-  const mutation = useMutation<Transaction | null, Error, UpdateTransactionInput, { previous?: Transaction[], groupId: string }>({
+  const mutation = useMutation<
+    Transaction | null,
+    Error,
+    UpdateTransactionInput,
+    { previous?: InfiniteData<TransactionsPageResponse>; groupId: string }
+  >({
     mutationFn: async (transactionData) => {
       const response = await fetchWithAuth("/transactions", {
         method: "PUT",
@@ -151,17 +240,17 @@ export function useUpdateTransaction(onSuccess?: () => void) {
       const groupId = variables.group_id;
       if (!groupId) return { groupId, previous: undefined };
 
-      await queryClient.cancelQueries({ queryKey: queryKeys.transactions(groupId) });
-      const previous = queryClient.getQueryData<Transaction[]>(
-        queryKeys.transactions(groupId)
+      await queryClient.cancelQueries({ queryKey: queryKeys.transactionsFeed(groupId) });
+      const previous = queryClient.getQueryData<InfiniteData<TransactionsPageResponse>>(
+        queryKeys.transactionsFeed(groupId)
       );
 
-      queryClient.setQueryData<Transaction[]>(queryKeys.transactions(groupId), (old) => {
-          const current = old ?? [];
-          return current.map((tx) =>
-            tx.id === variables.id ? { ...tx, ...variables } : tx
-          );
-        }
+      queryClient.setQueryData<InfiniteData<TransactionsPageResponse>>(
+        queryKeys.transactionsFeed(groupId),
+        (old) => mapInfiniteTransactions(
+          old,
+          (tx) => tx.id === variables.id ? { ...tx, ...variables } : tx
+        )
       );
 
       return { previous, groupId };
@@ -169,7 +258,7 @@ export function useUpdateTransaction(onSuccess?: () => void) {
     onError: (_error, _variables, context) => {
       if (context?.groupId && context.previous) {
         queryClient.setQueryData(
-          queryKeys.transactions(context.groupId),
+          queryKeys.transactionsFeed(context.groupId),
           context.previous
         );
       }
@@ -179,7 +268,7 @@ export function useUpdateTransaction(onSuccess?: () => void) {
       invalidateTransactionAdjacents(queryClient, groupId);
       if (context?.groupId) {
         queryClient.invalidateQueries({
-          queryKey: queryKeys.transactions(context.groupId),
+          queryKey: queryKeys.transactionsFeed(context.groupId),
         });
       }
       onSuccess?.();
@@ -200,7 +289,7 @@ export function useDeleteTransaction(onSuccess?: () => void) {
     { id: number; group_id?: string },
     Error,
     { id: number; group_id?: string },
-    { previous?: Transaction[], groupId?: string }
+    { previous?: InfiniteData<TransactionsPageResponse>; groupId?: string }
   >({
     mutationFn: async (variables) => {
       const response = await fetchWithAuth(`/transactions?id=${variables.id}`, {
@@ -217,14 +306,16 @@ export function useDeleteTransaction(onSuccess?: () => void) {
       const groupId = variables.group_id;
       if (!groupId) return { groupId, previous: undefined };
 
-      await queryClient.cancelQueries({ queryKey: queryKeys.transactions(groupId) });
-      const previous = queryClient.getQueryData<Transaction[]>(
-        queryKeys.transactions(groupId)
+      await queryClient.cancelQueries({ queryKey: queryKeys.transactionsFeed(groupId) });
+      const previous = queryClient.getQueryData<InfiniteData<TransactionsPageResponse>>(
+        queryKeys.transactionsFeed(groupId)
       );
 
-      queryClient.setQueryData<Transaction[]>(
-        queryKeys.transactions(groupId),
-        (old) => (old ?? []).filter((tx) => tx.id !== variables.id)
+      queryClient.setQueryData<InfiniteData<TransactionsPageResponse>>(
+        queryKeys.transactionsFeed(groupId),
+        (old) => mapInfiniteTransactions(old, (tx) => (
+          tx.id === variables.id ? null : tx
+        ))
       );
 
       return { previous, groupId };
@@ -232,7 +323,7 @@ export function useDeleteTransaction(onSuccess?: () => void) {
     onError: (_error, _variables, context) => {
       if (context?.groupId && context.previous) {
         queryClient.setQueryData(
-          queryKeys.transactions(context.groupId),
+          queryKeys.transactionsFeed(context.groupId),
           context.previous
         );
       }
@@ -242,7 +333,7 @@ export function useDeleteTransaction(onSuccess?: () => void) {
       invalidateTransactionAdjacents(queryClient, groupId);
       if (context?.groupId) {
         queryClient.invalidateQueries({
-          queryKey: queryKeys.transactions(context.groupId),
+          queryKey: queryKeys.transactionsFeed(context.groupId),
         });
       }
       onSuccess?.();

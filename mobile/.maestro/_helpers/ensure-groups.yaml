@@ -1,0 +1,71 @@
+appId: com.sharemoney.app
+---
+- waitForAnimationToEnd
+
+# Move back from known nested app screens that may not expose a "Navigate back" label
+- runFlow:
+    when:
+      visible: "Group Summary"
+    commands:
+      - pressKey: "Back"
+      - waitForAnimationToEnd
+- runFlow:
+    when:
+      visible: "Transactions"
+    commands:
+      - pressKey: "Back"
+      - waitForAnimationToEnd
+- runFlow:
+    when:
+      visible: "Group Members"
+    commands:
+      - pressKey: "Back"
+      - waitForAnimationToEnd
+
+# Step back to top-level if a detail screen is open
+- runFlow:
+    when:
+      visible: "Navigate back"
+    commands:
+      - tapOn: "Navigate back"
+      - waitForAnimationToEnd
+- runFlow:
+    when:
+      visible: "Navigate back"
+    commands:
+      - tapOn: "Navigate back"
+      - waitForAnimationToEnd
+
+# If we are on another tab, return to Home list first
+- runFlow:
+    when:
+      visible: "Profile"
+    commands:
+      - tapOn: "Home"
+      - waitForAnimationToEnd
+
+# Login if auth screen is visible
+- runFlow:
+    when:
+      visible: "Welcome Back"
+    commands:
+      - tapOn: "Email"
+      - inputText: "alice@test.com"
+      - tapOn: "Password"
+      - inputText: "testpassword123"
+      - hideKeyboard
+      - tapOn: "Sign In"
+      - waitForAnimationToEnd
+- runFlow:
+    when:
+      visible: "Sign In"
+    commands:
+      - tapOn: "Email"
+      - inputText: "alice@test.com"
+      - tapOn: "Password"
+      - inputText: "testpassword123"
+      - hideKeyboard
+      - tapOn: "Sign In"
+      - waitForAnimationToEnd
+
+- assertVisible: "Your Groups"

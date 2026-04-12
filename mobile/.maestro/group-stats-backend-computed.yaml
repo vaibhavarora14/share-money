@@ -1,0 +1,31 @@
+appId: com.sharemoney.app
+---
+# Test: Group Stats (Backend Computed Payload)
+# Purpose: Ensure stats screens render correctly after backend-computed migration.
+
+- runFlow: _helpers/ensure-groups.yaml
+
+# Open seeded group and enter stats via dashboard affordance
+- tapOn: "Summer Vacation 2024"
+- waitForAnimationToEnd
+- assertVisible: "Transactions"
+- tapOn: "Group summary"
+- waitForAnimationToEnd
+
+# Stats screen checks
+- assertVisible: "Group Summary"
+- assertVisible: "Totals"
+- assertVisible: "Settle Up"
+
+# Verify settlement-plan view renders backend-derived list
+- tapOn: "Settle Up"
+- waitForAnimationToEnd
+- assertVisible: "Recommended Settlements"
+
+# Return to group and then groups list
+- pressKey: "Back"
+- waitForAnimationToEnd
+- pressKey: "Back"
+- waitForAnimationToEnd
+- assertVisible: "Your Groups"
+- runFlow: signout.yaml
