@@ -8,7 +8,7 @@ appId: com.sharemoney.app
 # Open seeded group
 - tapOn: "Summer Vacation 2024"
 - waitForAnimationToEnd
-- assertVisible: "Add Expense"
+- assertVisible: "Transactions"
 
 # Exercise transaction list scrolling
 - swipe:
@@ -25,17 +25,18 @@ appId: com.sharemoney.app
       - waitForAnimationToEnd
 
 # Ensure list remains usable after scroll/load interaction
-- assertVisible: "Add Expense"
+- assertVisible: "Transactions"
+- assertVisible: "Activity"
 
 # Verify an older seeded transaction can still be reached
 - scrollUntilVisible:
     element:
-      text: "Dinner at fancy restaurant"
+      text: "Car rental for the week"
     direction: DOWN
     timeout: 10000
 
 # Navigate back and sign out
-- pressKey: "Back"
+- tapOn: "Navigate back"
 - waitForAnimationToEnd
 - assertVisible: "Your Groups"
 - runFlow: signout.yaml
