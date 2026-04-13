@@ -1,0 +1,80 @@
+name: Deploy Web Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "mobile/**"
+      - ".github/workflows/deploy-web-preview.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: web-preview-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-preview:
+    runs-on: ubuntu-latest
+    # Skip fork PRs unless workflow is manually triggered
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          expo-version: latest
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Export web bundle
+        working-directory: mobile
+        run: npx expo export -p web
+
+      - name: Deploy preview
+        id: deploy
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          DEPLOY_JSON="$(eas deploy --non-interactive --json)"
+          echo "$DEPLOY_JSON" > deploy-output.json
+
+          DEPLOY_URL="$(echo "$DEPLOY_JSON" | jq -r '.url // .deployment.url // .deploymentUrl // .website.url // empty')"
+          DEPLOY_ID="$(echo "$DEPLOY_JSON" | jq -r '.id // .deployment.id // .deploymentId // empty')"
+
+          echo "deploy_url=$DEPLOY_URL" >> "$GITHUB_OUTPUT"
+          echo "deploy_id=$DEPLOY_ID" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Web Preview Deployment"
+            echo ""
+            if [ -n "$DEPLOY_URL" ]; then
+              echo "- Preview URL: $DEPLOY_URL"
+            else
+              echo "- Preview URL: not detected from CLI JSON output"
+            fi
+            if [ -n "$DEPLOY_ID" ]; then
+              echo "- Deployment ID: \`$DEPLOY_ID\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment preview URL on PR
+        if: github.event_name == 'pull_request' && steps.deploy.outputs.deploy_url != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr comment "${{ github.event.pull_request.number }}" --body "Web preview deployed: ${{ steps.deploy.outputs.deploy_url }}"
