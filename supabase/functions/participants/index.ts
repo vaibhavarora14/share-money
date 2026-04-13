@@ -81,7 +81,7 @@ Deno.serve(async (req: Request) => {
       .order('created_at', { ascending: true });
 
     if (participantsError) {
-      return handleError(participantsError, 'fetching participants');
+      return handleError(participantsError, 'fetching participants', req);
     }
 
     let participants: Participant[] =

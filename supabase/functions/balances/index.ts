@@ -573,7 +573,7 @@ Deno.serve(async (req: Request) => {
       return createSuccessResponse({
         group_balances: [],
         overall_balances: [],
-      }, 200, 0);
+      }, 200, 0, req);
     }
 
     const { data: groups } = await supabase

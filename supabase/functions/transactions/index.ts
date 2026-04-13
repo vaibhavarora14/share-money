@@ -188,7 +188,7 @@ Deno.serve(async (req: Request) => {
           .single();
 
         if (participantAuthError || !participantRecord) {
-          return createErrorResponse(403, 'Forbidden: You are not a participant in this group', 'PERMISSION_DENIED');
+          return createErrorResponse(403, 'Forbidden: You are not a participant in this group', 'PERMISSION_DENIED', undefined, req);
         }
 
         participantData = participantRecord;
@@ -240,7 +240,7 @@ Deno.serve(async (req: Request) => {
           .limit(limit + 1);
 
         if (error) {
-          return handleError(error, 'fetching transactions');
+          return handleError(error, 'fetching transactions', req);
         }
 
         const pageRows = transactionsData || [];
@@ -347,7 +347,7 @@ Deno.serve(async (req: Request) => {
         items: parsedTransactions,
         has_more: hasMore,
         next_cursor: nextCursor,
-      }, 200, 0);
+      }, 200, 0, req);
     }
 
     // Handle POST - Create new transaction
@@ -356,16 +356,16 @@ Deno.serve(async (req: Request) => {
       try {
         transactionData = body ? JSON.parse(body) : {};
       } catch {
-        return createErrorResponse(400, 'Invalid JSON in request body', 'VALIDATION_ERROR');
+        return createErrorResponse(400, 'Invalid JSON in request body', 'VALIDATION_ERROR', undefined, req);
       }
 
       if (!transactionData.amount || !transactionData.description || !transactionData.date || !transactionData.type) {
-        return createErrorResponse(400, 'Missing required fields: amount, description, date, type', 'VALIDATION_ERROR');
+        return createErrorResponse(400, 'Missing required fields: amount, description, date, type', 'VALIDATION_ERROR', undefined, req);
       }
 
       const validation = validateTransactionData(transactionData);
       if (!validation.valid) {
-        return createErrorResponse(400, validation.error || 'Invalid transaction data', 'VALIDATION_ERROR');
+        return createErrorResponse(400, validation.error || 'Invalid transaction data', 'VALIDATION_ERROR', undefined, req);
       }
 
       if (transactionData.group_id) {
@@ -378,7 +378,7 @@ Deno.serve(async (req: Request) => {
           .single();
 
         if (membershipError || !membership) {
-          return createErrorResponse(403, 'You must be an active member of the group to add transactions', 'PERMISSION_DENIED');
+          return createErrorResponse(403, 'You must be an active member of the group to add transactions', 'PERMISSION_DENIED', undefined, req);
         }
       }
 
@@ -393,7 +393,7 @@ Deno.serve(async (req: Request) => {
             .single();
 
           if (participantError || !participant) {
-            return createErrorResponse(400, 'paid_by_participant_id must be a valid participant in the group', 'VALIDATION_ERROR');
+            return createErrorResponse(400, 'paid_by_participant_id must be a valid participant in the group', 'VALIDATION_ERROR', undefined, req);
           }
         }
 
@@ -409,14 +409,14 @@ Deno.serve(async (req: Request) => {
               .in('id', uniqueParticipantIds);
 
             if (participantsError) {
-              return createErrorResponse(400, 'Failed to validate participants', 'VALIDATION_ERROR');
+              return createErrorResponse(400, 'Failed to validate participants', 'VALIDATION_ERROR', undefined, req);
             }
 
             const foundParticipantIds = new Set((participants || []).map(p => p.id));
             const invalidParticipantIds = uniqueParticipantIds.filter(id => !foundParticipantIds.has(id));
             
             if (invalidParticipantIds.length > 0) {
-              return createErrorResponse(400, `Invalid participant_ids: ${invalidParticipantIds.join(', ')}`, 'VALIDATION_ERROR');
+              return createErrorResponse(400, `Invalid participant_ids: ${invalidParticipantIds.join(', ')}`, 'VALIDATION_ERROR', undefined, req);
             }
           }
         }
@@ -444,7 +444,7 @@ Deno.serve(async (req: Request) => {
         .single();
 
       if (error) {
-        return handleError(error, 'creating transaction');
+        return handleError(error, 'creating transaction', req);
       }
 
       if (transaction && participantIds.length > 0) {
@@ -488,7 +488,7 @@ Deno.serve(async (req: Request) => {
             });
           }
 
-          return createErrorResponse(500, 'Failed to create transaction splits', 'TRANSACTION_SPLIT_ERROR');
+          return createErrorResponse(500, 'Failed to create transaction splits', 'TRANSACTION_SPLIT_ERROR', undefined, req);
         }
       }
 
@@ -530,7 +530,7 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      return createSuccessResponse(responseTransaction, 201);
+      return createSuccessResponse(responseTransaction, 201, 0, req);
     }
 
     // Handle PUT - Update existing transaction
@@ -539,16 +539,16 @@ Deno.serve(async (req: Request) => {
       try {
         transactionData = body ? JSON.parse(body) : {};
       } catch {
-        return createErrorResponse(400, 'Invalid JSON in request body', 'VALIDATION_ERROR');
+        return createErrorResponse(400, 'Invalid JSON in request body', 'VALIDATION_ERROR', undefined, req);
       }
 
       if (!transactionData.id) {
-        return createErrorResponse(400, 'Missing transaction id', 'VALIDATION_ERROR');
+        return createErrorResponse(400, 'Missing transaction id', 'VALIDATION_ERROR', undefined, req);
       }
 
       const validation = validateTransactionData(transactionData);
       if (!validation.valid) {
-        return createErrorResponse(400, validation.error || 'Invalid transaction data', 'VALIDATION_ERROR');
+        return createErrorResponse(400, validation.error || 'Invalid transaction data', 'VALIDATION_ERROR', undefined, req);
       }
 
       const { data: existingTransaction, error: fetchError } = await supabase
@@ -558,7 +558,7 @@ Deno.serve(async (req: Request) => {
         .single();
 
       if (fetchError || !existingTransaction) {
-        return createErrorResponse(404, 'Transaction not found', 'NOT_FOUND');
+        return createErrorResponse(404, 'Transaction not found', 'NOT_FOUND', undefined, req);
       }
 
       let canUpdate = existingTransaction.user_id === user.id;
@@ -575,7 +575,7 @@ Deno.serve(async (req: Request) => {
       }
 
       if (!canUpdate) {
-        return createErrorResponse(403, 'You can only update transactions you own or transactions in groups you belong to', 'PERMISSION_DENIED');
+        return createErrorResponse(403, 'You can only update transactions you own or transactions in groups you belong to', 'PERMISSION_DENIED', undefined, req);
       }
 
       const groupId = transactionData.group_id !== undefined 
@@ -596,7 +596,7 @@ Deno.serve(async (req: Request) => {
             .single();
 
           if (participantError || !participant) {
-            return createErrorResponse(400, 'paid_by_participant_id must be a valid participant in the group', 'VALIDATION_ERROR');
+            return createErrorResponse(400, 'paid_by_participant_id must be a valid participant in the group', 'VALIDATION_ERROR', undefined, req);
           }
         }
 
@@ -610,14 +610,14 @@ Deno.serve(async (req: Request) => {
               .in('id', uniqueParticipantIds);
 
             if (participantsError) {
-              return createErrorResponse(400, 'Failed to validate participants', 'VALIDATION_ERROR');
+              return createErrorResponse(400, 'Failed to validate participants', 'VALIDATION_ERROR', undefined, req);
             }
 
             const foundParticipantIds = new Set((participants || []).map(p => p.id));
             const invalidParticipantIds = uniqueParticipantIds.filter(id => !foundParticipantIds.has(id));
             
             if (invalidParticipantIds.length > 0) {
-              return createErrorResponse(400, `Invalid participant_ids: ${invalidParticipantIds.join(', ')}`, 'VALIDATION_ERROR');
+              return createErrorResponse(400, `Invalid participant_ids: ${invalidParticipantIds.join(', ')}`, 'VALIDATION_ERROR', undefined, req);
             }
           }
         }
@@ -640,11 +640,11 @@ Deno.serve(async (req: Request) => {
         .single();
 
       if (error) {
-        return handleError(error, 'updating transaction');
+        return handleError(error, 'updating transaction', req);
       }
 
       if (!transaction) {
-        return createErrorResponse(404, 'Transaction not found', 'NOT_FOUND');
+        return createErrorResponse(404, 'Transaction not found', 'NOT_FOUND', undefined, req);
       }
 
       if (transactionData.split_among_participant_ids !== undefined) {
@@ -756,7 +756,7 @@ Deno.serve(async (req: Request) => {
           .filter((id): id is string => !!id);
       }
 
-      return createSuccessResponse(responseTransaction, 200);
+      return createSuccessResponse(responseTransaction, 200, 0, req);
     }
 
     // Handle DELETE - Delete transaction
@@ -764,12 +764,12 @@ Deno.serve(async (req: Request) => {
       const transactionId = url.searchParams.get('id');
       
       if (!transactionId) {
-        return createErrorResponse(400, 'Missing transaction id in query parameters', 'VALIDATION_ERROR');
+        return createErrorResponse(400, 'Missing transaction id in query parameters', 'VALIDATION_ERROR', undefined, req);
       }
 
       const id = parseInt(transactionId, 10);
       if (isNaN(id) || id <= 0) {
-        return createErrorResponse(400, 'Invalid transaction id', 'VALIDATION_ERROR');
+        return createErrorResponse(400, 'Invalid transaction id', 'VALIDATION_ERROR', undefined, req);
       }
 
       const { data: transaction, error: fetchError } = await supabase
@@ -779,7 +779,7 @@ Deno.serve(async (req: Request) => {
         .single();
 
       if (fetchError || !transaction) {
-        return createErrorResponse(404, 'Transaction not found', 'NOT_FOUND');
+        return createErrorResponse(404, 'Transaction not found', 'NOT_FOUND', undefined, req);
       }
 
       let canDelete = transaction.user_id === user.id;
@@ -796,7 +796,7 @@ Deno.serve(async (req: Request) => {
       }
 
       if (!canDelete) {
-        return createErrorResponse(403, 'Forbidden: You can only delete transactions you own or transactions in groups you belong to', 'PERMISSION_DENIED');
+        return createErrorResponse(403, 'Forbidden: You can only delete transactions you own or transactions in groups you belong to', 'PERMISSION_DENIED', undefined, req);
       }
 
       const { data: deletedData, error: deleteError } = await supabase
@@ -806,18 +806,18 @@ Deno.serve(async (req: Request) => {
         .select();
 
       if (deleteError) {
-        return handleError(deleteError, 'deleting transaction');
+        return handleError(deleteError, 'deleting transaction', req);
       }
 
       if (!deletedData || deletedData.length === 0) {
-        return createErrorResponse(403, 'Transaction could not be deleted. You may not have permission.', 'PERMISSION_DENIED');
+        return createErrorResponse(403, 'Transaction could not be deleted. You may not have permission.', 'PERMISSION_DENIED', undefined, req);
       }
 
-      return createSuccessResponse({ success: true, message: 'Transaction deleted successfully' }, 200);
+      return createSuccessResponse({ success: true, message: 'Transaction deleted successfully' }, 200, 0, req);
     }
 
-    return createErrorResponse(405, 'Method not allowed', 'METHOD_NOT_ALLOWED');
+    return createErrorResponse(405, 'Method not allowed', 'METHOD_NOT_ALLOWED', undefined, req);
   } catch (error: unknown) {
-    return handleError(error, 'transactions handler');
+    return handleError(error, 'transactions handler', req);
   }
 });
