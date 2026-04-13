@@ -139,7 +139,7 @@ Deno.serve(async (req: Request) => {
           .maybeSingle();
 
         if (!memberParticipant) {
-          return createErrorResponse(403, 'Forbidden: Not a member of this group', 'PERMISSION_DENIED');
+          return createErrorResponse(403, 'Forbidden: Not a member of this group', 'PERMISSION_DENIED', undefined, req);
         }
 
         query = query.eq('group_id', groupId);
@@ -163,24 +163,24 @@ Deno.serve(async (req: Request) => {
         currentUserEmail
       );
 
-      return createSuccessResponse({ settlements: enrichedSettlements }, 200, 0);
+      return createSuccessResponse({ settlements: enrichedSettlements }, 200, 0, req);
     }
 
     if (req.method === 'POST') {
       if (!body) {
-        return createErrorResponse(400, 'Request body is required', 'VALIDATION_ERROR');
+        return createErrorResponse(400, 'Request body is required', 'VALIDATION_ERROR', undefined, req);
       }
 
       let settlementData: CreateSettlementRequest;
       try {
         settlementData = JSON.parse(body);
       } catch {
-        return createErrorResponse(400, 'Invalid JSON in request body', 'VALIDATION_ERROR');
+        return createErrorResponse(400, 'Invalid JSON in request body', 'VALIDATION_ERROR', undefined, req);
       }
 
       const validation = validateSettlementData(settlementData);
       if (!validation.valid) {
-        return createErrorResponse(400, validation.error || 'Invalid settlement data', 'VALIDATION_ERROR');
+        return createErrorResponse(400, validation.error || 'Invalid settlement data', 'VALIDATION_ERROR', undefined, req);
       }
 
       if (!settlementData.group_id || !settlementData.from_participant_id || !settlementData.to_participant_id || !settlementData.amount) {
@@ -196,7 +196,7 @@ Deno.serve(async (req: Request) => {
         .maybeSingle();
 
       if (!creatorParticipant) {
-        return createErrorResponse(403, 'Forbidden: Not a member of this group', 'PERMISSION_DENIED');
+        return createErrorResponse(403, 'Forbidden: Not a member of this group', 'PERMISSION_DENIED', undefined, req);
       }
 
       // Ensure at least one of the participants is the creator (or creator is an owner)
@@ -229,23 +229,23 @@ Deno.serve(async (req: Request) => {
         currentUserEmail
       );
 
-      return createSuccessResponse({ settlement: enrichedSettlement }, 201);
+      return createSuccessResponse({ settlement: enrichedSettlement }, 201, 0, req);
     }
 
     if (req.method === 'PUT') {
       if (!body) {
-        return createErrorResponse(400, 'Request body is required', 'VALIDATION_ERROR');
+        return createErrorResponse(400, 'Request body is required', 'VALIDATION_ERROR', undefined, req);
       }
 
       let updateData: { id: string; amount?: number; currency?: string; notes?: string };
       try {
         updateData = JSON.parse(body);
       } catch {
-        return createErrorResponse(400, 'Invalid JSON in request body', 'VALIDATION_ERROR');
+        return createErrorResponse(400, 'Invalid JSON in request body', 'VALIDATION_ERROR', undefined, req);
       }
 
       if (!updateData.id) {
-        return createErrorResponse(400, 'Settlement id is required', 'VALIDATION_ERROR');
+        return createErrorResponse(400, 'Settlement id is required', 'VALIDATION_ERROR', undefined, req);
       }
 
       const { data: existingSettlement, error: fetchError } = await supabase
@@ -255,11 +255,11 @@ Deno.serve(async (req: Request) => {
         .single();
 
       if (fetchError || !existingSettlement) {
-        return createErrorResponse(404, 'Settlement not found', 'NOT_FOUND');
+        return createErrorResponse(404, 'Settlement not found', 'NOT_FOUND', undefined, req);
       }
 
       if (existingSettlement.created_by !== currentUserId) {
-        return createErrorResponse(403, 'Forbidden: You can only update settlements you created', 'PERMISSION_DENIED');
+        return createErrorResponse(403, 'Forbidden: You can only update settlements you created', 'PERMISSION_DENIED', undefined, req);
       }
 
       const updateFields: any = {};
@@ -286,7 +286,7 @@ Deno.serve(async (req: Request) => {
         currentUserEmail
       );
 
-      return createSuccessResponse({ settlement: enrichedSettlement }, 200);
+      return createSuccessResponse({ settlement: enrichedSettlement }, 200, 0, req);
     }
 
     if (req.method === 'DELETE') {
@@ -294,7 +294,7 @@ Deno.serve(async (req: Request) => {
       const settlementId = url.searchParams.get('id');
 
       if (!settlementId) {
-        return createErrorResponse(400, 'Settlement id is required', 'VALIDATION_ERROR');
+        return createErrorResponse(400, 'Settlement id is required', 'VALIDATION_ERROR', undefined, req);
       }
 
       const { data: existingSettlement, error: fetchError } = await supabase
@@ -304,11 +304,11 @@ Deno.serve(async (req: Request) => {
         .single();
 
       if (fetchError || !existingSettlement) {
-        return createErrorResponse(404, 'Settlement not found', 'NOT_FOUND');
+        return createErrorResponse(404, 'Settlement not found', 'NOT_FOUND', undefined, req);
       }
 
       if (existingSettlement.created_by !== currentUserId) {
-        return createErrorResponse(403, 'Forbidden: You can only delete settlements you created', 'PERMISSION_DENIED');
+        return createErrorResponse(403, 'Forbidden: You can only delete settlements you created', 'PERMISSION_DENIED', undefined, req);
       }
 
       const { error: deleteError } = await supabase
@@ -320,11 +320,11 @@ Deno.serve(async (req: Request) => {
         return handleError(deleteError, 'deleting settlement', req);
       }
 
-      return createEmptyResponse(204);
+      return createEmptyResponse(204, req);
     }
 
-    return createErrorResponse(405, 'Method not allowed', 'METHOD_NOT_ALLOWED');
+    return createErrorResponse(405, 'Method not allowed', 'METHOD_NOT_ALLOWED', undefined, req);
   } catch (error: unknown) {
-    return handleError(error, 'settlements handler');
+    return handleError(error, 'settlements handler', req);
   }
 });
