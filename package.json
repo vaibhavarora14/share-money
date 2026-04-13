@@ -11,7 +11,10 @@
     "bootstrap": "npm install --workspaces --include-workspace-root",
     "dev:mobile": "npm run start --workspace=mobile",
     "dev:server": "supabase functions serve --env-file supabase/.env",
-    "dev:web": "npm run dev --workspace=web"
+    "dev:web": "npm run dev --workspace=web",
+    "test:invite-regression:sql": "bash scripts/test-invite-regression-sql.sh",
+    "test:invite-regression:api": "node supabase/tests/invite-reconciliation/api/run-api-regression.mjs",
+    "test:invite-regression:local": "bash scripts/test-invite-regression-local.sh"
   },
   "devDependencies": {
     "imagemin": "^9.0.1",

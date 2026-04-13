@@ -1,0 +1,40 @@
+name: Nightly Maestro Invite Smoke
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  maestro-smoke:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      MAESTRO_CLOUD_API_KEY: ${{ secrets.MAESTRO_CLOUD_API_KEY }}
+      MAESTRO_APP_URL: ${{ secrets.MAESTRO_APP_URL }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Skip when Maestro secrets are missing
+        if: ${{ env.MAESTRO_CLOUD_API_KEY == '' || env.MAESTRO_APP_URL == '' }}
+        run: |
+          echo "Skipping nightly Maestro smoke: MAESTRO_CLOUD_API_KEY or MAESTRO_APP_URL is not configured."
+
+      - name: Install Maestro CLI
+        if: ${{ env.MAESTRO_CLOUD_API_KEY != '' && env.MAESTRO_APP_URL != '' }}
+        run: curl -Ls "https://get.maestro.mobile.dev" | bash
+
+      - name: Download app artifact
+        if: ${{ env.MAESTRO_CLOUD_API_KEY != '' && env.MAESTRO_APP_URL != '' }}
+        run: curl -L "$MAESTRO_APP_URL" -o app-under-test.apk
+
+      - name: Run nightly invite reconcile smoke flow
+        if: ${{ env.MAESTRO_CLOUD_API_KEY != '' && env.MAESTRO_APP_URL != '' }}
+        run: |
+          export PATH="$PATH:$HOME/.maestro/bin"
+          maestro cloud \
+            --api-key "$MAESTRO_CLOUD_API_KEY" \
+            --app app-under-test.apk \
+            mobile/.maestro/invite-reconcile-smoke.yaml

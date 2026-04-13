@@ -27,6 +27,7 @@ npm run test:e2e
 ```bash
 maestro test .maestro/sign-in-success.yaml
 maestro test .maestro/group-details.yaml
+maestro test .maestro/invite-reconcile-smoke.yaml
 ```
 
 ## Test Data
@@ -34,6 +35,7 @@ maestro test .maestro/group-details.yaml
 Tests use the seed data from `supabase/seed.sql`:
 - **Test User**: alice@test.com
 - **Password**: testpassword123
+- Additional smoke user: diana@test.com / testpassword123
 
 Make sure your database is seeded before running tests:
 ```bash

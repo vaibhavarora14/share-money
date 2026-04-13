@@ -1,0 +1,40 @@
+name: Invite Reconciliation Auto Heal
+
+on:
+  schedule:
+    - cron: "15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  auto-heal:
+    runs-on: ubuntu-latest
+    environment: Production
+    env:
+      SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate required secret
+        run: |
+          if [ -z "$SUPABASE_DATABASE_URL" ]; then
+            echo "SUPABASE_DATABASE_URL is required to run auto-heal."
+            exit 1
+          fi
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Run reconciliation auto-heal SQL
+        run: |
+          psql "$SUPABASE_DATABASE_URL" \
+            -v ON_ERROR_STOP=1 \
+            -f "supabase/tests/invite-reconciliation/sql/auto_heal_existing_users.sql"
+
+      - name: Summarize runbook reminder
+        if: failure()
+        run: |
+          echo "Auto-heal failed. Follow docs/invite-reconciliation-runbook.md for triage."

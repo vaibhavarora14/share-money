@@ -1,0 +1,23 @@
+appId: com.sharemoney.app
+---
+# Nightly smoke: sign-in then verify group visibility surface.
+# This is non-blocking and intended for hosted nightly checks.
+
+- runFlow: signout.yaml
+- waitForAnimationToEnd
+
+- tapOn:
+    text: "Email"
+- inputText: "diana@test.com"
+- tapOn:
+    text: "Password"
+- inputText: "testpassword123"
+- hideKeyboard
+- tapOn:
+    text: "Sign In"
+- waitForAnimationToEnd
+
+- assertVisible: "Your Groups"
+- assertVisible: "Summer Vacation 2024"
+
+- runFlow: signout.yaml

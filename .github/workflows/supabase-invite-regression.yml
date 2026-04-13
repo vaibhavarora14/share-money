@@ -1,0 +1,36 @@
+name: Supabase Invite Regression
+
+on:
+  pull_request:
+    paths:
+      - "supabase/**"
+      - "mobile/contexts/AuthContext.tsx"
+      - ".github/workflows/supabase-invite-regression.yml"
+      - "scripts/test-invite-regression-*.sh"
+      - "package.json"
+  workflow_dispatch:
+
+jobs:
+  invite-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run local invite SQL + API regression suite
+        run: npm run test:invite-regression:local
