@@ -45,6 +45,12 @@ interface UsersResponse {
   users: SupabaseUser[];
 }
 
+interface ReconcileResult {
+  accepted_count: number;
+  failed_count: number;
+  processed_count: number;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return createEmptyResponse(200, req);
@@ -70,6 +76,23 @@ Deno.serve(async (req: Request) => {
     const parsedPath = parsePath(url.pathname);
     const invitationId = parsedPath.resource === 'invitations' ? parsedPath.id : null;
     const action = parsedPath.resource === 'invitations' ? parsedPath.action : null;
+
+    // Handle POST /invitations/reconcile - Best-effort invite reconciliation on sign-in
+    if (httpMethod === 'POST' && invitationId === 'reconcile' && !action) {
+      const { data, error: rpcError } = await supabase.rpc('reconcile_pending_invitations_for_user');
+
+      if (rpcError) {
+        return handleError(rpcError, 'reconciling pending invitations', req);
+      }
+
+      const result = (Array.isArray(data) ? data[0] : data) as ReconcileResult | null;
+      return createSuccessResponse({
+        success: true,
+        accepted_count: result?.accepted_count ?? 0,
+        failed_count: result?.failed_count ?? 0,
+        processed_count: result?.processed_count ?? 0,
+      }, 200, 0, req);
+    }
 
     // Handle POST /invitations - Create invitation
     if (httpMethod === 'POST' && !invitationId) {

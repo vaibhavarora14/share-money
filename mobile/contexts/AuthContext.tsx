@@ -9,11 +9,13 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { Platform } from "react-native";
 import { AUTH_TIMEOUTS } from "../constants/auth";
 import { supabase } from "../supabase";
+import { fetchWithAuth } from "../utils/api";
 import { log, logError } from "../utils/logger";
 
 // Complete the auth session when browser closes
@@ -140,6 +142,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const lastReconciledUserIdRef = useRef<string | null>(null);
 
   // Helper to update auth state and sync with Sentry
   // Wrapped in useCallback to maintain stable reference for useEffect dependency
@@ -159,6 +162,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         : null
     );
   }, []);
+
+  const reconcilePendingInvitations = useCallback(
+    async (nextSession: Session | null) => {
+      const nextUserId = nextSession?.user?.id;
+      if (!nextUserId || !nextSession?.user?.email) return;
+      if (lastReconciledUserIdRef.current === nextUserId) return;
+
+      try {
+        await fetchWithAuth("/invitations/reconcile", { method: "POST" });
+        lastReconciledUserIdRef.current = nextUserId;
+      } catch (error) {
+        // Best-effort recovery. Auth and app flow should continue if this fails.
+        logError(error, {
+          context: "reconcilePendingInvitations",
+          errorType: "best_effort_failed",
+        });
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -225,11 +248,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     // This includes TOKEN_REFRESHED events from Supabase's automatic token refresh
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_, session) => {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
       // Check mounted flag to prevent state updates after unmount
       if (!mounted) return;
 
+      if (event === "SIGNED_OUT") {
+        lastReconciledUserIdRef.current = null;
+      }
+
       updateAuthState(session);
+
+      if (event === "INITIAL_SESSION" || event === "SIGNED_IN") {
+        await reconcilePendingInvitations(session);
+      }
     });
 
     return () => {
@@ -239,7 +270,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       }
       subscription.unsubscribe();
     };
-  }, [updateAuthState]);
+  }, [reconcilePendingInvitations, updateAuthState]);
 
   /**
    * Signs in a user with email and password
