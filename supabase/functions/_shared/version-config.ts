@@ -9,7 +9,7 @@ export const VERSION_CONFIG = {
   // Minimum app version required to use the API
   // Apps below this version will receive HTTP 426 (Upgrade Required)
   // Format: MAJOR.MINOR.PATCH (semver)
-  MIN_SUPPORTED_VERSION: "2.0.0",
+  MIN_SUPPORTED_VERSION: "2.5.0",
 
   // Current latest version (informational)
   LATEST_VERSION: "2.5.0",
