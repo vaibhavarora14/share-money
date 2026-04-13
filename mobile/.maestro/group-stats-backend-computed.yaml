@@ -9,6 +9,8 @@ appId: com.sharemoney.app
 - tapOn: "Summer Vacation 2024"
 - waitForAnimationToEnd
 - assertVisible: "Transactions"
+- assertVisible: "₹39,375.00"
+- assertVisible: "₹157,500.00"
 - tapOn: "Group summary"
 - waitForAnimationToEnd
 
@@ -16,6 +18,7 @@ appId: com.sharemoney.app
 - assertVisible: "Group Summary"
 - assertVisible: "Totals"
 - assertVisible: "Settle Up"
+- assertVisible: "₹157,500.00"
 
 # Verify settlement-plan view renders backend-derived list
 - tapOn: "Settle Up"

@@ -18,6 +18,7 @@ function invalidateSettlementAdjacents(queryClient: QueryClient, groupId?: strin
   queryClient.invalidateQueries({ queryKey: queryKeys.settlements(groupId) });
   queryClient.invalidateQueries({ queryKey: ["balances"] }); // Invalidate all balances (including global)
   queryClient.invalidateQueries({ queryKey: queryKeys.balances(groupId) });
+  queryClient.invalidateQueries({ queryKey: queryKeys.groupStats(groupId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.activity(groupId) });
 }
 

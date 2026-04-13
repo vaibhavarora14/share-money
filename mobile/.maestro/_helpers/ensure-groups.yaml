@@ -50,8 +50,10 @@ appId: com.sharemoney.app
       visible: "Welcome Back"
     commands:
       - tapOn: "Email"
+      - eraseText
       - inputText: "alice@test.com"
       - tapOn: "Password"
+      - eraseText
       - inputText: "testpassword123"
       - hideKeyboard
       - tapOn: "Sign In"
@@ -61,11 +63,13 @@ appId: com.sharemoney.app
       visible: "Sign In"
     commands:
       - tapOn: "Email"
+      - eraseText
       - inputText: "alice@test.com"
       - tapOn: "Password"
+      - eraseText
       - inputText: "testpassword123"
       - hideKeyboard
       - tapOn: "Sign In"
       - waitForAnimationToEnd
 
-- assertVisible: "Your Groups"
+- assertVisible: "Summer Vacation 2024"

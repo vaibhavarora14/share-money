@@ -9,6 +9,8 @@ appId: com.sharemoney.app
 - tapOn: "Summer Vacation 2024"
 - waitForAnimationToEnd
 - assertVisible: "Transactions"
+- assertVisible: "₹39,375.00"
+- assertVisible: "₹157,500.00"
 
 # Exercise transaction list scrolling
 - swipe:
@@ -34,6 +36,29 @@ appId: com.sharemoney.app
       text: "Car rental for the week"
     direction: DOWN
     timeout: 10000
+
+# Ensure dashboard metrics remain stable after paginated scrolling
+- scrollUntilVisible:
+    element:
+      text: "₹39,375.00"
+    direction: UP
+    timeout: 10000
+- assertVisible: "₹39,375.00"
+- assertVisible: "₹157,500.00"
+
+# Navigate back to dashboard stats after pagination interactions
+- scrollUntilVisible:
+    element:
+      text: "Group summary"
+    direction: UP
+    timeout: 10000
+- tapOn: "Group summary"
+- waitForAnimationToEnd
+- assertVisible: "Group Summary"
+- assertVisible: "Settle Up"
+- assertVisible: "₹157,500.00"
+- pressKey: "Back"
+- waitForAnimationToEnd
 
 # Navigate back and sign out
 - tapOn: "Navigate back"

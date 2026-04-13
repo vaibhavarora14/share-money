@@ -21,7 +21,7 @@ import { MembersList } from "../components/MembersList";
 import { TransactionsSection } from "../components/TransactionsSection";
 import { useAuth } from "../contexts/AuthContext";
 import { useActivity } from "../hooks/useActivity";
-import { useBalances } from "../hooks/useBalances";
+import { useBalances, useGroupStats } from "../hooks/useBalances";
 import {
   useCancelInvitation,
   useGroupInvitations,
@@ -154,6 +154,11 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     refetch: refetchBalances,
   } = useBalances(initialGroup.id);
   const {
+    data: groupStats,
+    isLoading: groupStatsLoading,
+    refetch: refetchGroupStats,
+  } = useGroupStats(initialGroup.id);
+  const {
     data: settlementsData,
     isLoading: settlementsLoading,
     refetch: refetchSettlements,
@@ -252,6 +257,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     refetchTx();
     refetchActivity();
     refetchBalances();
+    refetchGroupStats();
     refetchSettlements();
   };
 
@@ -752,12 +758,10 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           // DASHBOARD & LIST VIEW
           <>
             <GroupDashboard
-              balances={balancesData?.group_balances?.[0]?.balances || []}
-              transactions={transactions || []}
+              groupStats={groupStats}
               currentUserId={session?.user?.id}
-              currentUserParticipantId={group.members?.find(m => m.user_id === session?.user?.id)?.participant_id}
               loading={balancesLoading}
-              defaultCurrency={getDefaultCurrency()}
+              statsLoading={groupStatsLoading}
               onSettlePress={(balance) => {
                   setSettlingBalance(balance);
                   setShowSettlementForm(true);
