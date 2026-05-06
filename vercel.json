@@ -2,5 +2,19 @@
   "buildCommand": "npm ci --prefix web && npm run build --prefix web",
   "outputDirectory": "web/dist",
   "installCommand": "echo 'Skipping root install'",
-  "framework": null
+  "framework": null,
+  "rewrites": [
+    {
+      "source": "/privacy",
+      "destination": "/privacy.html"
+    },
+    {
+      "source": "/delete-account",
+      "destination": "/delete-account.html"
+    },
+    {
+      "source": "/account-deletion",
+      "destination": "/delete-account.html"
+    }
+  ]
 }
