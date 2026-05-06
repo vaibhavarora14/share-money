@@ -686,7 +686,7 @@ function App() {
                 Contact Support
               </a>
               <a
-                href="https://vaibhavarora14.github.io/share-money/privacy.html"
+                href="/privacy.html"
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{
