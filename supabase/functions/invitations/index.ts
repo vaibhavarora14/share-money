@@ -1,8 +1,9 @@
 import { verifyAuth } from '../_shared/auth.ts';
-import { SUPABASE_SERVICE_ROLE_KEY, SUPABASE_URL } from '../_shared/env.ts';
+import { SUPABASE_SERVICE_ROLE_KEY } from '../_shared/env.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { parsePath } from '../_shared/path-parser.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
+import { findUserIdByEmail } from '../_shared/user-lookup.ts';
 import { isValidEmail, isValidUUID, validateBodySize } from '../_shared/validation.ts';
 
 /**
@@ -34,15 +35,6 @@ interface GroupInvitation {
 interface CreateInvitationRequest {
   group_id: string;
   email: string;
-}
-
-interface SupabaseUser {
-  id: string;
-  email?: string;
-}
-
-interface UsersResponse {
-  users: SupabaseUser[];
 }
 
 Deno.serve(async (req: Request) => {
@@ -106,34 +98,92 @@ Deno.serve(async (req: Request) => {
       }
 
       if (SUPABASE_SERVICE_ROLE_KEY) {
-        const findUserResponse = await fetch(
-          `${SUPABASE_URL}/auth/v1/admin/users?email=${encodeURIComponent(normalizedEmail)}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-              'apikey': SUPABASE_SERVICE_ROLE_KEY,
-            },
+        // Exact, case-insensitive lookup against auth.users via SECURITY DEFINER RPC.
+        // (The previous `GET /auth/v1/admin/users?email=...` call silently ignored the
+        // email parameter and only returned the newest page of users, so existing
+        // users were wrongly treated as non-existent.)
+        let targetUserId: string | null;
+        try {
+          targetUserId = await findUserIdByEmail(normalizedEmail);
+        } catch (error: unknown) {
+          return handleError(error, 'searching for user', req);
+        }
+
+        // If the invitee already has an account, add them as a member directly
+        // instead of creating a pending invitation. Invitations are only for
+        // people who don't have an account yet.
+        if (targetUserId) {
+          const { data: existingMember } = await supabase
+            .from('group_members')
+            .select('id, status')
+            .eq('group_id', requestData.group_id)
+            .eq('user_id', targetUserId)
+            .maybeSingle();
+
+          if (existingMember && existingMember.status !== 'left') {
+            return createErrorResponse(400, 'User is already a member of this group', 'VALIDATION_ERROR', undefined, req);
           }
-        );
 
-        if (findUserResponse.ok) {
-          const usersData = await findUserResponse.json() as UsersResponse;
-          const targetUser = Array.isArray(usersData.users) 
-            ? usersData.users.find((u: SupabaseUser) => u.email?.toLowerCase() === normalizedEmail)
-            : usersData.users?.[0];
+          // Accept any pre-existing pending invitation for this email so the
+          // membership and invitation state stay consistent.
+          const { data: pendingInvitation } = await supabase
+            .from('group_invitations')
+            .select('id')
+            .eq('group_id', requestData.group_id)
+            .eq('email', normalizedEmail)
+            .eq('status', 'pending')
+            .maybeSingle();
 
-          if (targetUser && targetUser.id) {
-            const { data: existingMember } = await supabase
+          if (pendingInvitation) {
+            const { error: acceptError } = await supabase.rpc('accept_group_invitation', {
+              invitation_id: pendingInvitation.id,
+              accepting_user_id: targetUserId,
+            });
+
+            if (acceptError) {
+              return handleError(acceptError, 'accepting invitation for existing user', req);
+            }
+          } else if (existingMember && existingMember.status === 'left') {
+            const { error: reactivateError } = await supabase
               .from('group_members')
-              .select('id')
+              .update({ status: 'active', left_at: null, role: 'member' })
               .eq('group_id', requestData.group_id)
-              .eq('user_id', targetUser.id)
-              .single();
+              .eq('user_id', targetUserId);
 
-            if (existingMember) {
-              return createErrorResponse(400, 'User is already a member of this group', 'VALIDATION_ERROR', undefined, req);
+            if (reactivateError) {
+              return handleError(reactivateError, 'reactivating member', req);
+            }
+          } else {
+            const { error: addError } = await supabase
+              .from('group_members')
+              .insert({
+                group_id: requestData.group_id,
+                user_id: targetUserId,
+                role: 'member',
+              });
+
+            if (addError) {
+              return handleError(addError, 'adding member', req);
             }
           }
+
+          const { data: member, error: memberFetchError } = await supabase
+            .from('group_members')
+            .select('id, group_id, user_id, role, joined_at')
+            .eq('group_id', requestData.group_id)
+            .eq('user_id', targetUserId)
+            .single();
+
+          if (memberFetchError || !member) {
+            return handleError(memberFetchError || new Error('Failed to fetch added member'), 'adding member', req);
+          }
+
+          return createSuccessResponse({
+            member: true,
+            message: 'User already has an account and was added to the group as a member.',
+            email: normalizedEmail,
+            ...member,
+          }, 201, 0, req);
         }
       }
 
@@ -230,30 +280,15 @@ Deno.serve(async (req: Request) => {
           }
 
           try {
-            const findUserResponse = await fetch(
-              `${SUPABASE_URL}/auth/v1/admin/users?email=${encodeURIComponent(invitation.email.toLowerCase())}`,
-              {
-                headers: {
-                  'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-                  'apikey': SUPABASE_SERVICE_ROLE_KEY,
-                },
-              }
-            );
+            const invitedUserId = await findUserIdByEmail(invitation.email);
 
-            if (findUserResponse.ok) {
-              const usersData = await findUserResponse.json() as UsersResponse;
-              const targetUser = Array.isArray(usersData.users)
-                ? usersData.users.find((u: SupabaseUser) => u.email?.toLowerCase() === invitation.email.toLowerCase())
-                : usersData.users?.[0];
-
-              if (targetUser?.id) {
-                return {
-                  ...invitation,
-                  user_id: targetUser.id,
-                };
-              }
+            if (invitedUserId) {
+              return {
+                ...invitation,
+                user_id: invitedUserId,
+              };
             }
-          } catch (err) {
+          } catch (_err) {
             // If lookup fails, just return invitation without user_id
             // This is expected for users who haven't signed up yet
           }
