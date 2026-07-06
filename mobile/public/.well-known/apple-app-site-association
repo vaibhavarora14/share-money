@@ -1,0 +1,11 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "BQ8LZKL6TG.com.vaibhavarora.sharemoney",
+        "paths": ["/join/*"]
+      }
+    ]
+  }
+}

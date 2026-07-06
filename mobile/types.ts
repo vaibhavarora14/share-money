@@ -82,7 +82,8 @@ export interface GroupMember {
 export interface GroupInvitation {
   id: string;
   group_id: string;
-  email: string;
+  /** Invitee email; null for shareable link invites */
+  email?: string | null;
   invited_by: string;
   status: 'pending' | 'accepted' | 'expired' | 'cancelled';
   token?: string;
@@ -90,6 +91,10 @@ export interface GroupInvitation {
   created_at: string;
   accepted_at?: string;
   user_id?: string; // User ID if the invited user has signed up
+  /** Link invites: how many users the link admits (null for email invites) */
+  max_uses?: number | null;
+  /** Link invites: how many users have joined through the link */
+  uses_count?: number | null;
 }
 
 export interface GroupWithMembers extends Group {
