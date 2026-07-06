@@ -22,10 +22,14 @@ jobs:
           cache: 'npm'
           cache-dependency-path: mobile/package-lock.json
 
-      - name: 🏗 Setup Expo
+      - name: 🏗 Setup Expo and EAS
         uses: expo/expo-github-action@v8
         with:
           expo-version: latest
+          # eas-cli is required by `npm run deploy:web` (`npx eas deploy`);
+          # it is not a workspace dependency, so without this the deploy step
+          # fails with "could not determine executable to run".
+          eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
       - name: 📦 Install dependencies
