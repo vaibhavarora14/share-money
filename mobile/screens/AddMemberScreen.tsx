@@ -16,7 +16,6 @@ import {
     Appbar,
     Button,
     Divider,
-    SegmentedButtons,
     Text,
     TextInput,
     useTheme,
@@ -35,6 +34,11 @@ interface AddMemberScreenProps {
   onDismiss: () => void;
 }
 
+// Fixed link settings for UI-created links; the RPC stays configurable
+// server-side, the sheet just doesn't expose the knobs.
+const LINK_MAX_USES = 10;
+const LINK_VALID_DAYS = 30;
+
 export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
   visible,
   groupId,
@@ -45,8 +49,6 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
   const [loading, setLoading] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
-  const [linkMaxUses, setLinkMaxUses] = useState<string>("1");
-  const [linkValidDays, setLinkValidDays] = useState<string>("7");
   const [slideAnim] = useState(new Animated.Value(0));
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -81,26 +83,16 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
 
   const generateInviteLink = async (): Promise<string> => {
     // Reuse the link generated in this session so repeated Copy/Share taps
-    // don't mint a new invitation each time (options changes reset it).
+    // don't mint a new invitation each time.
     if (inviteLink) return inviteLink;
     const token = await createShareLink.mutateAsync({
       groupId,
-      maxUses: parseInt(linkMaxUses, 10),
-      validDays: parseInt(linkValidDays, 10),
+      maxUses: LINK_MAX_USES,
+      validDays: LINK_VALID_DAYS,
     });
     const url = `${getInviteLinkBaseUrl()}/join/${token}`;
     setInviteLink(url);
     return url;
-  };
-
-  const handleLinkOptionChange = (
-    setter: (value: string) => void,
-    value: string
-  ) => {
-    setter(value);
-    // Different limits mean a different link; drop the cached one.
-    setInviteLink(null);
-    setLinkCopied(false);
   };
 
   const handleCopyLink = async () => {
@@ -196,7 +188,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
     }
   };
 
-  const bottomSheetHeight = Math.min(screenHeight * 0.72, 620);
+  const bottomSheetHeight = Math.min(screenHeight * 0.58, 520);
   const translateY = slideAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [bottomSheetHeight, 0],
@@ -292,47 +284,6 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                 <Divider style={styles.dividerLine} />
               </View>
 
-              <Text
-                variant="labelMedium"
-                style={[styles.linkOptionLabel, { color: theme.colors.onSurfaceVariant }]}
-              >
-                People who can join with this link
-              </Text>
-              <SegmentedButtons
-                value={linkMaxUses}
-                onValueChange={(value) =>
-                  handleLinkOptionChange(setLinkMaxUses, value)
-                }
-                density="small"
-                buttons={[
-                  { value: "1", label: "1" },
-                  { value: "5", label: "5" },
-                  { value: "10", label: "10" },
-                  { value: "25", label: "25" },
-                ]}
-                style={styles.linkOptionRow}
-              />
-
-              <Text
-                variant="labelMedium"
-                style={[styles.linkOptionLabel, { color: theme.colors.onSurfaceVariant }]}
-              >
-                Link valid for
-              </Text>
-              <SegmentedButtons
-                value={linkValidDays}
-                onValueChange={(value) =>
-                  handleLinkOptionChange(setLinkValidDays, value)
-                }
-                density="small"
-                buttons={[
-                  { value: "1", label: "1 day" },
-                  { value: "7", label: "7 days" },
-                  { value: "30", label: "30 days" },
-                ]}
-                style={styles.linkOptionRow}
-              />
-
               <View style={styles.linkButtonsRow}>
                 <Button
                   mode="outlined"
@@ -372,11 +323,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                 variant="bodySmall"
                 style={[styles.linkHint, { color: theme.colors.onSurfaceVariant }]}
               >
-                {`This link can be used by ${
-                  linkMaxUses === "1" ? "one person" : `up to ${linkMaxUses} people`
-                } and expires in ${
-                  linkValidDays === "1" ? "1 day" : `${linkValidDays} days`
-                }.`}
+                {`Link lets up to ${LINK_MAX_USES} people join · valid ${LINK_VALID_DAYS} days`}
               </Text>
             </ScrollView>
           </KeyboardAvoidingView>
@@ -452,12 +399,6 @@ const styles = StyleSheet.create({
   },
   dividerLine: {
     flex: 1,
-  },
-  linkOptionLabel: {
-    marginBottom: 6,
-  },
-  linkOptionRow: {
-    marginBottom: 16,
   },
   linkButtonsRow: {
     flexDirection: "row",
