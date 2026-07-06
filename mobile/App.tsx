@@ -11,7 +11,6 @@ import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import {
-  Alert,
   Dimensions,
   Platform,
   Text as RNText,
@@ -28,6 +27,7 @@ import {
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BottomNavBar } from "./components/BottomNavBar";
 import { ForceUpdateModal } from "./components/ForceUpdateModal";
+import { BannerNotice, InAppBanner } from "./components/InAppBanner";
 import { JoinGroupPreview } from "./components/JoinGroupPreview";
 import { AUTH_TIMEOUTS } from "./constants/auth";
 import { WEB_MAX_WIDTH } from "./constants/layout";
@@ -36,10 +36,7 @@ import { UpgradeProvider, useUpgrade } from "./contexts/UpgradeContext";
 import { queryKeys } from "./hooks/queryKeys";
 import { fetchActivity } from "./hooks/useActivity";
 import { fetchBalances } from "./hooks/useBalances";
-import {
-  getGroupInvitePreviewRPC,
-  redeemGroupInviteLinkRPC,
-} from "./hooks/useGroupInvitations";
+import { redeemGroupInviteLinkRPC } from "./hooks/useGroupInvitations";
 import {
   useAddMember,
   useCreateGroup,
@@ -65,33 +62,13 @@ import { TransactionFormScreen } from "./screens/TransactionFormScreen";
 import { darkTheme, lightTheme } from "./theme";
 import { Group, GroupWithMembers } from "./types";
 import { getDefaultCurrency } from "./utils/currency";
-import { getUserFriendlyErrorMessage } from "./utils/errorMessages";
-import { extractInviteToken } from "./utils/inviteLinks";
+import {
+  extractInviteToken,
+  getInviteLinkErrorMessage,
+} from "./utils/inviteLinks";
 import { log, logError } from "./utils/logger";
 
 const PENDING_INVITE_TOKEN_KEY = "pending_invite_token";
-
-/** Cross-platform info dialog (react-native-web's Alert is a no-op). */
-function notifyUser(title: string, message: string) {
-  if (Platform.OS === "web" && typeof window !== "undefined") {
-    window.alert(`${title}\n\n${message}`);
-  } else {
-    Alert.alert(title, message);
-  }
-}
-
-/** Cross-platform confirm dialog resolving to the user's choice. */
-function confirmWithUser(title: string, message: string): Promise<boolean> {
-  if (Platform.OS === "web" && typeof window !== "undefined") {
-    return Promise.resolve(window.confirm(`${title}\n\n${message}`));
-  }
-  return new Promise((resolve) => {
-    Alert.alert(title, message, [
-      { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
-      { text: "Join", onPress: () => resolve(true) },
-    ]);
-  });
-}
 
 /** Removes the /join/<token> path from the web URL after handling it. */
 function clearJoinPathFromWebUrl() {
@@ -130,6 +107,8 @@ function AppContent() {
   const [groupRefreshTrigger, setGroupRefreshTrigger] = useState<number>(0);
   const [editingTransaction, setEditingTransaction] = useState<any>(null);
   const [joinToken, setJoinToken] = useState<string | null>(null);
+  const [banner, setBanner] = useState<BannerNotice | null>(null);
+  const dismissBanner = React.useCallback(() => setBanner(null), []);
   const [statsContext, setStatsContext] = useState<{
     groupId: string;
     mode: GroupStatsMode;
@@ -176,62 +155,64 @@ function AppContent() {
   }, [queryClientInstance, session?.user?.id]);
 
   /**
-   * Redeems an invite-link token for the signed-in user.
-   * @param askFirst - show a confirmation with the group preview before joining
+   * Redeems an invite-link token for the signed-in user immediately — no
+   * confirmation ceremony. The outcome is reported through the non-blocking
+   * top banner on the groups screen instead of dialogs.
    */
-  const redeemInviteToken = React.useCallback(
-    async (token: string, askFirst: boolean) => {
-      // Guard against double-processing (initial URL + url event, re-renders)
-      if (redeemingTokenRef.current === token) return;
-      redeemingTokenRef.current = token;
-      try {
-        if (askFirst) {
-          const preview = await getGroupInvitePreviewRPC(token);
-          if (!preview.is_valid) {
-            notifyUser(
-              "Invalid Link",
-              "This invite link is invalid, already used, or expired."
-            );
-            return;
-          }
-          const proceed = await confirmWithUser(
-            "Join Group",
-            `Do you want to join "${preview.group_name}"? (${preview.member_count} ${
-              preview.member_count === 1 ? "member" : "members"
-            })`
-          );
-          if (!proceed) return;
-        }
+  const redeemInviteToken = React.useCallback(async (token: string) => {
+    // Guard against double-processing (initial URL + url event, re-renders)
+    if (redeemingTokenRef.current === token) return;
+    redeemingTokenRef.current = token;
 
-        const result = await redeemGroupInviteLinkRPC(token);
-        groupsListRefetchRef.current?.();
-        setGroupRefreshTrigger((prev) => prev + 1);
+    // Land on the groups screen, where the banner lives.
+    setSelectedGroup(null);
+    setStatsContext(null);
+    setCurrentRoute("groups");
 
-        if (result.status === "already_member") {
-          notifyUser(
-            "Already a member",
-            `You're already a member of "${result.group_name}".`
-          );
-        } else if (result.status === "expired") {
-          notifyUser(
-            "Link expired",
-            "This invite link has expired. Ask for a new one."
-          );
-        } else {
-          notifyUser("Welcome!", `You've joined "${result.group_name}".`);
-        }
-      } catch (err) {
-        logError(err, { context: "redeemInviteToken" });
-        notifyUser("Could not join group", getUserFriendlyErrorMessage(err));
-      } finally {
-        redeemingTokenRef.current = null;
-        setJoinToken(null);
-        await AsyncStorage.removeItem(PENDING_INVITE_TOKEN_KEY).catch(() => {});
-        clearJoinPathFromWebUrl();
+    try {
+      const result = await redeemGroupInviteLinkRPC(token);
+      groupsListRefetchRef.current?.();
+      setGroupRefreshTrigger((prev) => prev + 1);
+
+      const openGroup =
+        result.group_id && result.group_name
+          ? () => {
+              setSelectedGroup({
+                id: result.group_id,
+                name: result.group_name ?? "",
+              } as Group);
+              setCurrentRoute("group-details");
+            }
+          : undefined;
+
+      if (result.status === "already_member") {
+        setBanner({
+          type: "success",
+          message: `You're already a member of "${result.group_name}"`,
+          onPress: openGroup,
+        });
+      } else if (result.status === "expired") {
+        setBanner({
+          type: "error",
+          message: "This invite link has expired. Ask for a new one.",
+        });
+      } else {
+        setBanner({
+          type: "success",
+          message: `You've joined "${result.group_name}"`,
+          onPress: openGroup,
+        });
       }
-    },
-    []
-  );
+    } catch (err) {
+      logError(err, { context: "redeemInviteToken" });
+      setBanner({ type: "error", message: getInviteLinkErrorMessage(err) });
+    } finally {
+      redeemingTokenRef.current = null;
+      setJoinToken(null);
+      await AsyncStorage.removeItem(PENDING_INVITE_TOKEN_KEY).catch(() => {});
+      clearJoinPathFromWebUrl();
+    }
+  }, []);
 
   // Handle invite links: initial URL (cold start / web navigation) + url events
   useEffect(() => {
@@ -240,7 +221,7 @@ function AppContent() {
       if (!token) return;
 
       if (session?.user?.id) {
-        await redeemInviteToken(token, true);
+        await redeemInviteToken(token);
       } else {
         // Remember the token across the auth flow, then show a safe preview.
         await AsyncStorage.setItem(PENDING_INVITE_TOKEN_KEY, token).catch(
@@ -286,8 +267,7 @@ function AppContent() {
         const token = await AsyncStorage.getItem(PENDING_INVITE_TOKEN_KEY);
         if (!token || cancelled) return;
         setJoinToken(null);
-        // No confirmation: the user explicitly chose "Sign In to Join".
-        await redeemInviteToken(token, false);
+        await redeemInviteToken(token);
       } catch (err) {
         logError(err, { context: "pending invite token processing" });
       }
@@ -662,6 +642,7 @@ function AppContent() {
         }}
         refetchTrigger={groupRefreshTrigger}
       />
+      <InAppBanner notice={banner} onDismiss={dismissBanner} />
       <BottomNavBar
         currentRoute={currentRoute}
         onGroupsPress={() => {
