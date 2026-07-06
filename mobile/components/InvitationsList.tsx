@@ -89,7 +89,16 @@ export const InvitationsList: React.FC<InvitationsListProps> = ({
                     isCancelling && { opacity: 0.6 },
                   ]}
                 >
-                  {invitation.email || "Invite link (single use)"}
+                  {invitation.email ||
+                    (() => {
+                      const remaining = Math.max(
+                        (invitation.max_uses ?? 1) - (invitation.uses_count ?? 0),
+                        0
+                      );
+                      return `Invite link (${remaining} ${
+                        remaining === 1 ? "use" : "uses"
+                      } left)`;
+                    })()}
                 </Text>
                 <Text
                   variant="bodyMedium"

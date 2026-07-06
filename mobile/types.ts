@@ -91,6 +91,10 @@ export interface GroupInvitation {
   created_at: string;
   accepted_at?: string;
   user_id?: string; // User ID if the invited user has signed up
+  /** Link invites: how many users the link admits (null for email invites) */
+  max_uses?: number | null;
+  /** Link invites: how many users have joined through the link */
+  uses_count?: number | null;
 }
 
 export interface GroupWithMembers extends Group {

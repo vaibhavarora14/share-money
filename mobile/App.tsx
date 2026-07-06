@@ -174,35 +174,14 @@ function AppContent() {
       groupsListRefetchRef.current?.();
       setGroupRefreshTrigger((prev) => prev + 1);
 
-      const openGroup =
-        result.group_id && result.group_name
-          ? () => {
-              setSelectedGroup({
-                id: result.group_id,
-                name: result.group_name ?? "",
-              } as Group);
-              setCurrentRoute("group-details");
-            }
-          : undefined;
-
-      if (result.status === "already_member") {
-        setBanner({
-          type: "success",
-          message: `You're already a member of "${result.group_name}"`,
-          onPress: openGroup,
-        });
-      } else if (result.status === "expired") {
+      if (result.status === "expired") {
         setBanner({
           type: "error",
           message: "This invite link has expired. Ask for a new one.",
         });
-      } else {
-        setBanner({
-          type: "success",
-          message: `You've joined "${result.group_name}"`,
-          onPress: openGroup,
-        });
       }
+      // 'joined' and 'already_member' are intentionally silent: the joined
+      // group appears in the list with a NEW tag until first opened.
     } catch (err) {
       logError(err, { context: "redeemInviteToken" });
       setBanner({ type: "error", message: getInviteLinkErrorMessage(err) });

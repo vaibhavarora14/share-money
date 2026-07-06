@@ -21,6 +21,7 @@ import {
   getUserFriendlyErrorMessage,
   isSessionExpiredError,
 } from "../utils/errorMessages";
+import { getSeenGroupIds, markGroupSeen } from "../utils/seenGroups";
 import { CreateGroupScreen } from "./CreateGroupScreen";
 
 interface GroupsListScreenProps {
@@ -42,6 +43,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
 }) => {
   const [showCreateGroup, setShowCreateGroup] = useState<boolean>(false);
   const [formerGroupsExpanded, setFormerGroupsExpanded] = useState<boolean>(false);
+  const [seenGroupIds, setSeenGroupIds] = useState<Set<string> | null>(null);
   const theme = useTheme();
   const { signOut, user } = useAuth();
   const { data: groups, isLoading: loading, error, refetch } = useGroups();
@@ -49,6 +51,38 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
     data: balancesData,
     refetch: refetchBalances,
   } = useBalances();
+
+  // Load which groups the user has already opened (for the NEW badge).
+  // First run baselines all current groups so existing members see no badges
+  // (an empty list stores an empty baseline, so a user's first joined group
+  // still gets the badge).
+  useEffect(() => {
+    if (!user?.id || loading) return;
+    let mounted = true;
+    getSeenGroupIds(
+      user.id,
+      groups.map((g) => g.id)
+    ).then((ids) => {
+      if (mounted) setSeenGroupIds(ids);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [user?.id, loading, groups]);
+
+  const handleGroupPress = (group: Group) => {
+    if (user?.id) {
+      // Clear the NEW badge as soon as the group is opened.
+      setSeenGroupIds((prev) => {
+        if (!prev || prev.has(group.id)) return prev;
+        const next = new Set(prev);
+        next.add(group.id);
+        return next;
+      });
+      markGroupSeen(user.id, group.id);
+    }
+    onGroupPress(group);
+  };
 
   // Expose refetch functions to parent component
   React.useEffect(() => {
@@ -85,7 +119,13 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   );
 
   // Helper function to render a group item
-  const renderGroupItem = (group: Group) => (
+  const renderGroupItem = (group: Group) => {
+    const isNew =
+      seenGroupIds !== null &&
+      !seenGroupIds.has(group.id) &&
+      group.user_status !== "left";
+
+    return (
     <Surface
       key={group.id}
       style={[
@@ -96,7 +136,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
     >
       <TouchableOpacity
         style={styles.groupTouchable}
-        onPress={() => onGroupPress(group)}
+        onPress={() => handleGroupPress(group)}
         activeOpacity={0.7}
       >
         <View style={styles.groupMainContent}>
@@ -121,16 +161,34 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
           </View>
 
           <View style={styles.groupInfo}>
-            <Text
-              variant="titleMedium"
-              style={[
-                styles.groupName,
-                group.user_status === 'left' && { color: theme.colors.onSurfaceVariant }
-              ]}
-              numberOfLines={1}
-            >
-              {group.name}
-            </Text>
+            <View style={styles.groupNameRow}>
+              <Text
+                variant="titleMedium"
+                style={[
+                  styles.groupName,
+                  group.user_status === 'left' && { color: theme.colors.onSurfaceVariant }
+                ]}
+                numberOfLines={1}
+              >
+                {group.name}
+              </Text>
+              {isNew && (
+                <View
+                  style={[
+                    styles.newBadge,
+                    { backgroundColor: theme.colors.primary },
+                  ]}
+                  testID={`new-badge-${group.id}`}
+                >
+                  <Text
+                    variant="labelSmall"
+                    style={[styles.newBadgeText, { color: theme.colors.onPrimary }]}
+                  >
+                    NEW
+                  </Text>
+                </View>
+              )}
+            </View>
             <View style={styles.groupMetadata}>
               {group.user_status === 'left' && (
                 <Text 
@@ -166,7 +224,8 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
         />
       </TouchableOpacity>
     </Surface>
-  );
+    );
+  };
 
   if (error) {
     // Don't show Retry button for session expiration - user will be signed out automatically
@@ -398,6 +457,15 @@ const styles = StyleSheet.create({
   groupName: {
     fontWeight: "bold",
     flexShrink: 1,
+  },
+  newBadge: {
+    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 1,
+  },
+  newBadgeText: {
+    fontWeight: "700",
+    letterSpacing: 0.5,
   },
   fab: {
     position: "absolute",

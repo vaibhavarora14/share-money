@@ -5,13 +5,27 @@ import { GroupInvitation } from "../types";
 import { fetchWithAuth } from "../utils/api";
 import { queryKeys } from "./queryKeys";
 
+export interface CreateShareLinkOptions {
+  groupId: string;
+  /** How many users the link can admit (1-100). Default 1. */
+  maxUses?: number;
+  /** Link validity in days (1-90). Default 7. */
+  validDays?: number;
+}
+
 /**
- * Creates a single-use shareable invite link for a group.
+ * Creates a shareable invite link for a group with configurable limits.
  * @returns the secret link token (64 hex chars)
  */
-export async function createGroupShareLinkRPC(groupId: string): Promise<string> {
+export async function createGroupShareLinkRPC({
+  groupId,
+  maxUses = 1,
+  validDays = 7,
+}: CreateShareLinkOptions): Promise<string> {
   const { data, error } = await supabase.rpc("create_group_share_link", {
     p_group_id: groupId,
+    p_max_uses: maxUses,
+    p_valid_days: validDays,
   });
 
   if (error) throw error;
@@ -22,6 +36,8 @@ export interface GroupInvitePreview {
   group_name: string | null;
   member_count: number | null;
   is_valid: boolean;
+  remaining_uses?: number | null;
+  expires_at?: string | null;
 }
 
 /**
@@ -47,6 +63,7 @@ export interface RedeemInviteLinkResult {
   status: "joined" | "already_member" | "expired";
   group_id: string;
   group_name: string | null;
+  remaining_uses?: number;
 }
 
 /**

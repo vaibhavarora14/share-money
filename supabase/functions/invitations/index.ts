@@ -233,7 +233,7 @@ Deno.serve(async (req: Request) => {
 
       let query = supabase
         .from('group_invitations')
-        .select('id, group_id, email, invited_by, status, token, expires_at, created_at, accepted_at')
+        .select('id, group_id, email, invited_by, status, token, expires_at, created_at, accepted_at, max_uses, uses_count')
         .order('created_at', { ascending: false });
 
       if (groupId) {
