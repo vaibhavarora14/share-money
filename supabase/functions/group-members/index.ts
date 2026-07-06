@@ -1,7 +1,8 @@
 import { verifyAuth } from '../_shared/auth.ts';
-import { SUPABASE_SERVICE_ROLE_KEY, SUPABASE_URL } from '../_shared/env.ts';
+import { SUPABASE_SERVICE_ROLE_KEY } from '../_shared/env.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
+import { findUserIdByEmail } from '../_shared/user-lookup.ts';
 import { isValidEmail, isValidUUID, validateBodySize } from '../_shared/validation.ts';
 
 /**
@@ -19,15 +20,6 @@ interface AddMemberRequest {
   group_id: string;
   email: string;
   role?: 'owner' | 'member';
-}
-
-interface SupabaseUser {
-  id: string;
-  email?: string;
-}
-
-interface UsersResponse {
-  users: SupabaseUser[];
 }
 
 async function createInvitation(
@@ -139,68 +131,19 @@ Deno.serve(async (req: Request) => {
           req
         );
       }
-      
-      const findUserResponse = await fetch(
-        `${SUPABASE_URL}/auth/v1/admin/users?email=${encodeURIComponent(normalizedEmail)}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-            'apikey': SUPABASE_SERVICE_ROLE_KEY,
-          },
-        }
-      );
 
-      if (!findUserResponse.ok) {
-        const errorText = await findUserResponse.text();
-        
-        if (findUserResponse.status === 404 || findUserResponse.status === 200) {
-          try {
-            const invitation = await createInvitation(
-              supabase,
-              requestData.group_id,
-              normalizedEmail,
-              currentUser.id
-            );
-
-            if (!invitation) {
-              return createSuccessResponse({
-                invitation: true,
-                message: 'An invitation has already been sent to this email address. The user will be added to the group when they sign up.',
-                email: normalizedEmail,
-              }, 200, 0, req);
-            }
-
-            return createSuccessResponse({
-              invitation: true,
-              message: 'Invitation sent successfully. The user will be added to the group when they sign up.',
-              email: normalizedEmail,
-              invitation_id: invitation.id,
-            }, 201, 0, req);
-          } catch (error: unknown) {
-            const errorMessage = error instanceof Error ? error.message : 'Failed to create invitation';
-            return handleError(new Error(errorMessage), 'creating invitation', req);
-          }
-        }
-        
-        if (findUserResponse.status === 401 || findUserResponse.status === 403) {
-          return createErrorResponse(
-            500,
-            'Server configuration error: Invalid service role key. Please verify SUPABASE_SERVICE_ROLE_KEY is correctly configured in your environment variables.',
-            'CONFIGURATION_ERROR',
-            undefined,
-            req
-          );
-        }
-        
-        return handleError(new Error(`Failed to search for user: ${errorText || 'Unknown error'}`), 'searching for user', req);
+      // Exact, case-insensitive lookup against auth.users via SECURITY DEFINER RPC.
+      // (The previous `GET /auth/v1/admin/users?email=...` call silently ignored the
+      // email parameter and only returned the newest page of users, so existing
+      // users were wrongly treated as non-existent and got pending invitations.)
+      let targetUserId: string | null;
+      try {
+        targetUserId = await findUserIdByEmail(normalizedEmail);
+      } catch (error: unknown) {
+        return handleError(error, 'searching for user', req);
       }
 
-      const usersData = await findUserResponse.json() as UsersResponse;
-      const targetUser = Array.isArray(usersData.users) 
-        ? usersData.users.find((u: SupabaseUser) => u.email?.toLowerCase() === normalizedEmail)
-        : usersData.users?.[0];
-
-      if (!targetUser || !targetUser.id) {
+      if (!targetUserId) {
         try {
           const invitation = await createInvitation(
             supabase,
@@ -234,7 +177,7 @@ Deno.serve(async (req: Request) => {
         .from('group_members')
         .select('id, status')
         .eq('group_id', requestData.group_id)
-        .eq('user_id', targetUser.id)
+        .eq('user_id', targetUserId)
         .single();
 
       if (existingMember) {
@@ -253,7 +196,7 @@ Deno.serve(async (req: Request) => {
               role: requestData.role || 'member',
             })
             .eq('group_id', requestData.group_id)
-            .eq('user_id', targetUser.id)
+            .eq('user_id', targetUserId)
             .select('id, group_id, user_id, role, joined_at')
             .maybeSingle();
 
@@ -267,7 +210,7 @@ Deno.serve(async (req: Request) => {
               .from('group_members')
               .select('id, group_id, user_id, role, joined_at')
               .eq('group_id', requestData.group_id)
-              .eq('user_id', targetUser.id)
+              .eq('user_id', targetUserId)
               .single();
 
             if (fetchError || !fetchedMember) {
@@ -301,7 +244,7 @@ Deno.serve(async (req: Request) => {
       if (pendingInvitation) {
         const { error: acceptError } = await supabase.rpc('accept_group_invitation', {
           invitation_id: pendingInvitation.id,
-          accepting_user_id: targetUser.id,
+          accepting_user_id: targetUserId,
         });
 
         if (!acceptError) {
@@ -309,7 +252,7 @@ Deno.serve(async (req: Request) => {
             .from('group_members')
             .select('id, group_id, user_id, role, joined_at')
             .eq('group_id', requestData.group_id)
-            .eq('user_id', targetUser.id)
+            .eq('user_id', targetUserId)
             .single();
 
           if (member) {
@@ -325,7 +268,7 @@ Deno.serve(async (req: Request) => {
         .from('group_members')
         .insert({
           group_id: requestData.group_id,
-          user_id: targetUser.id,
+          user_id: targetUserId,
           role: requestData.role || 'member',
         })
         .select()
