@@ -22,7 +22,7 @@ import { isValidEmail, isValidUUID, validateBodySize } from '../_shared/validati
 interface GroupInvitation {
   id: string;
   group_id: string;
-  email: string;
+  email: string | null; // null for shareable link invites
   invited_by: string;
   status: 'pending' | 'accepted' | 'expired' | 'cancelled';
   token?: string;
@@ -274,8 +274,9 @@ Deno.serve(async (req: Request) => {
       // Enrich invitations with user_id for invited users who have signed up
       const enrichedInvitations = await Promise.all(
         (invitations || []).map(async (invitation: GroupInvitation) => {
-          // Only look up user_id for pending invitations
-          if (invitation.status !== 'pending' || !SUPABASE_SERVICE_ROLE_KEY) {
+          // Only look up user_id for pending email invitations
+          // (link invitations have no email until redeemed)
+          if (invitation.status !== 'pending' || !invitation.email || !SUPABASE_SERVICE_ROLE_KEY) {
             return invitation;
           }
 

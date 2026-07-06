@@ -40,7 +40,8 @@ export const InvitationsList: React.FC<InvitationsListProps> = ({
     );
   }
 
-  const getInitials = (email: string) => {
+  const getInitials = (email: string | null | undefined) => {
+    if (!email) return "🔗";
     return email.substring(0, 2).toUpperCase();
   };
 
@@ -68,11 +69,17 @@ export const InvitationsList: React.FC<InvitationsListProps> = ({
                 size={40} 
                 label={getInitials(invitation.email)} 
                 style={{ 
-                  backgroundColor: theme.colors.surfaceVariant,
+                  backgroundColor: invitation.email
+                    ? theme.colors.surfaceVariant
+                    : theme.colors.secondaryContainer,
                   marginRight: 16,
                   opacity: 0.7
                 }}
-                color={theme.colors.onSurfaceVariant}
+                color={
+                  invitation.email
+                    ? theme.colors.onSurfaceVariant
+                    : theme.colors.onSecondaryContainer
+                }
               />
               <View style={styles.memberLeft}>
                 <Text
@@ -82,7 +89,7 @@ export const InvitationsList: React.FC<InvitationsListProps> = ({
                     isCancelling && { opacity: 0.6 },
                   ]}
                 >
-                  {invitation.email}
+                  {invitation.email || "Invite link (single use)"}
                 </Text>
                 <Text
                   variant="bodyMedium"
