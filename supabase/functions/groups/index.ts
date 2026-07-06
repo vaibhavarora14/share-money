@@ -131,7 +131,7 @@ Deno.serve(async (req: Request) => {
         .single();
 
       if (groupError || !group) {
-        return createErrorResponse(404, 'Group not found', 'NOT_FOUND');
+        return createErrorResponse(404, 'Group not found', 'NOT_FOUND', undefined, req);
       }
 
       // Get group members
@@ -176,7 +176,7 @@ Deno.serve(async (req: Request) => {
         members: membersWithEmails,
       };
 
-      return createSuccessResponse(groupWithMembers, 200, 0); // No caching - real-time data
+      return createSuccessResponse(groupWithMembers, 200, 0, req); // No caching - real-time data
     }
 
     // Handle POST /groups - Create new group
@@ -218,10 +218,10 @@ Deno.serve(async (req: Request) => {
         .single();
 
       if (fetchError || !group) {
-        return handleError(fetchError || new Error('Group not found after creation'), 'fetching created group');
+        return handleError(fetchError || new Error('Group not found after creation'), 'fetching created group', req);
       }
 
-      return createSuccessResponse(group, 201);
+      return createSuccessResponse(group, 201, 0, req);
     }
 
     // Method not allowed
