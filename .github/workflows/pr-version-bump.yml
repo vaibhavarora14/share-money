@@ -113,15 +113,20 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git config user.name "share-money-version-bot"
-          git config user.email "version-bot@users.noreply.github.com"
+          # The commit AUTHOR must be a Vercel-authorized identity (the repo
+          # owner): Vercel blocks deployments for commits by unknown authors
+          # on personal accounts, which failed PR preview checks whenever the
+          # bot's commit was the branch head. The "[bot]" tag stays in the
+          # commit MESSAGE for transparency — only the author field matters.
+          git config user.name "Vaibhav Arora"
+          git config user.email "contact@sharedmoney.app"
           git add mobile/version.json supabase/functions/_shared/version-config.ts
           # Do NOT add a skip-ci marker here: squash merges inherit it into the
           # merge commit message, which makes GitHub skip ALL push-triggered
           # deploy workflows on main. Recursion is not a concern because this
           # push uses the default GITHUB_TOKEN (such pushes never trigger new
           # workflow runs), and the diff guard above is a no-op on re-runs.
-          git commit -m "chore: auto-sync version with PR title"
+          git commit -m "chore: auto-sync version with PR title [bot]"
           git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }} HEAD:${{ github.head_ref }}
 
       - name: Fail for forks without maintainer access
