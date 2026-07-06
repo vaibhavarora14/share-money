@@ -32,32 +32,8 @@ export async function createGroupShareLinkRPC({
   return data as string;
 }
 
-export interface GroupInvitePreview {
-  group_name: string | null;
-  member_count: number | null;
-  is_valid: boolean;
-  remaining_uses?: number | null;
-  expires_at?: string | null;
-}
-
-/**
- * Fetches a safe preview (group name + member count) for an invite-link token.
- * Works for logged-out users too.
- */
-export async function getGroupInvitePreviewRPC(
-  token: string
-): Promise<GroupInvitePreview> {
-  const { data, error } = await supabase.rpc("get_group_invite_preview", {
-    p_token: token,
-  });
-  if (error) throw error;
-
-  const row = Array.isArray(data) ? data[0] : data;
-  if (!row) {
-    return { group_name: null, member_count: null, is_valid: false };
-  }
-  return row as GroupInvitePreview;
-}
+// Note: the anon-safe `get_group_invite_preview` RPC still exists server-side
+// (harmless, usable by tooling); the app no longer shows a preview screen.
 
 export interface RedeemInviteLinkResult {
   status: "joined" | "already_member" | "expired";

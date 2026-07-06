@@ -28,7 +28,6 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BottomNavBar } from "./components/BottomNavBar";
 import { ForceUpdateModal } from "./components/ForceUpdateModal";
 import { BannerNotice, InAppBanner } from "./components/InAppBanner";
-import { JoinGroupPreview } from "./components/JoinGroupPreview";
 import { AUTH_TIMEOUTS } from "./constants/auth";
 import { WEB_MAX_WIDTH } from "./constants/layout";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -106,7 +105,6 @@ function AppContent() {
     useState<number>(0);
   const [groupRefreshTrigger, setGroupRefreshTrigger] = useState<number>(0);
   const [editingTransaction, setEditingTransaction] = useState<any>(null);
-  const [joinToken, setJoinToken] = useState<string | null>(null);
   const [banner, setBanner] = useState<BannerNotice | null>(null);
   const dismissBanner = React.useCallback(() => setBanner(null), []);
   const [statsContext, setStatsContext] = useState<{
@@ -186,8 +184,9 @@ function AppContent() {
       logError(err, { context: "redeemInviteToken" });
       setBanner({ type: "error", message: getInviteLinkErrorMessage(err) });
     } finally {
+      // Consume the token exactly once: clear storage and the URL so no
+      // re-render, remount, or auth-state change can re-trigger a redeem.
       redeemingTokenRef.current = null;
-      setJoinToken(null);
       await AsyncStorage.removeItem(PENDING_INVITE_TOKEN_KEY).catch(() => {});
       clearJoinPathFromWebUrl();
     }
@@ -202,11 +201,15 @@ function AppContent() {
       if (session?.user?.id) {
         await redeemInviteToken(token);
       } else {
-        // Remember the token across the auth flow, then show a safe preview.
+        // Logged out: stash the token for post-auth redemption and go
+        // straight to the sign-in screen (no preview step). Clean the URL
+        // immediately — leaving /join/<token> in the address bar during the
+        // auth flow is what allowed re-processing (remounts, url events) to
+        // yank users back to a join screen mid-sign-in.
         await AsyncStorage.setItem(PENDING_INVITE_TOKEN_KEY, token).catch(
           () => {}
         );
-        setJoinToken(token);
+        clearJoinPathFromWebUrl();
       }
     };
 
@@ -245,7 +248,6 @@ function AppContent() {
       try {
         const token = await AsyncStorage.getItem(PENDING_INVITE_TOKEN_KEY);
         if (!token || cancelled) return;
-        setJoinToken(null);
         await redeemInviteToken(token);
       } catch (err) {
         logError(err, { context: "pending invite token processing" });
@@ -439,26 +441,8 @@ function AppContent() {
   }
 
   if (!session) {
-    if (joinToken) {
-      return (
-        <>
-          <JoinGroupPreview
-            token={joinToken}
-            onLogin={() => {
-              // Token stays in AsyncStorage; the post-auth effect redeems it.
-              setJoinToken(null);
-            }}
-            onCancel={() => {
-              setJoinToken(null);
-              AsyncStorage.removeItem(PENDING_INVITE_TOKEN_KEY).catch(() => {});
-              clearJoinPathFromWebUrl();
-            }}
-          />
-          <StatusBar style={theme.dark ? "light" : "dark"} />
-        </>
-      );
-    }
-
+    // Join links land here directly: the token is already stashed and will
+    // be redeemed right after sign-in/sign-up (no preview step).
     return (
       <>
         <AuthScreen
