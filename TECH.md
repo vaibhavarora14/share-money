@@ -248,79 +248,51 @@ supabase functions deploy function-name
 
 ### GitHub Actions (CI/CD)
 
-#### Database Migrations
+#### Database Migrations (manual)
 
-Automatic Supabase migrations are configured via GitHub Actions. When code is merged to the `main` branch, any new migration files in `supabase/migrations/` are automatically applied to the production database.
+Database migrations are **not** automated. The old `supabase-migrations.yml` workflow
+was removed; new migration files in `supabase/migrations/` must be applied manually
+with the Supabase CLI:
 
-#### Setup Instructions
+```bash
+# Link to your project (first time only)
+supabase link --project-ref your-project-id
 
-1. **Get Database Connection String:**
-   - Go to your Supabase project dashboard
-   - Navigate to Settings > Database
-   - Under "Connection string" section, select "URI" format
-   - Copy the connection string (it will look like: `postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres`)
-   - **Important**: For migrations, use the **Direct connection** (port 5432) instead of pooler (port 6543)
-   - Replace `[PASSWORD]` with your actual database password
-   - **CRITICAL**: If your password contains special characters, you must URL-encode them:
-     - `#` → `%23`
-     - `@` → `%40`
-     - `:` → `%3A`
-     - `/` → `%2F`
-     - `?` → `%3F`
-     - `&` → `%26`
-     - `=` → `%3D`
-   - Format: `postgresql://postgres:[URL-ENCODED-PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres`
-   - Example: If password is `my#pass@word`, use `my%23pass%40word`
+# Apply pending migrations to production
+supabase db push
+```
 
-2. **Configure GitHub Secrets:**
-   - Go to your GitHub repository
-   - Navigate to Settings > Environments > Production (or create a new environment)
-   - Click "Add secret"
-   - Add the following secret:
-     - `SUPABASE_DATABASE_URL` - Your database connection string (direct connection, port 5432)
+Run `supabase db push` before (or together with) merging PRs whose edge functions
+depend on new database objects, so the deployed functions never reference missing
+tables/functions.
 
-3. **Test the workflow:**
-   - Push a new migration file to `supabase/migrations/`
-   - Create a PR or merge to `main` branch
-   - Check the Actions tab to see the migration workflow run
-
-#### How It Works
-
-The workflow (`.github/workflows/supabase-migrations.yml`) automatically:
-
-1. **Triggers** on push to `main` branch or PRs when migration files change
-2. **Validates** that the `SUPABASE_DATABASE_URL` secret is configured
-3. **Installs** PostgreSQL client (`psql`)
-4. **On PRs**: Validates migration files (dry-run, no changes applied)
-5. **On main branch**: Applies all migration files in order using `psql`
-6. **Reports** success or failure status
-
-#### Manual Triggering
-
-You can also manually trigger the workflow:
-- Go to Actions tab in GitHub
-- Select "Apply Supabase Migrations" workflow
-- Click "Run workflow"
-
-#### Failure Handling
-
-- If migrations fail, the workflow will:
-  - Exit with an error code
-  - Display error messages in the Actions log
-  - Prevent further deployment steps (if configured)
-- Always check the workflow logs if a migration fails
-- Fix any issues in the migration SQL and push again
-
-#### Security Notes
+**Security notes:**
 
 - Never commit secrets to the repository
 - Rotate access tokens periodically
-- Use least-privilege access tokens when possible
 - Review migration files before merging to `main`
+
+#### What deploys automatically on merge to `main`
+
+| Target | Mechanism | Trigger |
+|---|---|---|
+| Edge functions | `.github/workflows/deploy-edge-functions.yml` | Push to `main` (any path) + manual dispatch |
+| Web app (Expo web, share-money.expo.app) | `.github/workflows/deploy-web.yml` (`expo export` + `eas deploy --prod`) | Push to `main` (any path) + manual dispatch |
+| Marketing site (`web/`, share-money-web.vercel.app) | Vercel Git integration (not GitHub Actions); `deploy-marketing.yml` is only a build check | Every push |
+| Database migrations | Manual `supabase db push` | — |
+| Android / iOS binaries & OTA updates | Manual (`mobile/build-release*.sh`, `eas submit`, `eas update`) | — |
+
+**Note:** until July 2026, the version bot's commit message contained `[skip ci]`.
+Squash merges inherit that marker into the merge commit message, which made GitHub
+skip ALL push-triggered deploy workflows for any squash-merged PR the bot had
+touched — deploys silently only happened via manual `workflow_dispatch`. The marker
+has been removed from `pr-version-bump.yml`; merge-to-main deploys now run as
+described above. Avoid putting `[skip ci]` in PR titles or commit messages unless
+you intend to suppress the deploy workflows.
 
 #### Edge Functions Deployment
 
-Automatic Edge Functions deployment is configured via GitHub Actions. When code is merged to `main` and files in `supabase/functions/` change, all Edge Functions are automatically deployed to production.
+Automatic Edge Functions deployment is configured via GitHub Actions. On every push to `main` (no path filter), all Edge Functions are deployed to production.
 
 **Setup Instructions:**
 
@@ -346,7 +318,7 @@ Automatic Edge Functions deployment is configured via GitHub Actions. When code 
 
 The workflow (`.github/workflows/deploy-edge-functions.yml`) automatically:
 
-1. **Triggers** on push to `main` branch when Edge Function files change
+1. **Triggers** on any push to `main` branch (and via manual dispatch)
 2. **Installs** Supabase CLI
 3. **Links** to your Supabase project
 4. **Deploys** all Edge Functions using `supabase functions deploy`
