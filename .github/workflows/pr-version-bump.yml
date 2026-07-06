@@ -116,7 +116,12 @@ jobs:
           git config user.name "share-money-version-bot"
           git config user.email "version-bot@users.noreply.github.com"
           git add mobile/version.json supabase/functions/_shared/version-config.ts
-          git commit -m "chore: auto-sync version with PR title [skip ci]"
+          # Do NOT add a skip-ci marker here: squash merges inherit it into the
+          # merge commit message, which makes GitHub skip ALL push-triggered
+          # deploy workflows on main. Recursion is not a concern because this
+          # push uses the default GITHUB_TOKEN (such pushes never trigger new
+          # workflow runs), and the diff guard above is a no-op on re-runs.
+          git commit -m "chore: auto-sync version with PR title"
           git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }} HEAD:${{ github.head_ref }}
 
       - name: Fail for forks without maintainer access
