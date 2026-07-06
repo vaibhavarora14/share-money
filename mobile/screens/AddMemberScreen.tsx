@@ -7,6 +7,7 @@ import {
     Modal,
     Platform,
     ScrollView,
+    Share,
     StyleSheet,
     TouchableOpacity,
     View,
@@ -14,6 +15,7 @@ import {
 import {
     Appbar,
     Button,
+    Divider,
     Text,
     TextInput,
     useTheme,
@@ -21,6 +23,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WEB_MAX_WIDTH } from "../constants/layout";
 import { useAuth } from "../contexts/AuthContext";
+import { useCreateGroupShareLink } from "../hooks/useGroupInvitations";
+import { getInviteLinkBaseUrl } from "../utils/inviteLinks";
 import { showErrorAlert } from "../utils/errorHandling";
 
 interface AddMemberScreenProps {
@@ -30,6 +34,11 @@ interface AddMemberScreenProps {
   onDismiss: () => void;
 }
 
+// Fixed link settings for UI-created links; the RPC stays configurable
+// server-side, the sheet just doesn't expose the knobs.
+const LINK_MAX_USES = 10;
+const LINK_VALID_DAYS = 30;
+
 export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
   visible,
   groupId,
@@ -38,11 +47,14 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
 }) => {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [slideAnim] = useState(new Animated.Value(0));
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const screenHeight = Dimensions.get("window").height;
   const { signOut } = useAuth();
+  const createShareLink = useCreateGroupShareLink();
 
   // Animation effect
   useEffect(() => {
@@ -64,7 +76,78 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
 
   const handleDismiss = () => {
     setEmail("");
+    setInviteLink(null);
+    setLinkCopied(false);
     onDismiss();
+  };
+
+  const generateInviteLink = async (): Promise<string> => {
+    // Reuse the link generated in this session so repeated Copy/Share taps
+    // don't mint a new invitation each time.
+    if (inviteLink) return inviteLink;
+    const token = await createShareLink.mutateAsync({
+      groupId,
+      maxUses: LINK_MAX_USES,
+      validDays: LINK_VALID_DAYS,
+    });
+    const url = `${getInviteLinkBaseUrl()}/join/${token}`;
+    setInviteLink(url);
+    return url;
+  };
+
+  const handleCopyLink = async () => {
+    setLoading(true);
+    try {
+      const url = await generateInviteLink();
+
+      if (Platform.OS === "web") {
+        if (typeof navigator !== "undefined" && navigator.clipboard) {
+          await navigator.clipboard.writeText(url);
+          setLinkCopied(true);
+        }
+        // Link is also shown inline below the buttons as a fallback.
+      } else {
+        // Native: the share sheet allows copying on both platforms.
+        await Share.share({ message: url, url });
+      }
+    } catch (err) {
+      showErrorAlert(err, signOut, "Error creating invite link");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleShareLink = async () => {
+    setLoading(true);
+    try {
+      const url = await generateInviteLink();
+
+      if (Platform.OS === "web") {
+        if (typeof navigator !== "undefined" && navigator.share) {
+          await navigator.share({
+            title: "Join my group on ShareMoney!",
+            text: `Join my group on ShareMoney! ${url}`,
+            url,
+          });
+        } else if (typeof navigator !== "undefined" && navigator.clipboard) {
+          await navigator.clipboard.writeText(url);
+          setLinkCopied(true);
+        }
+      } else {
+        await Share.share({
+          message: `Join my group on ShareMoney! ${url}`,
+          url, // iOS only
+        });
+      }
+    } catch (err) {
+      // Ignore user-cancelled shares
+      const message = err instanceof Error ? err.message : "";
+      if (!/abort|cancel/i.test(message)) {
+        showErrorAlert(err, signOut, "Error sharing invite link");
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleAdd = async () => {
@@ -105,7 +188,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
     }
   };
 
-  const bottomSheetHeight = screenHeight * 0.5;
+  const bottomSheetHeight = Math.min(screenHeight * 0.58, 520);
   const translateY = slideAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [bottomSheetHeight, 0],
@@ -192,6 +275,56 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
               >
                 Add Member
               </Button>
+
+              <View style={styles.dividerRow}>
+                <Divider style={styles.dividerLine} />
+                <Text style={{ marginHorizontal: 16, color: theme.colors.outline }}>
+                  OR
+                </Text>
+                <Divider style={styles.dividerLine} />
+              </View>
+
+              <View style={styles.linkButtonsRow}>
+                <Button
+                  mode="outlined"
+                  onPress={handleCopyLink}
+                  disabled={loading}
+                  loading={createShareLink.isPending}
+                  icon="content-copy"
+                  style={styles.linkButton}
+                  testID="copy-invite-link-button"
+                >
+                  {Platform.OS === "web" && linkCopied ? "Copied!" : "Copy Link"}
+                </Button>
+                <Button
+                  mode="outlined"
+                  onPress={handleShareLink}
+                  disabled={loading}
+                  loading={createShareLink.isPending}
+                  icon="share-variant"
+                  style={styles.linkButton}
+                  testID="share-invite-link-button"
+                >
+                  Share
+                </Button>
+              </View>
+
+              {inviteLink && (
+                <Text
+                  variant="bodySmall"
+                  selectable
+                  style={[styles.linkPreview, { color: theme.colors.primary }]}
+                >
+                  {inviteLink}
+                </Text>
+              )}
+
+              <Text
+                variant="bodySmall"
+                style={[styles.linkHint, { color: theme.colors.onSurfaceVariant }]}
+              >
+                {`Link lets up to ${LINK_MAX_USES} people join · valid ${LINK_VALID_DAYS} days`}
+              </Text>
             </ScrollView>
           </KeyboardAvoidingView>
         </Animated.View>
@@ -258,5 +391,28 @@ const styles = StyleSheet.create({
   },
   addButton: {
     marginTop: 8,
+  },
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 24,
+  },
+  dividerLine: {
+    flex: 1,
+  },
+  linkButtonsRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  linkButton: {
+    flex: 1,
+  },
+  linkPreview: {
+    textAlign: "center",
+    marginTop: 12,
+  },
+  linkHint: {
+    textAlign: "center",
+    marginTop: 12,
   },
 });

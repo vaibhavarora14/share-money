@@ -50,6 +50,17 @@ module.exports = ({ config }) => {
   const isDevelopmentBuild = !!process.env.EAS_BUILD_PROFILE || 
                              process.env.EXPO_PUBLIC_USE_DEV_CLIENT === 'true';
 
+  // Hostname for Universal Links (iOS) / App Links (Android), used by the
+  // group invite-link feature. When unset, only the custom scheme is used.
+  let appUrlHostname = null;
+  try {
+    if (process.env.EXPO_PUBLIC_APP_URL) {
+      appUrlHostname = new URL(process.env.EXPO_PUBLIC_APP_URL).hostname;
+    }
+  } catch (e) {
+    console.warn('Warning: EXPO_PUBLIC_APP_URL is invalid; Universal/App Links disabled');
+  }
+
   return {
     ...config,
     expo: {
@@ -72,7 +83,10 @@ module.exports = ({ config }) => {
         supportsTablet: true,
         bundleIdentifier: "com.vaibhavarora.sharemoney",
         scheme: "com.vaibhavarora.sharemoney",
-        buildNumber: versionConfig.buildNumber.toString()
+        buildNumber: versionConfig.buildNumber.toString(),
+        // Universal Links for invite links; requires the
+        // apple-app-site-association file hosted at the app URL.
+        associatedDomains: appUrlHostname ? [`applinks:${appUrlHostname}`] : []
       },
       android: {
         package: "com.vaibhavarora.sharemoney",
@@ -83,7 +97,21 @@ module.exports = ({ config }) => {
           foregroundImage: "./assets/adaptive-icon.png",
           backgroundColor: "#14B8A6"
         },
-        edgeToEdgeEnabled: true
+        edgeToEdgeEnabled: true,
+        // App Links for invite links; requires assetlinks.json hosted at
+        // https://<host>/.well-known/assetlinks.json
+        intentFilters: appUrlHostname
+          ? [
+              {
+                action: "VIEW",
+                autoVerify: true,
+                data: [
+                  { scheme: "https", host: appUrlHostname, pathPrefix: "/join" }
+                ],
+                category: ["BROWSABLE", "DEFAULT"]
+              }
+            ]
+          : []
       },
       web: {
         favicon: "./assets/favicon.png"
