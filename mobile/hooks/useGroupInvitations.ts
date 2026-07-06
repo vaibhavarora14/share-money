@@ -1,8 +1,90 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
+import { supabase } from "../supabase";
 import { GroupInvitation } from "../types";
 import { fetchWithAuth } from "../utils/api";
 import { queryKeys } from "./queryKeys";
+
+export interface CreateShareLinkOptions {
+  groupId: string;
+  /** How many users the link can admit (1-100). Default 1. */
+  maxUses?: number;
+  /** Link validity in days (1-90). Default 7. */
+  validDays?: number;
+}
+
+/**
+ * Creates a shareable invite link for a group with configurable limits.
+ * @returns the secret link token (64 hex chars)
+ */
+export async function createGroupShareLinkRPC({
+  groupId,
+  maxUses = 1,
+  validDays = 7,
+}: CreateShareLinkOptions): Promise<string> {
+  const { data, error } = await supabase.rpc("create_group_share_link", {
+    p_group_id: groupId,
+    p_max_uses: maxUses,
+    p_valid_days: validDays,
+  });
+
+  if (error) throw error;
+  return data as string;
+}
+
+export interface GroupInvitePreview {
+  group_name: string | null;
+  member_count: number | null;
+  is_valid: boolean;
+  remaining_uses?: number | null;
+  expires_at?: string | null;
+}
+
+/**
+ * Fetches a safe preview (group name + member count) for an invite-link token.
+ * Works for logged-out users too.
+ */
+export async function getGroupInvitePreviewRPC(
+  token: string
+): Promise<GroupInvitePreview> {
+  const { data, error } = await supabase.rpc("get_group_invite_preview", {
+    p_token: token,
+  });
+  if (error) throw error;
+
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) {
+    return { group_name: null, member_count: null, is_valid: false };
+  }
+  return row as GroupInvitePreview;
+}
+
+export interface RedeemInviteLinkResult {
+  status: "joined" | "already_member" | "expired";
+  group_id: string;
+  group_name: string | null;
+  remaining_uses?: number;
+}
+
+/**
+ * Atomically redeems a single-use invite link for the signed-in user.
+ * Authorization happens server-side via auth.uid().
+ */
+export async function redeemGroupInviteLinkRPC(
+  token: string
+): Promise<RedeemInviteLinkResult> {
+  const { data, error } = await supabase.rpc("redeem_group_invite_link", {
+    p_token: token,
+  });
+  if (error) throw error;
+  return data as RedeemInviteLinkResult;
+}
+
+export function useCreateGroupShareLink() {
+  return useMutation({
+    mutationFn: createGroupShareLinkRPC,
+  });
+}
 
 export async function fetchGroupInvitations(
   groupId: string

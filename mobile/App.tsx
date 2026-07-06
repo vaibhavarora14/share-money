@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Sentry from "@sentry/react-native";
 import { Session } from "@supabase/supabase-js";
 import {
@@ -5,6 +6,7 @@ import {
   QueryClientProvider,
   useQueryClient,
 } from "@tanstack/react-query";
+import * as Linking from "expo-linking";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
@@ -25,6 +27,8 @@ import {
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BottomNavBar } from "./components/BottomNavBar";
 import { ForceUpdateModal } from "./components/ForceUpdateModal";
+import { BannerNotice, InAppBanner } from "./components/InAppBanner";
+import { JoinGroupPreview } from "./components/JoinGroupPreview";
 import { AUTH_TIMEOUTS } from "./constants/auth";
 import { WEB_MAX_WIDTH } from "./constants/layout";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -32,6 +36,7 @@ import { UpgradeProvider, useUpgrade } from "./contexts/UpgradeContext";
 import { queryKeys } from "./hooks/queryKeys";
 import { fetchActivity } from "./hooks/useActivity";
 import { fetchBalances } from "./hooks/useBalances";
+import { redeemGroupInviteLinkRPC } from "./hooks/useGroupInvitations";
 import {
   useAddMember,
   useCreateGroup,
@@ -57,7 +62,20 @@ import { TransactionFormScreen } from "./screens/TransactionFormScreen";
 import { darkTheme, lightTheme } from "./theme";
 import { Group, GroupWithMembers } from "./types";
 import { getDefaultCurrency } from "./utils/currency";
+import {
+  extractInviteToken,
+  getInviteLinkErrorMessage,
+} from "./utils/inviteLinks";
 import { log, logError } from "./utils/logger";
+
+const PENDING_INVITE_TOKEN_KEY = "pending_invite_token";
+
+/** Removes the /join/<token> path from the web URL after handling it. */
+function clearJoinPathFromWebUrl() {
+  if (Platform.OS === "web" && typeof window !== "undefined") {
+    window.history.replaceState({}, "", window.location.origin);
+  }
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -88,6 +106,9 @@ function AppContent() {
     useState<number>(0);
   const [groupRefreshTrigger, setGroupRefreshTrigger] = useState<number>(0);
   const [editingTransaction, setEditingTransaction] = useState<any>(null);
+  const [joinToken, setJoinToken] = useState<string | null>(null);
+  const [banner, setBanner] = useState<BannerNotice | null>(null);
+  const dismissBanner = React.useCallback(() => setBanner(null), []);
   const [statsContext, setStatsContext] = useState<{
     groupId: string;
     mode: GroupStatsMode;
@@ -96,6 +117,8 @@ function AppContent() {
   const groupsListRefetchRef = React.useRef<(() => void) | null>(null);
   const lastLoggedStateRef = React.useRef<string | null>(null);
   const stuckTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const initialUrlHandledRef = React.useRef(false);
+  const redeemingTokenRef = React.useRef<string | null>(null);
   const prefetchGroupData = React.useCallback(
     async (groupId: string) => {
       await Promise.all([
@@ -130,6 +153,109 @@ function AppContent() {
       queryClientInstance.clear();
     }
   }, [queryClientInstance, session?.user?.id]);
+
+  /**
+   * Redeems an invite-link token for the signed-in user immediately — no
+   * confirmation ceremony. The outcome is reported through the non-blocking
+   * top banner on the groups screen instead of dialogs.
+   */
+  const redeemInviteToken = React.useCallback(async (token: string) => {
+    // Guard against double-processing (initial URL + url event, re-renders)
+    if (redeemingTokenRef.current === token) return;
+    redeemingTokenRef.current = token;
+
+    // Land on the groups screen, where the banner lives.
+    setSelectedGroup(null);
+    setStatsContext(null);
+    setCurrentRoute("groups");
+
+    try {
+      const result = await redeemGroupInviteLinkRPC(token);
+      groupsListRefetchRef.current?.();
+      setGroupRefreshTrigger((prev) => prev + 1);
+
+      if (result.status === "expired") {
+        setBanner({
+          type: "error",
+          message: "This invite link has expired. Ask for a new one.",
+        });
+      }
+      // 'joined' and 'already_member' are intentionally silent: the joined
+      // group appears in the list with a NEW tag until first opened.
+    } catch (err) {
+      logError(err, { context: "redeemInviteToken" });
+      setBanner({ type: "error", message: getInviteLinkErrorMessage(err) });
+    } finally {
+      redeemingTokenRef.current = null;
+      setJoinToken(null);
+      await AsyncStorage.removeItem(PENDING_INVITE_TOKEN_KEY).catch(() => {});
+      clearJoinPathFromWebUrl();
+    }
+  }, []);
+
+  // Handle invite links: initial URL (cold start / web navigation) + url events
+  useEffect(() => {
+    const handleUrl = async (url: string | null) => {
+      const token = extractInviteToken(url);
+      if (!token) return;
+
+      if (session?.user?.id) {
+        await redeemInviteToken(token);
+      } else {
+        // Remember the token across the auth flow, then show a safe preview.
+        await AsyncStorage.setItem(PENDING_INVITE_TOKEN_KEY, token).catch(
+          () => {}
+        );
+        setJoinToken(token);
+      }
+    };
+
+    const subscription = Linking.addEventListener("url", (event) =>
+      handleUrl(event.url)
+    );
+
+    if (!initialUrlHandledRef.current) {
+      initialUrlHandledRef.current = true;
+      (async () => {
+        try {
+          let url = await Linking.getInitialURL();
+          if (
+            !url &&
+            Platform.OS === "web" &&
+            typeof window !== "undefined"
+          ) {
+            url = window.location.href;
+          }
+          await handleUrl(url);
+        } catch (err) {
+          logError(err, { context: "invite link initial URL" });
+        }
+      })();
+    }
+
+    return () => subscription.remove();
+  }, [session?.user?.id, redeemInviteToken]);
+
+  // After sign-in/sign-up, consume any invite token saved before auth.
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await AsyncStorage.getItem(PENDING_INVITE_TOKEN_KEY);
+        if (!token || cancelled) return;
+        setJoinToken(null);
+        await redeemInviteToken(token);
+      } catch (err) {
+        logError(err, { context: "pending invite token processing" });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.id, redeemInviteToken]);
 
   // Debug routing / loading state to track "stuck on spinner" issues.
   // To avoid noisy duplicate breadcrumbs, only log when the state snapshot changes.
@@ -313,6 +439,26 @@ function AppContent() {
   }
 
   if (!session) {
+    if (joinToken) {
+      return (
+        <>
+          <JoinGroupPreview
+            token={joinToken}
+            onLogin={() => {
+              // Token stays in AsyncStorage; the post-auth effect redeems it.
+              setJoinToken(null);
+            }}
+            onCancel={() => {
+              setJoinToken(null);
+              AsyncStorage.removeItem(PENDING_INVITE_TOKEN_KEY).catch(() => {});
+              clearJoinPathFromWebUrl();
+            }}
+          />
+          <StatusBar style={theme.dark ? "light" : "dark"} />
+        </>
+      );
+    }
+
     return (
       <>
         <AuthScreen
@@ -475,6 +621,7 @@ function AppContent() {
         }}
         refetchTrigger={groupRefreshTrigger}
       />
+      <InAppBanner notice={banner} onDismiss={dismissBanner} />
       <BottomNavBar
         currentRoute={currentRoute}
         onGroupsPress={() => {
