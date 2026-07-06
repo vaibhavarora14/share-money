@@ -66,9 +66,28 @@ jobs:
 
       - name: 🚀 Export and Deploy Web
         working-directory: mobile
-        run: npm run deploy:web
+        run: |
+          # Fail fast if client env is missing: `expo export` inlines
+          # EXPO_PUBLIC_* values at build time, so a bundle built without them
+          # ships with undefined Supabase credentials and crashes on load
+          # (this took production down after the first CI deploy — previous
+          # deploys were manual from a machine with a local .env).
+          # These values are public by design (they ship in every client
+          # bundle); they live in the Production environment secrets.
+          for var in EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_ANON_KEY EXPO_PUBLIC_API_URL; do
+            if [ -z "${!var}" ]; then
+              echo "❌ $var is not set — refusing to build a bundle with missing client env"
+              exit 1
+            fi
+          done
+          npm run deploy:web
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL }}
+          EXPO_PUBLIC_APP_URL: ${{ secrets.EXPO_PUBLIC_APP_URL }}
+          EXPO_PUBLIC_DEFAULT_CURRENCY: ${{ secrets.EXPO_PUBLIC_DEFAULT_CURRENCY }}
 
       - name: 🏥 Post-deployment health check
         run: |
