@@ -682,11 +682,13 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
             onPress={onBack}
             accessibilityLabel="Navigate back"
             testID="back-button"
+            iconColor={theme.colors.onSurface}
+            size={28}
             isLeading
           />
           <Appbar.Content
             title={MODE_COPY[activeMode].title}
-            titleStyle={{ fontWeight: "bold" }}
+            titleStyle={{ fontWeight: "bold", color: theme.colors.onSurface }}
           />
         </Appbar.Header>
         {isCostMode ? renderCostContent() : renderBalanceContent()}
