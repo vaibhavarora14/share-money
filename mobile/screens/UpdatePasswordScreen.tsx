@@ -7,6 +7,7 @@ import {
   View,
 } from "react-native";
 import {
+  Appbar,
   Button,
   HelperText,
   Icon,
@@ -15,6 +16,7 @@ import {
   useTheme,
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { HeaderIconButton } from "../components/HeaderIconButton";
 import { useAuth } from "../contexts/AuthContext";
 import { showAlert } from "../utils/alert";
 
@@ -78,6 +80,19 @@ export const UpdatePasswordScreen: React.FC<UpdatePasswordScreenProps> = ({
       style={[styles.container, { backgroundColor: theme.colors.background }]}
       edges={["top", "bottom"]}
     >
+      <Appbar.Header style={{ backgroundColor: theme.colors.background }}>
+        <HeaderIconButton
+          icon="close"
+          onPress={handleSkip}
+          accessibilityLabel="Close password update"
+          testID="back-button"
+          color={theme.colors.onSurface}
+        />
+        <Appbar.Content
+          title="Update Password"
+          titleStyle={{ fontWeight: "bold" }}
+        />
+      </Appbar.Header>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardView}

@@ -29,6 +29,7 @@ import {
     SafeAreaView,
     useSafeAreaInsets,
 } from "react-native-safe-area-context";
+import { HeaderIconButton } from "../components/HeaderIconButton";
 import { TransactionWebDateField } from "../components/TransactionWebDateField";
 import { WEB_MAX_WIDTH } from "../constants/layout";
 import { useAuth } from "../contexts/AuthContext";
@@ -473,7 +474,13 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     >
       {/* Header */}
       <Appbar.Header style={[styles.header, { backgroundColor: theme.colors.background }]}>
-        <Appbar.BackAction onPress={onDismiss} />
+        <HeaderIconButton
+          icon="chevron-left"
+          onPress={onDismiss}
+          accessibilityLabel="Navigate back"
+          testID="back-button"
+          color={theme.colors.onSurface}
+        />
         <Appbar.Content
           title={transaction ? "Edit Expense" : "Add Expense"}
           titleStyle={{ fontWeight: "600" }}

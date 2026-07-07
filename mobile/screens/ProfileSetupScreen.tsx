@@ -19,6 +19,7 @@ import {
 } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CountryCodePicker } from "../components/CountryCodePicker";
+import { HeaderIconButton } from "../components/HeaderIconButton";
 import { useAuth } from "../contexts/AuthContext";
 import { useProfile } from "../hooks/useProfile";
 import {
@@ -189,7 +190,13 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
       <Appbar.Header style={{ backgroundColor: theme.colors.background }}>
         {onBack ? (
           <>
-            <Appbar.BackAction onPress={onBack} />
+            <HeaderIconButton
+              icon="chevron-left"
+              onPress={onBack}
+              accessibilityLabel="Navigate back"
+              testID="back-button"
+              color={theme.colors.onSurface}
+            />
             <Appbar.Content
               title="Edit Profile"
               titleStyle={{ fontWeight: "bold" }}

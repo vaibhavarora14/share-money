@@ -12,6 +12,7 @@ import {
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BalancesSection } from "../components/BalancesSection";
+import { HeaderIconButton } from "../components/HeaderIconButton";
 import { useAuth } from "../contexts/AuthContext";
 import { useBalances, useGroupStats } from "../hooks/useBalances";
 import { useGroupDetails } from "../hooks/useGroups";
@@ -677,14 +678,12 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
     <>
       <SafeAreaView style={[styles.container, colorStyles.container]}>
         <Appbar.Header style={colorStyles.appbar}>
-          <Appbar.Action
-            icon="arrow-left"
+          <HeaderIconButton
+            icon="chevron-left"
             onPress={onBack}
             accessibilityLabel="Navigate back"
             testID="back-button"
-            iconColor={theme.colors.onSurface}
-            size={28}
-            isLeading
+            color={theme.colors.onSurface}
           />
           <Appbar.Content
             title={MODE_COPY[activeMode].title}

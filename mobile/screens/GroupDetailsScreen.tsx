@@ -14,6 +14,7 @@ import {
 } from "react-native-paper";
 import { ActivityFeed } from "../components/ActivityFeed";
 import { GroupDashboard } from "../components/GroupDashboard";
+import { HeaderIconButton } from "../components/HeaderIconButton";
 import { InvitationsList } from "../components/InvitationsList";
 import { MembersList } from "../components/MembersList";
 import { TransactionsSection } from "../components/TransactionsSection";
@@ -571,7 +572,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
       <Appbar.Header style={{ backgroundColor: theme.colors.background }}>
-        <Appbar.BackAction
+        <HeaderIconButton
+          icon="chevron-left"
           onPress={() => {
             if (showMembers) {
               setShowMembers(false);
@@ -581,6 +583,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           }}
           accessibilityLabel="Navigate back"
           testID="back-button"
+          color={theme.colors.onSurface}
         />
         <Appbar.Content
           title={showMembers ? "Group Members" : group.name}

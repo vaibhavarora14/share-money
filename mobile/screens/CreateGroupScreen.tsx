@@ -7,11 +7,17 @@ import {
     StyleSheet,
     View,
 } from "react-native";
-import { Appbar, Button, TextInput, useTheme } from "react-native-paper";
+import {
+    Appbar,
+    Button,
+    TextInput,
+    useTheme,
+} from "react-native-paper";
 import {
     SafeAreaView,
     useSafeAreaInsets,
 } from "react-native-safe-area-context";
+import { HeaderIconButton } from "../components/HeaderIconButton";
 import { WEB_MAX_WIDTH } from "../constants/layout";
 import { useAuth } from "../contexts/AuthContext";
 import { showAlert } from "../utils/alert";
@@ -84,7 +90,13 @@ export const CreateGroupScreen: React.FC<CreateGroupScreenProps> = ({
             style={[styles.header, { backgroundColor: theme.colors.surface }]}
             elevated
           >
-            <Appbar.BackAction onPress={handleDismiss} />
+            <HeaderIconButton
+              icon="close"
+              onPress={handleDismiss}
+              accessibilityLabel="Close create group"
+              testID="back-button"
+              color={theme.colors.onSurface}
+            />
             <Appbar.Content
               title="Create New Group"
               titleStyle={{ fontWeight: "bold" }}

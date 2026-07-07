@@ -7,8 +7,15 @@ import {
     StyleSheet,
     View,
 } from "react-native";
-import { Appbar, Button, Text, TextInput, useTheme } from "react-native-paper";
+import {
+    Appbar,
+    Button,
+    Text,
+    TextInput,
+    useTheme,
+} from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { HeaderIconButton } from "../components/HeaderIconButton";
 import { WEB_MAX_WIDTH } from "../constants/layout";
 import { Balance, GroupMember, Participant, Settlement } from "../types";
 import {
@@ -314,7 +321,13 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
           keyboardVerticalOffset={insets.top}
         >
           <Appbar.Header>
-            <Appbar.Action icon="close" onPress={onDismiss} />
+            <HeaderIconButton
+              icon="close"
+              onPress={onDismiss}
+              accessibilityLabel="Close settlement"
+              testID="back-button"
+              color={theme.colors.onSurface}
+            />
             <Appbar.Content title={isEditing ? "Edit Settlement" : "Settle Up"} />
           </Appbar.Header>
 

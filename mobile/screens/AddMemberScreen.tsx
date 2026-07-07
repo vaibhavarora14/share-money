@@ -20,6 +20,7 @@ import {
     useTheme,
 } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { HeaderIconButton } from "../components/HeaderIconButton";
 import { WEB_MAX_WIDTH } from "../constants/layout";
 import { useAuth } from "../contexts/AuthContext";
 import { useCreateGroupShareLink } from "../hooks/useGroupInvitations";
@@ -228,7 +229,13 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
           </View>
           <Appbar.Header style={styles.header}>
             <Appbar.Content title="Add Member" titleStyle={{ fontWeight: 'bold' }} />
-            <Appbar.Action icon="close" onPress={handleDismiss} />
+            <HeaderIconButton
+              icon="close"
+              onPress={handleDismiss}
+              accessibilityLabel="Close add member"
+              testID="back-button"
+              color={theme.colors.onSurface}
+            />
           </Appbar.Header>
           <KeyboardAvoidingView
             behavior={Platform.OS === "ios" ? "padding" : "height"}
