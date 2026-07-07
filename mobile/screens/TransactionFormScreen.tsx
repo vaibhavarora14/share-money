@@ -1,7 +1,6 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    Alert,
     BackHandler,
     FlatList,
     KeyboardAvoidingView,
@@ -41,6 +40,7 @@ import {
     getCurrencySymbol,
     getDefaultCurrency,
 } from "../utils/currency";
+import { showAlert } from "../utils/alert";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 
 interface TransactionFormScreenProps {
@@ -404,7 +404,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
         split_among_participant_ids: isGroupExpense ? splitAmong : undefined,
       });
     } catch (error) {
-      Alert.alert("Error", getUserFriendlyErrorMessage(error));
+      showAlert("Error", getUserFriendlyErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -417,7 +417,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       try {
         await onDelete();
       } catch (error) {
-        Alert.alert("Error", getUserFriendlyErrorMessage(error));
+        showAlert("Error", getUserFriendlyErrorMessage(error));
       } finally {
         setLoading(false);
       }

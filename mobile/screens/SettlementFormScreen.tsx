@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-    Alert,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -17,6 +16,7 @@ import {
     getCurrencySymbol,
     getDefaultCurrency,
 } from "../utils/currency";
+import { showAlert } from "../utils/alert";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 
 interface SettlementFormScreenProps {
@@ -224,7 +224,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
             const currentParticipantId = currentMember?.participant_id;
 
             if (!currentParticipantId) {
-            Alert.alert("Error", "Unable to identify your participant record in this group");
+            showAlert("Error", "Unable to identify your participant record in this group");
             return;
             }
 
@@ -237,12 +237,12 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
             } else if (selectedToParticipantId) {
             otherParticipantId = selectedToParticipantId;
             } else {
-            Alert.alert("Error", "Please select a member to settle with");
+            showAlert("Error", "Please select a member to settle with");
             return;
             }
 
             if (!otherParticipantId) {
-            Alert.alert("Error", "Selected member does not have a valid participant record");
+            showAlert("Error", "Selected member does not have a valid participant record");
             return;
             }
 
@@ -267,7 +267,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
       setSelectedToParticipantId("");
       setAmountError("");
     } catch (error) {
-      Alert.alert("Error", getUserFriendlyErrorMessage(error));
+      showAlert("Error", getUserFriendlyErrorMessage(error));
     } finally {
       setLoading(false);
     }

@@ -1,4 +1,4 @@
-import { Alert } from "react-native";
+import { showAlert } from "./alert";
 import {
   getUserFriendlyErrorMessage,
   isSessionExpiredError,
@@ -32,15 +32,8 @@ export function showErrorAlert(
         context: "signOut on session expiration",
       });
     });
-
-    // Show alert to inform user (sign out already happened)
-    Alert.alert(
-      title,
-      message,
-      [{ text: "OK", style: "default" }]
-    );
-  } else {
-    Alert.alert(title, message, [{ text: "OK", style: "default" }]);
   }
+
+  showAlert(title, message);
 }
 

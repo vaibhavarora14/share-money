@@ -1,6 +1,5 @@
 import React, { useRef, useState } from "react";
 import {
-    Alert,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -15,6 +14,7 @@ import {
 } from "react-native-safe-area-context";
 import { WEB_MAX_WIDTH } from "../constants/layout";
 import { useAuth } from "../contexts/AuthContext";
+import { showAlert } from "../utils/alert";
 import { showErrorAlert } from "../utils/errorHandling";
 
 interface CreateGroupScreenProps {
@@ -48,7 +48,7 @@ export const CreateGroupScreen: React.FC<CreateGroupScreenProps> = ({
   const handleCreate = async () => {
     // Validation
     if (!name.trim()) {
-      Alert.alert("Error", "Please enter a group name");
+      showAlert("Error", "Please enter a group name");
       return;
     }
 

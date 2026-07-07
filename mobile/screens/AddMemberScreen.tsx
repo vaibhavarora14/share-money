@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import {
-    Alert,
     Animated,
     Dimensions,
     KeyboardAvoidingView,
@@ -25,6 +24,7 @@ import { WEB_MAX_WIDTH } from "../constants/layout";
 import { useAuth } from "../contexts/AuthContext";
 import { useCreateGroupShareLink } from "../hooks/useGroupInvitations";
 import { getInviteLinkBaseUrl } from "../utils/inviteLinks";
+import { showAlert } from "../utils/alert";
 import { showErrorAlert } from "../utils/errorHandling";
 
 interface AddMemberScreenProps {
@@ -153,14 +153,14 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
   const handleAdd = async () => {
     // Validation
     if (!email.trim()) {
-      Alert.alert("Error", "Please enter an email address");
+      showAlert("Error", "Please enter an email address");
       return;
     }
 
     // Basic email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email.trim())) {
-      Alert.alert("Error", "Please enter a valid email address");
+      showAlert("Error", "Please enter a valid email address");
       return;
     }
 
@@ -169,13 +169,13 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
       const result = await onAddMember(email.trim());
       // Check if result indicates an invitation was created
       if (result && typeof result === 'object' && 'invitation' in result && result.invitation) {
-        Alert.alert(
+        showAlert(
           "Invitation Sent",
           result.message || "Invitation sent successfully! The user will be added to the group when they sign up.",
           [{ text: "OK", onPress: handleDismiss }]
         );
       } else {
-        Alert.alert(
+        showAlert(
           "Success",
           "Member added successfully!",
           [{ text: "OK", onPress: handleDismiss }]
