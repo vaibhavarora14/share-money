@@ -353,6 +353,13 @@ The workflow (`.github/workflows/deploy-edge-functions.yml`) automatically:
 4. Supabase Edge Function validates token with Supabase
 5. RLS policies filter data by `user_id`
 
+**Password reset:** "Forgot password?" on the sign-in screen sends a Supabase recovery
+email. The link redirects to the web origin (web) or
+`com.vaibhavarora.sharemoney://auth/callback` (native — already in Supabase's allowed
+redirect URLs for OAuth). The app detects the recovery session (`PASSWORD_RECOVERY`
+event on web, `type=recovery` deep link on native) and shows the set-new-password
+screen.
+
 ### Google OAuth Setup
 
 1. Create OAuth credentials in Google Cloud Console (Web application type)

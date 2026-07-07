@@ -3,6 +3,7 @@ import { Session, User } from "@supabase/supabase-js";
 import * as AppleAuthentication from "expo-apple-authentication";
 import * as AuthSession from "expo-auth-session";
 import Constants from "expo-constants";
+import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import React, {
   createContext,
@@ -129,12 +130,28 @@ interface AuthContextType {
   loading: boolean;
   /** Signs in a user with email and password */
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  /** Signs up a new user with email and password */
-  signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
+  /**
+   * Signs up a new user with email and password.
+   * `needsEmailConfirmation` is true when the project requires the user to
+   * confirm their email before a session is created — the UI must tell them
+   * to check their inbox instead of silently doing nothing.
+   */
+  signUp: (
+    email: string,
+    password: string
+  ) => Promise<{ error: Error | null; needsEmailConfirmation?: boolean }>;
   /** Signs in a user with Google OAuth */
   signInWithGoogle: () => Promise<AuthResult>;
   /** Signs in a user with Apple (native on iOS, OAuth elsewhere) */
   signInWithApple: () => Promise<AuthResult>;
+  /** Sends a password-reset email with a recovery link */
+  resetPassword: (email: string) => Promise<{ error: Error | null }>;
+  /** Sets a new password for the current (recovery) session */
+  updatePassword: (newPassword: string) => Promise<{ error: Error | null }>;
+  /** True when the user arrived via a password-recovery link */
+  passwordRecovery: boolean;
+  /** Clears the password-recovery state (e.g. user skipped the reset) */
+  clearPasswordRecovery: () => void;
   /** Signs out the current user */
   signOut: () => void | Promise<void>;
 }
@@ -154,6 +171,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [passwordRecovery, setPasswordRecovery] = useState<boolean>(false);
 
   // Helper to update auth state and sync with Sentry
   // Wrapped in useCallback to maintain stable reference for useEffect dependency
@@ -239,9 +257,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     // This includes TOKEN_REFRESHED events from Supabase's automatic token refresh
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_, session) => {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
       // Check mounted flag to prevent state updates after unmount
       if (!mounted) return;
+
+      // On web, detectSessionInUrl processes recovery links and emits this
+      // event; the app then shows the "set a new password" screen.
+      if (event === "PASSWORD_RECOVERY") {
+        setPasswordRecovery(true);
+      }
 
       updateAuthState(session);
     });
@@ -254,6 +278,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       subscription.unsubscribe();
     };
   }, [updateAuthState]);
+
+  // Native platforms: handle password-recovery deep links
+  // (com.vaibhavarora.sharemoney://auth/callback#...&type=recovery).
+  // Web recovery links are handled by detectSessionInUrl + PASSWORD_RECOVERY.
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+
+    const handleRecoveryUrl = async (url: string | null) => {
+      if (!url || !url.includes("auth/callback")) return;
+
+      const hashMatch = url.match(/#(.+)/);
+      if (!hashMatch || !hashMatch[1]) return;
+
+      const hash = hashMatch[1];
+      if (!/(^|&)type=recovery(&|$)/.test(hash)) return;
+
+      const accessToken = hash.match(/access_token=([^&]+)/)?.[1];
+      const refreshToken = hash.match(/refresh_token=([^&]+)/)?.[1];
+      if (!accessToken || !refreshToken) return;
+
+      try {
+        const { error } = await supabase.auth.setSession({
+          access_token: decodeURIComponent(accessToken),
+          refresh_token: decodeURIComponent(refreshToken),
+        });
+        if (!error) {
+          setPasswordRecovery(true);
+        } else {
+          logError(error, { context: "passwordRecoveryDeepLink" });
+        }
+      } catch (err) {
+        logError(err, { context: "passwordRecoveryDeepLink" });
+      }
+    };
+
+    const subscription = Linking.addEventListener("url", (event) => {
+      void handleRecoveryUrl(event.url);
+    });
+    Linking.getInitialURL()
+      .then((url) => void handleRecoveryUrl(url))
+      .catch(() => {});
+
+    return () => subscription.remove();
+  }, []);
 
   /**
    * Signs in a user with email and password
@@ -299,7 +367,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         return { error: mapAuthError(error, "signUp") };
       }
 
-      return { error };
+      // A user without a session means email confirmation is required before
+      // sign-in; the UI must surface that instead of appearing to do nothing.
+      return {
+        error: null,
+        needsEmailConfirmation: !!data.user && !data.session,
+      };
     } catch (err) {
       logError(err, { context: "signUp" });
       return {
@@ -307,6 +380,63 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           err instanceof Error ? err : new Error("Unknown error in signUp"),
       };
     }
+  }, []);
+
+  /**
+   * Sends a password-reset email containing a recovery link.
+   * The link redirects back into the app (custom scheme on native, origin on
+   * web), where the recovery session triggers the update-password screen.
+   * @param email - The account email to send the recovery link to
+   */
+  const resetPassword = useCallback(async (email: string) => {
+    try {
+      const redirectTo =
+        Platform.OS === "web"
+          ? AuthSession.makeRedirectUri()
+          : "com.vaibhavarora.sharemoney://auth/callback";
+
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo,
+      });
+      return { error };
+    } catch (err) {
+      logError(err, { context: "resetPassword" });
+      return {
+        error:
+          err instanceof Error
+            ? err
+            : new Error("Unknown error in resetPassword"),
+      };
+    }
+  }, []);
+
+  /**
+   * Sets a new password for the currently signed-in (recovery) session and
+   * clears the recovery state.
+   * @param newPassword - The new password
+   */
+  const updatePassword = useCallback(async (newPassword: string) => {
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+      if (!error) {
+        setPasswordRecovery(false);
+      }
+      return { error };
+    } catch (err) {
+      logError(err, { context: "updatePassword" });
+      return {
+        error:
+          err instanceof Error
+            ? err
+            : new Error("Unknown error in updatePassword"),
+      };
+    }
+  }, []);
+
+  const clearPasswordRecovery = useCallback(() => {
+    setPasswordRecovery(false);
   }, []);
 
   /**
@@ -555,6 +685,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       signUp,
       signInWithGoogle,
       signInWithApple,
+      resetPassword,
+      updatePassword,
+      passwordRecovery,
+      clearPasswordRecovery,
       signOut,
     }),
     [
@@ -565,6 +699,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       signUp,
       signInWithGoogle,
       signInWithApple,
+      resetPassword,
+      updatePassword,
+      passwordRecovery,
+      clearPasswordRecovery,
       signOut,
     ]
   );
