@@ -1,5 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import {
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import {
   ActivityIndicator,
   Appbar,
@@ -44,6 +50,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   const [showCreateGroup, setShowCreateGroup] = useState<boolean>(false);
   const [formerGroupsExpanded, setFormerGroupsExpanded] = useState<boolean>(false);
   const [seenGroupIds, setSeenGroupIds] = useState<Set<string> | null>(null);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
   const theme = useTheme();
   const { signOut, user } = useAuth();
   const { data: groups, isLoading: loading, error, refetch } = useGroups();
@@ -107,6 +114,15 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
       showErrorAlert(error, signOut, "Session Expired");
     }
   }, [error, signOut]);
+
+  const handlePullToRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([refetch(), refetchBalances()]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refetch, refetchBalances]);
 
   const isInitialLoading = loading && groups.length === 0;
 
@@ -179,6 +195,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                     { backgroundColor: theme.colors.primary },
                   ]}
                   testID={`new-badge-${group.id}`}
+                  accessibilityLabel="New group"
                 >
                   <Text
                     variant="labelSmall"
@@ -189,31 +206,35 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                 </View>
               )}
             </View>
-            <View style={styles.groupMetadata}>
-              {group.user_status === 'left' && (
-                <Text 
-                  variant="bodySmall"
-                  style={[styles.formerStatusText, { color: theme.colors.error }]}
-                >
-                  Former Member
-                </Text>
-              )}
-              {group.user_status === 'left' && (
-                <Text
-                  variant="bodySmall"
-                  style={[styles.metadataSeparator, { color: theme.colors.onSurfaceVariant }]}
-                >
-                  •
-                </Text>
-              )}
-              <Text
-                variant="bodySmall"
-                style={{ color: theme.colors.onSurfaceVariant, flex: 1 }}
-                numberOfLines={1}
-              >
-                {group.description || "No description"}
-              </Text>
-            </View>
+            {(group.user_status === 'left' || !!group.description) && (
+              <View style={styles.groupMetadata}>
+                {group.user_status === 'left' && (
+                  <Text
+                    variant="bodySmall"
+                    style={[styles.formerStatusText, { color: theme.colors.error }]}
+                  >
+                    Former Member
+                  </Text>
+                )}
+                {group.user_status === 'left' && !!group.description && (
+                  <Text
+                    variant="bodySmall"
+                    style={[styles.metadataSeparator, { color: theme.colors.onSurfaceVariant }]}
+                  >
+                    •
+                  </Text>
+                )}
+                {!!group.description && (
+                  <Text
+                    variant="bodySmall"
+                    style={{ color: theme.colors.onSurfaceVariant, flex: 1 }}
+                    numberOfLines={1}
+                  >
+                    {group.description}
+                  </Text>
+                )}
+              </View>
+            )}
           </View>
         </View>
 
@@ -310,6 +331,14 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handlePullToRefresh}
+              tintColor={theme.colors.primary}
+              colors={[theme.colors.primary]}
+            />
+          }
         >
           {groups.length === 0 ? (
             <View style={styles.emptyContainer}>

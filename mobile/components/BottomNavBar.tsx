@@ -7,43 +7,32 @@ import {
   TouchableRipple,
   useTheme,
 } from "react-native-paper";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ProfileIcon } from "./ProfileIcon";
 
 interface BottomNavBarProps {
   onGroupsPress: () => void;
-  onLogoutPress: () => void;
   onProfilePress: () => void;
   currentRoute: string;
-
 }
 
 export const BottomNavBar: React.FC<BottomNavBarProps> = ({
   onGroupsPress,
-  onLogoutPress,
   onProfilePress,
   currentRoute,
 }) => {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const isGroupsActive = currentRoute === "groups";
   const isProfileActive = currentRoute === "profile";
 
   const renderItem = (
     label: string,
-    icon: string,
-    activeIcon: string,
     isActive: boolean,
     onPress: () => void,
-    isLogout: boolean = false
+    renderIcon: (color: string) => React.ReactNode
   ) => {
-    const iconColor = isLogout
-      ? theme.colors.error
-      : isActive
-      ? theme.colors.onSecondaryContainer
-      : theme.colors.onSurfaceVariant;
-
-    const labelColor = isLogout
-      ? theme.colors.error
-      : isActive
+    const color = isActive
       ? theme.colors.onSecondaryContainer
       : theme.colors.onSurfaceVariant;
 
@@ -52,33 +41,27 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
         onPress={onPress}
         style={styles.tab}
         borderless
-        rippleColor={
-          isLogout
-            ? theme.colors.errorContainer
-            : theme.colors.secondaryContainer
-        }
+        rippleColor={theme.colors.secondaryContainer}
+        accessibilityRole="tab"
+        accessibilityLabel={label}
+        accessibilityState={{ selected: isActive }}
       >
         <View style={styles.tabContent}>
           <View
             style={[
               styles.iconContainer,
-              isActive &&
-                !isLogout && {
-                  backgroundColor: theme.colors.secondaryContainer,
-                },
+              isActive && {
+                backgroundColor: theme.colors.secondaryContainer,
+              },
             ]}
           >
-            <Icon
-              source={isActive ? activeIcon : icon}
-              size={24}
-              color={iconColor}
-            />
+            {renderIcon(color)}
           </View>
           <Text
             variant="labelMedium"
             style={[
               styles.label,
-              { color: labelColor, fontWeight: isActive ? "bold" : "normal" },
+              { color, fontWeight: isActive ? "bold" : "normal" },
             ]}
           >
             {label}
@@ -91,49 +74,23 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
   return (
     <Surface
       elevation={2}
-      style={[styles.container, { backgroundColor: theme.colors.surface }]}
+      style={[
+        styles.container,
+        // Keep the tabs clear of the home indicator / gesture area
+        { backgroundColor: theme.colors.surface, paddingBottom: insets.bottom },
+      ]}
     >
       <View style={styles.content}>
-        {renderItem(
-          "Home",
-          "home-outline",
-          "home",
-          isGroupsActive,
-          onGroupsPress
-        )}
-        <TouchableRipple
-          onPress={onProfilePress}
-          style={styles.tab}
-          borderless
-          rippleColor={theme.colors.secondaryContainer}
-        >
-          <View style={styles.tabContent}>
-            <View
-              style={[
-                styles.iconContainer,
-                isProfileActive && {
-                  backgroundColor: theme.colors.secondaryContainer,
-                },
-              ]}
-            >
-              <ProfileIcon />
-            </View>
-            <Text
-              variant="labelMedium"
-              style={[
-                styles.label,
-                {
-                  color: isProfileActive
-                    ? theme.colors.onSecondaryContainer
-                    : theme.colors.onSurfaceVariant,
-                  fontWeight: isProfileActive ? "bold" : "normal",
-                },
-              ]}
-            >
-              Profile
-            </Text>
-          </View>
-        </TouchableRipple>
+        {renderItem("Home", isGroupsActive, onGroupsPress, (color) => (
+          <Icon
+            source={isGroupsActive ? "home" : "home-outline"}
+            size={24}
+            color={color}
+          />
+        ))}
+        {renderItem("Profile", isProfileActive, onProfilePress, () => (
+          <ProfileIcon />
+        ))}
       </View>
     </Surface>
   );
@@ -147,7 +104,6 @@ const styles = StyleSheet.create({
   content: {
     flexDirection: "row",
     height: 80,
-    paddingBottom: 0, 
   },
   tab: {
     flex: 1,

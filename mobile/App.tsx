@@ -25,6 +25,7 @@ import {
   useTheme,
 } from "react-native-paper";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { AlertHost } from "./components/AlertHost";
 import { BottomNavBar } from "./components/BottomNavBar";
 import { ForceUpdateModal } from "./components/ForceUpdateModal";
 import { BannerNotice, InAppBanner } from "./components/InAppBanner";
@@ -58,6 +59,7 @@ import { GroupStatsMode, GroupStatsScreen } from "./screens/GroupStatsScreen";
 import { GroupsListScreen } from "./screens/GroupsListScreen";
 import { ProfileSetupScreen } from "./screens/ProfileSetupScreen";
 import { TransactionFormScreen } from "./screens/TransactionFormScreen";
+import { UpdatePasswordScreen } from "./screens/UpdatePasswordScreen";
 import { darkTheme, lightTheme } from "./theme";
 import { Group, GroupWithMembers } from "./types";
 import { getDefaultCurrency } from "./utils/currency";
@@ -89,7 +91,7 @@ const queryClient = new QueryClient({
 // ... imports
 
 function AppContent() {
-  const { session, loading, signOut, user } = useAuth();
+  const { session, loading, user, passwordRecovery } = useAuth();
   const theme = useTheme();
   const queryClientInstance = useQueryClient();
   const {
@@ -151,6 +153,31 @@ function AppContent() {
       queryClientInstance.clear();
     }
   }, [queryClientInstance, session?.user?.id]);
+
+  // Gently prompt users who haven't completed their profile (e.g. right
+  // after sign-up) to add a name, so group members can recognize them.
+  // Shown at most once per session and never over another banner.
+  const profilePromptShownRef = React.useRef(false);
+  useEffect(() => {
+    if (
+      !session ||
+      profileLoading ||
+      !profile ||
+      profile.profile_completed ||
+      profilePromptShownRef.current ||
+      banner !== null ||
+      currentRoute !== "groups"
+    ) {
+      return;
+    }
+    profilePromptShownRef.current = true;
+    setBanner({
+      type: "success",
+      message:
+        "Finish setting up your profile — add your name so friends can recognize you. Tap here.",
+      onPress: () => setCurrentRoute("profile"),
+    });
+  }, [session, profileLoading, profile, banner, currentRoute]);
 
   /**
    * Redeems an invite-link token for the signed-in user immediately — no
@@ -454,6 +481,17 @@ function AppContent() {
     );
   }
 
+  // The user arrived via a password-recovery link: let them set a new
+  // password before anything else (skippable — they are already signed in).
+  if (passwordRecovery) {
+    return (
+      <>
+        <UpdatePasswordScreen onComplete={() => setCurrentRoute("groups")} />
+        <StatusBar style={theme.dark ? "light" : "dark"} />
+      </>
+    );
+  }
+
   // Show profile screen
   if (currentRoute === "profile") {
     return (
@@ -474,7 +512,6 @@ function AppContent() {
           onProfilePress={() => {
             setCurrentRoute("profile");
           }}
-          onLogoutPress={signOut}
         />
         <StatusBar style={theme.dark ? "light" : "dark"} />
       </>
@@ -572,7 +609,6 @@ function AppContent() {
             setStatsContext(null);
             setGroupRefreshTrigger((prev) => prev + 1);
           }}
-          onLogoutPress={signOut}
           onProfilePress={() => setCurrentRoute("profile")}
         />
         {showAddMember && selectedGroup && (
@@ -613,7 +649,6 @@ function AppContent() {
           setGroupRefreshTrigger((prev) => prev + 1);
         }}
         onProfilePress={() => setCurrentRoute("profile")}
-        onLogoutPress={signOut}
       />
       <StatusBar style={theme.dark ? "light" : "dark"} />
     </>
@@ -690,11 +725,10 @@ if (!process.env.EXPO_PUBLIC_SENTRY_DSN) {
       // Cast through `any` to avoid TypeScript issues with the
       // experimental mobile replay API typings.
       Sentry.mobileReplayIntegration({
-        // NOTE: These are left as false initially while we test internally.
-        // Before broad production rollout, consider enabling them or
-        // masking specific sensitive screens/inputs.
-        maskAllText: false,
-        maskAllImages: false,
+        // Masked by default: this app shows financial amounts, emails, and
+        // phone numbers, none of which belong in session replays.
+        maskAllText: true,
+        maskAllImages: true,
       }) as any,
     ],
 
@@ -858,6 +892,7 @@ export default function App() {
                   >
                     <AppContent />
                     <ForceUpdateOverlay />
+                    <AlertHost />
                   </View>
                 </AuthProvider>
               </UpgradeProvider>

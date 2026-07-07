@@ -77,7 +77,11 @@ module.exports = ({ config }) => {
       splash: {
         image: "./assets/splash-icon.png",
         resizeMode: "contain",
-        backgroundColor: "#14B8A6"
+        // Matches the average edge color of the splash artwork's indigo
+        // gradient so the letterboxed area blends instead of clashing
+        // (previously teal #14B8A6, which matched neither the artwork nor
+        // the in-app brand blue).
+        backgroundColor: "#322e8c"
       },
       ios: {
         supportsTablet: true,
@@ -97,7 +101,8 @@ module.exports = ({ config }) => {
         usesCleartextTraffic: true,
         adaptiveIcon: {
           foregroundImage: "./assets/adaptive-icon.png",
-          backgroundColor: "#14B8A6"
+          // Matches the icon artwork's indigo gradient (see splash note)
+          backgroundColor: "#322e8c"
         },
         edgeToEdgeEnabled: true,
         // App Links for invite links; requires assetlinks.json hosted at

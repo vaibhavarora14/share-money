@@ -3,31 +3,32 @@
 Audit of the mobile app (`mobile/`) from a UI/UX perspective, grounded in the current code.
 Every finding references the file(s) where it lives so it can be actioned directly.
 
-**Status note:** Finding A1 (Sign in with Apple) is implemented alongside this audit — see
-"Apple Sign-In Setup" in `TECH.md`. A3 (OAuth cancel shows an error alert) is also fixed.
+**Status note:** All findings below have been addressed on this branch. The table records
+what was found and how each item was resolved; the detail sections describe the original
+problem for context.
 
 ---
 
 ## Summary (prioritized)
 
-| # | Severity | Area | Finding |
-|---|----------|------|---------|
-| A1 | High | Auth | No Sign in with Apple — App Store Guideline 4.8 requires it when Google login is offered *(fixed in this PR)* |
-| A2 | High | Auth | No "Forgot password?" flow — users who forget their password are permanently locked out |
-| G1 | High | Feedback | `Alert.alert` is a no-op on web — all validation/error feedback silently disappears in the web build |
-| P1 | High | Privacy/trust | Sentry mobile replay captures unmasked text/images in a finance app |
-| A4 | Medium | Auth | Sign-up shows no "check your email" guidance if email confirmation is enabled in production |
-| A3 | Medium | Auth | Cancelling the Google OAuth sheet shows a "Sign In Failed" error alert *(fixed in this PR)* |
-| N1 | Medium | Layout | `BottomNavBar` doesn't respect the bottom safe-area inset (home-indicator iPhones, edge-to-edge Android) |
-| G2 | Medium | Feedback | No pull-to-refresh on the groups list or group details |
-| X1 | Medium | Accessibility | Almost no accessibility labels/roles across the app; icon-only controls are unlabeled |
-| A5 | Medium | Auth/legal | No Terms/Privacy links at account creation, even though `docs/privacy.html` is shipped |
-| O1 | Medium | Onboarding | Profile setup is never prompted after sign-up; `profile_completed` is tracked but unused |
-| N2 | Low/Med | Navigation | Logout is a single tap on an icon with no confirmation |
-| V1 | Low | Visual | Splash/adaptive-icon background (`#14B8A6` teal) clashes with the brand blue (`#1a73e8`) |
-| A6 | Low | Auth | Sign-up password field doesn't use `new-password` autofill hints; email has no format validation |
-| V2 | Low | Visual | "No description" filler text on group rows adds noise |
-| C1 | Low | Code hygiene | `BottomNavBar` accepts `onLogoutPress` but never renders a logout item |
+| # | Severity | Area | Finding | Status |
+|---|----------|------|---------|--------|
+| A1 | High | Auth | No Sign in with Apple — App Store Guideline 4.8 requires it when Google login is offered | Fixed — native flow on iOS, OAuth on web (see "Apple Sign-In Setup" in `TECH.md`) |
+| A2 | High | Auth | No "Forgot password?" flow — users who forget their password are permanently locked out | Fixed — reset-link flow on `AuthScreen` + `UpdatePasswordScreen` for recovery links |
+| G1 | High | Feedback | `Alert.alert` is a no-op on web — all validation/error feedback silently disappears in the web build | Fixed — `showAlert` wrapper (`utils/alert.ts`) renders a Paper Dialog on web via `AlertHost`; all call sites migrated |
+| P1 | High | Privacy/trust | Sentry mobile replay captures unmasked text/images in a finance app | Fixed — `maskAllText`/`maskAllImages` now `true` |
+| A4 | Medium | Auth | Sign-up shows no "check your email" guidance if email confirmation is enabled in production | Fixed — `signUp` reports `needsEmailConfirmation`; inline notice on the auth screen |
+| A3 | Medium | Auth | Cancelling the Google OAuth sheet shows a "Sign In Failed" error alert | Fixed — cancellations return a typed `cancelled` result and are ignored |
+| N1 | Medium | Layout | `BottomNavBar` doesn't respect the bottom safe-area inset (home-indicator iPhones, edge-to-edge Android) | Fixed — `useSafeAreaInsets().bottom` padding on the bar |
+| G2 | Medium | Feedback | No pull-to-refresh on the groups list or group details | Fixed — `RefreshControl` on both screens, awaiting all data sources |
+| X1 | Medium | Accessibility | Almost no accessibility labels/roles across the app; icon-only controls are unlabeled | Fixed — tab roles/state on bottom nav, labels on logout, password toggles, NEW badge; inline `HelperText` form errors |
+| A5 | Medium | Auth/legal | No Terms/Privacy links at account creation, even though `docs/privacy.html` is shipped | Fixed — privacy-policy link on the auth screen (`constants/links.ts`) |
+| O1 | Medium | Onboarding | Profile setup is never prompted after sign-up; `profile_completed` is tracked but unused | Fixed — once-per-session tappable banner on Groups until the profile is completed |
+| N2 | Low/Med | Navigation | Logout is a single tap on an icon with no confirmation | Fixed — confirmation dialog (web-safe) |
+| V1 | Low | Visual | Splash/adaptive-icon background (`#14B8A6` teal) clashes with the brand indigo/blue artwork | Fixed — background now `#322e8c`, matching the artwork's edge gradient |
+| A6 | Low | Auth | Sign-up password field doesn't use `new-password` autofill hints; email has no format validation | Fixed — mode-aware `autoComplete`/`textContentType`, inline email/password validation |
+| V2 | Low | Visual | "No description" filler text on group rows adds noise | Fixed — description line omitted when empty |
+| C1 | Low | Code hygiene | `BottomNavBar` accepts `onLogoutPress` but never renders a logout item | Fixed — prop removed everywhere |
 
 ---
 
@@ -179,12 +180,14 @@ renders a logout item. Either remove the prop or add the item; today it's mislea
 
 ---
 
-## Suggested order of attack
+## Follow-ups worth considering (beyond this audit's scope)
 
-1. **This PR:** Apple sign-in (A1) + OAuth cancel handling (A3).
-2. **Quick wins, high impact:** web-safe alert wrapper (G1), password reset flow (A2),
-   replay masking (P1), sign-up confirmation messaging (A4).
-3. **Polish pass:** safe-area on bottom nav (N1), pull-to-refresh (G2), Terms/Privacy line (A5),
-   logout confirmation (N2), splash color (V1).
-4. **Accessibility pass (X1):** labels/roles on icon controls and nav tabs, `HelperText` for
-   inline form errors — best done as one sweep with a checklist.
+All audit findings are resolved; these adjacent improvements surfaced during the work and
+could be picked up later:
+
+- Replace the custom state-based router with React Navigation or Expo Router for state
+  restoration, typed routes, and web URLs per screen.
+- Skeleton loaders instead of spinners on the groups list and group details.
+- Haptic feedback (`expo-haptics`) on primary actions (settle up, create expense).
+- A full VoiceOver/TalkBack QA pass on device — the label/role sweep here fixed the known
+  gaps, but only a device pass proves the flows read sensibly end to end.

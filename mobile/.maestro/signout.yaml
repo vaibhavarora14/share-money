@@ -16,7 +16,7 @@ appId: com.sharemoney.app
       - tapOn: "Navigate back"
       - waitForAnimationToEnd
 
-# Log out when authenticated
+# Log out when authenticated (confirming the logout dialog)
 - runFlow:
     when:
       visible: "Profile"
@@ -25,6 +25,8 @@ appId: com.sharemoney.app
       - waitForAnimationToEnd
       - tapOn:
           id: logout-button
+      - waitForAnimationToEnd
+      - tapOn: "Log Out"
       - waitForAnimationToEnd
 
 # If already on auth screen, this is a no-op

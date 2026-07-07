@@ -28,6 +28,7 @@ import {
   getDefaultCountry,
   parsePhoneNumber,
 } from "../utils/countryCodes";
+import { showAlert } from "../utils/alert";
 import { showErrorAlert } from "../utils/errorHandling";
 
 interface ProfileSetupScreenProps {
@@ -201,10 +202,19 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
           icon="logout"
           iconColor={theme.colors.error}
           onPress={() => {
-            // Ensure async function is properly called
-            void signOut();
+            // Confirm first: this sits next to the title where stray taps
+            // happen, and logging out discards in-progress edits.
+            showAlert("Log Out?", "Are you sure you want to log out?", [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Log Out",
+                style: "destructive",
+                onPress: () => void signOut(),
+              },
+            ]);
           }}
           testID="logout-button"
+          accessibilityLabel="Log out"
         />
       </Appbar.Header>
       <KeyboardAvoidingView
