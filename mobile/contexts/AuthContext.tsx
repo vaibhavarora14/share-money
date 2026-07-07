@@ -1,5 +1,6 @@
 import * as Sentry from "@sentry/react-native";
 import { Session, User } from "@supabase/supabase-js";
+import * as AppleAuthentication from "expo-apple-authentication";
 import * as AuthSession from "expo-auth-session";
 import Constants from "expo-constants";
 import * as WebBrowser from "expo-web-browser";
@@ -105,6 +106,17 @@ function mapAuthError(
 }
 
 /**
+ * Result of an authentication attempt.
+ * `cancelled` is set when the user deliberately dismissed the auth flow
+ * (e.g. closed the OAuth browser sheet) — callers should treat that as a
+ * non-event rather than an error.
+ */
+export interface AuthResult {
+  error: Error | null;
+  cancelled?: boolean;
+}
+
+/**
  * Authentication context type
  * Provides session state, user information, and authentication methods
  */
@@ -120,7 +132,9 @@ interface AuthContextType {
   /** Signs up a new user with email and password */
   signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
   /** Signs in a user with Google OAuth */
-  signInWithGoogle: () => Promise<{ error: Error | null }>;
+  signInWithGoogle: () => Promise<AuthResult>;
+  /** Signs in a user with Apple (native on iOS, OAuth elsewhere) */
+  signInWithApple: () => Promise<AuthResult>;
   /** Signs out the current user */
   signOut: () => void | Promise<void>;
 }
@@ -296,120 +310,211 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   /**
-   * Signs in a user with Google OAuth
+   * Signs in a user via a browser-based OAuth flow (Google, Apple on web, etc.)
    * Opens a browser for authentication and handles the OAuth callback
-   * @returns Promise resolving to an object with error property (null if successful)
+   * @param provider - The OAuth provider to authenticate with
+   * @returns Promise resolving to an AuthResult
    */
-  const signInWithGoogle = useCallback(async () => {
-    try {
-      // For Expo Go, we MUST use the Expo proxy service
-      // For Web, we use the window origin
-      const isExpoGo = Constants.appOwnership === "expo";
-      const isWeb = Platform.OS === "web";
+  const signInWithOAuthProvider = useCallback(
+    async (provider: "google" | "apple"): Promise<AuthResult> => {
+      try {
+        // For Expo Go, we MUST use the Expo proxy service
+        // For Web, we use the window origin
+        const isExpoGo = Constants.appOwnership === "expo";
+        const isWeb = Platform.OS === "web";
 
-      let redirectTo: string;
-      if (isWeb) {
-        // For Web, AuthSession.makeRedirectUri() correctly gets the window.location.origin
-        redirectTo = AuthSession.makeRedirectUri();
-      } else if (isExpoGo) {
-        // Use Expo's proxy service for Expo Go - this prevents email app from opening
-        // useProxy is valid at runtime but not in types, so we use type assertion
-        redirectTo = AuthSession.makeRedirectUri({
-          useProxy: true,
-        } as Parameters<typeof AuthSession.makeRedirectUri>[0]);
-      } else {
-        // Use custom scheme for development/production builds
-        redirectTo = "com.vaibhavarora.sharemoney://auth/callback";
-      }
-
-      // Get the OAuth URL from Supabase
-      const { data, error: urlError } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo,
-          skipBrowserRedirect: !isWeb,
-        },
-      });
-
-      if (urlError) {
-        return { error: urlError };
-      }
-
-      if (!data?.url) {
-        return { error: new Error("Failed to get OAuth URL") };
-      }
-
-      if (isWeb) {
-        // On web, Supabase handles the redirect automatically if skipBrowserRedirect is false
-        return { error: null };
-      }
-
-      // Open browser for authentication (native platforms only)
-      const result = await WebBrowser.openAuthSessionAsync(
-        data.url,
-        redirectTo
-      );
-
-      if (result.type === "success") {
-        // TypeScript doesn't narrow the type properly, but url exists on success
-        const url = (result as { type: "success"; url: string }).url;
-
-        // Extract tokens from URL hash (callback always contains access_token)
-        const hashMatch = url.match(/#(.+)/);
-        if (!hashMatch || !hashMatch[1]) {
-          return { error: new Error("Invalid callback URL: no hash found") };
+        let redirectTo: string;
+        if (isWeb) {
+          // For Web, AuthSession.makeRedirectUri() correctly gets the window.location.origin
+          redirectTo = AuthSession.makeRedirectUri();
+        } else if (isExpoGo) {
+          // Use Expo's proxy service for Expo Go - this prevents email app from opening
+          // useProxy is valid at runtime but not in types, so we use type assertion
+          redirectTo = AuthSession.makeRedirectUri({
+            useProxy: true,
+          } as Parameters<typeof AuthSession.makeRedirectUri>[0]);
+        } else {
+          // Use custom scheme for development/production builds
+          redirectTo = "com.vaibhavarora.sharemoney://auth/callback";
         }
 
-        const hash = hashMatch[1];
-        const accessToken = hash.match(/access_token=([^&]+)/)?.[1];
-        const refreshToken = hash.match(/refresh_token=([^&]+)/)?.[1];
-
-        if (!accessToken || !refreshToken) {
-          return {
-            error: new Error(
-              "Missing access_token or refresh_token in callback URL"
-            ),
-          };
-        }
-
-        // Set session directly from tokens
-        const { data, error: sessionError } = await supabase.auth.setSession({
-          access_token: decodeURIComponent(accessToken),
-          refresh_token: decodeURIComponent(refreshToken),
+        // Get the OAuth URL from Supabase
+        const { data, error: urlError } = await supabase.auth.signInWithOAuth({
+          provider,
+          options: {
+            redirectTo,
+            skipBrowserRedirect: !isWeb,
+          },
         });
 
-        if (sessionError) {
-          return { error: sessionError };
+        if (urlError) {
+          return { error: urlError };
         }
 
-        // Verify session was created
-        const {
-          data: { session: verifySession },
-          error: verifyError,
-        } = await supabase.auth.getSession();
-
-        if (verifyError || !verifySession) {
-          return {
-            error: new Error("Session was not created after setting tokens"),
-          };
+        if (!data?.url) {
+          return { error: new Error("Failed to get OAuth URL") };
         }
 
-        return { error: null };
+        if (isWeb) {
+          // On web, Supabase handles the redirect automatically if skipBrowserRedirect is false
+          return { error: null };
+        }
+
+        // Open browser for authentication (native platforms only)
+        const result = await WebBrowser.openAuthSessionAsync(
+          data.url,
+          redirectTo
+        );
+
+        if (result.type === "success") {
+          // TypeScript doesn't narrow the type properly, but url exists on success
+          const url = (result as { type: "success"; url: string }).url;
+
+          // Extract tokens from URL hash (callback always contains access_token)
+          const hashMatch = url.match(/#(.+)/);
+          if (!hashMatch || !hashMatch[1]) {
+            return { error: new Error("Invalid callback URL: no hash found") };
+          }
+
+          const hash = hashMatch[1];
+          const accessToken = hash.match(/access_token=([^&]+)/)?.[1];
+          const refreshToken = hash.match(/refresh_token=([^&]+)/)?.[1];
+
+          if (!accessToken || !refreshToken) {
+            return {
+              error: new Error(
+                "Missing access_token or refresh_token in callback URL"
+              ),
+            };
+          }
+
+          // Set session directly from tokens
+          const { data, error: sessionError } = await supabase.auth.setSession({
+            access_token: decodeURIComponent(accessToken),
+            refresh_token: decodeURIComponent(refreshToken),
+          });
+
+          if (sessionError) {
+            return { error: sessionError };
+          }
+
+          // Verify session was created
+          const {
+            data: { session: verifySession },
+            error: verifyError,
+          } = await supabase.auth.getSession();
+
+          if (verifyError || !verifySession) {
+            return {
+              error: new Error("Session was not created after setting tokens"),
+            };
+          }
+
+          return { error: null };
+        }
+
+        if (result.type === "cancel" || result.type === "dismiss") {
+          // The user closed the browser sheet on purpose — not an error.
+          return { error: null, cancelled: true };
+        }
+
+        return { error: new Error("Authentication failed") };
+      } catch (error) {
+        logError(error, { context: `signInWithOAuthProvider:${provider}` });
+        return {
+          error:
+            error instanceof Error
+              ? error
+              : new Error("Unknown error occurred"),
+        };
+      }
+    },
+    []
+  );
+
+  /**
+   * Signs in a user with Google OAuth
+   * @returns Promise resolving to an AuthResult
+   */
+  const signInWithGoogle = useCallback(
+    () => signInWithOAuthProvider("google"),
+    [signInWithOAuthProvider]
+  );
+
+  /**
+   * Signs in a user with Apple.
+   * Uses the native Sign in with Apple sheet on iOS (required by App Store
+   * Guideline 4.8 and the best UX — Face ID, no browser round-trip), and the
+   * browser-based OAuth flow everywhere else (web).
+   * @returns Promise resolving to an AuthResult
+   */
+  const signInWithApple = useCallback(async (): Promise<AuthResult> => {
+    try {
+      const canUseNativeApple =
+        Platform.OS === "ios" &&
+        (await AppleAuthentication.isAvailableAsync().catch(() => false));
+
+      if (!canUseNativeApple) {
+        // Web (and any platform without the native module): browser OAuth flow
+        return await signInWithOAuthProvider("apple");
       }
 
-      if (result.type === "cancel") {
-        return { error: new Error("Authentication was cancelled") };
+      let credential: AppleAuthentication.AppleAuthenticationCredential;
+      try {
+        credential = await AppleAuthentication.signInAsync({
+          requestedScopes: [
+            AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+            AppleAuthentication.AppleAuthenticationScope.EMAIL,
+          ],
+        });
+      } catch (err) {
+        // The user dismissed the native Apple sheet — not an error.
+        if ((err as { code?: string })?.code === "ERR_REQUEST_CANCELED") {
+          return { error: null, cancelled: true };
+        }
+        throw err;
       }
 
-      return { error: new Error("Authentication was cancelled or failed") };
+      if (!credential.identityToken) {
+        return {
+          error: new Error("Apple did not return an identity token"),
+        };
+      }
+
+      const { error } = await supabase.auth.signInWithIdToken({
+        provider: "apple",
+        token: credential.identityToken,
+      });
+
+      if (error) {
+        return { error };
+      }
+
+      // Apple only shares the user's name on the FIRST authorization ever.
+      // Persist it to user metadata right away so it isn't lost (best-effort).
+      const fullName = [
+        credential.fullName?.givenName,
+        credential.fullName?.familyName,
+      ]
+        .filter(Boolean)
+        .join(" ");
+      if (fullName) {
+        try {
+          await supabase.auth.updateUser({ data: { full_name: fullName } });
+        } catch (err) {
+          logError(err, { context: "signInWithApple:saveFullName" });
+        }
+      }
+
+      return { error: null };
     } catch (error) {
-      logError(error, { context: "signInWithGoogle" });
+      logError(error, { context: "signInWithApple" });
       return {
         error:
           error instanceof Error ? error : new Error("Unknown error occurred"),
       };
     }
-  }, []);
+  }, [signInWithOAuthProvider]);
 
   /**
    * Signs out the current user
@@ -449,9 +554,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       signIn,
       signUp,
       signInWithGoogle,
+      signInWithApple,
       signOut,
     }),
-    [session, user, loading, signIn, signUp, signInWithGoogle, signOut]
+    [
+      session,
+      user,
+      loading,
+      signIn,
+      signUp,
+      signInWithGoogle,
+      signInWithApple,
+      signOut,
+    ]
   );
 
   return (

@@ -84,6 +84,8 @@ module.exports = ({ config }) => {
         bundleIdentifier: "com.vaibhavarora.sharemoney",
         scheme: "com.vaibhavarora.sharemoney",
         buildNumber: versionConfig.buildNumber.toString(),
+        // Required entitlement for Sign in with Apple
+        usesAppleSignIn: true,
         // Universal Links for invite links; requires the
         // apple-app-site-association file hosted at the app URL.
         associatedDomains: appUrlHostname ? [`applinks:${appUrlHostname}`] : []
@@ -146,6 +148,7 @@ module.exports = ({ config }) => {
             "assets": ["./assets"]
           },
         ],
+        "expo-apple-authentication",
         "expo-font",
         "expo-web-browser",
         // Only include expo-dev-client plugin for development builds

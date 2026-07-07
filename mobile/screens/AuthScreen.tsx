@@ -32,9 +32,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const { signIn, signUp, signInWithGoogle } = useAuth();
+  const { signIn, signUp, signInWithGoogle, signInWithApple } = useAuth();
   const theme = useTheme();
+
+  // Native Sign in with Apple is iOS-only; the web build uses the browser
+  // OAuth flow. Android is intentionally excluded (no Apple requirement there).
+  const showAppleSignIn = Platform.OS === "ios" || Platform.OS === "web";
+  const anyLoading = loading || googleLoading || appleLoading;
 
   const handleSubmit = async () => {
     if (!email.trim() || !password.trim()) {
@@ -71,27 +77,39 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     }
   };
 
-  const handleGoogleSignIn = async () => {
-    setGoogleLoading(true);
+  const handleProviderSignIn = async (provider: "google" | "apple") => {
+    const providerName = provider === "google" ? "Google" : "Apple";
+    const setProviderLoading =
+      provider === "google" ? setGoogleLoading : setAppleLoading;
+
+    setProviderLoading(true);
     try {
-      const { error } = await signInWithGoogle();
-      if (error) {
-        const errorMessage = error.message || "Failed to sign in with Google";
+      const result =
+        provider === "google" ? await signInWithGoogle() : await signInWithApple();
+
+      // The user backed out of the auth sheet on purpose — stay quiet.
+      if (result.cancelled) {
+        return;
+      }
+
+      if (result.error) {
+        const errorMessage =
+          result.error.message || `Failed to sign in with ${providerName}`;
         Alert.alert(
-          "Google Sign In Failed",
+          `${providerName} Sign In Failed`,
           errorMessage,
           [{ text: "OK", style: "default" }]
         );
       }
     } catch (err) {
-      console.error("Error in Google sign in:", err);
+      console.error(`Error in ${providerName} sign in:`, err);
       Alert.alert(
         "Error",
         "An unexpected error occurred. Please try again.",
         [{ text: "OK", style: "default" }]
       );
     } finally {
-      setGoogleLoading(false);
+      setProviderLoading(false);
     }
   };
 
@@ -142,7 +160,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               keyboardType="email-address"
               autoCapitalize="none"
               autoComplete="email"
-              disabled={loading || googleLoading}
+              disabled={anyLoading}
               style={styles.input}
               left={<TextInput.Icon icon="email" />}
             />
@@ -155,7 +173,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               secureTextEntry={!showPassword}
               autoCapitalize="none"
               autoComplete="password"
-              disabled={loading || googleLoading}
+              disabled={anyLoading}
               style={styles.input}
               left={<TextInput.Icon icon="lock" />}
               right={
@@ -169,7 +187,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             <Button
               mode="contained"
               onPress={handleSubmit}
-              disabled={loading || googleLoading}
+              disabled={anyLoading}
               loading={loading}
               style={styles.button}
               contentStyle={styles.buttonContent}
@@ -191,14 +209,30 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               <Divider style={styles.divider} />
             </View>
 
+            {showAppleSignIn && (
+              <Button
+                mode="outlined"
+                onPress={() => handleProviderSignIn("apple")}
+                disabled={anyLoading}
+                loading={appleLoading}
+                style={styles.providerButton}
+                contentStyle={styles.buttonContent}
+                icon="apple"
+                accessibilityLabel="Continue with Apple"
+              >
+                Continue with Apple
+              </Button>
+            )}
+
             <Button
               mode="outlined"
-              onPress={handleGoogleSignIn}
-              disabled={loading || googleLoading}
+              onPress={() => handleProviderSignIn("google")}
+              disabled={anyLoading}
               loading={googleLoading}
-              style={styles.googleButton}
+              style={styles.providerButton}
               contentStyle={styles.buttonContent}
               icon="google"
+              accessibilityLabel="Continue with Google"
             >
               Continue with Google
             </Button>
@@ -206,7 +240,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             <Button
               mode="text"
               onPress={onToggleMode}
-              disabled={loading || googleLoading}
+              disabled={anyLoading}
               style={styles.toggleButton}
             >
               {isSignUp
@@ -282,7 +316,7 @@ const styles = StyleSheet.create({
   dividerText: {
     marginHorizontal: 16,
   },
-  googleButton: {
+  providerButton: {
     marginBottom: 16,
   },
   toggleButton: {

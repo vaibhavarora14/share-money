@@ -5,7 +5,7 @@
 - **Frontend**: React Native (Expo), TypeScript, React Native Paper
 - **Backend**: Supabase Edge Functions (Deno/TypeScript)
 - **Database**: Supabase (PostgreSQL)
-- **Auth**: Supabase Auth (Email/Password + Google OAuth)
+- **Auth**: Supabase Auth (Email/Password + Google OAuth + Sign in with Apple)
 
 ## Project Structure
 
@@ -347,7 +347,7 @@ The workflow (`.github/workflows/deploy-edge-functions.yml`) automatically:
 
 ### Authentication Flow
 
-1. User signs in via Supabase Auth (email/password or Google OAuth)
+1. User signs in via Supabase Auth (email/password, Google OAuth, or Sign in with Apple)
 2. JWT token stored in AsyncStorage
 3. Token sent in `Authorization: Bearer <token>` header to API
 4. Supabase Edge Function validates token with Supabase
@@ -359,6 +359,45 @@ The workflow (`.github/workflows/deploy-edge-functions.yml`) automatically:
 2. Add redirect URI: `https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback`
 3. Configure in Supabase Dashboard > Authentication > Providers
 4. Add mobile redirect URL: `com.vaibhavarora.sharemoney://auth/callback` (in Supabase URL Configuration)
+
+### Apple Sign-In Setup
+
+The app uses two flows:
+
+- **iOS (native)**: the system Sign in with Apple sheet via `expo-apple-authentication`,
+  then `supabase.auth.signInWithIdToken({ provider: "apple", token })`. No browser round-trip.
+- **Web**: the standard Supabase browser OAuth flow (same as Google).
+
+Configuration steps:
+
+1. **Apple Developer portal** (developer.apple.com):
+   - Enable the "Sign In with Apple" capability on the App ID `com.vaibhavarora.sharemoney`.
+   - Create a **Services ID** (e.g. `com.vaibhavarora.sharemoney.web`) for the web OAuth flow, with
+     return URL `https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback`.
+   - Create a **Sign in with Apple key** (under Keys) and download the `.p8` file — needed to
+     generate the client secret for the web flow.
+2. **Supabase Dashboard > Authentication > Providers > Apple**:
+   - Enable the provider.
+   - **Client IDs**: comma-separated list containing the iOS bundle id
+     (`com.vaibhavarora.sharemoney`, validates native ID tokens) and the Services ID (web flow).
+     For Expo Go testing, also add `host.exp.Exponent`.
+   - **Secret Key**: the client secret JWT generated from the `.p8` key
+     (regenerate before its 6-month expiry — consider a calendar reminder or automation).
+3. **EAS build**: `usesAppleSignIn: true` and the `expo-apple-authentication` plugin are already
+   set in `mobile/app.config.js`; the entitlement is applied on the next iOS build. Native Apple
+   sign-in requires a development build or TestFlight/production build (it is not fully testable
+   in the iOS Simulator without an Apple ID signed in).
+4. **Local Supabase**: `[auth.external.apple]` in `supabase/config.toml` stays disabled by
+   default; enable it there with the same client IDs and
+   `SUPABASE_AUTH_EXTERNAL_APPLE_SECRET` env var if you need to test locally.
+
+Notes:
+
+- Apple only returns the user's full name on the **first** authorization. The app persists it to
+  Supabase user metadata (`full_name`) immediately after the first sign-in. To make Apple forget
+  the authorization for re-testing: Settings > Apple ID > Sign-In & Security > Sign in with Apple.
+- If a user previously signed up with the same email via Google/password, Supabase links
+  accounts by verified email automatically (default behavior).
 
 ### Environment Variables
 
