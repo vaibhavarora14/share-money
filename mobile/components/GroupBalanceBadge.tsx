@@ -75,8 +75,9 @@ export const GroupBalanceBadge: React.FC<GroupBalanceBadgeProps> = ({
   const isMultiCurrency = netBalances.length > 1;
   const isPositive = mainBalance.amount > 0;
   
-  const badgeColor = isPositive ? theme.colors.primaryContainer : theme.colors.errorContainer;
-  const textColor = isPositive ? theme.colors.onPrimaryContainer : theme.colors.onErrorContainer;
+  // Teal = you are owed (positive), red = you owe — matches the dashboard
+  const badgeColor = isPositive ? theme.colors.tertiaryContainer : theme.colors.errorContainer;
+  const textColor = isPositive ? theme.colors.onTertiaryContainer : theme.colors.onErrorContainer;
 
   return (
     <View style={[styles.balanceBadge, { backgroundColor: badgeColor }, style]}>

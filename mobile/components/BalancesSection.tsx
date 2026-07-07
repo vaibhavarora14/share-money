@@ -152,10 +152,10 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                               size={40}
                               label={getInitials(getUserDisplayName(balance))}
                               style={{
-                                backgroundColor: theme.colors.primaryContainer,
+                                backgroundColor: theme.colors.tertiaryContainer,
                                 marginRight: 12,
                               }}
-                              color={theme.colors.onPrimaryContainer}
+                              color={theme.colors.onTertiaryContainer}
                             />
                             <View style={styles.balanceLeft}>
                               <Text
@@ -335,10 +335,10 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                               size={40}
                               label={getInitials(getUserDisplayName(balance))}
                               style={{
-                                backgroundColor: theme.colors.primaryContainer,
+                                backgroundColor: theme.colors.tertiaryContainer,
                                 marginRight: 12,
                               }}
-                              color={theme.colors.onPrimaryContainer}
+                              color={theme.colors.onTertiaryContainer}
                             />
                             <View style={styles.balanceLeft}>
                               <Text

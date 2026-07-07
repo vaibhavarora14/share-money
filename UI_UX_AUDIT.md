@@ -180,6 +180,29 @@ renders a logout item. Either remove the prop or add the item; today it's mislea
 
 ---
 
+## Addendum: visual refresh
+
+Beyond the itemized findings, the app's visual identity had a deeper problem: the theme was
+a Google Material clone (`#1a73e8` blue, neutral grey darks) that matched neither the brand
+artwork (an indigo-to-violet gradient logo with a teal accent) nor anything distinctive.
+Addressed on this branch, verified with rendered screenshots in both color schemes:
+
+- **Brand-aligned theme** (`mobile/theme.ts`): primary indigo `#4f46e5`, secondary violet,
+  tertiary teal — all derived from the logo artwork. Light mode uses a soft indigo-tinted
+  canvas (`#f7f7fd`) under white cards so surfaces read with depth; dark mode uses
+  indigo-tinted darks (`#121220`/`#1a1a2c`) instead of neutral grey.
+- **Consistent money semantics**: teal (tertiary) = money coming in, red = money going out —
+  applied to the group balance badge, dashboard amounts, RECEIVE/PAY chips, balances-section
+  avatars, and the stats screen (previously a mix of hardcoded Google green/red and
+  primary/error containers).
+- **Per-entity avatar colors** (`mobile/utils/avatarColors.ts`): group icons and person
+  avatars hash their id to an 8-color palette (light/dark variants) instead of one monotone
+  tint, so lists stop looking like a single repeated row.
+- **Hardcoded palette stragglers removed**: decorative background gradients in `App.tsx`,
+  dashboard amount colors, stats-screen amounts, and the stale teal in `app.json` now all
+  follow the theme.
+- **Empty-state polish**: the "No groups yet" icon sits in a tonal circle instead of floating.
+
 ## Follow-ups worth considering (beyond this audit's scope)
 
 All audit findings are resolved; these adjacent improvements surfaced during the work and

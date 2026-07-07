@@ -775,8 +775,8 @@ export default function App() {
 
       // Get theme colors for gradient
       const isDark = colorScheme === "dark";
-      const primaryColor = isDark ? "#8ab4f8" : "#1a73e8"; // Theme primary color
-      const secondaryColor = isDark ? "#aecbfa" : "#4285f4"; // Slightly lighter variant
+      const primaryColor = isDark ? "#a5b4fc" : "#4f46e5"; // Theme primary (brand indigo)
+      const secondaryColor = isDark ? "#c4b5fd" : "#7c3aed"; // Theme secondary (brand violet)
       const backgroundColor = theme.colors.background;
 
       // Convert hex to rgba for gradient
@@ -860,8 +860,8 @@ export default function App() {
                       borderRadius: screenWidth * 0.2,
                       backgroundColor:
                         colorScheme === "dark"
-                          ? "rgba(138, 180, 248, 0.03)" // Dark theme primary color
-                          : "rgba(26, 115, 232, 0.03)", // Light theme primary color
+                          ? "rgba(165, 180, 252, 0.03)" // Dark theme primary color
+                          : "rgba(79, 70, 229, 0.03)", // Light theme primary color
                       transform: [{ translateY: -(screenWidth * 0.2) }],
                     }}
                   />
@@ -875,8 +875,8 @@ export default function App() {
                       borderRadius: screenWidth * 0.2,
                       backgroundColor:
                         colorScheme === "dark"
-                          ? "rgba(174, 203, 250, 0.03)" // Dark theme secondary color
-                          : "rgba(66, 133, 244, 0.03)", // Light theme secondary color
+                          ? "rgba(196, 181, 253, 0.03)" // Dark theme secondary color
+                          : "rgba(124, 58, 237, 0.03)", // Light theme secondary color
                       transform: [{ translateY: -(screenWidth * 0.2) }],
                     }}
                   />

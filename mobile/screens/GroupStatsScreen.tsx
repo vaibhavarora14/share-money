@@ -483,7 +483,7 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
                 const isInvolved = isFromMe || isToMe;
 
                 // Google Material 3 semantic colors
-                const amountColor = isToMe ? "#1e8e3e" : isFromMe ? "#d93025" : theme.colors.onSurface;
+                const amountColor = isToMe ? theme.colors.tertiary : isFromMe ? theme.colors.error : theme.colors.onSurface;
 
                 const fromName = isFromMe ? "You" : (edge.fromUser.full_name || edge.fromUser.email?.split("@")[0] || "User");
                 const toName = isToMe ? "You" : (edge.toUser.full_name || edge.toUser.email?.split("@")[0] || "User");

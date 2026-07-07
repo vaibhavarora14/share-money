@@ -22,6 +22,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useBalances } from "../hooks/useBalances";
 import { useGroups } from "../hooks/useGroups";
 import { Group } from "../types";
+import { getAvatarColors } from "../utils/avatarColors";
 import { showErrorAlert } from "../utils/errorHandling";
 import {
   getUserFriendlyErrorMessage,
@@ -140,6 +141,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
       seenGroupIds !== null &&
       !seenGroupIds.has(group.id) &&
       group.user_status !== "left";
+    const avatarColors = getAvatarColors(group.id, theme.dark);
 
     return (
     <Surface
@@ -160,7 +162,12 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
             <Surface
               style={[
                 styles.groupIcon,
-                { backgroundColor: theme.colors.primaryContainer },
+                {
+                  backgroundColor:
+                    group.user_status === "left"
+                      ? theme.colors.surfaceVariant
+                      : avatarColors.background,
+                },
               ]}
               elevation={0}
             >
@@ -168,7 +175,10 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                 style={{
                   fontSize: 20,
                   fontWeight: "bold",
-                  color: theme.colors.onPrimaryContainer,
+                  color:
+                    group.user_status === "left"
+                      ? theme.colors.onSurfaceVariant
+                      : avatarColors.foreground,
                 }}
               >
                 {group.name.charAt(0).toUpperCase()}
@@ -343,11 +353,18 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
           {groups.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Surface style={styles.emptySurface} elevation={0}>
-                <IconButton
-                  icon="account-group-outline"
-                  size={48}
-                  iconColor={theme.colors.primary}
-                />
+                <View
+                  style={[
+                    styles.emptyIconCircle,
+                    { backgroundColor: theme.colors.primaryContainer },
+                  ]}
+                >
+                  <IconButton
+                    icon="account-group-outline"
+                    size={48}
+                    iconColor={theme.colors.onPrimaryContainer}
+                  />
+                </View>
                 <Text
                   variant="titleLarge"
                   style={{ marginBottom: 8, fontWeight: "bold" }}
@@ -452,6 +469,14 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     width: "100%",
     backgroundColor: "transparent",
+  },
+  emptyIconCircle: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
   },
   groupItem: {
     marginBottom: 12,

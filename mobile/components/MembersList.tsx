@@ -10,6 +10,7 @@ import {
   useTheme,
 } from "react-native-paper";
 import { GroupMember } from "../types";
+import { getAvatarColors } from "../utils/avatarColors";
 import { formatDate } from "../utils/date";
 import { styles } from "./MembersList.styles";
 
@@ -84,6 +85,7 @@ export const MembersList: React.FC<MembersListProps> = ({
             (isCurrentUser && canManageMembers) ||
             isCurrentUser);
         const isRemoving = removingMemberId === member.user_id;
+        const avatarColors = getAvatarColors(member.user_id, theme.dark);
 
         return (
           <React.Fragment key={member.id}>
@@ -99,13 +101,13 @@ export const MembersList: React.FC<MembersListProps> = ({
                 label={getInitials(memberName)}
                 style={{
                   backgroundColor: isActive
-                    ? theme.colors.secondaryContainer
+                    ? avatarColors.background
                     : theme.colors.surfaceVariant,
                   marginRight: 16,
                 }}
                 color={
                   isActive
-                    ? theme.colors.onSecondaryContainer
+                    ? avatarColors.foreground
                     : theme.colors.onSurfaceVariant
                 }
               />

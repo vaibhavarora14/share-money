@@ -10,6 +10,7 @@ import {
     useTheme
 } from "react-native-paper";
 import { Balance, Transaction } from "../types";
+import { getAvatarColors } from "../utils/avatarColors";
 import { formatCurrency, formatTotals } from "../utils/currency";
 import { DebtEdge, simplifyDebts } from "../utils/debt";
 
@@ -141,9 +142,9 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
     const isOwed = edge.toUser.user_id === currentUserId;
     const otherUser = isOwed ? edge.fromUser : edge.toUser;
     
-    // Google Material 3 colors often use Tonal palettes.
-    // We'll stick to semantic red/green but with a "Google" feel (clean, readable).
-    const amountColor = isOwed ? "#1e8e3e" : "#d93025"; // Google Green / Google Red
+    // Semantic amounts follow the theme: teal (tertiary) = money coming in,
+    // red (error) = money going out. Works in both light and dark schemes.
+    const amountColor = isOwed ? theme.colors.tertiary : theme.colors.error;
 
     // Look up display name - backend now enriches full_name/email for all users (including invited)
     const displayName =
@@ -174,8 +175,16 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
               <Avatar.Text
                 label={avatarLabel}
                 size={40}
-                style={{ backgroundColor: theme.colors.surfaceVariant }}
-                color={theme.colors.onSurfaceVariant}
+                style={{
+                  backgroundColor: getAvatarColors(
+                    otherUser.user_id || displayName,
+                    theme.dark
+                  ).background,
+                }}
+                color={
+                  getAvatarColors(otherUser.user_id || displayName, theme.dark)
+                    .foreground
+                }
                 labelStyle={{ fontWeight: '600' }}
               />
             )}
@@ -199,12 +208,12 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
               {/* Action Button: Small, Tonal / Outlined */}
                <View style={[
                    styles.actionChip, 
-                   { backgroundColor: isOwed ? theme.colors.secondaryContainer : theme.colors.errorContainer } 
+                   { backgroundColor: isOwed ? theme.colors.tertiaryContainer : theme.colors.errorContainer } 
                ]}>
                    <Text 
                     variant="labelSmall" 
                     style={{ 
-                        color: isOwed ? theme.colors.onSecondaryContainer : theme.colors.onErrorContainer,
+                        color: isOwed ? theme.colors.onTertiaryContainer : theme.colors.onErrorContainer,
                         fontWeight: '700'
                     }}
                    >
