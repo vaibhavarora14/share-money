@@ -677,8 +677,15 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
     <>
       <SafeAreaView style={[styles.container, colorStyles.container]}>
         <Appbar.Header style={colorStyles.appbar}>
-          <Appbar.BackAction onPress={onBack} />
-          <Appbar.Content title={MODE_COPY[activeMode].title} />
+          <Appbar.BackAction
+            onPress={onBack}
+            accessibilityLabel="Navigate back"
+            testID="back-button"
+          />
+          <Appbar.Content
+            title={MODE_COPY[activeMode].title}
+            titleStyle={{ fontWeight: "bold" }}
+          />
         </Appbar.Header>
         {isCostMode ? renderCostContent() : renderBalanceContent()}
       </SafeAreaView>
