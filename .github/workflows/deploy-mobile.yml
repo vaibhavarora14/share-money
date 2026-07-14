@@ -152,12 +152,22 @@ jobs:
 
           ARGS=(--platform "$PLATFORM" --profile production --non-interactive --wait --json)
           if [ "$SUBMIT" = "true" ]; then
-            ARGS+=(--auto-submit --auto-submit-with-profile "$SUBMIT_PROFILE")
+            # --auto-submit and --auto-submit-with-profile are mutually exclusive
+            ARGS+=(--auto-submit-with-profile "$SUBMIT_PROFILE")
           fi
 
           echo "Running: eas build ${ARGS[*]}"
-          # Capture JSON even when eas prints progress to stderr
+          # JSON goes to stdout; human-readable progress/errors go to stderr.
+          set +e
           eas build "${ARGS[@]}" > ../eas-build-output.json
+          STATUS=$?
+          set -e
+          if [ "$STATUS" -ne 0 ]; then
+            echo "❌ eas build failed with exit code $STATUS"
+            echo "---- eas-build-output.json ----"
+            cat ../eas-build-output.json || true
+            exit "$STATUS"
+          fi
           echo "Build JSON written to eas-build-output.json"
 
       - name: 📤 Summarize build results
