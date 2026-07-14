@@ -1,6 +1,12 @@
 name: Deploy Mobile (Android + iOS)
 
+# Tag pushes are the reliable release trigger for automation tokens that
+# cannot call workflow_dispatch (403). Pushing vX.Y.Z from main starts the
+# full Android+iOS production build + store submit + GitHub release flow.
 on:
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
       platform:
@@ -47,11 +53,17 @@ jobs:
     environment: Production
     permissions:
       contents: write
+    env:
+      RELEASE_PLATFORM: ${{ github.event.inputs.platform || 'all' }}
+      RELEASE_SUBMIT: ${{ github.event.inputs.submit || 'true' }}
+      RELEASE_SUBMIT_PROFILE: ${{ github.event.inputs.submit_profile || 'production' }}
+      RELEASE_CREATE_GH: ${{ github.event.inputs.create_github_release || 'true' }}
+      RELEASE_GIT_REF: ${{ github.event.inputs.git_ref || github.ref }}
     steps:
       - name: 🏗 Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.git_ref }}
+          ref: ${{ env.RELEASE_GIT_REF }}
           fetch-depth: 0
 
       - name: 🏗 Setup Node
@@ -134,9 +146,9 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           set -euo pipefail
-          PLATFORM="${{ github.event.inputs.platform }}"
-          SUBMIT="${{ github.event.inputs.submit }}"
-          SUBMIT_PROFILE="${{ github.event.inputs.submit_profile }}"
+          PLATFORM="${RELEASE_PLATFORM}"
+          SUBMIT="${RELEASE_SUBMIT}"
+          SUBMIT_PROFILE="${RELEASE_SUBMIT_PROFILE}"
 
           ARGS=(--platform "$PLATFORM" --profile production --non-interactive --wait --json)
           if [ "$SUBMIT" = "true" ]; then
@@ -170,7 +182,7 @@ jobs:
           NODE
 
       - name: 📦 Create GitHub release (Android artifact)
-        if: ${{ github.event.inputs.create_github_release == 'true' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'android') }}
+        if: ${{ env.RELEASE_CREATE_GH == 'true' && (env.RELEASE_PLATFORM == 'all' || env.RELEASE_PLATFORM == 'android') }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
