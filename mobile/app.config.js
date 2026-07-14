@@ -84,9 +84,19 @@ module.exports = ({ config }) => {
         bundleIdentifier: "com.vaibhavarora.sharemoney",
         scheme: "com.vaibhavarora.sharemoney",
         buildNumber: versionConfig.buildNumber.toString(),
-        // Universal Links for invite links; requires the
-        // apple-app-site-association file hosted at the app URL.
-        associatedDomains: appUrlHostname ? [`applinks:${appUrlHostname}`] : []
+        // Avoid App Store Connect manual encryption questionnaire prompts.
+        infoPlist: {
+          ITSAppUsesNonExemptEncryption: false
+        },
+        // Universal Links require Associated Domains on the App Store
+        // provisioning profile. EAS cannot refresh that profile
+        // non-interactively right now, so only enable when explicitly opted in.
+        // IMPORTANT: omit the key entirely when disabled — an empty array can
+        // still cause prebuild to request the entitlement.
+        ...(process.env.EXPO_PUBLIC_ENABLE_ASSOCIATED_DOMAINS === 'true' &&
+        appUrlHostname
+          ? { associatedDomains: [`applinks:${appUrlHostname}`] }
+          : {})
       },
       android: {
         package: "com.vaibhavarora.sharemoney",
@@ -131,6 +141,7 @@ module.exports = ({ config }) => {
         fallbackToCacheTimeout: 0
       },
       plugins: [
+        './plugins/withStripAssociatedDomains',
         [
           "expo-build-properties",
           {

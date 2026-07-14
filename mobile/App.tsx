@@ -57,6 +57,7 @@ import { GroupDetailsScreen } from "./screens/GroupDetailsScreen";
 import { GroupStatsMode, GroupStatsScreen } from "./screens/GroupStatsScreen";
 import { GroupsListScreen } from "./screens/GroupsListScreen";
 import { ProfileSetupScreen } from "./screens/ProfileSetupScreen";
+import { SplitwiseImportScreen } from "./screens/SplitwiseImportScreen";
 import { TransactionFormScreen } from "./screens/TransactionFormScreen";
 import { darkTheme, lightTheme } from "./theme";
 import { Group, GroupWithMembers } from "./types";
@@ -501,6 +502,21 @@ function AppContent() {
     );
   }
 
+  // Show Splitwise import screen
+  if (currentRoute === "splitwise-import" && selectedGroup) {
+    return (
+      <>
+        <SplitwiseImportScreen
+          groupId={selectedGroup.id}
+          groupName={selectedGroup.name}
+          onBack={() => setCurrentRoute("group-details")}
+          onDone={() => setCurrentRoute("group-details")}
+        />
+        <StatusBar style={theme.dark ? "light" : "dark"} />
+      </>
+    );
+  }
+
   if (currentRoute === "group-stats" && statsContext) {
     return (
       <>
@@ -557,6 +573,9 @@ function AppContent() {
           onEditTransaction={(transaction) => {
             setEditingTransaction(transaction);
             setCurrentRoute("transaction-form");
+          }}
+          onImportSplitwise={() => {
+            setCurrentRoute("splitwise-import");
           }}
           onStatsPress={(mode) => {
             if (!groupToDisplay.id) return;

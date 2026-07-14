@@ -60,6 +60,7 @@ interface GroupDetailsScreenProps {
   onLeaveGroup?: () => void;
   onAddTransaction: () => void;
   onEditTransaction: (transaction: Transaction) => void;
+  onImportSplitwise?: () => void;
   refreshTrigger?: number; // When this changes, refresh invitations
   groupRefreshTrigger?: number; // When this changes, refresh group data
   onStatsPress?: (mode: GroupStatsMode) => void;
@@ -73,6 +74,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   onLeaveGroup,
   onAddTransaction,
   onEditTransaction,
+  onImportSplitwise,
   refreshTrigger,
   groupRefreshTrigger,
   onStatsPress,
@@ -686,6 +688,17 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               title="View Members"
               leadingIcon="account-group"
             />
+            {onImportSplitwise && (
+              <Menu.Item
+                onPress={() => {
+                  handleCloseMenu();
+                  onImportSplitwise();
+                }}
+                title="Import from Splitwise"
+                leadingIcon="file-import-outline"
+                testID="group-menu-import-splitwise"
+              />
+            )}
               <Menu.Item
                 onPress={() => {
                   handleCloseMenu();
