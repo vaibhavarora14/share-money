@@ -1,0 +1,241 @@
+name: Deploy Mobile (Android + iOS)
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: "Platforms to build"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - android
+          - ios
+      submit:
+        description: "Submit builds to App Store / Play Store after success"
+        required: true
+        default: true
+        type: boolean
+      submit_profile:
+        description: "EAS submit profile"
+        required: true
+        default: "production"
+        type: choice
+        options:
+          - production
+          - internal
+      create_github_release:
+        description: "Create GitHub release with Android artifact"
+        required: true
+        default: true
+        type: boolean
+      git_ref:
+        description: "Git ref to build from (branch, tag, or SHA)"
+        required: true
+        default: "main"
+        type: string
+
+concurrency:
+  group: deploy-mobile-${{ github.event.inputs.git_ref || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and release mobile apps
+    runs-on: ubuntu-latest
+    environment: Production
+    permissions:
+      contents: write
+    steps:
+      - name: 🏗 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.git_ref }}
+          fetch-depth: 0
+
+      - name: 🏗 Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: 🏗 Setup Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          expo-version: latest
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: 📦 Install dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: ✅ Validate secrets and version
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL }}
+        run: |
+          set -euo pipefail
+          for var in EXPO_TOKEN EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_ANON_KEY EXPO_PUBLIC_API_URL; do
+            if [ -z "${!var}" ]; then
+              echo "❌ $var is not set in the Production environment"
+              exit 1
+            fi
+          done
+
+          VERSION=$(node -p "require('./version.json').version")
+          BUILD=$(node -p "require('./version.json').buildNumber")
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "BUILD=$BUILD" >> "$GITHUB_ENV"
+          echo "TAG=v${VERSION}" >> "$GITHUB_ENV"
+          echo "📦 Releasing ShareMoney ${VERSION} (build ${BUILD})"
+
+      - name: 🔧 Inject client env into EAS production profile
+        working-directory: mobile
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL }}
+          EXPO_PUBLIC_APP_URL: ${{ secrets.EXPO_PUBLIC_APP_URL }}
+          EXPO_PUBLIC_DEFAULT_CURRENCY: ${{ secrets.EXPO_PUBLIC_DEFAULT_CURRENCY }}
+          EXPO_PUBLIC_SENTRY_DSN: ${{ secrets.EXPO_PUBLIC_SENTRY_DSN }}
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const eas = JSON.parse(fs.readFileSync('eas.json', 'utf8'));
+          const env = eas.build.production.env || {};
+          const keys = [
+            'EXPO_PUBLIC_SUPABASE_URL',
+            'EXPO_PUBLIC_SUPABASE_ANON_KEY',
+            'EXPO_PUBLIC_API_URL',
+            'EXPO_PUBLIC_APP_URL',
+            'EXPO_PUBLIC_DEFAULT_CURRENCY',
+            'EXPO_PUBLIC_SENTRY_DSN',
+          ];
+          for (const key of keys) {
+            if (process.env[key]) env[key] = process.env[key];
+          }
+          env.EAS_BUILD = 'true';
+          delete env.EXPO_PUBLIC_USE_DEV_CLIENT;
+          eas.build.production.env = env;
+          fs.writeFileSync('eas.json', JSON.stringify(eas, null, 2) + '\n');
+          console.log('Injected EXPO_PUBLIC_* into eas.json production profile');
+          NODE
+
+      - name: 🚀 EAS production build
+        id: build
+        working-directory: mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          PLATFORM="${{ github.event.inputs.platform }}"
+          SUBMIT="${{ github.event.inputs.submit }}"
+          SUBMIT_PROFILE="${{ github.event.inputs.submit_profile }}"
+
+          ARGS=(--platform "$PLATFORM" --profile production --non-interactive --wait --json)
+          if [ "$SUBMIT" = "true" ]; then
+            ARGS+=(--auto-submit --auto-submit-with-profile "$SUBMIT_PROFILE")
+          fi
+
+          echo "Running: eas build ${ARGS[*]}"
+          # Capture JSON even when eas prints progress to stderr
+          eas build "${ARGS[@]}" > ../eas-build-output.json
+          echo "Build JSON written to eas-build-output.json"
+
+      - name: 📤 Summarize build results
+        working-directory: mobile
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const raw = fs.readFileSync('../eas-build-output.json', 'utf8');
+          const data = JSON.parse(raw);
+          const builds = Array.isArray(data) ? data : [data];
+          let summary = `## ShareMoney ${process.env.VERSION} mobile release\n\n`;
+          summary += `Build number: **${process.env.BUILD}**\n\n`;
+          summary += `| Platform | Status | Build |\n| --- | --- | --- |\n`;
+          for (const b of builds) {
+            const platform = b.platform || b.job?.platform || '?';
+            const status = b.status || '?';
+            const url = b.buildDetailsPageUrl || b.permalinkUrl || b.id || '';
+            summary += `| ${platform} | ${status} | ${url} |\n`;
+          }
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
+          console.log(summary);
+          NODE
+
+      - name: 📦 Create GitHub release (Android artifact)
+        if: ${{ github.event.inputs.create_github_release == 'true' && (github.event.inputs.platform == 'all' || github.event.inputs.platform == 'android') }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          node <<'NODE' > /tmp/android-artifact-url.txt
+          const fs = require('fs');
+          const data = JSON.parse(fs.readFileSync('eas-build-output.json', 'utf8'));
+          const builds = Array.isArray(data) ? data : [data];
+          const android = builds.find((b) => (b.platform || '').toLowerCase() === 'android');
+          if (!android) {
+            console.error('No Android build found in EAS output');
+            process.exit(1);
+          }
+          const url =
+            android.artifacts?.buildUrl ||
+            android.artifacts?.applicationArchiveUrl ||
+            '';
+          if (!url) {
+            console.error('Android build has no artifact URL yet:', JSON.stringify(android, null, 2));
+            process.exit(1);
+          }
+          process.stdout.write(url);
+          NODE
+
+          ARTIFACT_URL=$(cat /tmp/android-artifact-url.txt)
+          mkdir -p releases
+          EXT="${ARTIFACT_URL%%\?*}"
+          EXT="${EXT##*.}"
+          if [ -z "$EXT" ] || [ "$EXT" = "$ARTIFACT_URL" ]; then EXT=aab; fi
+          ARTIFACT_PATH="releases/sharemoney-${VERSION}.${EXT}"
+          echo "⬇️ Downloading Android artifact..."
+          curl -fsSL "$ARTIFACT_URL" -o "$ARTIFACT_PATH"
+
+          PREV_TAG=$(git tag --sort=-v:refname | awk -v cur="$TAG" '$0 != cur { print; exit }')
+          {
+            echo "## ShareMoney ${VERSION}"
+            echo ""
+            echo "Build Number: ${BUILD}"
+            echo ""
+            echo "### Changes"
+            if [ -n "$PREV_TAG" ]; then
+              git log --oneline --no-merges --format="- %s" "${PREV_TAG}..HEAD" | head -30
+            else
+              git log --oneline --no-merges --format="- %s" HEAD | head -30
+            fi
+            echo ""
+            echo "### Stores"
+            echo "- Android and iOS production builds submitted via EAS (if submit was enabled)."
+          } > /tmp/release-notes.md
+
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag ${TAG} already exists"
+          else
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists — uploading artifact"
+            gh release upload "$TAG" "$ARTIFACT_PATH" --clobber
+          else
+            gh release create "$TAG" \
+              --title "Release ${TAG}" \
+              --notes-file /tmp/release-notes.md \
+              "$ARTIFACT_PATH"
+          fi
+
+          echo "✅ GitHub release: https://github.com/${{ github.repository }}/releases/tag/${TAG}"

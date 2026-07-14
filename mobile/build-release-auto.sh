@@ -9,10 +9,37 @@
 # 4. Creates a GitHub release with the APK (if gh CLI is available)
 #
 # Usage:
-#   ./build-release-auto.sh          - Build and create release
-#   ./build-release-auto.sh preview  - Preview release notes without building
+#   ./build-release-auto.sh                              - Android local build + release flow
+#   ./build-release-auto.sh cloud                        - Android cloud build + release flow
+#   ./build-release-auto.sh cloud ios                    - iOS cloud build (download artifact)
+#   ./build-release-auto.sh local android                - Explicit Android local build
+#   ./build-release-auto.sh preview                      - Preview release notes without building
 
 set -e
+
+BUILD_MODE="local"
+TARGET_PLATFORM="android"
+PREVIEW_MODE=false
+
+for arg in "$@"; do
+    case "$arg" in
+        cloud)
+            BUILD_MODE="cloud"
+            ;;
+        local)
+            BUILD_MODE="local"
+            ;;
+        ios)
+            TARGET_PLATFORM="ios"
+            ;;
+        android)
+            TARGET_PLATFORM="android"
+            ;;
+        preview)
+            PREVIEW_MODE=true
+            ;;
+    esac
+done
 
 # Function to get commits for a release
 get_release_commits() {
@@ -174,7 +201,7 @@ show_past_release() {
 }
 
 # Check for preview mode
-if [ "$1" = "preview" ]; then
+if [ "$PREVIEW_MODE" = true ]; then
     echo "🔍 Preview Mode - Release Notes Generator"
     echo "=========================================="
     echo ""
@@ -210,8 +237,8 @@ if [ "$1" = "preview" ]; then
     exit 0
 fi
 
-echo "🔨 Building ShareMoney Android Production APK for Release"
-echo "=========================================================="
+echo "🔨 Building ShareMoney ${TARGET_PLATFORM^^} Production Artifact for Release"
+echo "==========================================================================="
 echo ""
 
 # Check if .env.production file exists
@@ -260,34 +287,128 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 fi
 
 echo "🚀 Starting EAS production build..."
+echo "🔧 Build mode: ${BUILD_MODE}"
+echo "📱 Platform: ${TARGET_PLATFORM}"
 echo ""
-
-# Run the build with environment variables
-eas build --local --platform android --profile production
-
-echo ""
-echo "🔍 Finding built APK..."
-
-# Find the APK file
-APK_FILE=$(find . -name "*.apk" -type f -not -path "*/node_modules/*" | head -1)
-
-if [ -z "$APK_FILE" ]; then
-    echo "❌ Error: APK file not found after build"
-    echo "Please check the build output for errors"
-    exit 1
-fi
 
 # Create releases directory if it doesn't exist
 mkdir -p ../releases
 
-# Rename and copy APK
-RELEASE_APK="../releases/sharemoney-${VERSION}.apk"
-cp "$APK_FILE" "$RELEASE_APK"
+RELEASE_ARTIFACT=""
+ARTIFACT_KIND="artifact"
 
-echo "✅ APK ready: $RELEASE_APK"
+if [ "$TARGET_PLATFORM" = "ios" ] && [ "$BUILD_MODE" = "local" ]; then
+    echo "❌ iOS local builds are not supported by this script."
+    echo "Use cloud mode: ./build-release-auto.sh cloud ios"
+    exit 1
+fi
+
+if [ "$TARGET_PLATFORM" = "android" ] && [ "$BUILD_MODE" = "local" ]; then
+    # Run local build
+    eas build --local --platform android --profile production
+
+    echo ""
+    echo "🔍 Finding built Android artifact..."
+
+    # Find APK first, then AAB
+    ARTIFACT_FILE=$(find . -name "*.apk" -type f -not -path "*/node_modules/*" | head -1)
+    if [ -z "$ARTIFACT_FILE" ]; then
+        ARTIFACT_FILE=$(find . -name "*.aab" -type f -not -path "*/node_modules/*" | head -1)
+    fi
+
+    if [ -z "$ARTIFACT_FILE" ]; then
+        echo "❌ Error: Android artifact not found after build"
+        echo "Please check the build output for errors"
+        exit 1
+    fi
+
+    ARTIFACT_EXT="${ARTIFACT_FILE##*.}"
+    RELEASE_ARTIFACT="../releases/sharemoney-${VERSION}.${ARTIFACT_EXT}"
+    cp "$ARTIFACT_FILE" "$RELEASE_ARTIFACT"
+elif [ "$TARGET_PLATFORM" = "android" ] && [ "$BUILD_MODE" = "cloud" ]; then
+    # Run cloud build and wait for completion
+    BUILD_JSON=$(eas build --platform android --profile production --non-interactive --wait --json)
+
+    BUILD_URL=$(echo "$BUILD_JSON" | node -e "
+let raw = '';
+process.stdin.on('data', c => raw += c);
+process.stdin.on('end', () => {
+  const data = JSON.parse(raw);
+  const build = Array.isArray(data) ? data[0] : data;
+  const url = build?.artifacts?.buildUrl || build?.artifacts?.applicationArchiveUrl || '';
+  if (!url) process.exit(1);
+  process.stdout.write(url);
+});
+")
+
+    if [ -z "$BUILD_URL" ]; then
+        echo "❌ Error: Could not find build artifact URL from EAS cloud build output"
+        exit 1
+    fi
+
+    ARTIFACT_FILENAME=$(echo "$BUILD_URL" | sed 's|?.*||' | awk -F/ '{print $NF}')
+    ARTIFACT_EXT="${ARTIFACT_FILENAME##*.}"
+    if [ -z "$ARTIFACT_EXT" ] || [ "$ARTIFACT_EXT" = "$ARTIFACT_FILENAME" ]; then
+        ARTIFACT_EXT="aab"
+    fi
+
+    RELEASE_ARTIFACT="../releases/sharemoney-${VERSION}.${ARTIFACT_EXT}"
+    echo "⬇️  Downloading build artifact from EAS..."
+    curl -L "$BUILD_URL" -o "$RELEASE_ARTIFACT"
+elif [ "$TARGET_PLATFORM" = "ios" ] && [ "$BUILD_MODE" = "cloud" ]; then
+    # Run iOS cloud build and wait for completion
+    BUILD_JSON=$(eas build --platform ios --profile production --non-interactive --wait --json)
+
+    BUILD_URL=$(echo "$BUILD_JSON" | node -e "
+let raw = '';
+process.stdin.on('data', c => raw += c);
+process.stdin.on('end', () => {
+  const data = JSON.parse(raw);
+  const build = Array.isArray(data) ? data[0] : data;
+  const url = build?.artifacts?.buildUrl || build?.artifacts?.applicationArchiveUrl || '';
+  if (!url) process.exit(1);
+  process.stdout.write(url);
+});
+")
+
+    if [ -z "$BUILD_URL" ]; then
+        echo "❌ Error: Could not find iOS build artifact URL from EAS cloud build output"
+        exit 1
+    fi
+
+    ARTIFACT_FILENAME=$(echo "$BUILD_URL" | sed 's|?.*||' | awk -F/ '{print $NF}')
+    ARTIFACT_EXT="${ARTIFACT_FILENAME##*.}"
+    if [ -z "$ARTIFACT_EXT" ] || [ "$ARTIFACT_EXT" = "$ARTIFACT_FILENAME" ]; then
+        ARTIFACT_EXT="ipa"
+    fi
+
+    RELEASE_ARTIFACT="../releases/sharemoney-ios-${VERSION}.${ARTIFACT_EXT}"
+    echo "⬇️  Downloading iOS build artifact from EAS..."
+    curl -L "$BUILD_URL" -o "$RELEASE_ARTIFACT"
+else
+    echo "❌ Unsupported mode combination: platform=${TARGET_PLATFORM}, mode=${BUILD_MODE}"
+    exit 1
+fi
+
+if [ "${RELEASE_ARTIFACT##*.}" = "apk" ]; then
+    ARTIFACT_KIND="APK"
+elif [ "${RELEASE_ARTIFACT##*.}" = "aab" ]; then
+    ARTIFACT_KIND="AAB"
+elif [ "${RELEASE_ARTIFACT##*.}" = "ipa" ]; then
+    ARTIFACT_KIND="IPA"
+fi
+
+echo "✅ ${ARTIFACT_KIND} ready: $RELEASE_ARTIFACT"
 echo ""
 
-# Check if gh CLI is available
+# iOS builds generally go through App Store Connect, not GitHub Releases.
+if [ "$TARGET_PLATFORM" = "ios" ]; then
+    echo "ℹ️ iOS artifact built successfully."
+    echo "➡️  Submit with: eas submit --platform ios --profile production --path $RELEASE_ARTIFACT"
+    exit 0
+fi
+
+# Check if gh CLI is available (Android release flow)
 if command -v gh &> /dev/null; then
     echo "📦 Creating GitHub release..."
     echo ""
@@ -307,7 +428,7 @@ if command -v gh &> /dev/null; then
     gh release create "${TAG}" \
         --title "Release ${TAG}" \
         --notes "$RELEASE_NOTES" \
-        "${RELEASE_APK}" \
+        "${RELEASE_ARTIFACT}" \
         --repo vaibhavarora14/share-money
     
     echo ""
@@ -324,6 +445,6 @@ else
     echo "   https://github.com/vaibhavarora14/share-money/releases/new"
     echo ""
     echo "3. Select tag: ${TAG}"
-    echo "4. Upload APK: $RELEASE_APK"
+    echo "4. Upload artifact: $RELEASE_ARTIFACT"
     echo "5. Click 'Publish release'"
 fi
