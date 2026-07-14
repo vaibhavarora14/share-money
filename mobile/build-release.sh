@@ -1,13 +1,25 @@
 #!/bin/bash
 
-# Build script for creating production APK for GitHub releases
+# Build script for creating production Android artifact for GitHub releases
 # 
 # This script:
-# 1. Builds a production Android APK using EAS
-# 2. Finds and renames the APK with version info
+# 1. Builds a production Android artifact using EAS
+# 2. Finds/downloads and renames it with version info
 # 3. Provides instructions for creating a GitHub release
+#
+# Usage:
+#   ./build-release.sh          - Local EAS build (default)
+#   ./build-release.sh local    - Explicit local EAS build
+#   ./build-release.sh cloud    - EAS cloud build (wait + download artifact)
 
 set -e
+
+BUILD_MODE="local"
+if [ "$1" = "cloud" ]; then
+    BUILD_MODE="cloud"
+elif [ "$1" = "local" ]; then
+    BUILD_MODE="local"
+fi
 
 echo "🔨 Building ShareMoney Android Production APK for Release"
 echo "=========================================================="
@@ -64,31 +76,67 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 fi
 
 echo "🚀 Starting EAS production build..."
+echo "🔧 Build mode: ${BUILD_MODE}"
 echo ""
-
-# Run the build with environment variables
-eas build --local --platform android --profile production
-
-echo ""
-echo "🔍 Finding built APK..."
-
-# Find the APK file (EAS typically puts it in a build directory or current directory)
-APK_FILE=$(find . -name "*.apk" -type f -not -path "*/node_modules/*" | head -1)
-
-if [ -z "$APK_FILE" ]; then
-    echo "❌ Error: APK file not found after build"
-    echo "Please check the build output for errors"
-    exit 1
-fi
 
 # Create releases directory if it doesn't exist
 mkdir -p ../releases
 
-# Rename and copy APK
-RELEASE_APK="../releases/sharemoney-${VERSION}.apk"
-cp "$APK_FILE" "$RELEASE_APK"
+if [ "$BUILD_MODE" = "local" ]; then
+    # Run the local build
+    eas build --local --platform android --profile production
 
-echo "✅ APK ready for release: $RELEASE_APK"
+    echo ""
+    echo "🔍 Finding built Android artifact..."
+
+    # Find APK first, then AAB
+    ARTIFACT_FILE=$(find . -name "*.apk" -type f -not -path "*/node_modules/*" | head -1)
+    if [ -z "$ARTIFACT_FILE" ]; then
+        ARTIFACT_FILE=$(find . -name "*.aab" -type f -not -path "*/node_modules/*" | head -1)
+    fi
+
+    if [ -z "$ARTIFACT_FILE" ]; then
+        echo "❌ Error: Android artifact not found after build"
+        echo "Please check the build output for errors"
+        exit 1
+    fi
+
+    ARTIFACT_EXT="${ARTIFACT_FILE##*.}"
+    RELEASE_ARTIFACT="../releases/sharemoney-${VERSION}.${ARTIFACT_EXT}"
+    cp "$ARTIFACT_FILE" "$RELEASE_ARTIFACT"
+else
+    # Run cloud build and wait for completion
+    BUILD_JSON=$(eas build --platform android --profile production --non-interactive --wait --json)
+
+    BUILD_URL=$(echo "$BUILD_JSON" | node -e "
+let raw = '';
+process.stdin.on('data', c => raw += c);
+process.stdin.on('end', () => {
+  const data = JSON.parse(raw);
+  const build = Array.isArray(data) ? data[0] : data;
+  const url = build?.artifacts?.buildUrl || build?.artifacts?.applicationArchiveUrl || '';
+  if (!url) process.exit(1);
+  process.stdout.write(url);
+});
+")
+
+    if [ -z "$BUILD_URL" ]; then
+        echo "❌ Error: Could not find build artifact URL from EAS cloud build output"
+        exit 1
+    fi
+
+    ARTIFACT_FILENAME=$(echo "$BUILD_URL" | sed 's|?.*||' | awk -F/ '{print $NF}')
+    ARTIFACT_EXT="${ARTIFACT_FILENAME##*.}"
+    if [ -z "$ARTIFACT_EXT" ] || [ "$ARTIFACT_EXT" = "$ARTIFACT_FILENAME" ]; then
+        ARTIFACT_EXT="aab"
+    fi
+
+    RELEASE_ARTIFACT="../releases/sharemoney-${VERSION}.${ARTIFACT_EXT}"
+    echo "⬇️  Downloading build artifact from EAS..."
+    curl -L "$BUILD_URL" -o "$RELEASE_ARTIFACT"
+fi
+
+echo "✅ Android artifact ready for release: $RELEASE_ARTIFACT"
 echo ""
 echo "📝 Next steps to create GitHub release:"
 echo ""
@@ -114,6 +162,6 @@ echo "   "
 echo "   ### Changes"
 echo "   See [CHANGELOG.md](../CHANGELOG.md) for details."
 echo ""
-echo "6. Upload the APK file: $RELEASE_APK"
+echo "6. Upload the artifact file: $RELEASE_ARTIFACT"
 echo "7. Click 'Publish release'"
 echo ""
