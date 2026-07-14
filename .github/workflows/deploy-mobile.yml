@@ -199,10 +199,8 @@ jobs:
           SUBMIT_PROFILE="${{ needs.resolve.outputs.submit_profile }}"
 
           ARGS=(--platform "$PLATFORM" --profile production --non-interactive --wait --json)
-          # Avoid mutating Apple credentials mid-release in non-interactive CI.
-          if [ "$PLATFORM" = "ios" ]; then
-            ARGS+=(--freeze-credentials)
-          fi
+          # Do NOT freeze credentials: invite-link Associated Domains require a
+          # regenerated App Store provisioning profile when entitlements change.
           if [ "$SUBMIT" = "true" ]; then
             # --auto-submit and --auto-submit-with-profile are mutually exclusive
             ARGS+=(--auto-submit-with-profile "$SUBMIT_PROFILE")
