@@ -199,12 +199,8 @@ jobs:
           SUBMIT_PROFILE="${{ needs.resolve.outputs.submit_profile }}"
 
           ARGS=(--platform "$PLATFORM" --profile production --non-interactive --wait --json --clear-cache)
-          # Do NOT freeze credentials: invite-link Associated Domains require a
-          # regenerated App Store provisioning profile when entitlements change.
-          if [ "$SUBMIT" = "true" ]; then
-            # --auto-submit and --auto-submit-with-profile are mutually exclusive
-            ARGS+=(--auto-submit-with-profile "$SUBMIT_PROFILE")
-          fi
+          # Build first (no auto-submit) so a store agreement failure cannot
+          # obscure a successful binary. Submit is a separate step below.
 
           echo "Running: eas build ${ARGS[*]}"
           set +e
@@ -218,6 +214,29 @@ jobs:
             exit "$STATUS"
           fi
           echo "Build JSON written to eas-build-output-${PLATFORM}.json"
+
+          if [ "$SUBMIT" = "true" ]; then
+            BUILD_ID=$(node -e '
+              const fs=require("fs");
+              const d=JSON.parse(fs.readFileSync("../eas-build-output-'"$PLATFORM"'.json","utf8"));
+              const b=(Array.isArray(d)?d:[d])[0]||{};
+              if(!b.id) process.exit(1);
+              process.stdout.write(b.id);
+            ')
+            echo "📤 Submitting build ${BUILD_ID} with profile ${SUBMIT_PROFILE}..."
+            set +e
+            eas submit --platform "$PLATFORM" --id "$BUILD_ID" --profile "$SUBMIT_PROFILE" --non-interactive --wait
+            SUBMIT_STATUS=$?
+            set -e
+            if [ "$SUBMIT_STATUS" -ne 0 ]; then
+              echo "⚠️ eas submit failed (exit ${SUBMIT_STATUS}). Binary is available; retry after fixing store agreements:"
+              echo "   eas submit --platform ${PLATFORM} --id ${BUILD_ID} --profile ${SUBMIT_PROFILE} --non-interactive"
+              # Soft-fail: keep the job green when only submission is blocked
+              # (e.g. unsigned Apple Developer agreement).
+            else
+              echo "✅ Submit completed for ${PLATFORM}"
+            fi
+          fi
 
       - name: 📤 Export build metadata
         id: meta
