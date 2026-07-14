@@ -1,12 +1,18 @@
 name: Deploy Mobile (Android + iOS)
 
 # Tag pushes are the reliable release trigger for automation tokens that
-# cannot call workflow_dispatch (403). Pushing vX.Y.Z from main starts the
-# full Android+iOS production build + store submit + GitHub release flow.
+# cannot call workflow_dispatch (403).
+#
+# Tags:
+#   vX.Y.Z         -> build android + ios
+#   android-vX.Y.Z -> android only
+#   ios-vX.Y.Z     -> ios only
 on:
   push:
     tags:
       - "v*"
+      - "android-v*"
+      - "ios-v*"
   workflow_dispatch:
     inputs:
       platform:
@@ -47,23 +53,66 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: Build and release mobile apps
+  resolve:
+    name: Resolve release options
+    runs-on: ubuntu-latest
+    outputs:
+      platform: ${{ steps.resolve.outputs.platform }}
+      submit: ${{ steps.resolve.outputs.submit }}
+      submit_profile: ${{ steps.resolve.outputs.submit_profile }}
+      create_github_release: ${{ steps.resolve.outputs.create_github_release }}
+      git_ref: ${{ steps.resolve.outputs.git_ref }}
+      matrix: ${{ steps.resolve.outputs.matrix }}
+    steps:
+      - name: Resolve inputs / tag
+        id: resolve
+        run: |
+          set -euo pipefail
+          REF="${{ github.event.inputs.git_ref || github.ref }}"
+          PLATFORM="${{ github.event.inputs.platform || '' }}"
+          if [ -z "$PLATFORM" ]; then
+            case "${{ github.ref_name }}" in
+              ios-v*) PLATFORM=ios ;;
+              android-v*) PLATFORM=android ;;
+              *) PLATFORM=all ;;
+            esac
+          fi
+          SUBMIT="${{ github.event.inputs.submit || 'true' }}"
+          SUBMIT_PROFILE="${{ github.event.inputs.submit_profile || 'production' }}"
+          CREATE_GH="${{ github.event.inputs.create_github_release || 'true' }}"
+
+          if [ "$PLATFORM" = "all" ]; then
+            MATRIX='[{"platform":"android"},{"platform":"ios"}]'
+          elif [ "$PLATFORM" = "android" ]; then
+            MATRIX='[{"platform":"android"}]'
+          else
+            MATRIX='[{"platform":"ios"}]'
+          fi
+
+          echo "platform=$PLATFORM" >> "$GITHUB_OUTPUT"
+          echo "submit=$SUBMIT" >> "$GITHUB_OUTPUT"
+          echo "submit_profile=$SUBMIT_PROFILE" >> "$GITHUB_OUTPUT"
+          echo "create_github_release=$CREATE_GH" >> "$GITHUB_OUTPUT"
+          echo "git_ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "Resolved platform=$PLATFORM matrix=$MATRIX ref=$REF"
+
+  build:
+    name: EAS ${{ matrix.platform }}
+    needs: resolve
     runs-on: ubuntu-latest
     environment: Production
     permissions:
       contents: write
-    env:
-      RELEASE_PLATFORM: ${{ github.event.inputs.platform || 'all' }}
-      RELEASE_SUBMIT: ${{ github.event.inputs.submit || 'true' }}
-      RELEASE_SUBMIT_PROFILE: ${{ github.event.inputs.submit_profile || 'production' }}
-      RELEASE_CREATE_GH: ${{ github.event.inputs.create_github_release || 'true' }}
-      RELEASE_GIT_REF: ${{ github.event.inputs.git_ref || github.ref }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.resolve.outputs.matrix) }}
     steps:
       - name: 🏗 Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ env.RELEASE_GIT_REF }}
+          ref: ${{ needs.resolve.outputs.git_ref }}
           fetch-depth: 0
 
       - name: 🏗 Setup Node
@@ -99,13 +148,12 @@ jobs:
               exit 1
             fi
           done
-
           VERSION=$(node -p "require('./version.json').version")
           BUILD=$(node -p "require('./version.json').buildNumber")
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "BUILD=$BUILD" >> "$GITHUB_ENV"
           echo "TAG=v${VERSION}" >> "$GITHUB_ENV"
-          echo "📦 Releasing ShareMoney ${VERSION} (build ${BUILD})"
+          echo "📦 Releasing ShareMoney ${VERSION} (build ${BUILD}) for ${{ matrix.platform }}"
 
       - name: 🔧 Inject client env into EAS production profile
         working-directory: mobile
@@ -146,78 +194,117 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           set -euo pipefail
-          PLATFORM="${RELEASE_PLATFORM}"
-          SUBMIT="${RELEASE_SUBMIT}"
-          SUBMIT_PROFILE="${RELEASE_SUBMIT_PROFILE}"
+          PLATFORM="${{ matrix.platform }}"
+          SUBMIT="${{ needs.resolve.outputs.submit }}"
+          SUBMIT_PROFILE="${{ needs.resolve.outputs.submit_profile }}"
 
           ARGS=(--platform "$PLATFORM" --profile production --non-interactive --wait --json)
+          # Avoid mutating Apple credentials mid-release in non-interactive CI.
+          if [ "$PLATFORM" = "ios" ]; then
+            ARGS+=(--freeze-credentials)
+          fi
           if [ "$SUBMIT" = "true" ]; then
             # --auto-submit and --auto-submit-with-profile are mutually exclusive
             ARGS+=(--auto-submit-with-profile "$SUBMIT_PROFILE")
           fi
 
           echo "Running: eas build ${ARGS[*]}"
-          # JSON goes to stdout; human-readable progress/errors go to stderr.
           set +e
-          eas build "${ARGS[@]}" > ../eas-build-output.json
+          eas build "${ARGS[@]}" > ../eas-build-output-${PLATFORM}.json
           STATUS=$?
           set -e
           if [ "$STATUS" -ne 0 ]; then
             echo "❌ eas build failed with exit code $STATUS"
-            echo "---- eas-build-output.json ----"
-            cat ../eas-build-output.json || true
+            echo "---- eas-build-output-${PLATFORM}.json ----"
+            cat "../eas-build-output-${PLATFORM}.json" || true
             exit "$STATUS"
           fi
-          echo "Build JSON written to eas-build-output.json"
+          echo "Build JSON written to eas-build-output-${PLATFORM}.json"
 
-      - name: 📤 Summarize build results
-        working-directory: mobile
-        run: |
-          node <<'NODE'
-          const fs = require('fs');
-          const raw = fs.readFileSync('../eas-build-output.json', 'utf8');
-          const data = JSON.parse(raw);
-          const builds = Array.isArray(data) ? data : [data];
-          let summary = `## ShareMoney ${process.env.VERSION} mobile release\n\n`;
-          summary += `Build number: **${process.env.BUILD}**\n\n`;
-          summary += `| Platform | Status | Build |\n| --- | --- | --- |\n`;
-          for (const b of builds) {
-            const platform = b.platform || b.job?.platform || '?';
-            const status = b.status || '?';
-            const url = b.buildDetailsPageUrl || b.permalinkUrl || b.id || '';
-            summary += `| ${platform} | ${status} | ${url} |\n`;
-          }
-          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
-          console.log(summary);
-          NODE
-
-      - name: 📦 Create GitHub release (Android artifact)
-        if: ${{ env.RELEASE_CREATE_GH == 'true' && (env.RELEASE_PLATFORM == 'all' || env.RELEASE_PLATFORM == 'android') }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: 📤 Export build metadata
+        id: meta
+        if: always()
         run: |
           set -euo pipefail
-          node <<'NODE' > /tmp/android-artifact-url.txt
+          PLATFORM="${{ matrix.platform }}"
+          FILE="eas-build-output-${PLATFORM}.json"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "build=${BUILD}" >> "$GITHUB_OUTPUT"
+          mkdir -p build-meta
+          if [ -f "$FILE" ]; then
+            cp "$FILE" "build-meta/${PLATFORM}.json"
+            node <<NODE
           const fs = require('fs');
-          const data = JSON.parse(fs.readFileSync('eas-build-output.json', 'utf8'));
+          const data = JSON.parse(fs.readFileSync('$FILE', 'utf8'));
           const builds = Array.isArray(data) ? data : [data];
-          const android = builds.find((b) => (b.platform || '').toLowerCase() === 'android');
-          if (!android) {
-            console.error('No Android build found in EAS output');
-            process.exit(1);
+          const b = builds[0] || {};
+          const status = (b.status || 'unknown').toLowerCase();
+          const platform = (b.platform || '$PLATFORM').toLowerCase();
+          const url = b.artifacts?.buildUrl || b.artifacts?.applicationArchiveUrl || '';
+          fs.writeFileSync('build-meta/' + platform + '-status.txt', status);
+          if (platform === 'android' && url) {
+            fs.writeFileSync('build-meta/android-artifact-url.txt', url);
           }
-          const url =
-            android.artifacts?.buildUrl ||
-            android.artifacts?.applicationArchiveUrl ||
-            '';
-          if (!url) {
-            console.error('Android build has no artifact URL yet:', JSON.stringify(android, null, 2));
-            process.exit(1);
-          }
-          process.stdout.write(url);
+          let summary = '### ' + platform + ' build\\n\\n';
+          summary += '- status: **' + status + '**\\n';
+          summary += '- id: `' + (b.id || '?') + '`\\n';
+          if (url) summary += '- artifact: ' + url + '\\n';
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary.replace(/\\n/g, '\n'));
           NODE
+          else
+            echo "missing" > "build-meta/${PLATFORM}-status.txt"
+          fi
 
-          ARTIFACT_URL=$(cat /tmp/android-artifact-url.txt)
+      - name: Upload build metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eas-meta-${{ matrix.platform }}
+          path: build-meta/
+          if-no-files-found: ignore
+
+  github-release:
+    name: Publish GitHub release
+    needs: [resolve, build]
+    if: ${{ always() && needs.resolve.outputs.create_github_release == 'true' && (needs.resolve.outputs.platform == 'all' || needs.resolve.outputs.platform == 'android') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: 🏗 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.git_ref }}
+          fetch-depth: 0
+
+      - name: Download Android build metadata
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: eas-meta-android
+          path: build-meta
+
+      - name: Skip if Android did not produce an artifact
+        id: check
+        run: |
+          if [ -f build-meta/android-artifact-url.txt ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "url=$(cat build-meta/android-artifact-url.txt)" >> "$GITHUB_OUTPUT"
+          else
+            echo "No Android artifact URL from build job — skipping release upload"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 📦 Create / update GitHub release
+        if: steps.check.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_URL: ${{ steps.check.outputs.url }}
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./mobile/version.json').version")
+          BUILD=$(node -p "require('./mobile/version.json').buildNumber")
+          TAG="v${VERSION}"
           mkdir -p releases
           EXT="${ARTIFACT_URL%%\?*}"
           EXT="${EXT##*.}"
@@ -226,7 +313,7 @@ jobs:
           echo "⬇️ Downloading Android artifact..."
           curl -fsSL "$ARTIFACT_URL" -o "$ARTIFACT_PATH"
 
-          PREV_TAG=$(git tag --sort=-v:refname | awk -v cur="$TAG" '$0 != cur { print; exit }')
+          PREV_TAG=$(git tag --sort=-v:refname | awk -v cur="$TAG" '$0 != cur && $0 !~ /^(android|ios)-/ { print; exit }')
           {
             echo "## ShareMoney ${VERSION}"
             echo ""
@@ -240,24 +327,17 @@ jobs:
             fi
             echo ""
             echo "### Stores"
-            echo "- Android and iOS production builds submitted via EAS (if submit was enabled)."
+            echo "- Android/iOS production builds submitted via EAS when those jobs succeed."
           } > /tmp/release-notes.md
-
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "Tag ${TAG} already exists"
-          else
-            git tag "$TAG"
-            git push origin "$TAG"
-          fi
 
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release ${TAG} already exists — uploading artifact"
             gh release upload "$TAG" "$ARTIFACT_PATH" --clobber
+            gh release edit "$TAG" --notes-file /tmp/release-notes.md || true
           else
             gh release create "$TAG" \
               --title "Release ${TAG}" \
               --notes-file /tmp/release-notes.md \
               "$ARTIFACT_PATH"
           fi
-
           echo "✅ GitHub release: https://github.com/${{ github.repository }}/releases/tag/${TAG}"
