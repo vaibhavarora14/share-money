@@ -88,9 +88,17 @@ module.exports = ({ config }) => {
         infoPlist: {
           ITSAppUsesNonExemptEncryption: false
         },
-        // Universal Links for invite links; requires the
-        // apple-app-site-association file hosted at the app URL.
-        associatedDomains: appUrlHostname ? [`applinks:${appUrlHostname}`] : []
+        // Universal Links require the App Store provisioning profile to include
+        // the Associated Domains capability. EAS currently cannot refresh that
+        // profile non-interactively ("Failed to fetch Apple provisioning
+        // profiles"), so keep this empty until credentials are regenerated in
+        // the Expo/Apple dashboards. Invite https URLs still work via browser
+        // + the custom scheme; set EXPO_PUBLIC_ENABLE_ASSOCIATED_DOMAINS=true
+        // after the profile includes com.apple.developer.associated-domains.
+        associatedDomains:
+          process.env.EXPO_PUBLIC_ENABLE_ASSOCIATED_DOMAINS === 'true' && appUrlHostname
+            ? [`applinks:${appUrlHostname}`]
+            : []
       },
       android: {
         package: "com.vaibhavarora.sharemoney",
