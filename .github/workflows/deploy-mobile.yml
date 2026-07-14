@@ -198,7 +198,7 @@ jobs:
           SUBMIT="${{ needs.resolve.outputs.submit }}"
           SUBMIT_PROFILE="${{ needs.resolve.outputs.submit_profile }}"
 
-          ARGS=(--platform "$PLATFORM" --profile production --non-interactive --wait --json)
+          ARGS=(--platform "$PLATFORM" --profile production --non-interactive --wait --json --clear-cache)
           # Do NOT freeze credentials: invite-link Associated Domains require a
           # regenerated App Store provisioning profile when entitlements change.
           if [ "$SUBMIT" = "true" ]; then
