@@ -84,6 +84,10 @@ module.exports = ({ config }) => {
         bundleIdentifier: "com.vaibhavarora.sharemoney",
         scheme: "com.vaibhavarora.sharemoney",
         buildNumber: versionConfig.buildNumber.toString(),
+        // Avoid App Store Connect manual encryption questionnaire prompts.
+        infoPlist: {
+          ITSAppUsesNonExemptEncryption: false
+        },
         // Universal Links for invite links; requires the
         // apple-app-site-association file hosted at the app URL.
         associatedDomains: appUrlHostname ? [`applinks:${appUrlHostname}`] : []
