@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ComponentType } from "react";
 import type { LucideProps } from "lucide-react";
 import {
@@ -281,10 +281,12 @@ function CtaButton({
   destination,
   variant,
   placement,
+  compactLabel,
 }: {
   destination: PlatformDestination;
   variant: "primary" | "secondary";
   placement: string;
+  compactLabel?: string;
 }) {
   return (
     <a
@@ -296,7 +298,7 @@ function CtaButton({
       onClick={() => trackCtaClick(destination, placement)}
     >
       <PlatformIcon platform={destination.platform} className="cta-icon" />
-      <span>{destination.label}</span>
+      <span className="cta-label">{compactLabel ?? destination.label}</span>
       <span className="cta-status">{destination.status}</span>
     </a>
   );
@@ -311,6 +313,26 @@ function App() {
   const secondaryDestinations = getSecondaryDestinations(
     primaryDestination.platform,
   );
+
+  useEffect(() => {
+    if (!menuOpen) {
+      return;
+    }
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+      }
+    };
+
+    document.body.classList.add("menu-open");
+    window.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      document.body.classList.remove("menu-open");
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [menuOpen]);
 
   return (
     <div className="landing-page">
@@ -359,7 +381,12 @@ function App() {
           </nav>
 
           <div className="header-actions">
-            <CtaButton destination={primaryDestination} variant="primary" placement="header" />
+            <CtaButton
+              destination={primaryDestination}
+              variant="primary"
+              placement="header"
+              compactLabel="Get app"
+            />
             <button
               className="theme-button"
               type="button"
