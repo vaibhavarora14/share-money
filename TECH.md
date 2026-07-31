@@ -246,6 +246,20 @@ supabase functions deploy function-name
 - `SUPABASE_ACCESS_TOKEN` - Get from https://supabase.com/dashboard/account/tokens
 - `SUPABASE_PROJECT_ID` - Your project reference ID from Settings > General
 
+**Monthly reminder Edge Function secrets:**
+
+Set these in Supabase Dashboard > Project Settings > Edge Functions > Environment Variables:
+
+- `APP_URL` - App URL used for links in reminder emails
+- `REMINDER_CRON_SECRET` - Random shared secret required to invoke `monthly-reminders`
+- `RESEND_API_KEY` - Resend API key
+- `REMINDER_FROM_EMAIL` - Verified Resend sender, e.g. `ShareMoney <reminders@example.com>`
+
+Set these in Supabase Vault before the monthly Cron job runs:
+
+- `monthly_reminders_function_url` - Full deployed function URL, e.g. `https://<project-ref>.supabase.co/functions/v1/monthly-reminders`
+- `monthly_reminders_cron_secret` - Same value as `REMINDER_CRON_SECRET`
+
 ### GitHub Actions (CI/CD)
 
 #### Database Migrations (manual)

@@ -109,7 +109,7 @@ jobs:
           echo ""
           
           # List of functions to check
-          FUNCTIONS=("groups" "transactions" "balances" "settlements" "invitations" "group-members" "activity" "profile" "import-splitwise")
+          FUNCTIONS=("groups" "transactions" "balances" "settlements" "invitations" "group-members" "activity" "profile" "import-splitwise" "monthly-reminders")
           
           echo "**Function Health Status:**" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -166,6 +166,7 @@ jobs:
           echo "- groups" >> $GITHUB_STEP_SUMMARY
           echo "- import-splitwise" >> $GITHUB_STEP_SUMMARY
           echo "- invitations" >> $GITHUB_STEP_SUMMARY
+          echo "- monthly-reminders" >> $GITHUB_STEP_SUMMARY
           echo "- settlements" >> $GITHUB_STEP_SUMMARY
           echo "- transactions" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
