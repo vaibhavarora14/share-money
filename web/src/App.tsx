@@ -296,7 +296,8 @@ function CtaButton({
       target="_blank"
       rel="noopener noreferrer"
       className={`cta cta-${variant}`}
-      aria-label={destination.ariaLabel}
+      aria-label={`${compactLabel ?? destination.label}. ${destination.status}`}
+      title={destination.ariaLabel}
       onClick={() => trackCtaClick(destination, placement)}
     >
       <PlatformIcon platform={destination.platform} className="cta-icon" />

@@ -29,10 +29,12 @@
   --color-action: #1f5eff;
   --color-action-text: #ffffff;
   --color-action-hover: #1a55ea;
+  --color-action-accent: #1f5eff;
   --color-coral: #e76f51;
   --color-success: #087a55;
   --color-success-bg: #e6f6ef;
   --color-danger-bg: #fff1ef;
+  --color-danger-text: #c54d42;
   --color-muted-bg: rgba(23, 32, 42, 0.04);
   --color-nav-bg: color-mix(in srgb, var(--color-canvas) 90%, transparent);
 }
@@ -46,6 +48,9 @@
   --color-text-subtle: #b5c0d5;
   --color-border: #30415b;
   --color-nav-bg: #0f1726f2;
+  --color-action-accent: #9bb5ff;
+  --color-success: #64d7aa;
+  --color-danger-text: #ff9186;
 }
 
 *,
@@ -381,7 +386,7 @@ img {
 }
 
 .cta-primary .cta-status {
-  color: rgba(255, 255, 255, 0.9);
+  color: #fff;
 }
 
 .cta-secondary {
@@ -484,7 +489,7 @@ img {
 }
 
 .proof-row-negative span:last-child {
-  color: #c54d42;
+  color: var(--color-danger-text);
 }
 
 .case-tabs {
@@ -507,7 +512,7 @@ img {
 }
 
 .tab-button.is-active {
-  color: var(--color-action);
+  color: var(--color-action-accent);
   background: color-mix(in srgb, var(--color-action) 16%, transparent);
   border-color: color-mix(in srgb, var(--color-action) 42%, transparent);
 }
