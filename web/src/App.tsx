@@ -296,7 +296,6 @@ function CtaButton({
       target="_blank"
       rel="noopener noreferrer"
       className={`cta cta-${variant}`}
-      aria-label={`${compactLabel ?? destination.label}. ${destination.status}`}
       title={destination.ariaLabel}
       onClick={() => trackCtaClick(destination, placement)}
     >
@@ -474,8 +473,8 @@ function App() {
                 <img
                   src={`/${isDark ? "hero-screenshot-dark" : "hero-screenshot"}.png`}
                   alt="Group balances and expenses in the ShareMoney app"
-                  width={540}
-                  height={1200}
+                  width={900}
+                  height={400}
                   loading="eager"
                   fetchPriority="high"
                   className="hero-image"
