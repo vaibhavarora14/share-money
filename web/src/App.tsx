@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ComponentType } from "react";
+import type { ComponentType, KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { LucideProps } from "lucide-react";
 import {
   ArrowRight,
@@ -184,6 +184,8 @@ const useCaseProfiles: Record<UseCaseKey, UseCaseProfile> = {
   },
 };
 
+const useCaseKeys = Object.keys(useCaseProfiles) as UseCaseKey[];
+
 const workflow: WorkflowStep[] = [
   {
     step: 1,
@@ -314,6 +316,35 @@ function App() {
     primaryDestination.platform,
   );
 
+  const handleUseCaseKeyDown = (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    currentKey: UseCaseKey,
+  ) => {
+    const currentIndex = useCaseKeys.indexOf(currentKey);
+    let nextIndex: number | null = null;
+
+    if (event.key === "ArrowRight") {
+      nextIndex = (currentIndex + 1) % useCaseKeys.length;
+    } else if (event.key === "ArrowLeft") {
+      nextIndex = (currentIndex - 1 + useCaseKeys.length) % useCaseKeys.length;
+    } else if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = useCaseKeys.length - 1;
+    }
+
+    if (nextIndex === null) {
+      return;
+    }
+
+    event.preventDefault();
+    const nextKey = useCaseKeys[nextIndex];
+    setActiveUseCase(nextKey);
+    requestAnimationFrame(() => {
+      document.getElementById(`use-case-tab-${nextKey}`)?.focus();
+    });
+  };
+
   useEffect(() => {
     if (!menuOpen) {
       return;
@@ -336,10 +367,6 @@ function App() {
 
   return (
     <div className="landing-page">
-      <a className="skip-link" href="#main-content">
-        Skip to main content
-      </a>
-
       <header className="site-header">
         <div className="container nav-shell">
           <a className="brand" href="#main-content" aria-label="ShareMoney home">
@@ -493,13 +520,17 @@ function App() {
             </div>
 
             <div className="case-tabs" role="tablist" aria-label="Use case examples">
-              {(Object.keys(useCaseProfiles) as UseCaseKey[]).map((key) => (
+              {useCaseKeys.map((key) => (
                 <button
                   type="button"
                   key={key}
+                  id={`use-case-tab-${key}`}
                   role="tab"
                   aria-selected={activeUseCase === key}
+                  aria-controls="use-case-panel"
+                  tabIndex={activeUseCase === key ? 0 : -1}
                   onClick={() => setActiveUseCase(key)}
+                  onKeyDown={(event) => handleUseCaseKeyDown(event, key)}
                   className={`tab-button ${
                     activeUseCase === key ? "is-active" : ""
                   }`}
@@ -509,7 +540,12 @@ function App() {
               ))}
             </div>
 
-            <article className="case-panel">
+            <article
+              className="case-panel"
+              id="use-case-panel"
+              role="tabpanel"
+              aria-labelledby={`use-case-tab-${activeUseCase}`}
+            >
               <div className="case-panel-header">
                 <p>{useCaseProfiles[activeUseCase].summary}</p>
               </div>

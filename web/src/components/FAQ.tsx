@@ -75,6 +75,7 @@ export function FAQ() {
                 className={`faq-answer ${isOpen ? "is-open" : ""}`}
                 role="region"
                 aria-labelledby={`faq-question-${index}`}
+                hidden={!isOpen}
               >
                 <p>{faq.answer}</p>
               </div>

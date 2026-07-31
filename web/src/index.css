@@ -503,6 +503,7 @@ img {
   font-size: 0.95rem;
   cursor: pointer;
   font-weight: 550;
+  min-height: 44px;
 }
 
 .tab-button.is-active {
@@ -735,6 +736,10 @@ img {
   max-height: 240px;
 }
 
+.faq-answer[hidden] {
+  display: none;
+}
+
 .faq-answer p {
   margin: 0;
   padding: 0 var(--space-4) var(--space-4) var(--space-4);
@@ -782,6 +787,9 @@ img {
 .footer-links a {
   color: var(--color-text-subtle);
   text-decoration: none;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
 }
 
 .footer-inner p {
