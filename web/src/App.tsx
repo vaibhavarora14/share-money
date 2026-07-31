@@ -20,8 +20,6 @@ import {
   Wallet,
   X,
 } from "lucide-react";
-import { track } from "@vercel/analytics";
-import { Analytics } from "@vercel/analytics/react";
 import { FAQ } from "./components/FAQ";
 import { TrustBadges } from "./components/TrustBadges";
 import { useTheme } from "./contexts/ThemeContext";
@@ -254,11 +252,16 @@ function getSecondaryDestinations(primaryPlatform: Platform): PlatformDestinatio
 
 function trackCtaClick(destination: PlatformDestination, placement: string) {
   const device = getDevice();
-  track("landing_cta_click", {
-    platform: destination.platform,
-    placement,
-    device,
-  });
+
+  window.dispatchEvent(
+    new CustomEvent("landing_cta_click", {
+      detail: {
+        platform: destination.platform,
+        placement,
+        device,
+      },
+    }),
+  );
 }
 
 function PlatformIcon({
@@ -710,7 +713,6 @@ function App() {
         </div>
       </footer>
 
-      <Analytics />
     </div>
   );
 }
