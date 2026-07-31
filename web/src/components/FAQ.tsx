@@ -1,8 +1,5 @@
-/**
- * FAQ Component
- * Expandable FAQ section for common questions
- */
-import { useState } from 'react';
+import { useState } from "react";
+import { ChevronDown } from "lucide-react";
 
 interface FAQItem {
   question: string;
@@ -12,104 +9,79 @@ interface FAQItem {
 const faqs: FAQItem[] = [
   {
     question: "Is ShareMoney free to use?",
-    answer: "Yes! ShareMoney is completely free. We believe managing shared expenses shouldn't cost you anything."
+    answer: "Yes. ShareMoney is free for tracking shared expenses and balances.",
   },
   {
-    question: "How does the smart settlement algorithm work?",
-    answer: "Our algorithm analyzes all debts and credits in a group to find the minimum number of transactions needed to settle everyone up. Instead of multiple back-and-forth payments, we calculate the most efficient settlement path."
+    question: "How does settlement minimization work?",
+    answer:
+      "ShareMoney analyzes group balances and proposes the minimum number of transfers needed to settle everyone to zero.",
   },
   {
     question: "Is my financial data secure?",
-    answer: "Yes. We never store your actual payment information. We only track who owes what, not your bank details. All data is stored securely and you maintain full control."
+    answer:
+      "ShareMoney stores group records, participants, expenses, and balances. We focus on clear records, not storing payment instruments.",
   },
   {
     question: "Can I use ShareMoney for international trips?",
-    answer: "Yes! ShareMoney supports multiple currencies, making it perfect for international travel and expenses in different countries."
+    answer:
+      "Yes. ShareMoney supports multiple currencies so overseas groups can track expenses in different money types.",
   },
   {
-    question: "Do my friends need to download the app?",
-    answer: "No! ShareMoney works on the web, so your friends can access it from any device with a browser. Mobile apps are coming soon for an even better experience."
+    question: "Do my friends need to download an app?",
+    answer:
+      "ShareMoney is available through the web app for anyone, and Android users can install the app from Google Play. iOS is currently available via TestFlight.",
   },
   {
-    question: "What happens if someone doesn't pay?",
-    answer: "ShareMoney helps you track who owes what, but the actual payment happens outside the app. We provide clear records you can share to remind people of their obligations."
-  }
+    question: "What happens if someone doesn’t pay?",
+    answer:
+      "ShareMoney keeps the shared ledger visible and up-to-date. Payment happens in your preferred payment app outside ShareMoney.",
+  },
 ];
 
 export function FAQ() {
-  const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const [openIndex, setOpenIndex] = useState<number | null>(0);
 
   return (
-    <section className="section" style={{ backgroundColor: 'var(--color-background)' }}>
-      <div className="container">
-        <div style={{ textAlign: 'center', marginBottom: '3rem' }}>
-          <h2 style={{ marginBottom: '1rem' }}>Frequently Asked Questions</h2>
-          <p style={{ fontSize: '1.125rem' }}>Everything you need to know about ShareMoney.</p>
-        </div>
+    <div className="faq">
+      <div className="section-head">
+        <h2 id="faq-title">Frequently asked questions</h2>
+        <p>Everything you need to know before you invite your group.</p>
+      </div>
 
-        <div style={{
-          maxWidth: '800px',
-          margin: '0 auto',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '1rem'
-        }}>
-          {faqs.map((faq, index) => (
-            <div
-              key={index}
-              style={{
-                backgroundColor: 'var(--color-surface)',
-                borderRadius: '12px',
-                border: '1px solid var(--color-border)',
-                overflow: 'hidden',
-                transition: 'all 0.2s ease'
-              }}
-            >
+      <div className="faq-list" aria-labelledby="faq-title">
+        {faqs.map((faq, index) => {
+          const isOpen = openIndex === index;
+
+          return (
+            <div className="faq-item" key={faq.question}>
               <button
-                onClick={() => setOpenIndex(openIndex === index ? null : index)}
-                style={{
-                  width: '100%',
-                  padding: '1.5rem',
-                  textAlign: 'left',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  fontSize: '1.125rem',
-                  fontWeight: 600,
-                  color: 'var(--color-text-main)'
-                }}
-                aria-expanded={openIndex === index}
+                type="button"
+                className={`faq-question ${isOpen ? "is-open" : ""}`}
+                aria-expanded={isOpen}
                 aria-controls={`faq-answer-${index}`}
+                id={`faq-question-${index}`}
+                onClick={() => setOpenIndex(isOpen ? null : index)}
               >
                 <span>{faq.question}</span>
-                <span style={{
-                  fontSize: '1.5rem',
-                  transition: 'transform 0.2s ease',
-                  transform: openIndex === index ? 'rotate(180deg)' : 'rotate(0deg)'
-                }}>
-                  ▼
-                </span>
+                <ChevronDown
+                  size={18}
+                  className={`faq-toggle ${isOpen ? "is-open" : ""}`}
+                  aria-hidden
+                />
               </button>
-              {openIndex === index && (
-                <div
-                  id={`faq-answer-${index}`}
-                  style={{
-                    padding: '0 1.5rem 1.5rem 1.5rem',
-                    color: 'var(--color-text-secondary)',
-                    lineHeight: 1.6
-                  }}
-                >
-                  {faq.answer}
-                </div>
-              )}
+
+              <div
+                id={`faq-answer-${index}`}
+                className={`faq-answer ${isOpen ? "is-open" : ""}`}
+                role="region"
+                aria-labelledby={`faq-question-${index}`}
+              >
+                <p>{faq.answer}</p>
+              </div>
             </div>
-          ))}
-        </div>
+          );
+        })}
       </div>
-    </section>
+    </div>
   );
 }
-
