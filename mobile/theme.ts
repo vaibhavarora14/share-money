@@ -1,83 +1,83 @@
 import { MD3LightTheme, MD3DarkTheme, configureFonts } from "react-native-paper";
 import { Platform } from "react-native";
 
-// Google Brand Colors
-const GOOGLE_BLUE = "#1a73e8";
-const GOOGLE_RED = "#ea4335";
-const GOOGLE_YELLOW = "#fbbc04";
-const GOOGLE_GREEN = "#34a853";
+const BRAND_CANVAS = "#F7F9FC";
+const BRAND_INK = "#17202A";
+const BRAND_ACTION = "#1F5EFF";
+const BRAND_CORAL = "#E76F51";
+const BRAND_SUCCESS = "#087A55";
 
 // Light Theme Colors
 const lightColors = {
   ...MD3LightTheme.colors,
-  primary: GOOGLE_BLUE,
+  primary: BRAND_ACTION,
   onPrimary: "#ffffff",
-  primaryContainer: "#e8f0fe",
-  onPrimaryContainer: "#1967d2",
-  secondary: GOOGLE_BLUE, // Using Blue as secondary for a cohesive look
+  primaryContainer: "#DCE6FF",
+  onPrimaryContainer: "#123A99",
+  secondary: BRAND_CORAL,
   onSecondary: "#ffffff",
-  secondaryContainer: "#d2e3fc",
-  onSecondaryContainer: "#174ea6",
-  tertiary: GOOGLE_GREEN,
+  secondaryContainer: "#FBE4DC",
+  onSecondaryContainer: "#7A2F1F",
+  tertiary: BRAND_SUCCESS,
   onTertiary: "#ffffff",
-  tertiaryContainer: "#ceead6",
-  onTertiaryContainer: "#0d652d",
-  error: GOOGLE_RED,
+  tertiaryContainer: "#D9F0E8",
+  onTertiaryContainer: "#07583F",
+  error: "#B42318",
   onError: "#ffffff",
-  errorContainer: "#fad2cf",
-  onErrorContainer: "#a50e0e",
-  background: "#ffffff",
-  onBackground: "#202124",
+  errorContainer: "#FDE2DD",
+  onErrorContainer: "#7A271A",
+  background: BRAND_CANVAS,
+  onBackground: BRAND_INK,
   surface: "#ffffff",
-  onSurface: "#202124",
-  surfaceVariant: "#f1f3f4",
-  onSurfaceVariant: "#5f6368",
-  outline: "#dadce0",
-  outlineVariant: "#e8eaed",
+  onSurface: BRAND_INK,
+  surfaceVariant: "#EEF2F7",
+  onSurfaceVariant: "#5B6776",
+  outline: "#C9D2DF",
+  outlineVariant: "#DCE3EC",
   elevation: {
     level0: "transparent",
-    level1: "#f8f9fa",
-    level2: "#f1f3f4",
-    level3: "#e8eaed",
-    level4: "#dadce0",
-    level5: "#bdc1c6",
+    level1: "#FFFFFF",
+    level2: "#F2F5FA",
+    level3: "#ECF1F7",
+    level4: "#E5ECF4",
+    level5: "#DDE7F1",
   },
 };
 
 // Dark Theme Colors
 const darkColors = {
   ...MD3DarkTheme.colors,
-  primary: "#8ab4f8",
-  onPrimary: "#202124",
-  primaryContainer: "#174ea6",
-  onPrimaryContainer: "#e8f0fe",
-  secondary: "#8ab4f8",
-  onSecondary: "#202124",
-  secondaryContainer: "#174ea6",
-  onSecondaryContainer: "#d2e3fc",
-  tertiary: "#81c995",
-  onTertiary: "#202124",
-  tertiaryContainer: "#0d652d",
-  onTertiaryContainer: "#ceead6",
-  error: "#f28b82",
-  onError: "#202124",
-  errorContainer: "#a50e0e",
-  onErrorContainer: "#fad2cf",
-  background: "#202124",
-  onBackground: "#e8eaed",
-  surface: "#202124",
-  onSurface: "#e8eaed",
-  surfaceVariant: "#303134",
-  onSurfaceVariant: "#bdc1c6",
-  outline: "#5f6368",
-  outlineVariant: "#3c4043",
+  primary: "#9BB8FF",
+  onPrimary: "#101827",
+  primaryContainer: "#183D98",
+  onPrimaryContainer: "#E8EEFF",
+  secondary: "#F0A08B",
+  onSecondary: "#17110F",
+  secondaryContainer: "#653226",
+  onSecondaryContainer: "#FFE6DE",
+  tertiary: "#76D3B0",
+  onTertiary: "#091A14",
+  tertiaryContainer: "#0D5E43",
+  onTertiaryContainer: "#DDF8ED",
+  error: "#FFB4A8",
+  onError: "#2A0704",
+  errorContainer: "#8C1D18",
+  onErrorContainer: "#FFEDEA",
+  background: "#11171D",
+  onBackground: "#E6ECF3",
+  surface: "#17202A",
+  onSurface: "#E6ECF3",
+  surfaceVariant: "#222D38",
+  onSurfaceVariant: "#B7C2CF",
+  outline: "#52606F",
+  outlineVariant: "#344252",
   elevation: {
     level0: "transparent",
-    level1: "#292a2d",
-    level2: "#2d2e31",
-    level3: "#303134",
-    level4: "#323336",
-    level5: "#35363a",
+    level1: "#1A2530",
+    level2: "#1E2A36",
+    level3: "#23313E",
+    level4: "#283744",
+    level5: "#2D3C4A",
   },
 };
 
@@ -93,12 +93,12 @@ export const lightTheme = {
   ...MD3LightTheme,
   colors: lightColors,
   fonts: configureFonts({config: fontConfig}),
-  roundness: 16, // More rounded corners like modern Google apps
+  roundness: 8,
 };
 
 export const darkTheme = {
   ...MD3DarkTheme,
   colors: darkColors,
   fonts: configureFonts({config: fontConfig}),
-  roundness: 16,
+  roundness: 8,
 };
