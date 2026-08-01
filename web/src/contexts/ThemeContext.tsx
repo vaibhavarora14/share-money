@@ -1,3 +1,5 @@
+/* eslint-disable react-refresh/only-export-components */
+
 /**
  * Theme Context
  * Manages dark mode state - defaults to system preference

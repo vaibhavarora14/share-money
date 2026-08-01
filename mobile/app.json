@@ -13,7 +13,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#14B8A6"
+      "backgroundColor": "#F7F9FC"
     },
     "ios": {
       "supportsTablet": true,
@@ -29,7 +29,7 @@
       "scheme": "com.vaibhavarora.sharemoney",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#14B8A6"
+        "backgroundColor": "#F7F9FC"
       },
       "edgeToEdgeEnabled": true
     },

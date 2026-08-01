@@ -109,16 +109,22 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.header}>
-            <View style={[styles.logoContainer, { backgroundColor: 'transparent' }]}>
+            <Surface
+              style={[
+                styles.logoContainer,
+                { backgroundColor: theme.colors.surface },
+              ]}
+              elevation={1}
+            >
               <Image 
                 source={require('../assets/logo.png')} 
                 style={styles.logoImage}
                 resizeMode="contain"
                 accessibilityLabel="ShareMoney app icon"
               />
-            </View>
-            <Text variant="displaySmall" style={styles.title}>
-              {isSignUp ? "Create Account" : "Welcome Back"}
+            </Surface>
+            <Text variant="displaySmall" style={[styles.title, { color: theme.colors.onBackground }]}>
+              ShareMoney
             </Text>
             <Text
               variant="bodyLarge"
@@ -128,8 +134,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               ]}
             >
               {isSignUp
-                ? "Sign up to start tracking your transactions"
-                : "Sign in to continue"}
+                ? "Create an account for shared expenses, clearly settled."
+                : "Shared expenses, clearly settled."}
             </Text>
           </View>
 
@@ -233,22 +239,21 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   header: {
-    marginBottom: 48,
+    marginBottom: 40,
     alignItems: "center",
   },
   logoContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    overflow: 'hidden', // Ensure proper clipping of rounded corners
+    width: 96,
+    height: 96,
+    borderRadius: 20,
+    overflow: 'hidden',
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 24,
   },
   logoImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 80,
+    height: 80,
   },
   title: {
     fontWeight: "bold",

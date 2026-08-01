@@ -7,9 +7,9 @@ import { parseCsv } from "./csv";
  * The export has fixed columns followed by one column per group member:
  *
  *   Date,Description,Category,Cost,Currency,Alice,Bob,Charlie
- *   2024-05-01,Groceries,Groceries,60.00,USD,40.00,-20.00,-20.00
- *   2024-05-03,Bob paid Alice,Payment,15.00,USD,-15.00,15.00,0.00
- *   ,Total balance,,,USD,25.00,-5.00,-20.00
+ *   2024-05-01,Groceries,Groceries,6000.00,INR,4000.00,-2000.00,-2000.00
+ *   2024-05-03,Bob paid Alice,Payment,1500.00,INR,-1500.00,1500.00,0.00
+ *   ,Total balance,,,INR,2500.00,-500.00,-2000.00
  *
  * Each member cell holds the row's net effect on that member's balance
  * (paid minus owed share): positive means they lent money, negative means
