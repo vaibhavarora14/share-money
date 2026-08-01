@@ -21,9 +21,11 @@ This document is the canonical reference for the landing-page redesign.
 - CTA event: `landing_cta_click` with `{ platform, placement, device }`.
 
 ## Visual System
-- Identity: `Group Pocket`, a compact wallet holding coral and green money slips.
-- The mark must read as money coordination at favicon size. Do not use routing paths,
-  transfer arrows, abstract nodes, or line diagrams as the primary brand metaphor.
+- Identity: `Electric Pocket`, a vivid action-blue launcher tile with a white wallet
+  holding coral and green money slips.
+- The mark must read as money coordination at favicon size and Android launcher
+  size. Do not use routing paths, transfer arrows, abstract nodes, or line diagrams
+  as the primary brand metaphor.
 - Palette
   - Canvas `#F7F9FC`
   - Ink `#17202A`
