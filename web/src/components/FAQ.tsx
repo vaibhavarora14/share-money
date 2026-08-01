@@ -42,10 +42,11 @@ export function FAQ() {
   const [openIndex, setOpenIndex] = useState<number | null>(0);
 
   return (
-    <div className="faq">
-      <div className="section-head">
-        <h2 id="faq-title">Frequently asked questions</h2>
-        <p>Everything you need to know before you invite your group.</p>
+    <div className="container faq">
+      <div className="section-head section-head-wide">
+        <p className="kicker">Before you invite the group</p>
+        <h2 id="faq-title">Questions that should have clear answers.</h2>
+        <p>What ShareMoney does, what it stores, and where the actual payment happens.</p>
       </div>
 
       <div className="faq-list" aria-labelledby="faq-title">

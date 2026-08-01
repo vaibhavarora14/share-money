@@ -2,15 +2,16 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/avif" href="/icon.avif" />
+    <link rel="icon" type="image/svg+xml" href="/group-pocket.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#F7F9FC" />
+    <meta name="theme-color" content="#F7F9FC" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#11171D" media="(prefers-color-scheme: dark)" />
     <meta name="color-scheme" content="light dark" />
 
     <link
       rel="preload"
       as="image"
-      href="/hero-screenshot.avif"
+      href="/group-story.avif"
       type="image/avif"
       media="(prefers-color-scheme: light)"
       fetchpriority="high"
@@ -18,7 +19,7 @@
     <link
       rel="preload"
       as="image"
-      href="/hero-screenshot-dark.avif"
+      href="/group-story-dark.avif"
       type="image/avif"
       media="(prefers-color-scheme: dark)"
       fetchpriority="high"
@@ -42,7 +43,10 @@
       property="og:description"
       content="Track shared expenses, split bills, and review group balances for trips, homes, and dinner groups."
     />
-    <meta property="og:image" content="https://share-money-web.vercel.app/hero-screenshot.webp" />
+    <meta property="og:image" content="https://share-money-web.vercel.app/group-story.webp" />
+    <meta property="og:image:width" content="900" />
+    <meta property="og:image:height" content="1000" />
+    <meta property="og:image:alt" content="A ShareMoney dinner group with member balances and the app's group ledger." />
 
     <meta property="twitter:card" content="summary_large_image" />
     <meta property="twitter:url" content="https://share-money-web.vercel.app/" />
@@ -51,7 +55,8 @@
       property="twitter:description"
       content="Track shared expenses, split bills, and review group balances for trips, homes, and dinner groups."
     />
-    <meta property="twitter:image" content="https://share-money-web.vercel.app/hero-screenshot.webp" />
+    <meta property="twitter:image" content="https://share-money-web.vercel.app/group-story.webp" />
+    <meta property="twitter:image:alt" content="A ShareMoney dinner group with member balances and the app's group ledger." />
 
     <script type="application/ld+json">
       {

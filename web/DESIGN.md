@@ -21,6 +21,9 @@ This document is the canonical reference for the landing-page redesign.
 - CTA event: `landing_cta_click` with `{ platform, placement, device }`.
 
 ## Visual System
+- Identity: `Group Pocket`, a compact wallet holding coral and green money slips.
+- The mark must read as money coordination at favicon size. Do not use routing paths,
+  transfer arrows, abstract nodes, or line diagrams as the primary brand metaphor.
 - Palette
   - Canvas `#F7F9FC`
   - Ink `#17202A`
@@ -34,8 +37,10 @@ This document is the canonical reference for the landing-page redesign.
 
 ## Layout Rules
 1. Sticky compact nav with section links + theme control + primary `Get the app` CTA.
-2. Hero: headline, support copy, trust line, primary + secondary CTAs, then real in-app screenshot.
-3. Product proof card strip: balances, expense history, settlement result.
+2. Hero: `Group Story Poster`, with headline and actions above a real group context. The
+   product screenshot sits inside that social story instead of floating as a device mockup.
+3. Product proof: `Group Pulse`, combining named member balances, a shared activity
+   timeline, and the final settlement result in one connected view.
 4. Use-case tabs: Trips / Roommates / Dinner Groups.
 5. 3-step workflow: Add expenses / Split fairly / Settle clearly.
 6. Alternating feature rows: minimized settlements, multi-currency, synchronized activity, summaries.
@@ -43,10 +48,14 @@ This document is the canonical reference for the landing-page redesign.
 8. Accessible FAQ accordion + focused install + legal/support footer.
 
 ## Asset Rules
-- Primary logo and hero assets are `png` with `webp` and `avif` fallbacks.
+- Product screens use `avif`, `webp`, and `png` fallbacks.
 - Use `<picture>` for responsive image selection.
 - Hero image is preloaded for first paint.
+- Product screenshots remain genuine. Supporting social context may be composed from
+  typography, initials, color, and semantic UI elements, without stock photography.
 
 ## Non-goals
 - No testimonials, no fabricated ratings or metrics, no oversized logo walls, no stock photography.
 - No decorative blobs, gradients as brand treatment, or hidden content/animated reveal sections.
+- No handwritten annotations or ornamental underlines. Warmth comes from people, group
+  names, shared moments, and activity rather than casual type effects.

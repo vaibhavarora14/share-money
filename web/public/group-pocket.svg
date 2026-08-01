@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="ShareMoney">
+  <path d="M18 13.5h18.5a4 4 0 0 1 4 4V31H18z" fill="#E76F51" stroke="#17202A" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M27 8.5h18.5a4 4 0 0 1 4 4V31H27z" fill="#7BDCB5" stroke="#17202A" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M11 24h42v23.5a8 8 0 0 1-8 8H19a8 8 0 0 1-8-8z" fill="#FFFFFF" stroke="#17202A" stroke-width="3.5" stroke-linejoin="round"/>
+  <path d="M11 27.5h42" fill="none" stroke="#17202A" stroke-width="3.5"/>
+  <path d="M38 36h15v10H38a5 5 0 0 1 0-10z" fill="#1F5EFF" stroke="#17202A" stroke-width="3" stroke-linejoin="round"/>
+  <circle cx="43" cy="41" r="1.75" fill="#FFFFFF"/>
+  <path d="M18.5 44.5v3.5M24.5 44.5v3.5M30.5 44.5v3.5" fill="none" stroke="#17202A" stroke-width="2" stroke-linecap="round"/>
+</svg>
