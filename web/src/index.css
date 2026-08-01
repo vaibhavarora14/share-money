@@ -1408,9 +1408,12 @@ img {
 
 @media (max-width: 70rem) {
   .section-nav {
-    position: fixed;
+    position: absolute;
     z-index: 70;
-    inset: var(--header-height) 0 0;
+    top: 100%;
+    right: 0;
+    left: 0;
+    height: calc(100svh - var(--header-height));
     display: none;
     align-content: start;
     flex-direction: column;
