@@ -46,7 +46,7 @@ export function ProductChapters() {
             <p className="chapter-label">Clear across currencies</p>
             <h3>Each currency keeps its own honest balance.</h3>
             <p>
-              A trip can include USD, EUR, and INR without hiding the original amount.
+              A trip can include INR, EUR, and AED without hiding the original amount.
               ShareMoney keeps each currency visible and the final actions readable.
             </p>
             <ul className="chapter-facts">
@@ -65,13 +65,13 @@ export function ProductChapters() {
               <span className="avatar avatar-small" aria-hidden>NO</span>
               <span className="member-copy"><strong>Noor</strong><span>pays Maya</span></span>
               <ArrowRight size={18} aria-hidden />
-              <strong>$120</strong>
+              <strong>INR 10,000</strong>
             </div>
             <div className="settlement-transfer">
               <span className="avatar avatar-small" aria-hidden>YO</span>
               <span className="member-copy"><strong>You</strong><span>pay Maya</span></span>
               <ArrowRight size={18} aria-hidden />
-              <strong>$40</strong>
+              <strong>INR 3,200</strong>
             </div>
             <div className="settlement-plan-result">
               <CheckCircle2 size={22} aria-hidden />

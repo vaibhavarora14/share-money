@@ -1,16 +1,16 @@
-import { CheckCircle2, CircleDollarSign, ReceiptText } from "lucide-react";
+import { CheckCircle2, ReceiptText, WalletCards } from "lucide-react";
 
 const pulseMembers = [
-  { initials: "KA", name: "Kai", amount: "owes $31.40", tone: "negative" },
-  { initials: "AR", name: "Ari", amount: "is owed $58.60", tone: "positive" },
-  { initials: "SA", name: "Sam", amount: "owes $27.20", tone: "negative" },
+  { initials: "KA", name: "Kai", amount: "owes INR 2,620", tone: "negative" },
+  { initials: "AR", name: "Ari", amount: "is owed INR 4,880", tone: "positive" },
+  { initials: "SA", name: "Sam", amount: "owes INR 2,260", tone: "negative" },
   { initials: "CH", name: "Charlie", amount: "settled", tone: "neutral" },
 ] as const;
 
 const pulseActivity = [
-  { date: "Thu", text: "Kai added groceries", amount: "$84.20" },
-  { date: "Sat", text: "Ari added dinner", amount: "$55.60" },
-  { date: "Sun", text: "Sam added snacks", amount: "$36.00" },
+  { date: "Thu", text: "Kai added groceries", amount: "INR 7,020" },
+  { date: "Sat", text: "Ari added dinner", amount: "INR 4,630" },
+  { date: "Sun", text: "Sam added snacks", amount: "INR 3,000" },
   { date: "Now", text: "ShareMoney calculated two transfers", amount: "Ready" },
 ] as const;
 
@@ -30,7 +30,7 @@ export function GroupPulse() {
         <div className="group-pulse">
           <div className="pulse-column pulse-balances">
             <div className="pulse-column-title">
-              <CircleDollarSign size={20} aria-hidden />
+              <WalletCards size={20} aria-hidden />
               <h3>Member balances</h3>
             </div>
             <div className="pulse-member-list" role="list">
@@ -68,11 +68,11 @@ export function GroupPulse() {
             <dl>
               <div>
                 <dt>Total spend</dt>
-                <dd>$175.80</dd>
+                <dd>INR 14,650</dd>
               </div>
               <div>
                 <dt>Open balance</dt>
-                <dd>$0.00</dd>
+                <dd>INR 0</dd>
               </div>
             </dl>
           </div>
