@@ -11,7 +11,7 @@ import {
     useTheme,
 } from "react-native-paper";
 import { Balance, GroupBalance, Participant } from "../types";
-import { formatCurrency } from "../utils/currency";
+import { formatCurrency, getDefaultCurrency } from "../utils/currency";
 import { styles } from "./BalancesSection.styles";
 
 interface BalancesSectionProps {
@@ -35,7 +35,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
   groupBalances,
   overallBalances = [],
   loading,
-  defaultCurrency = "USD",
+  defaultCurrency = getDefaultCurrency(),
   showOverallBalances = true,
   onSettleUp,
   currentUserId,

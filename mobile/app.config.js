@@ -77,7 +77,7 @@ module.exports = ({ config }) => {
       splash: {
         image: "./assets/splash-icon.png",
         resizeMode: "contain",
-        backgroundColor: "#14B8A6"
+        backgroundColor: "#F7F9FC"
       },
       ios: {
         supportsTablet: true,
@@ -105,7 +105,7 @@ module.exports = ({ config }) => {
         usesCleartextTraffic: true,
         adaptiveIcon: {
           foregroundImage: "./assets/adaptive-icon.png",
-          backgroundColor: "#14B8A6"
+          backgroundColor: "#F7F9FC"
         },
         edgeToEdgeEnabled: true,
         // App Links for invite links; requires assetlinks.json hosted at
@@ -165,4 +165,3 @@ module.exports = ({ config }) => {
     }
   };
 };
-

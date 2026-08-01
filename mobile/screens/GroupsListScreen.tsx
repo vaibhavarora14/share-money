@@ -420,13 +420,13 @@ const styles = StyleSheet.create({
   emptySurface: {
     padding: 32,
     alignItems: "center",
-    borderRadius: 24,
+    borderRadius: 8,
     width: "100%",
     backgroundColor: "transparent",
   },
   groupItem: {
     marginBottom: 12,
-    borderRadius: 16,
+    borderRadius: 8,
     overflow: "hidden",
   },
   groupTouchable: {
@@ -440,7 +440,7 @@ const styles = StyleSheet.create({
   groupIcon: {
     width: 48,
     height: 48,
-    borderRadius: 24,
+    borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -472,7 +472,7 @@ const styles = StyleSheet.create({
     margin: 16,
     right: 0,
     bottom: 10,
-    borderRadius: 16,
+    borderRadius: 8,
   },
   // New Styles
   groupMetadata: {
@@ -497,7 +497,7 @@ const styles = StyleSheet.create({
   accordion: {
     marginTop: 12,
     marginBottom: 12,
-    borderRadius: 16,
+    borderRadius: 8,
     overflow: "hidden",
   },
   accordionTitle: {
