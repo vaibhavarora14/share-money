@@ -31,42 +31,19 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <div
-          style={{
-            minHeight: '100vh',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '2rem',
-            backgroundColor: 'var(--color-background)',
-          }}
-        >
-          <div
-            style={{
-              textAlign: 'center',
-              maxWidth: '600px',
-              padding: '3rem',
-              backgroundColor: 'white',
-              borderRadius: '24px',
-              boxShadow: 'var(--shadow-lg)',
-            }}
-          >
-            <h2 style={{ marginBottom: '1rem', color: 'var(--color-primary)' }}>
-              Something went wrong
-            </h2>
-            <p style={{ marginBottom: '2rem', color: 'var(--color-text-secondary)' }}>
+        <div className="error-boundary">
+          <div className="error-boundary-panel">
+            <h2>Something went wrong</h2>
+            <p>
               We're sorry, but something unexpected happened. Please try refreshing the page.
             </p>
             <button
+              type="button"
               onClick={() => {
                 this.setState({ hasError: false, error: null });
                 window.location.reload();
               }}
-              className="btn btn-primary"
-              style={{
-                padding: '1rem 2rem',
-                fontSize: '1.125rem',
-              }}
+              className="error-boundary-action"
             >
               Refresh Page
             </button>
@@ -78,4 +55,3 @@ export class ErrorBoundary extends Component<Props, State> {
     return this.props.children;
   }
 }
-

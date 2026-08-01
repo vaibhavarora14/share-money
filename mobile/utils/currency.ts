@@ -21,8 +21,8 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
  * Used for currency picker UI
  */
 export const CURRENCIES: Currency[] = [
-  { code: 'USD', symbol: '$', name: 'US Dollar' },
   { code: 'INR', symbol: '₹', name: 'Indian Rupee' },
+  { code: 'USD', symbol: '$', name: 'US Dollar' },
   { code: 'EUR', symbol: '€', name: 'Euro' },
   { code: 'GBP', symbol: '£', name: 'British Pound' },
   { code: 'JPY', symbol: '¥', name: 'Japanese Yen' },
@@ -35,7 +35,6 @@ export const CURRENCIES: Currency[] = [
 /**
  * Gets the default currency code from environment variable
  * Defaults to INR for frontend (can be overridden via EXPO_PUBLIC_DEFAULT_CURRENCY)
- * Note: Backend defaults to USD, but frontend uses INR by default for user preference
  * @returns Currency code string (e.g., 'INR', 'USD')
  */
 export function getDefaultCurrency(): string {
@@ -44,13 +43,13 @@ export function getDefaultCurrency(): string {
 
 /**
  * Gets the currency symbol for a given currency code
- * Uses case-insensitive lookup and falls back to '$' if currency not found
+ * Uses case-insensitive lookup and falls back to the INR symbol if currency is not found
  * @param currencyCode - Currency code (e.g., 'USD', 'INR'). Defaults to default currency
  * @returns Currency symbol string (e.g., '$', '₹')
  */
 export function getCurrencySymbol(currencyCode: string = getDefaultCurrency()): string {
   const normalizedCode = currencyCode.toUpperCase();
-  return CURRENCY_SYMBOLS[normalizedCode] || CURRENCY_SYMBOLS['USD'] || '$';
+  return CURRENCY_SYMBOLS[normalizedCode] || CURRENCY_SYMBOLS['INR'] || '₹';
 }
 
 /**
