@@ -113,6 +113,7 @@ The workflow deploys all functions in `supabase/functions/`:
 - `group-members` - Group member management
 - `groups` - Group management
 - `invitations` - Group invitations
+- `monthly-reminders` - Scheduled pending balance email reminders
 - `settlements` - Settlement management
 - `transactions` - Transaction management
 

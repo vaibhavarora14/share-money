@@ -1,0 +1,522 @@
+import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
+import { SUPABASE_SERVICE_ROLE_KEY, SUPABASE_URL } from '../_shared/env.ts';
+import { fetchUserEmails } from '../_shared/user-email.ts';
+import { log } from '../_shared/logger.ts';
+import {
+  aggregateMonthlyReminderEmails,
+  buildGroupSettlementEdges,
+  getDeliveryReservationMode,
+  getPreviousMonthPeriodKey,
+  type ReminderEmail,
+  type ReminderGroup,
+  type ReminderParticipant,
+  type ReminderSettlement,
+  type ReminderTransaction,
+} from '../_shared/monthly-reminders.ts';
+import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
+
+interface ReminderRunRow {
+  id: string;
+}
+
+interface DeliveryRow {
+  id: string;
+  user_id: string;
+  status: string;
+}
+
+interface SendResult {
+  id?: string;
+  error?: unknown;
+}
+
+interface ReminderSummaryRecipient {
+  user_id: string;
+  to: string;
+  action_count: number;
+  status: 'dry_run' | 'sent' | 'failed' | 'skipped_duplicate';
+  error?: string;
+}
+
+type SupabaseClient = any;
+
+const PAGE_SIZE = 1000;
+const RESEND_EMAIL_URL = 'https://api.resend.com/emails';
+
+function getOptionalSecret(key: string): string | null {
+  const value = Deno.env.get(key)?.trim();
+  return value ? value : null;
+}
+
+function requireSecret(key: string): string {
+  const value = getOptionalSecret(key);
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${key}`);
+  }
+  return value;
+}
+
+function getRequestSecret(req: Request): string | null {
+  const directSecret = req.headers.get('x-reminder-cron-secret')?.trim();
+  if (directSecret) return directSecret;
+
+  const authorization = req.headers.get('authorization') || req.headers.get('Authorization');
+  const bearerMatch = authorization?.match(/^Bearer\s+(.+)$/i);
+  return bearerMatch?.[1]?.trim() || null;
+}
+
+function assertCronSecret(req: Request) {
+  const expectedSecret = requireSecret('REMINDER_CRON_SECRET');
+  const actualSecret = getRequestSecret(req);
+  if (!actualSecret || actualSecret !== expectedSecret) {
+    throw new Error('Unauthorized: invalid reminder cron secret');
+  }
+}
+
+function sanitizeError(error: unknown): string {
+  if (error instanceof Error) return error.message.slice(0, 500);
+  if (typeof error === 'string') return error.slice(0, 500);
+  try {
+    return JSON.stringify(error).slice(0, 500);
+  } catch {
+    return String(error).slice(0, 500);
+  }
+}
+
+async function fetchAllRows<T>(
+  fetchPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
+): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const to = from + PAGE_SIZE - 1;
+    const { data, error } = await fetchPage(from, to);
+    if (error) throw error;
+
+    rows.push(...(data || []));
+    if (!data || data.length < PAGE_SIZE) break;
+  }
+  return rows;
+}
+
+async function createRun(supabase: SupabaseClient, periodKey: string): Promise<string> {
+  const { data, error } = await supabase
+    .from('monthly_reminder_runs')
+    .insert({ period_key: periodKey, status: 'running' })
+    .select('id')
+    .single();
+
+  if (error) throw error;
+  return (data as ReminderRunRow).id;
+}
+
+async function finishRun(
+  supabase: SupabaseClient,
+  runId: string,
+  status: 'completed' | 'failed',
+  stats: Record<string, unknown>,
+) {
+  const { error } = await supabase
+    .from('monthly_reminder_runs')
+    .update({
+      status,
+      finished_at: new Date().toISOString(),
+      stats,
+    })
+    .eq('id', runId);
+
+  if (error) {
+    log.error('Failed to update monthly reminder run', 'monthly-reminders', {
+      runId,
+      error: sanitizeError(error),
+    });
+  }
+}
+
+async function fetchReminderInputs(supabase: SupabaseClient) {
+  const [groups, participants, transactions, settlements] = await Promise.all([
+    fetchAllRows<ReminderGroup>((from, to) =>
+      supabase
+        .from('groups')
+        .select('id, name')
+        .order('created_at', { ascending: true })
+        .range(from, to)
+    ),
+    fetchAllRows<ReminderParticipant>((from, to) =>
+      supabase
+        .from('participants')
+        .select('id, group_id, user_id, email, full_name, type')
+        .range(from, to)
+    ),
+    fetchAllRows<ReminderTransaction>((from, to) =>
+      supabase
+        .from('transactions')
+        .select(`
+          id,
+          group_id,
+          amount,
+          currency,
+          paid_by_participant_id,
+          transaction_splits (
+            participant_id,
+            amount
+          )
+        `)
+        .eq('type', 'expense')
+        .not('group_id', 'is', null)
+        .range(from, to)
+    ),
+    fetchAllRows<ReminderSettlement>((from, to) =>
+      supabase
+        .from('settlements')
+        .select('id, group_id, from_participant_id, to_participant_id, amount, currency')
+        .not('group_id', 'is', null)
+        .range(from, to)
+    ),
+  ]);
+
+  const userIds = Array.from(
+    new Set(
+      participants
+        .map((participant) => participant.user_id)
+        .filter((userId): userId is string => !!userId),
+    ),
+  );
+  const userIdToEmail = await fetchUserEmails(userIds, '', null);
+
+  return { groups, participants, transactions, settlements, userIdToEmail };
+}
+
+function buildReminderEmails(
+  periodKey: string,
+  appUrl: string,
+  logoUrl: string | null,
+  inputs: Awaited<ReturnType<typeof fetchReminderInputs>>,
+): ReminderEmail[] {
+  const participantsByGroup = new Map<string, ReminderParticipant[]>();
+  const transactionsByGroup = new Map<string, ReminderTransaction[]>();
+  const settlementsByGroup = new Map<string, ReminderSettlement[]>();
+
+  for (const participant of inputs.participants) {
+    if (!participantsByGroup.has(participant.group_id)) {
+      participantsByGroup.set(participant.group_id, []);
+    }
+    participantsByGroup.get(participant.group_id)!.push(participant);
+  }
+
+  for (const transaction of inputs.transactions) {
+    if (!transactionsByGroup.has(transaction.group_id)) {
+      transactionsByGroup.set(transaction.group_id, []);
+    }
+    transactionsByGroup.get(transaction.group_id)!.push(transaction);
+  }
+
+  for (const settlement of inputs.settlements) {
+    if (!settlementsByGroup.has(settlement.group_id)) {
+      settlementsByGroup.set(settlement.group_id, []);
+    }
+    settlementsByGroup.get(settlement.group_id)!.push(settlement);
+  }
+
+  const edges = inputs.groups.flatMap((group) =>
+    buildGroupSettlementEdges({
+      group,
+      participants: participantsByGroup.get(group.id) || [],
+      transactions: transactionsByGroup.get(group.id) || [],
+      settlements: settlementsByGroup.get(group.id) || [],
+      userIdToEmail: inputs.userIdToEmail,
+    })
+  );
+
+  return aggregateMonthlyReminderEmails({ periodKey, appUrl, logoUrl, edges });
+}
+
+async function loadExistingDeliveries(
+  supabase: SupabaseClient,
+  periodKey: string,
+): Promise<Map<string, DeliveryRow>> {
+  const rows = await fetchAllRows<DeliveryRow>((from, to) =>
+    supabase
+      .from('monthly_reminder_deliveries')
+      .select('id, user_id, status')
+      .eq('period_key', periodKey)
+      .range(from, to)
+  );
+
+  return new Map(rows.map((row) => [row.user_id, row]));
+}
+
+async function reserveDelivery(
+  supabase: SupabaseClient,
+  runId: string,
+  periodKey: string,
+  email: ReminderEmail,
+  existing: DeliveryRow | undefined,
+): Promise<{ id: string; skipped: boolean }> {
+  const deliveryPayload = {
+    run_id: runId,
+    period_key: periodKey,
+    user_id: email.user_id,
+    email: email.to,
+    status: 'pending',
+    action_count: email.actions.length,
+    payload: { actions: email.actions },
+    error_message: null,
+    resend_message_id: null,
+    sent_at: null,
+  };
+
+  const reservationMode = getDeliveryReservationMode(existing);
+  if (reservationMode === 'skip_duplicate' && existing) {
+    return { id: existing.id, skipped: true };
+  }
+
+  if (reservationMode === 'retry_failed' && existing) {
+    const { data, error } = await supabase
+      .from('monthly_reminder_deliveries')
+      .update(deliveryPayload)
+      .eq('id', existing.id)
+      .select('id')
+      .single();
+
+    if (error) throw error;
+    return { id: (data as { id: string }).id, skipped: false };
+  }
+
+  const { data, error } = await supabase
+    .from('monthly_reminder_deliveries')
+    .insert(deliveryPayload)
+    .select('id')
+    .single();
+
+  if (error && typeof error === 'object' && 'code' in error && error.code === '23505') {
+    return { id: '', skipped: true };
+  }
+  if (error) throw error;
+  return { id: (data as { id: string }).id, skipped: false };
+}
+
+async function sendReminderEmail(email: ReminderEmail): Promise<string | null> {
+  const resendApiKey = requireSecret('RESEND_API_KEY');
+  const fromEmail = requireSecret('REMINDER_FROM_EMAIL');
+
+  const response = await fetch(RESEND_EMAIL_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${resendApiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: fromEmail,
+      to: [email.to],
+      subject: email.subject,
+      html: email.html,
+      text: email.text,
+    }),
+  });
+
+  const responseText = await response.text();
+  let data: SendResult | null = null;
+  if (responseText) {
+    try {
+      data = JSON.parse(responseText) as SendResult;
+    } catch {
+      data = { error: responseText };
+    }
+  }
+
+  if (!response.ok) {
+    throw new Error(`Resend returned ${response.status}: ${sanitizeError(data?.error || responseText)}`);
+  }
+
+  return data?.id || null;
+}
+
+async function markDeliverySent(
+  supabase: SupabaseClient,
+  deliveryId: string,
+  resendMessageId: string | null,
+) {
+  const { error } = await supabase
+    .from('monthly_reminder_deliveries')
+    .update({
+      status: 'sent',
+      sent_at: new Date().toISOString(),
+      resend_message_id: resendMessageId,
+      error_message: null,
+    })
+    .eq('id', deliveryId);
+
+  if (error) throw error;
+}
+
+async function markDeliveryFailed(
+  supabase: SupabaseClient,
+  deliveryId: string,
+  errorMessage: string,
+) {
+  const { error } = await supabase
+    .from('monthly_reminder_deliveries')
+    .update({
+      status: 'failed',
+      error_message: errorMessage,
+    })
+    .eq('id', deliveryId);
+
+  if (error) throw error;
+}
+
+Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') {
+    return createEmptyResponse(200, req);
+  }
+
+  if (req.method !== 'POST' && req.method !== 'GET') {
+    return createErrorResponse(405, 'Method not allowed', 'METHOD_NOT_ALLOWED', undefined, req);
+  }
+
+  let runId: string | null = null;
+  let supabase: SupabaseClient | null = null;
+
+  try {
+    assertCronSecret(req);
+
+    if (!SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('Missing required environment variable: SUPABASE_SERVICE_ROLE_KEY');
+    }
+
+    const url = new URL(req.url);
+    const dryRun = url.searchParams.get('dry_run') === 'true';
+    const periodKey = getPreviousMonthPeriodKey();
+    const appUrl = requireSecret('APP_URL');
+    const logoUrl = getOptionalSecret('REMINDER_LOGO_URL');
+
+    if (!dryRun) {
+      requireSecret('RESEND_API_KEY');
+      requireSecret('REMINDER_FROM_EMAIL');
+    }
+
+    supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    });
+
+    const inputs = await fetchReminderInputs(supabase);
+    const emails = buildReminderEmails(periodKey, appUrl, logoUrl, inputs);
+
+    if (dryRun) {
+      return createSuccessResponse({
+        period_key: periodKey,
+        dry_run: true,
+        recipient_count: emails.length,
+        recipients: emails.map((email) => ({
+          user_id: email.user_id,
+          to: email.to,
+          action_count: email.actions.length,
+          actions: email.actions,
+        })),
+      }, 200, 0, req);
+    }
+
+    runId = await createRun(supabase, periodKey);
+    const existingDeliveries = await loadExistingDeliveries(supabase, periodKey);
+    const recipients: ReminderSummaryRecipient[] = [];
+    let sentCount = 0;
+    let failedCount = 0;
+    let skippedDuplicateCount = 0;
+
+    for (const email of emails) {
+      let deliveryId: string | null = null;
+      try {
+        const reservation = await reserveDelivery(
+          supabase,
+          runId,
+          periodKey,
+          email,
+          existingDeliveries.get(email.user_id),
+        );
+
+        if (reservation.skipped) {
+          skippedDuplicateCount += 1;
+          recipients.push({
+            user_id: email.user_id,
+            to: email.to,
+            action_count: email.actions.length,
+            status: 'skipped_duplicate',
+          });
+          continue;
+        }
+
+        deliveryId = reservation.id;
+        const resendMessageId = await sendReminderEmail(email);
+        try {
+          await markDeliverySent(supabase, deliveryId, resendMessageId);
+        } catch (markSentError) {
+          log.error('Reminder email sent but delivery row could not be marked sent', 'monthly-reminders', {
+            deliveryId,
+            userId: email.user_id,
+            error: sanitizeError(markSentError),
+          });
+        }
+        sentCount += 1;
+        recipients.push({
+          user_id: email.user_id,
+          to: email.to,
+          action_count: email.actions.length,
+          status: 'sent',
+        });
+      } catch (error) {
+        failedCount += 1;
+        const errorMessage = sanitizeError(error);
+        const existingDelivery = existingDeliveries.get(email.user_id);
+        const failedDeliveryId = deliveryId || existingDelivery?.id;
+        if (failedDeliveryId) {
+          try {
+            await markDeliveryFailed(supabase, failedDeliveryId, errorMessage);
+          } catch (markFailedError) {
+            log.error('Reminder delivery row could not be marked failed', 'monthly-reminders', {
+              deliveryId: failedDeliveryId,
+              userId: email.user_id,
+              error: sanitizeError(markFailedError),
+            });
+          }
+        }
+        recipients.push({
+          user_id: email.user_id,
+          to: email.to,
+          action_count: email.actions.length,
+          status: 'failed',
+          error: errorMessage,
+        });
+        log.error('Failed to send monthly reminder email', 'monthly-reminders', {
+          userId: email.user_id,
+          error: errorMessage,
+        });
+      }
+    }
+
+    const stats = {
+      period_key: periodKey,
+      dry_run: false,
+      recipient_count: emails.length,
+      sent_count: sentCount,
+      failed_count: failedCount,
+      skipped_duplicate_count: skippedDuplicateCount,
+    };
+
+    await finishRun(supabase, runId, 'completed', stats);
+
+    return createSuccessResponse({
+      ...stats,
+      recipients,
+    }, 200, 0, req);
+  } catch (error: unknown) {
+    if (runId && supabase) {
+      await finishRun(supabase, runId, 'failed', { error: sanitizeError(error) });
+    }
+    return handleError(error, 'monthly-reminders handler', req);
+  }
+});

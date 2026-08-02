@@ -162,6 +162,18 @@ ShareMoney/
 | `SUPABASE_ANON_KEY` | Public anon key | (from `supabase status`) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service role key | (from `supabase status`) |
 | `ALLOWED_ORIGIN` | CORS origin for Edge Functions | `http://localhost:19000` |
+| `APP_URL` | App URL used in reminder email links | `https://share-money-web.vercel.app` |
+| `REMINDER_CRON_SECRET` | Shared secret required to invoke monthly reminders | random secret |
+| `RESEND_API_KEY` | Resend API key for reminder emails | `re_...` |
+| `REMINDER_FROM_EMAIL` | Verified sender for reminder emails | `ShareMoney <reminders@example.com>` |
+| `REMINDER_LOGO_URL` | Optional hosted logo URL for reminder emails; falls back to `${APP_URL}/icon.png` | `https://yourdomain.com/icon.png` |
+
+**Supabase Vault secrets for monthly reminders:**
+
+| Secret | Purpose |
+| ------ | ------- |
+| `monthly_reminders_function_url` | Full deployed function URL, e.g. `https://<project-ref>.supabase.co/functions/v1/monthly-reminders` |
+| `monthly_reminders_cron_secret` | Same value as `REMINDER_CRON_SECRET` |
 
 **Mobile `mobile/.env`** (Expo requires `EXPO_PUBLIC_` prefix):
 
