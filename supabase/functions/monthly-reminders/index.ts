@@ -190,6 +190,7 @@ async function fetchReminderInputs(supabase: SupabaseClient) {
 function buildReminderEmails(
   periodKey: string,
   appUrl: string,
+  logoUrl: string | null,
   inputs: Awaited<ReturnType<typeof fetchReminderInputs>>,
 ): ReminderEmail[] {
   const participantsByGroup = new Map<string, ReminderParticipant[]>();
@@ -227,7 +228,7 @@ function buildReminderEmails(
     })
   );
 
-  return aggregateMonthlyReminderEmails({ periodKey, appUrl, edges });
+  return aggregateMonthlyReminderEmails({ periodKey, appUrl, logoUrl, edges });
 }
 
 async function loadExistingDeliveries(
@@ -388,6 +389,7 @@ Deno.serve(async (req: Request) => {
     const dryRun = url.searchParams.get('dry_run') === 'true';
     const periodKey = getPreviousMonthPeriodKey();
     const appUrl = requireSecret('APP_URL');
+    const logoUrl = getOptionalSecret('REMINDER_LOGO_URL');
 
     if (!dryRun) {
       requireSecret('RESEND_API_KEY');
@@ -403,7 +405,7 @@ Deno.serve(async (req: Request) => {
     });
 
     const inputs = await fetchReminderInputs(supabase);
-    const emails = buildReminderEmails(periodKey, appUrl, inputs);
+    const emails = buildReminderEmails(periodKey, appUrl, logoUrl, inputs);
 
     if (dryRun) {
       return createSuccessResponse({

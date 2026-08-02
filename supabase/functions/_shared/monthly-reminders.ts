@@ -93,6 +93,7 @@ interface BuildGroupSettlementEdgesInput {
 interface AggregateReminderEmailsInput {
   periodKey: string;
   appUrl: string;
+  logoUrl?: string | null;
   edges: SettlementReminderEdge[];
 }
 
@@ -135,6 +136,14 @@ function escapeHtml(value: string): string {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
+}
+
+function baseUrl(value: string): string {
+  return value.replace(/\/$/, '');
+}
+
+function defaultLogoUrl(appUrl: string): string {
+  return `${baseUrl(appUrl)}/icon.png`;
 }
 
 export function formatReminderMoney(amount: number, currency: string): string {
@@ -335,6 +344,7 @@ function addAction(
   to: string,
   periodKey: string,
   appUrl: string,
+  logoUrl: string,
   action: ReminderAction,
 ) {
   if (!emails.has(userId)) {
@@ -350,22 +360,31 @@ function addAction(
   }
 
   emails.get(userId)!.actions.push(action);
-  renderReminderEmail(emails.get(userId)!, periodKey, appUrl);
+  renderReminderEmail(emails.get(userId)!, periodKey, appUrl, logoUrl);
 }
 
-function renderReminderEmail(email: ReminderEmail, periodKey: string, appUrl: string) {
+function renderReminderEmail(
+  email: ReminderEmail,
+  periodKey: string,
+  appUrl: string,
+  logoUrl: string,
+) {
   const periodLabel = getPeriodLabel(periodKey);
   const rows = email.actions.map((action) => {
     const amount = formatReminderMoney(action.amount, action.currency);
     const sentence = action.direction === 'owe'
       ? `You owe ${amount} to ${action.counterparty_name} in ${action.group_name}`
       : `You are owed ${amount} by ${action.counterparty_name} in ${action.group_name}`;
-    const groupUrl = `${appUrl.replace(/\/$/, '')}/groups/${encodeURIComponent(action.group_id)}`;
+    const groupUrl = `${baseUrl(appUrl)}/groups/${encodeURIComponent(action.group_id)}`;
+    const badge = action.direction === 'owe' ? 'To send' : 'To collect';
     return `
       <tr>
-        <td style="padding:12px;border-bottom:1px solid #e5e7eb;">${escapeHtml(sentence)}</td>
-        <td style="padding:12px;border-bottom:1px solid #e5e7eb;text-align:right;">
-          <a href="${escapeHtml(groupUrl)}" style="color:#2563eb;text-decoration:none;">Open group</a>
+        <td style="padding:16px;border-bottom:1px solid #dbe7e3;">
+          <div style="font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#0f766e;margin-bottom:4px;">${escapeHtml(badge)}</div>
+          <div style="font-size:15px;color:#10201d;">${escapeHtml(sentence)}</div>
+        </td>
+        <td style="padding:16px;border-bottom:1px solid #dbe7e3;text-align:right;white-space:nowrap;">
+          <a href="${escapeHtml(groupUrl)}" style="color:#0f766e;font-weight:700;text-decoration:none;">Open group</a>
         </td>
       </tr>`;
   }).join('');
@@ -379,23 +398,72 @@ function renderReminderEmail(email: ReminderEmail, periodKey: string, appUrl: st
 
   email.html = `<!doctype html>
 <html>
-  <body style="font-family:Arial,sans-serif;color:#111827;line-height:1.5;">
-    <h1 style="font-size:20px;margin:0 0 12px;">ShareMoney pending balances</h1>
-    <p style="margin:0 0 16px;">Here are your unsettled group balances for ${escapeHtml(periodLabel)}.</p>
-    <table style="border-collapse:collapse;width:100%;max-width:720px;border:1px solid #e5e7eb;">
-      <tbody>${rows}</tbody>
+  <body style="margin:0;padding:0;background:#f4fbf9;font-family:Arial,sans-serif;color:#10201d;line-height:1.5;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
+      A tiny money nudge from ShareMoney: your unsettled group balances are ready.
+    </div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4fbf9;padding:24px 12px;">
+      <tbody>
+        <tr>
+          <td align="center">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:680px;background:#ffffff;border:1px solid #dbe7e3;border-radius:16px;overflow:hidden;">
+              <tbody>
+                <tr>
+                  <td style="padding:24px 24px 8px;">
+                    <table role="presentation" cellspacing="0" cellpadding="0">
+                      <tbody>
+                        <tr>
+                          <td style="padding-right:12px;">
+                            <img src="${escapeHtml(logoUrl)}" width="48" height="48" alt="ShareMoney" style="display:block;border-radius:12px;">
+                          </td>
+                          <td>
+                            <div style="font-size:18px;font-weight:800;color:#10201d;">ShareMoney</div>
+                            <div style="font-size:13px;color:#526762;">Monthly balance check-in</div>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 24px 18px;">
+                    <h1 style="font-size:24px;line-height:1.25;margin:0 0 10px;color:#10201d;">Time for a quick balance tidy-up</h1>
+                    <p style="font-size:15px;margin:0;color:#526762;">New month, clean slate energy. Here are the balances still waiting in your groups for ${escapeHtml(periodLabel)}.</p>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:0 24px 8px;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #dbe7e3;border-radius:12px;overflow:hidden;">
+                      <tbody>${rows}</tbody>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:18px 24px 24px;">
+                    <a href="${escapeHtml(appUrl)}" style="display:inline-block;background:#14b8a6;color:#ffffff;font-weight:800;text-decoration:none;padding:12px 18px;border-radius:10px;">Open ShareMoney</a>
+                    <p style="font-size:13px;color:#526762;margin:16px 0 0;">A little settle-up now keeps future you from doing awkward math later.</p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p style="max-width:680px;font-size:12px;color:#6b7d78;margin:12px auto 0;">You are receiving this because you have unsettled balances in a ShareMoney group.</p>
+          </td>
+        </tr>
+      </tbody>
     </table>
-    <p style="margin:16px 0 0;">
-      <a href="${escapeHtml(appUrl)}" style="color:#2563eb;">Open ShareMoney</a>
-    </p>
   </body>
 </html>`;
   email.text = [
     `ShareMoney pending balances for ${periodLabel}`,
     '',
+    'A tiny money nudge from ShareMoney.',
+    'New month, clean slate energy. Here are the balances still waiting in your groups:',
+    '',
     ...textLines,
     '',
     `Open ShareMoney: ${appUrl}`,
+    '',
+    'A little settle-up now keeps future you from doing awkward math later.',
   ].join('\n');
 }
 
@@ -403,6 +471,7 @@ export function aggregateMonthlyReminderEmails(
   input: AggregateReminderEmailsInput,
 ): ReminderEmail[] {
   const emails = new Map<string, ReminderEmail>();
+  const logoUrl = input.logoUrl?.trim() || defaultLogoUrl(input.appUrl);
 
   for (const edge of input.edges) {
     addAction(
@@ -411,6 +480,7 @@ export function aggregateMonthlyReminderEmails(
       edge.from_email,
       input.periodKey,
       input.appUrl,
+      logoUrl,
       {
         direction: 'owe',
         group_id: edge.group_id,
@@ -427,6 +497,7 @@ export function aggregateMonthlyReminderEmails(
       edge.to_email,
       input.periodKey,
       input.appUrl,
+      logoUrl,
       {
         direction: 'owed',
         group_id: edge.group_id,

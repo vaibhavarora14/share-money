@@ -254,6 +254,7 @@ Set these in Supabase Dashboard > Project Settings > Edge Functions > Environmen
 - `REMINDER_CRON_SECRET` - Random shared secret required to invoke `monthly-reminders`
 - `RESEND_API_KEY` - Resend API key
 - `REMINDER_FROM_EMAIL` - Verified Resend sender, e.g. `ShareMoney <reminders@example.com>`
+- `REMINDER_LOGO_URL` - Optional hosted logo URL for reminder emails; falls back to `${APP_URL}/icon.png`
 
 Set these in Supabase Vault before the monthly Cron job runs:
 
