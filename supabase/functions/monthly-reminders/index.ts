@@ -299,6 +299,7 @@ async function reserveDelivery(
 async function sendReminderEmail(email: ReminderEmail): Promise<string | null> {
   const resendApiKey = requireSecret('RESEND_API_KEY');
   const fromEmail = requireSecret('REMINDER_FROM_EMAIL');
+  const replyToEmail = getOptionalSecret('REMINDER_REPLY_TO_EMAIL');
 
   const response = await fetch(RESEND_EMAIL_URL, {
     method: 'POST',
@@ -312,6 +313,7 @@ async function sendReminderEmail(email: ReminderEmail): Promise<string | null> {
       subject: email.subject,
       html: email.html,
       text: email.text,
+      ...(replyToEmail ? { reply_to: replyToEmail } : {}),
     }),
   });
 

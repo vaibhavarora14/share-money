@@ -166,6 +166,7 @@ ShareMoney/
 | `REMINDER_CRON_SECRET` | Shared secret required to invoke monthly reminders | random secret |
 | `RESEND_API_KEY` | Resend API key for reminder emails | `re_...` |
 | `REMINDER_FROM_EMAIL` | Verified sender for reminder emails | `ShareMoney <reminders@example.com>` |
+| `REMINDER_REPLY_TO_EMAIL` | Optional reply-to address for reminder emails | `varora1406@gmail.com` |
 | `REMINDER_LOGO_URL` | Optional hosted logo URL for reminder emails; falls back to `${APP_URL}/icon.png` | `https://yourdomain.com/icon.png` |
 
 **Supabase Vault secrets for monthly reminders:**
