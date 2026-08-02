@@ -10,7 +10,7 @@ import {
     useTheme
 } from "react-native-paper";
 import { Balance, Transaction } from "../types";
-import { formatCurrency, formatTotals } from "../utils/currency";
+import { formatCurrency, formatTotals, getDefaultCurrency } from "../utils/currency";
 import { DebtEdge, simplifyDebts } from "../utils/debt";
 
 interface GroupDashboardProps {
@@ -33,7 +33,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   currentUserId,
   currentUserParticipantId,
   loading,
-  defaultCurrency = "USD",
+  defaultCurrency = getDefaultCurrency(),
   onSettlePress,
   onMyCostsPress,
   onTotalCostsPress,
@@ -347,7 +347,7 @@ const styles = StyleSheet.create({
   },
   compactStat: {
       flex: 1,
-      borderRadius: 16, // MD3 Large corner radius
+      borderRadius: 8,
       overflow: 'hidden',
   },
   compactStatContent: {
