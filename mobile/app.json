@@ -4,7 +4,7 @@
     "name": "ShareMoney",
     "slug": "share-money",
     "owner": "share-money",
-    "version": "1.5.0",
+    "version": "2.10.1",
     "_comment_version": "This is superseded by app.config.js which reads from version.json",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -19,7 +19,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.vaibhavarora.sharemoney",
       "scheme": "com.vaibhavarora.sharemoney",
-      "buildNumber": "21",
+      "buildNumber": "40",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
