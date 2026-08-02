@@ -255,6 +255,9 @@ otp_length = 6
 template = "Your code is {{ .Code }}"
 max_frequency = "5s"
 
+[functions.monthly-reminders]
+verify_jwt = false
+
 # Configure MFA via WebAuthn
 # [auth.mfa.web_authn]
 # enroll_enabled = true
