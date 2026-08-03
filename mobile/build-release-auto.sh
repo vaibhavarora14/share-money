@@ -89,7 +89,7 @@ generate_release_notes() {
     
     # Return the formatted notes
     cat <<EOF
-## ShareMoney ${version}
+## OweWho ${version}
 
 Build Number: ${build}
 
@@ -132,7 +132,7 @@ preview_release_notes() {
     echo "📋 Release Notes Preview for ${tag}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    echo "## ShareMoney ${version}"
+    echo "## OweWho ${version}"
     echo ""
     echo "Build Number: ${build}"
     echo ""
@@ -191,7 +191,7 @@ show_past_release() {
     echo "📋 Release Notes for ${tag}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    echo "## ShareMoney ${version}"
+    echo "## OweWho ${version}"
     echo ""
     echo "### Changes (${COMMIT_COUNT} commits since ${PREVIOUS_TAG})"
     echo "$COMMITS"
@@ -237,7 +237,7 @@ if [ "$PREVIEW_MODE" = true ]; then
     exit 0
 fi
 
-echo "🔨 Building ShareMoney ${TARGET_PLATFORM^^} Production Artifact for Release"
+echo "🔨 Building OweWho ${TARGET_PLATFORM^^} Production Artifact for Release"
 echo "==========================================================================="
 echo ""
 
@@ -323,7 +323,7 @@ if [ "$TARGET_PLATFORM" = "android" ] && [ "$BUILD_MODE" = "local" ]; then
     fi
 
     ARTIFACT_EXT="${ARTIFACT_FILE##*.}"
-    RELEASE_ARTIFACT="../releases/sharemoney-${VERSION}.${ARTIFACT_EXT}"
+    RELEASE_ARTIFACT="../releases/owewho-${VERSION}.${ARTIFACT_EXT}"
     cp "$ARTIFACT_FILE" "$RELEASE_ARTIFACT"
 elif [ "$TARGET_PLATFORM" = "android" ] && [ "$BUILD_MODE" = "cloud" ]; then
     # Run cloud build and wait for completion
@@ -352,7 +352,7 @@ process.stdin.on('end', () => {
         ARTIFACT_EXT="aab"
     fi
 
-    RELEASE_ARTIFACT="../releases/sharemoney-${VERSION}.${ARTIFACT_EXT}"
+    RELEASE_ARTIFACT="../releases/owewho-${VERSION}.${ARTIFACT_EXT}"
     echo "⬇️  Downloading build artifact from EAS..."
     curl -L "$BUILD_URL" -o "$RELEASE_ARTIFACT"
 elif [ "$TARGET_PLATFORM" = "ios" ] && [ "$BUILD_MODE" = "cloud" ]; then
@@ -382,7 +382,7 @@ process.stdin.on('end', () => {
         ARTIFACT_EXT="ipa"
     fi
 
-    RELEASE_ARTIFACT="../releases/sharemoney-ios-${VERSION}.${ARTIFACT_EXT}"
+    RELEASE_ARTIFACT="../releases/owewho-ios-${VERSION}.${ARTIFACT_EXT}"
     echo "⬇️  Downloading iOS build artifact from EAS..."
     curl -L "$BUILD_URL" -o "$RELEASE_ARTIFACT"
 else

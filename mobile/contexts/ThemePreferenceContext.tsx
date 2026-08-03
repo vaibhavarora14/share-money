@@ -18,7 +18,7 @@ interface ThemePreferenceContextValue {
   setThemePreference: (preference: ThemePreference) => Promise<void>;
 }
 
-const THEME_PREFERENCE_STORAGE_KEY = "sharemoney.themePreference";
+const THEME_PREFERENCE_STORAGE_KEY = "owewho.themePreference";
 
 const ThemePreferenceContext =
   createContext<ThemePreferenceContextValue | null>(null);

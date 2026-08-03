@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Version management script for ShareMoney
+ * Version management script for OweWho
  * 
  * Usage:
  *   node scripts/version.js patch        - Increment patch version (1.0.0 -> 1.0.1)
@@ -139,7 +139,7 @@ function incrementVersion(currentVersion, type) {
 
 function showVersion() {
   const versionConfig = readVersion();
-  console.log('\n📱 ShareMoney Version Info');
+  console.log('\n📱 OweWho Version Info');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log(`Version:     ${versionConfig.version}`);
   console.log(`Build:       ${versionConfig.buildNumber}`);

@@ -1,8 +1,35 @@
 {
-  "buildCommand": "npm ci --prefix web && npm run build --prefix web",
+  "buildCommand": "npm ci --prefix web && npm ci --prefix mobile && (test -e node_modules || ln -s mobile/node_modules node_modules) && npm run build --prefix web && npm run export:web:owewho --prefix mobile",
   "outputDirectory": "web/dist",
   "installCommand": "echo 'Skipping root install'",
   "framework": null,
+  "redirects": [
+    {
+      "source": "/join/:token",
+      "destination": "/app/join/:token",
+      "permanent": true
+    }
+  ],
+  "headers": [
+    {
+      "source": "/app",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    },
+    {
+      "source": "/app/:path*",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    }
+  ],
   "rewrites": [
     {
       "source": "/privacy",
@@ -15,6 +42,14 @@
     {
       "source": "/account-deletion",
       "destination": "/delete-account.html"
+    },
+    {
+      "source": "/app",
+      "destination": "/app/index.html"
+    },
+    {
+      "source": "/app/:path*",
+      "destination": "/app/index.html"
     }
   ]
 }

@@ -53,19 +53,25 @@ module.exports = ({ config }) => {
   // Hostname for Universal Links (iOS) / App Links (Android), used by the
   // group invite-link feature. When unset, only the custom scheme is used.
   let appUrlHostname = null;
+  let appLinkPathPrefix = "/join";
   try {
     if (process.env.EXPO_PUBLIC_APP_URL) {
-      appUrlHostname = new URL(process.env.EXPO_PUBLIC_APP_URL).hostname;
+      const appUrl = new URL(process.env.EXPO_PUBLIC_APP_URL);
+      appUrlHostname = appUrl.hostname;
+      const appPath = appUrl.pathname.replace(/\/+$/, "");
+      appLinkPathPrefix = `${appPath === "/" ? "" : appPath}/join`;
     }
   } catch (e) {
     console.warn('Warning: EXPO_PUBLIC_APP_URL is invalid; Universal/App Links disabled');
   }
 
+  const webBaseUrl = process.env.EXPO_PUBLIC_WEB_BASE_URL;
+
   return {
     ...config,
     expo: {
       ...config.expo,
-      name: "ShareMoney",
+      name: "OweWho",
       slug: "share-money",
       owner: "share-money",
       version: versionConfig.version,
@@ -82,7 +88,7 @@ module.exports = ({ config }) => {
       ios: {
         supportsTablet: true,
         bundleIdentifier: "com.vaibhavarora.sharemoney",
-        scheme: "com.vaibhavarora.sharemoney",
+        scheme: "owewho",
         buildNumber: versionConfig.buildNumber.toString(),
         usesAppleSignIn: true,
         // Avoid App Store Connect manual encryption questionnaire prompts.
@@ -101,7 +107,7 @@ module.exports = ({ config }) => {
       },
       android: {
         package: "com.vaibhavarora.sharemoney",
-        scheme: "com.vaibhavarora.sharemoney",
+        scheme: "owewho",
         versionCode: versionConfig.buildNumber,
         adaptiveIcon: {
           foregroundImage: "./assets/adaptive-icon.png",
@@ -116,7 +122,7 @@ module.exports = ({ config }) => {
                 action: "VIEW",
                 autoVerify: true,
                 data: [
-                  { scheme: "https", host: appUrlHostname, pathPrefix: "/join" }
+                  { scheme: "https", host: appUrlHostname, pathPrefix: appLinkPathPrefix }
                 ],
                 category: ["BROWSABLE", "DEFAULT"]
               }
@@ -124,8 +130,18 @@ module.exports = ({ config }) => {
           : []
       },
       web: {
-        favicon: "./assets/favicon.png"
+        favicon: "./assets/favicon.png",
+        bundler: "metro",
+        output: "single"
       },
+      ...(webBaseUrl
+        ? {
+            experiments: {
+              ...(config.expo?.experiments || {}),
+              baseUrl: webBaseUrl
+            }
+          }
+        : {}),
       extra: {
         eas: {
           projectId: "afddb7db-3d7d-46da-a1b5-0d6e4b4374ce"

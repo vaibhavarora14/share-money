@@ -1,4 +1,4 @@
--- Allow group people without ShareMoney accounts
+-- Allow group people without OweWho accounts
 -- Created: 2026-08-03
 --
 -- A participant may now represent a real group person before they have an app
