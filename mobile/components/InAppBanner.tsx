@@ -69,10 +69,10 @@ export const InAppBanner: React.FC<InAppBannerProps> = ({
   const isError = notice.type === "error";
   const backgroundColor = isError
     ? theme.colors.errorContainer
-    : theme.colors.secondaryContainer;
+    : theme.colors.primaryContainer;
   const foreground = isError
     ? theme.colors.onErrorContainer
-    : theme.colors.onSecondaryContainer;
+    : theme.colors.onPrimaryContainer;
 
   const translateY = slideAnim.interpolate({
     inputRange: [0, 1],

@@ -98,15 +98,15 @@ export const MembersList: React.FC<MembersListProps> = ({
                 size={40}
                 label={getInitials(memberName)}
                 style={{
-                  backgroundColor: isActive
-                    ? theme.colors.secondaryContainer
-                    : theme.colors.surfaceVariant,
+	                  backgroundColor: isActive
+	                    ? theme.colors.primaryContainer
+	                    : theme.colors.surfaceVariant,
                   marginRight: 16,
                 }}
                 color={
-                  isActive
-                    ? theme.colors.onSecondaryContainer
-                    : theme.colors.onSurfaceVariant
+	                  isActive
+	                    ? theme.colors.onPrimaryContainer
+	                    : theme.colors.onSurfaceVariant
                 }
               />
               <View style={styles.memberLeft}>

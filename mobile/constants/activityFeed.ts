@@ -15,12 +15,3 @@ export const ACTIVITY_ICONS = {
   SETTLEMENT: 'handshake-outline',
   EMPTY_STATE: 'clipboard-text-outline',
 } as const;
-
-export const ACTIVITY_COLORS = {
-  CREATED: '#009688', // Teal 500
-  UPDATED: '#F57C00', // Orange 700
-  DELETED: '#D32F2F', // Red 700
-  SETTLEMENT_CREATED: '#1976D2', // Blue 700
-  SETTLEMENT_UPDATED: '#7B1FA2', // Purple 700
-  DEFAULT: '#757575',
-} as const;

@@ -69,16 +69,16 @@ export const InvitationsList: React.FC<InvitationsListProps> = ({
                 size={40} 
                 label={getInitials(invitation.email)} 
                 style={{ 
-                  backgroundColor: invitation.email
-                    ? theme.colors.surfaceVariant
-                    : theme.colors.secondaryContainer,
+	                  backgroundColor: invitation.email
+	                    ? theme.colors.surfaceVariant
+	                    : theme.colors.primaryContainer,
                   marginRight: 16,
                   opacity: 0.7
                 }}
                 color={
-                  invitation.email
-                    ? theme.colors.onSurfaceVariant
-                    : theme.colors.onSecondaryContainer
+	                  invitation.email
+	                    ? theme.colors.onSurfaceVariant
+	                    : theme.colors.onPrimaryContainer
                 }
               />
               <View style={styles.memberLeft}>

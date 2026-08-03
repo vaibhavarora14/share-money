@@ -12,19 +12,9 @@ const faqs: FAQItem[] = [
     answer: "Yes. ShareMoney is free for tracking shared expenses and balances.",
   },
   {
-    question: "How does settlement minimization work?",
-    answer:
-      "ShareMoney analyzes group balances and proposes the minimum number of transfers needed to settle everyone to zero.",
-  },
-  {
     question: "Is my financial data secure?",
     answer:
       "ShareMoney stores group records, participants, expenses, and balances. We focus on clear records, not storing payment instruments.",
-  },
-  {
-    question: "Can I use ShareMoney for international trips?",
-    answer:
-      "Yes. ShareMoney supports multiple currencies so overseas groups can track expenses in different money types.",
   },
   {
     question: "Do my friends need to download an app?",
@@ -44,9 +34,8 @@ export function FAQ() {
   return (
     <div className="container faq">
       <div className="section-head section-head-wide">
-        <p className="kicker">Before you invite the group</p>
-        <h2 id="faq-title">Questions that should have clear answers.</h2>
-        <p>What ShareMoney does, what it stores, and where the actual payment happens.</p>
+        <p className="kicker">FAQ</p>
+        <h2 id="faq-title">Clear answers.</h2>
       </div>
 
       <div className="faq-list" aria-labelledby="faq-title">

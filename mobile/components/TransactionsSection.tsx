@@ -1,6 +1,6 @@
 import React from "react";
 import { Pressable, View } from "react-native";
-import { ActivityIndicator, Avatar, Surface, Text, useTheme } from "react-native-paper";
+import { ActivityIndicator, Icon, Surface, Text, useTheme } from "react-native-paper";
 import { useAuth } from "../contexts/AuthContext";
 import { Participant, Transaction } from "../types";
 import { formatCurrency, getDefaultCurrency } from "../utils/currency";
@@ -32,14 +32,18 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
   const currentUserId = session?.user?.id;
 
   const getCategoryIcon = (category: string) => {
-    // Simple mapping for now, can be expanded
     const lowerCat = category?.toLowerCase() || "";
-    if (lowerCat.includes("food") || lowerCat.includes("restaurant")) return "food";
+    if (!lowerCat.trim()) return "help-circle-outline";
+    if (lowerCat.includes("food") || lowerCat.includes("restaurant")) return "silverware-fork-knife";
     if (lowerCat.includes("transport") || lowerCat.includes("taxi") || lowerCat.includes("uber")) return "taxi";
-    if (lowerCat.includes("grocery") || lowerCat.includes("market")) return "cart";
-    if (lowerCat.includes("entertainment") || lowerCat.includes("movie")) return "movie";
+    if (lowerCat.includes("grocery") || lowerCat.includes("market")) return "cart-outline";
+    if (lowerCat.includes("entertainment") || lowerCat.includes("movie")) return "movie-open-outline";
     if (lowerCat.includes("travel") || lowerCat.includes("flight")) return "airplane";
-    return "receipt";
+    if (lowerCat.includes("shopping")) return "shopping-outline";
+    if (lowerCat.includes("rent")) return "home-outline";
+    if (lowerCat.includes("utilities") || lowerCat.includes("utility")) return "lightning-bolt-outline";
+    if (lowerCat.includes("health") || lowerCat.includes("medical")) return "medical-bag";
+    return "tag-outline";
   };
 
   const getPayerName = (transaction: Transaction) => {
@@ -117,12 +121,11 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
                 >
                   <View style={styles.row}>
                     {/* Icon: Tonal Circle */}
-                    <View style={[styles.iconContainer, { backgroundColor: theme.colors.secondaryContainer }]}>
-                        <Avatar.Icon 
-                          size={24} 
-                          icon={categoryIcon} 
-                          color={theme.colors.onSecondaryContainer}
-                          style={{ backgroundColor: 'transparent' }}
+                    <View style={[styles.iconContainer, { backgroundColor: theme.colors.primaryContainer }]}>
+                        <Icon
+                          source={categoryIcon}
+                          size={18}
+                          color={theme.colors.onPrimaryContainer}
                         />
                     </View>
 

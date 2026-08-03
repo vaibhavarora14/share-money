@@ -104,6 +104,31 @@ function mapAuthError(
   return error;
 }
 
+function mapGoogleOAuthError(error: Error): Error {
+  const message = error.message || "";
+
+  if (
+    message.includes("Unsupported provider") ||
+    message.includes("provider is not enabled")
+  ) {
+    return new Error(
+      "Google sign-in is not enabled for this Supabase environment. For local Android testing, add [auth.external.google] to supabase/config.toml, set SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID and SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET in supabase/.env, then restart Supabase."
+    );
+  }
+
+  if (
+    message.includes("OAuth") ||
+    message.includes("provider") ||
+    message.includes("client")
+  ) {
+    return new Error(
+      `${message}\n\nFor local Android testing, make sure Google Cloud allows http://127.0.0.1:54321/auth/v1/callback and your local Supabase Google client ID/secret are set.`
+    );
+  }
+
+  return error;
+}
+
 /**
  * Authentication context type
  * Provides session state, user information, and authentication methods
@@ -332,7 +357,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       });
 
       if (urlError) {
-        return { error: urlError };
+        return { error: mapGoogleOAuthError(urlError) };
       }
 
       if (!data?.url) {
@@ -379,7 +404,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         });
 
         if (sessionError) {
-          return { error: sessionError };
+          return { error: mapGoogleOAuthError(sessionError) };
         }
 
         // Verify session was created

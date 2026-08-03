@@ -350,7 +350,7 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
                               {userBals.length > 0 ? (
                                   userBals.map((bal, i) => (
                                       <Text key={i} variant="titleMedium" style={{ 
-                                          color: bal.amount >= 0 ? theme.colors.primary : theme.colors.error, 
+                                          color: bal.amount >= 0 ? theme.colors.tertiary : theme.colors.error, 
                                           fontWeight: 'bold' 
                                       }}>
                                           {bal.amount >= 0 ? "+" : ""}{formatCurrency(bal.amount, bal.currency)}
@@ -364,7 +364,7 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
   
                               <Text variant="labelSmall" style={{ 
                                   fontWeight: 'bold',
-                                  color: isOverpaid ? theme.colors.primary : isUnderpaid ? theme.colors.error : theme.colors.onSurfaceVariant,
+                                  color: isOverpaid ? theme.colors.tertiary : isUnderpaid ? theme.colors.error : theme.colors.onSurfaceVariant,
                                   opacity: isSettledStatus ? 0.3 : 1,
                                   marginTop: 2
                               }}>
@@ -482,8 +482,7 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
                 const isToMe = edge.toUser.user_id === currentUserId;
                 const isInvolved = isFromMe || isToMe;
 
-                // Google Material 3 semantic colors
-                const amountColor = isToMe ? "#1e8e3e" : isFromMe ? "#d93025" : theme.colors.onSurface;
+                const amountColor = isToMe ? theme.colors.tertiary : isFromMe ? theme.colors.error : theme.colors.onSurface;
 
                 const fromName = isFromMe ? "You" : (edge.fromUser.full_name || edge.fromUser.email?.split("@")[0] || "User");
                 const toName = isToMe ? "You" : (edge.toUser.full_name || edge.toUser.email?.split("@")[0] || "User");
@@ -540,12 +539,12 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
                                     </Text>
                                     <View style={[
                                         styles.actionChip, 
-                                        { backgroundColor: isToMe ? theme.colors.secondaryContainer : isFromMe ? theme.colors.errorContainer : theme.colors.surfaceVariant } 
+                                        { backgroundColor: isToMe ? theme.colors.tertiaryContainer : isFromMe ? theme.colors.errorContainer : theme.colors.surfaceVariant } 
                                     ]}>
                                         <Text 
                                             variant="labelSmall" 
                                             style={{ 
-                                                color: isToMe ? theme.colors.onSecondaryContainer : isFromMe ? theme.colors.onErrorContainer : theme.colors.onSurfaceVariant,
+                                                color: isToMe ? theme.colors.onTertiaryContainer : isFromMe ? theme.colors.onErrorContainer : theme.colors.onSurfaceVariant,
                                                 fontWeight: '700',
                                                 fontSize: 10,
                                                 letterSpacing: 0.5
@@ -596,6 +595,12 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
                 value={activeMode}
                 onValueChange={(val) => setActiveMode(val as GroupStatsMode)}
                 style={{ marginBottom: 24 }}
+                theme={{
+                    colors: {
+                        secondaryContainer: theme.colors.primaryContainer,
+                        onSecondaryContainer: theme.colors.onPrimaryContainer,
+                    },
+                }}
                 buttons={[
                     { value: 'total-costs', label: 'Totals', icon: 'account-group' },
                     { value: 'settlement-plan', label: 'Settle Up', icon: 'hand-coin' },
@@ -714,7 +719,6 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
   },
   scrollContent: {
     padding: 16,
