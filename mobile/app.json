@@ -19,7 +19,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.vaibhavarora.sharemoney",
       "scheme": "com.vaibhavarora.sharemoney",
-      "buildNumber": "43",
+      "buildNumber": "44",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
