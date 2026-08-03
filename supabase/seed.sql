@@ -1,4 +1,4 @@
--- Seed Data for ShareMoney Database
+-- Seed Data for OweWho Database
 -- This file contains test data to populate the database after migrations
 -- Run automatically after migrations during `supabase db reset`
 --

@@ -1,2 +1,5 @@
 User-agent: *
 Allow: /
+Disallow: /app/
+
+Sitemap: https://owewho.com/sitemap.xml

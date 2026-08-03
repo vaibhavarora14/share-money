@@ -10,14 +10,38 @@ import {
   getPrimaryDestination,
   getSecondaryDestinations,
 } from "./landingContent";
+import { pageByPath, normalizeSeoPath, type SeoPage } from "./seoPages";
 import { detectDevice } from "./utils/deviceDetection";
+
+function RouteIntro({ page }: { page: SeoPage }) {
+  return (
+    <section className="route-intro" aria-labelledby="route-intro-title">
+      <div className="container route-intro-shell">
+        <div>
+          <p className="kicker">{page.eyebrow}</p>
+          <h2 id="route-intro-title">{page.heading}</h2>
+          <p>{page.body}</p>
+        </div>
+        <ul aria-label="OweWho highlights">
+          {page.proof.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
 
 function App() {
   const [device] = useState(detectDevice);
+  const [seoPath] = useState(() =>
+    typeof window === "undefined" ? "/" : normalizeSeoPath(window.location.pathname),
+  );
   const primaryDestination = getPrimaryDestination(device);
   const secondaryDestinations = getSecondaryDestinations(
     primaryDestination.platform,
   );
+  const seoPage = pageByPath.get(seoPath) ?? pageByPath.get("/");
 
   return (
     <div className="landing-page">
@@ -28,6 +52,7 @@ function App() {
           primaryDestination={primaryDestination}
           secondaryDestinations={secondaryDestinations}
         />
+        {seoPage ? <RouteIntro page={seoPage} /> : null}
         <WorkflowSection />
         <TrustSection />
         <section id="faq" className="section faq-section">

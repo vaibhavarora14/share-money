@@ -67,16 +67,17 @@ import { Group, GroupWithMembers } from "./types";
 import { getDefaultCurrency } from "./utils/currency";
 import {
   extractInviteToken,
+  getConfiguredWebAppPath,
   getInviteLinkErrorMessage,
 } from "./utils/inviteLinks";
 import { log, logError } from "./utils/logger";
 
 const PENDING_INVITE_TOKEN_KEY = "pending_invite_token";
 
-/** Removes the /join/<token> path from the web URL after handling it. */
+/** Removes the invite token path from the web URL after handling it. */
 function clearJoinPathFromWebUrl() {
   if (Platform.OS === "web" && typeof window !== "undefined") {
-    window.history.replaceState({}, "", window.location.origin);
+    window.history.replaceState({}, "", getConfiguredWebAppPath() || "/");
   }
 }
 

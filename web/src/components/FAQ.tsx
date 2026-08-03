@@ -8,23 +8,23 @@ interface FAQItem {
 
 const faqs: FAQItem[] = [
   {
-    question: "Is ShareMoney free to use?",
-    answer: "Yes. ShareMoney is free for tracking shared expenses and balances.",
+    question: "Is OweWho free to use?",
+    answer: "Yes. OweWho is free for tracking shared expenses and balances.",
   },
   {
     question: "Is my financial data secure?",
     answer:
-      "ShareMoney stores group records, participants, expenses, and balances. We focus on clear records, not storing payment instruments.",
+      "OweWho stores group records, participants, expenses, and balances. We focus on clear records, not storing payment instruments.",
   },
   {
     question: "Do my friends need to download an app?",
     answer:
-      "ShareMoney is available through the web app for anyone, and Android users can install the app from Google Play. iOS is currently available via TestFlight.",
+      "OweWho is available through the web app for anyone, and Android users can install the app from Google Play. iOS is currently available via TestFlight.",
   },
   {
     question: "What happens if someone doesn’t pay?",
     answer:
-      "ShareMoney keeps the shared ledger visible and up-to-date. Payment happens in your preferred payment app outside ShareMoney.",
+      "OweWho keeps the shared ledger visible and up-to-date. Payment happens in your preferred payment app outside OweWho.",
   },
 ];
 

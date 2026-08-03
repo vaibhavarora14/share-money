@@ -220,7 +220,7 @@ Deno.test('aggregateMonthlyReminderEmails creates one digest per user across rol
   const emails = aggregateMonthlyReminderEmails({
     periodKey: '2026-08',
     appUrl: 'https://app.example.com',
-    logoUrl: 'https://assets.example.com/sharemoney-logo.png',
+    logoUrl: 'https://assets.example.com/owewho-logo.png',
     edges: [
       {
         group_id: 'group-1',
@@ -262,14 +262,14 @@ Deno.test('aggregateMonthlyReminderEmails creates one digest per user across rol
   const alice = emails.find((email) => email.user_id === 'alice-user');
   assertEquals(alice?.to, 'alice@example.com');
   assertEquals(alice?.actions.map((action) => action.direction), ['owe', 'owed']);
-  assertEquals(alice?.subject, 'ShareMoney pending balances for August 2026');
-  assertEquals(alice?.html.includes('src="https://assets.example.com/sharemoney-logo.png"'), true);
-  assertEquals(alice?.html.includes('ShareMoney'), true);
+  assertEquals(alice?.subject, 'OweWho pending balances for August 2026');
+  assertEquals(alice?.html.includes('src="https://assets.example.com/owewho-logo.png"'), true);
+  assertEquals(alice?.html.includes('OweWho'), true);
   assertEquals(alice?.html.includes('Time for a quick balance tidy-up'), true);
   assertEquals(alice?.html.includes('New month, clean slate energy.'), true);
   assertEquals(alice?.html.includes('You owe USD 12.50 to Bob in Trip'), true);
   assertEquals(alice?.html.includes('You are owed EUR 8.00 by Cory in House'), true);
-  assertEquals(alice?.text.includes('A tiny money nudge from ShareMoney.'), true);
+  assertEquals(alice?.text.includes('A tiny money nudge from OweWho.'), true);
   assertEquals(alice?.text.includes('A little settle-up now keeps future you from doing awkward math later.'), true);
 });
 

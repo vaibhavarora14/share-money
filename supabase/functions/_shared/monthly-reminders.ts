@@ -352,7 +352,7 @@ function addAction(
     emails.set(userId, {
       user_id: userId,
       to,
-      subject: `ShareMoney pending balances for ${periodLabel}`,
+      subject: `OweWho pending balances for ${periodLabel}`,
       html: '',
       text: '',
       actions: [],
@@ -400,7 +400,7 @@ function renderReminderEmail(
 <html>
   <body style="margin:0;padding:0;background:#f4fbf9;font-family:Arial,sans-serif;color:#10201d;line-height:1.5;">
     <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
-      A tiny money nudge from ShareMoney: your unsettled group balances are ready.
+      A tiny money nudge from OweWho: your unsettled group balances are ready.
     </div>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4fbf9;padding:24px 12px;">
       <tbody>
@@ -414,10 +414,10 @@ function renderReminderEmail(
                       <tbody>
                         <tr>
                           <td style="padding-right:12px;">
-                            <img src="${escapeHtml(logoUrl)}" width="48" height="48" alt="ShareMoney" style="display:block;border-radius:12px;">
+                            <img src="${escapeHtml(logoUrl)}" width="48" height="48" alt="OweWho" style="display:block;border-radius:12px;">
                           </td>
                           <td>
-                            <div style="font-size:18px;font-weight:800;color:#10201d;">ShareMoney</div>
+                            <div style="font-size:18px;font-weight:800;color:#10201d;">OweWho</div>
                             <div style="font-size:13px;color:#526762;">Monthly balance check-in</div>
                           </td>
                         </tr>
@@ -440,13 +440,13 @@ function renderReminderEmail(
                 </tr>
                 <tr>
                   <td style="padding:18px 24px 24px;">
-                    <a href="${escapeHtml(appUrl)}" style="display:inline-block;background:#14b8a6;color:#ffffff;font-weight:800;text-decoration:none;padding:12px 18px;border-radius:10px;">Open ShareMoney</a>
+                    <a href="${escapeHtml(appUrl)}" style="display:inline-block;background:#14b8a6;color:#ffffff;font-weight:800;text-decoration:none;padding:12px 18px;border-radius:10px;">Open OweWho</a>
                     <p style="font-size:13px;color:#526762;margin:16px 0 0;">A little settle-up now keeps future you from doing awkward math later.</p>
                   </td>
                 </tr>
               </tbody>
             </table>
-            <p style="max-width:680px;font-size:12px;color:#6b7d78;margin:12px auto 0;">You are receiving this because you have unsettled balances in a ShareMoney group.</p>
+            <p style="max-width:680px;font-size:12px;color:#6b7d78;margin:12px auto 0;">You are receiving this because you have unsettled balances in an OweWho group.</p>
           </td>
         </tr>
       </tbody>
@@ -454,14 +454,14 @@ function renderReminderEmail(
   </body>
 </html>`;
   email.text = [
-    `ShareMoney pending balances for ${periodLabel}`,
+    `OweWho pending balances for ${periodLabel}`,
     '',
-    'A tiny money nudge from ShareMoney.',
+    'A tiny money nudge from OweWho.',
     'New month, clean slate energy. Here are the balances still waiting in your groups:',
     '',
     ...textLines,
     '',
-    `Open ShareMoney: ${appUrl}`,
+    `Open OweWho: ${appUrl}`,
     '',
     'A little settle-up now keeps future you from doing awkward math later.',
   ].join('\n');
