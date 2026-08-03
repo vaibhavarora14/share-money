@@ -4,7 +4,7 @@
     "name": "ShareMoney",
     "slug": "share-money",
     "owner": "share-money",
-    "version": "2.12.1",
+    "version": "2.12.2",
     "_comment_version": "This is superseded by app.config.js which reads from version.json",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -19,7 +19,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.vaibhavarora.sharemoney",
       "scheme": "com.vaibhavarora.sharemoney",
-      "buildNumber": "43",
+      "buildNumber": "45",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -52,6 +53,7 @@
       "fallbackToCacheTimeout": 0
     },
     "plugins": [
+      "expo-apple-authentication",
       "expo-font",
       "expo-web-browser"
     ]
