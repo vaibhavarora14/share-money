@@ -1,4 +1,4 @@
-# ShareMoney Landing Page Design Guide
+# OweWho Landing Page Design Guide
 
 This document is the canonical reference for the landing-page redesign.
 

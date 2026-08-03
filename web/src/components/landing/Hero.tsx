@@ -14,8 +14,8 @@ export function Hero({
         <div className="hero-intro">
           <div className="hero-title-block">
             <p className="kicker">Shared expenses</p>
-            <h1>Split the trip. Settle up.</h1>
-            <p className="hero-lead">One shared record for group money.</p>
+            <h1>Split bills. Know who owes who.</h1>
+            <p className="hero-lead">One shared ledger for group money.</p>
             <div className="hero-actions">
               <PlatformCta
                 destination={primaryDestination}
@@ -44,7 +44,7 @@ export function Hero({
         <figure className="hero-product-shot">
           <img
             src="/app-group-current.png"
-            alt="ShareMoney group screen showing balances, summary cards, and transactions"
+            alt="OweWho group screen showing balances, summary cards, and transactions"
             width="1080"
             height="2400"
             loading="eager"
@@ -52,7 +52,7 @@ export function Hero({
           />
         </figure>
 
-        <div className="hero-proof-strip" aria-label="How ShareMoney works">
+        <div className="hero-proof-strip" aria-label="How OweWho works">
           <div><strong>Add</strong><span>Expense</span></div>
           <div><strong>See</strong><span>Balance</span></div>
           <div><strong>Settle</strong><span>Clearly</span></div>

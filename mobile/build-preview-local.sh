@@ -13,7 +13,7 @@
 
 set -e
 
-echo "🔨 Building ShareMoney Android Preview (Local)"
+echo "🔨 Building OweWho Android Preview (Local)"
 echo "=============================================="
 echo ""
 

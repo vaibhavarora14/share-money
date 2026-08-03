@@ -49,7 +49,7 @@ export function UseCases() {
           <p>Choose a scenario to see how the people, spending, and final balance fit together.</p>
         </div>
 
-        <div className="use-case-tabs" role="tablist" aria-label="ShareMoney use cases">
+        <div className="use-case-tabs" role="tablist" aria-label="OweWho use cases">
           {useCaseKeys.map((key) => (
             <button
               type="button"

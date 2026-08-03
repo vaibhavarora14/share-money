@@ -65,28 +65,28 @@ export const platformDestinations: PlatformDestination[] = [
     label: "Get the Android app",
     status: "Android | Available now",
     href: "https://play.google.com/store/apps/details?id=com.vaibhavarora.sharemoney&pcampaignid=web_share",
-    ariaLabel: "Download ShareMoney for Android from Google Play",
+    ariaLabel: "Download OweWho for Android from Google Play",
   },
   {
     platform: "ios",
     label: "Join the iOS beta",
     status: "iOS | TestFlight beta",
     href: "https://testflight.apple.com/join/j23pnEmX",
-    ariaLabel: "Join the ShareMoney iOS beta on TestFlight",
+    ariaLabel: "Join the OweWho iOS beta on TestFlight",
   },
   {
     platform: "web",
     label: "Open web app",
     status: "Web | Open now",
-    href: "https://share-money.expo.app",
-    ariaLabel: "Open the ShareMoney web app",
+    href: "https://owewho.com/app",
+    ariaLabel: "Open the OweWho web app",
   },
 ];
 
 export const primaryDestinationByDevice: Record<DeviceType, Platform> = {
   android: "android",
   ios: "ios",
-  desktop: "android",
+  desktop: "web",
 };
 
 export const sectionNav: LandingSection[] = [
@@ -188,7 +188,7 @@ export const useCaseScenarios: Record<UseCaseKey, SettlementScenario> = {
     kicker: "Weekly Dinner Club",
     title: "Good food. Clear balances.",
     summary:
-      "The host can change every week. ShareMoney keeps every receipt, split, and balance visible to the whole group.",
+      "The host can change every week. OweWho keeps every receipt, split, and balance visible to the whole group.",
     tone: "green",
     members: [
       {

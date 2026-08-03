@@ -12,11 +12,11 @@ interface ForceUpdateModalProps {
 
 const DEFAULT_STORE_URL_ANDROID =
   "https://play.google.com/store/apps/details?id=com.vaibhavarora.sharemoney";
-const DEFAULT_STORE_URL_IOS = "https://apps.apple.com/app/sharemoney/id000000000";
+const DEFAULT_STORE_URL_IOS = "https://apps.apple.com/app/owewho/id000000000";
 
 export const ForceUpdateModal: React.FC<ForceUpdateModalProps> = ({
   visible,
-  message = "Please update your app to continue using ShareMoney.",
+  message = "Please update your app to continue using OweWho.",
   storeUrlIos = DEFAULT_STORE_URL_IOS,
   storeUrlAndroid = DEFAULT_STORE_URL_ANDROID,
 }) => {
@@ -72,7 +72,7 @@ export const ForceUpdateModal: React.FC<ForceUpdateModalProps> = ({
             variant="bodyMedium"
             style={[styles.subtitle, { color: theme.colors.onSurfaceVariant }]}
           >
-            A newer version of ShareMoney is available with important updates
+            A newer version of OweWho is available with important updates
             and improvements.
           </Text>
 

@@ -51,3 +51,4 @@ supabase/.temp/
 # Package locks (optional - uncomment if you want to ignore them)
 # package-lock.json
 # yarn.lock
+.vercel

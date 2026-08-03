@@ -8,7 +8,7 @@ import { isValidDate, isValidUUID, validateBodySize } from '../_shared/validatio
  * Import Splitwise Edge Function
  *
  * Bulk-imports a Splitwise group export (parsed client-side) into a
- * ShareMoney group in a single request:
+ * OweWho group in a single request:
  * - POST /import-splitwise - Create expenses (with exact per-participant
  *   splits, unlike the equal-split /transactions endpoint) and settlements.
  *

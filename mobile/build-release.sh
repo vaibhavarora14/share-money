@@ -21,7 +21,7 @@ elif [ "$1" = "local" ]; then
     BUILD_MODE="local"
 fi
 
-echo "🔨 Building ShareMoney Android Production APK for Release"
+echo "🔨 Building OweWho Android Production APK for Release"
 echo "=========================================================="
 echo ""
 
@@ -102,7 +102,7 @@ if [ "$BUILD_MODE" = "local" ]; then
     fi
 
     ARTIFACT_EXT="${ARTIFACT_FILE##*.}"
-    RELEASE_ARTIFACT="../releases/sharemoney-${VERSION}.${ARTIFACT_EXT}"
+    RELEASE_ARTIFACT="../releases/owewho-${VERSION}.${ARTIFACT_EXT}"
     cp "$ARTIFACT_FILE" "$RELEASE_ARTIFACT"
 else
     # Run cloud build and wait for completion
@@ -131,7 +131,7 @@ process.stdin.on('end', () => {
         ARTIFACT_EXT="aab"
     fi
 
-    RELEASE_ARTIFACT="../releases/sharemoney-${VERSION}.${ARTIFACT_EXT}"
+    RELEASE_ARTIFACT="../releases/owewho-${VERSION}.${ARTIFACT_EXT}"
     echo "⬇️  Downloading build artifact from EAS..."
     curl -L "$BUILD_URL" -o "$RELEASE_ARTIFACT"
 fi
@@ -150,7 +150,7 @@ echo ""
 echo "3. Select tag: ${TAG}"
 echo "4. Title: Release ${TAG}"
 echo "5. Description:"
-echo "   ## ShareMoney ${VERSION}"
+echo "   ## OweWho ${VERSION}"
 echo "   "
 echo "   Build Number: ${BUILD}"
 echo "   "
