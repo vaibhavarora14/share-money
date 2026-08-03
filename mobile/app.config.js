@@ -84,6 +84,7 @@ module.exports = ({ config }) => {
         bundleIdentifier: "com.vaibhavarora.sharemoney",
         scheme: "com.vaibhavarora.sharemoney",
         buildNumber: versionConfig.buildNumber.toString(),
+        usesAppleSignIn: true,
         // Avoid App Store Connect manual encryption questionnaire prompts.
         infoPlist: {
           ITSAppUsesNonExemptEncryption: false
@@ -156,6 +157,7 @@ module.exports = ({ config }) => {
             "assets": ["./assets"]
           },
         ],
+        "expo-apple-authentication",
         "expo-font",
         "expo-web-browser",
         // Only include expo-dev-client plugin for development builds
