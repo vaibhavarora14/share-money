@@ -62,8 +62,7 @@ function getParticipantLabel(participant: Participant): string {
   const name =
     participant.full_name ||
     participant.email ||
-    `Member ${participant.id.substring(0, 8)}`;
-  if (participant.type === "invited") return `${name} (Invited)`;
+    `Person ${participant.id.substring(0, 8)}`;
   if (participant.type === "former") return `${name} (Former)`;
   return name;
 }

@@ -90,6 +90,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const amountInputRef = useRef<RNTextInput>(null);
+  const didDefaultSplitRef = useRef(false);
 
   // Form state
   const [description, setDescription] = useState("");
@@ -124,43 +125,17 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
 
   // Memoized values
   const isGroupExpense = useMemo(
-    () => type === "expense" && groupId && (participants?.length || 0) > 0,
+    () => type === "expense" && !!groupId && (participants?.length || 0) > 0,
     [type, groupId, participants?.length]
   );
 
   const activeParticipants = useMemo(
-    () => (participants || []).filter((p) => p.type === "member"),
+    () => (participants || []).filter((p) => p.type !== "former"),
     [participants]
   );
-
-  const invitedParticipants = useMemo(
-    () => (participants || []).filter((p) => p.type === "invited"),
-    [participants]
-  );
-
-  const formerParticipants = useMemo(
-    () => (participants || []).filter((p) => p.type === "former"),
-    [participants]
-  );
-
-  const transactionParticipantIds = useMemo(() => {
-    if (!transaction) return new Set<string>();
-    const ids = new Set<string>();
-    if (transaction.paid_by_participant_id) {
-      ids.add(transaction.paid_by_participant_id);
-    }
-    if (Array.isArray(transaction.splits) && transaction.splits.length > 0) {
-      transaction.splits.forEach((split) => {
-        if (split.participant_id) {
-          ids.add(split.participant_id);
-        }
-      });
-    }
-    return ids;
-  }, [transaction]);
 
   const availableParticipants = useMemo(() => {
-    const combined = [...activeParticipants, ...invitedParticipants];
+    const combined = [...activeParticipants];
     if (transaction) {
       // 1. Check payer
       if (transaction.paid_by_participant_id) {
@@ -192,7 +167,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     }
     
     return combined;
-  }, [activeParticipants, invitedParticipants, formerParticipants, transaction, transactionParticipantIds, paidBy]);
+  }, [activeParticipants, transaction, paidBy, participants]);
 
   const allParticipantIds = useMemo(
     () => availableParticipants.map((p) => p.id),
@@ -225,6 +200,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     setCurrency(effectiveDefaultCurrency);
     setPaidBy("");
     setSplitAmong([]);
+    didDefaultSplitRef.current = false;
     setDescriptionError("");
     setAmountError("");
     setDateError("");
@@ -261,6 +237,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       } else {
         setSplitAmong([]);
       }
+      didDefaultSplitRef.current = true;
     },
     [effectiveDefaultCurrency]
   );
@@ -285,10 +262,13 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     if (!isGroupExpense) {
       setSplitAmong([]);
       setPaidBy("");
+      didDefaultSplitRef.current = false;
     } else {
-      // For a new group expense, default split to all members if currently empty
-      if (splitAmong.length === 0 && allParticipantIds.length > 0) {
+      // For a new group expense, default split to all people once. After that,
+      // an empty selection is an intentional user state and should remain empty.
+      if (!didDefaultSplitRef.current && splitAmong.length === 0 && allParticipantIds.length > 0) {
         setSplitAmong(allParticipantIds);
+        didDefaultSplitRef.current = true;
       }
       
       // Default "Paid By" to the current user
@@ -341,9 +321,6 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     setSplitAmong((prev) => {
       const uniquePrev = [...new Set(prev)];
       if (uniquePrev.includes(participantId)) {
-        if (paidBy === participantId && uniquePrev.length === 1) {
-          return uniquePrev;
-        }
         return uniquePrev.filter((id) => id !== participantId);
       } else {
         return [...uniquePrev, participantId];
@@ -448,6 +425,8 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
 
     void deleteTransaction();
   };
+
+  const isSaveDisabled = loading || (isGroupExpense && splitAmong.length === 0);
 
   const handleHardwareBack = useCallback(() => {
     if (showCurrencyPicker) {
@@ -722,9 +701,8 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                   >
                     {availableParticipants.map((p) => {
                       const isSelected = paidBy === p.id;
-                      const displayName = p.full_name || p.email || "Unknown";
+                      const displayName = p.full_name || p.email?.split("@")[0] || p.email || "Unknown";
                       const isFormer = p.type === "former";
-                      const isInvited = p.type === "invited";
                       return (
                         <Chip
                           key={p.id}
@@ -749,7 +727,6 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                           testID={`paid-by-chip-${p.email || p.id}`}
                         >
                           {displayName}
-                          {isInvited && " (Invited)"}
                           {isFormer && " (Former)"}
                         </Chip>
                       );
@@ -765,7 +742,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                     disabled={loading}
                   >
                     {paidByParticipant 
-                      ? `${paidByParticipant.full_name || paidByParticipant.email}${paidByParticipant.type === 'former' ? " (Former)" : ""}${paidByParticipant.type === 'invited' ? " (Invited)" : ""}` 
+                      ? `${paidByParticipant.full_name || paidByParticipant.email?.split("@")[0] || paidByParticipant.email || "Unknown"}${paidByParticipant.type === 'former' ? " (Former)" : ""}`
                       : "Select who paid"}
                   </Button>
                 )}
@@ -795,9 +772,8 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                 <View style={styles.chipWrap}>
                   {availableParticipants.map((p) => {
                     const isSelected = splitAmong.includes(p.id);
-                    const displayName = p.full_name || p.email || "Unknown";
+                    const displayName = p.full_name || p.email?.split("@")[0] || p.email || "Unknown";
                     const isFormer = p.type === "former";
-                    const isInvited = p.type === "invited";
                     return (
                       <Chip
                         key={p.id}
@@ -806,7 +782,6 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                         style={[
                           styles.wrapChip,
                           isFormer && styles.formerChip,
-                          isInvited && styles.invitedChip,
                           !isSelected && { backgroundColor: theme.colors.surfaceVariant },
                         ]}
                         theme={{
@@ -821,7 +796,6 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                       >
                         {displayName}
                         {isFormer && " (Former)"}
-                        {isInvited && " (Invited)"}
                       </Chip>
                     );
                   })}
@@ -855,7 +829,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
           <Button
             mode="contained"
             onPress={handleSave}
-            disabled={loading}
+            disabled={isSaveDisabled}
             loading={loading}
             style={styles.saveButton}
             contentStyle={styles.saveButtonContent}
@@ -987,7 +961,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
               style={styles.pickerList}
               renderItem={({ item }) => {
                 const isSelected = paidBy === item.id;
-                const displayName = item.full_name || item.email || "Unknown";
+                const displayName = item.full_name || item.email?.split("@")[0] || item.email || "Unknown";
                 return (
                   <TouchableOpacity
                     style={[
@@ -1002,7 +976,6 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                   >
                     <Text variant="bodyLarge">
                       {displayName}
-                      {item.type === 'invited' && " (Invited)"}
                       {item.type === 'former' && " (Former)"}
                     </Text>
                     {isSelected && (
@@ -1242,10 +1215,7 @@ const styles = StyleSheet.create({
   formerChip: {
     opacity: 0.7,
   },
-  invitedChip: {
-    borderStyle: "dashed",
-  },
-  
+
   paidByButton: {
     marginBottom: 8,
   },
