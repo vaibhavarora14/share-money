@@ -44,11 +44,11 @@ try {
 }
 
 module.exports = ({ config }) => {
-  // Check if we're building for development builds (via EAS or local)
-  // EAS_BUILD_PROFILE is automatically set by EAS Build
-  // EXPO_PUBLIC_USE_DEV_CLIENT can be set manually for local builds
-  const isDevelopmentBuild = !!process.env.EAS_BUILD_PROFILE || 
-                             process.env.EXPO_PUBLIC_USE_DEV_CLIENT === 'true';
+  // Only include expo-dev-client in development builds. EAS sets
+  // EAS_BUILD_PROFILE for production too, so check the profile value.
+  const isDevelopmentBuild =
+    process.env.EAS_BUILD_PROFILE === 'development' ||
+    process.env.EXPO_PUBLIC_USE_DEV_CLIENT === 'true';
 
   // Hostname for Universal Links (iOS) / App Links (Android), used by the
   // group invite-link feature. When unset, only the custom scheme is used.
