@@ -33,24 +33,6 @@ export function getActivityDescription(
 }
 
 /**
- * Gets a color for the activity action (for UI)
- * Color represents the action taken, not the entity type
- */
-export function getActivityColor(type: ActivityItem['type']): string {
-  // Action-based colors: consistent across transactions and settlements
-  if (type.endsWith('_created')) {
-    return '#4CAF50'; // Green - Something was added
-  }
-  if (type.endsWith('_updated')) {
-    return '#FF9800'; // Orange - Something was changed
-  }
-  if (type.endsWith('_deleted')) {
-    return '#F44336'; // Red - Something was removed
-  }
-  return '#757575'; // Gray - Fallback
-}
-
-/**
  * Formats the timestamp for display with timezone awareness
  * Uses date-fns for consistent timezone handling across platforms
  * @param timestamp - ISO timestamp string from database

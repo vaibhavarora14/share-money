@@ -6,17 +6,13 @@ export function TrustSection() {
       <div className="container">
         <div className="section-head section-head-wide">
           <p className="kicker">A ledger, not a wallet</p>
-          <h2 id="trust-title">The boundary is part of the product.</h2>
-          <p>
-            ShareMoney helps the group agree on the record. It does not connect to your
-            bank or move money between people.
-          </p>
+          <h2 id="trust-title">No bank link. No payment handling.</h2>
         </div>
 
         <div className="trust-boundaries">
           <article>
             <Database size={24} aria-hidden />
-            <h3>ShareMoney stores</h3>
+            <h3>Stores the record</h3>
             <ul>
               <li>Groups and members</li>
               <li>Expenses, balances, notes, and activity</li>
@@ -25,7 +21,7 @@ export function TrustSection() {
           </article>
           <article>
             <CreditCard size={24} aria-hidden />
-            <h3>ShareMoney never needs</h3>
+            <h3>Skips bank access</h3>
             <ul>
               <li>Your bank login</li>
               <li>Card or payment instrument details</li>
@@ -34,7 +30,7 @@ export function TrustSection() {
           </article>
           <article>
             <ExternalLink size={24} aria-hidden />
-            <h3>Payments happen elsewhere</h3>
+            <h3>Payments stay outside</h3>
             <ul>
               <li>Use your preferred payment app</li>
               <li>Return to record the settlement</li>

@@ -4,8 +4,8 @@ import { Platform } from "react-native";
 const BRAND_CANVAS = "#F7F9FC";
 const BRAND_INK = "#17202A";
 const BRAND_ACTION = "#1F5EFF";
-const BRAND_CORAL = "#E76F51";
-const BRAND_SUCCESS = "#087A55";
+const BRAND_SEA = "#00866E";
+const BRAND_BERRY = "#C95872";
 
 // Light Theme Colors
 const lightColors = {
@@ -14,14 +14,14 @@ const lightColors = {
   onPrimary: "#ffffff",
   primaryContainer: "#DCE6FF",
   onPrimaryContainer: "#123A99",
-  secondary: BRAND_CORAL,
+  secondary: BRAND_BERRY,
   onSecondary: "#ffffff",
-  secondaryContainer: "#FBE4DC",
-  onSecondaryContainer: "#7A2F1F",
-  tertiary: BRAND_SUCCESS,
+  secondaryContainer: "#F8E2E8",
+  onSecondaryContainer: "#842A43",
+  tertiary: BRAND_SEA,
   onTertiary: "#ffffff",
-  tertiaryContainer: "#D9F0E8",
-  onTertiaryContainer: "#07583F",
+  tertiaryContainer: "#DFF6EF",
+  onTertiaryContainer: "#075E51",
   error: "#B42318",
   onError: "#ffffff",
   errorContainer: "#FDE2DD",
@@ -51,14 +51,14 @@ const darkColors = {
   onPrimary: "#101827",
   primaryContainer: "#183D98",
   onPrimaryContainer: "#E8EEFF",
-  secondary: "#F0A08B",
-  onSecondary: "#17110F",
-  secondaryContainer: "#653226",
-  onSecondaryContainer: "#FFE6DE",
-  tertiary: "#76D3B0",
-  onTertiary: "#091A14",
-  tertiaryContainer: "#0D5E43",
-  onTertiaryContainer: "#DDF8ED",
+  secondary: "#E58AA2",
+  onSecondary: "#1F0B12",
+  secondaryContainer: "#642338",
+  onSecondaryContainer: "#FFE3EA",
+  tertiary: "#68D6C2",
+  onTertiary: "#041B17",
+  tertiaryContainer: "#075E51",
+  onTertiaryContainer: "#D8FBF3",
   error: "#FFB4A8",
   onError: "#2A0704",
   errorContainer: "#8C1D18",

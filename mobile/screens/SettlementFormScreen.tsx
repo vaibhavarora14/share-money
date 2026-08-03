@@ -327,7 +327,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
             <View
               style={[
                 styles.balanceInfo,
-                { backgroundColor: theme.colors.secondaryContainer },
+                { backgroundColor: theme.colors.primaryContainer },
               ]}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -366,7 +366,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                      toName = member?.full_name || member?.email || "Member";
                   } else {
                     return (
-                      <Text variant="titleMedium" style={{ color: theme.colors.onSecondaryContainer, opacity: 0.6 }}>
+                      <Text variant="titleMedium" style={{ color: theme.colors.onPrimaryContainer, opacity: 0.6 }}>
                         Select a member to settle with
                       </Text>
                     );
@@ -374,13 +374,13 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
 
                   return (
                     <>
-                      <Text variant="titleMedium" style={{ color: theme.colors.onSecondaryContainer, fontWeight: 'bold' }}>
+                      <Text variant="titleMedium" style={{ color: theme.colors.onPrimaryContainer, fontWeight: 'bold' }}>
                         {fromName}
                       </Text>
-                      <Text variant="titleMedium" style={{ color: theme.colors.onSecondaryContainer, marginHorizontal: 8, opacity: 0.7 }}>
+                      <Text variant="titleMedium" style={{ color: theme.colors.onPrimaryContainer, marginHorizontal: 8, opacity: 0.7 }}>
                         paying
                       </Text>
-                      <Text variant="titleMedium" style={{ color: theme.colors.onSecondaryContainer, fontWeight: 'bold' }}>
+                      <Text variant="titleMedium" style={{ color: theme.colors.onPrimaryContainer, fontWeight: 'bold' }}>
                         {toName}
                       </Text>
                     </>
@@ -393,7 +393,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                   variant="bodyMedium"
                   style={[
                     styles.balanceAmount,
-                    { color: theme.colors.onSecondaryContainer, marginTop: 8, opacity: 0.8 },
+                    { color: theme.colors.onPrimaryContainer, marginTop: 8, opacity: 0.8 },
                   ]}
                 >
                   {formatCurrency(
