@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -33,6 +34,7 @@ import {
   getDefaultCountry,
   parsePhoneNumber,
 } from "../utils/countryCodes";
+import { useDeleteAccount } from "../hooks/useDeleteAccount";
 import { showErrorAlert } from "../utils/errorHandling";
 
 interface ProfileSetupScreenProps {
@@ -57,6 +59,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     useThemePreference();
   const insets = useSafeAreaInsets();
   const { data: profile, updateProfile } = useProfile();
+  const deleteAccount = useDeleteAccount();
   const { signOut, user } = useAuth();
 
   useEffect(() => {
@@ -180,6 +183,28 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     } catch (error) {
       showErrorAlert(error, signOut, "Appearance");
     }
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Delete Account",
+      "This permanently removes access to your ShareMoney account and anonymizes your profile in shared groups.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete Account",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteAccount.mutateAsync();
+              Alert.alert("Account Deleted", "Your account has been deleted.");
+            } catch (error) {
+              showErrorAlert(error, signOut, "Delete Account");
+            }
+          },
+        },
+      ]
+    );
   };
 
   const getInitials = () => {
@@ -382,12 +407,50 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             <Button
               mode="contained"
               onPress={handleComplete}
-              disabled={loading || !hasChanges}
+              disabled={loading || deleteAccount.isPending || !hasChanges}
               loading={loading}
               style={styles.button}
               contentStyle={styles.buttonContent}
             >
               Save Changes
+            </Button>
+          </Surface>
+
+          <Surface
+            style={[
+              styles.dangerCard,
+              { backgroundColor: theme.colors.errorContainer },
+            ]}
+            elevation={0}
+          >
+            <View style={styles.dangerHeader}>
+              <Icon source="alert-outline" size={22} color={theme.colors.error} />
+              <View style={styles.dangerText}>
+                <Text
+                  variant="titleSmall"
+                  style={{ color: theme.colors.onErrorContainer }}
+                >
+                  Delete Account
+                </Text>
+                <Text
+                  variant="bodySmall"
+                  style={{ color: theme.colors.onErrorContainer }}
+                >
+                  Remove access to your account and anonymize your profile in shared groups.
+                </Text>
+              </View>
+            </View>
+            <Button
+              mode="contained-tonal"
+              onPress={handleDeleteAccount}
+              disabled={loading || deleteAccount.isPending}
+              loading={deleteAccount.isPending}
+              textColor={theme.colors.error}
+              style={styles.deleteButton}
+              contentStyle={styles.buttonContent}
+              icon="delete-outline"
+            >
+              Delete Account
             </Button>
           </Surface>
         </ScrollView>
@@ -517,5 +580,23 @@ const styles = StyleSheet.create({
   },
   buttonContent: {
     paddingVertical: 6,
+  },
+  dangerCard: {
+    borderRadius: 16,
+    marginTop: 16,
+    padding: 16,
+  },
+  dangerHeader: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 12,
+  },
+  dangerText: {
+    flex: 1,
+    gap: 4,
+  },
+  deleteButton: {
+    alignSelf: "flex-start",
+    borderRadius: 8,
   },
 });

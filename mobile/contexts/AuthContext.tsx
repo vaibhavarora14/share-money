@@ -1,7 +1,9 @@
 import * as Sentry from "@sentry/react-native";
 import { Session, User } from "@supabase/supabase-js";
+import * as AppleAuthentication from "expo-apple-authentication";
 import * as AuthSession from "expo-auth-session";
 import Constants from "expo-constants";
+import * as Crypto from "expo-crypto";
 import * as WebBrowser from "expo-web-browser";
 import React, {
   createContext,
@@ -129,6 +131,65 @@ function mapGoogleOAuthError(error: Error): Error {
   return error;
 }
 
+function mapAppleAuthError(error: Error & { code?: string }): Error {
+  const message = error.message || "";
+
+  if (error.code === "ERR_REQUEST_CANCELED") {
+    return new Error("Authentication was cancelled");
+  }
+
+  if (message.includes("unknown reason")) {
+    return new Error(
+      "Apple sign-in could not start in this build. In the iOS simulator, this can happen when the app is not installed with an Apple-provisioned Sign in with Apple entitlement. Test this on a real iPhone or a TestFlight/App Store build with the Sign in with Apple capability enabled."
+    );
+  }
+
+  if (
+    message.includes("Unsupported provider") ||
+    message.includes("provider is not enabled")
+  ) {
+    return new Error(
+      "Apple sign-in is not enabled for this Supabase environment. Enable the Apple provider in Supabase Auth and add com.vaibhavarora.sharemoney as an allowed client ID."
+    );
+  }
+
+  if (
+    message.includes("OAuth") ||
+    message.includes("provider") ||
+    message.includes("client") ||
+    message.includes("nonce")
+  ) {
+    return new Error(
+      `${message}\n\nMake sure the Apple provider is enabled in Supabase Auth and the iOS bundle ID is configured for Sign in with Apple.`
+    );
+  }
+
+  return error;
+}
+
+function createAppleNonce(byteCount = 32): string {
+  return Array.from(Crypto.getRandomBytes(byteCount))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function formatAppleFullName(
+  fullName: AppleAuthentication.AppleAuthenticationFullName | null
+): string | null {
+  if (!fullName) return null;
+
+  const name = [
+    fullName.givenName,
+    fullName.middleName,
+    fullName.familyName,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+
+  return name || null;
+}
+
 /**
  * Authentication context type
  * Provides session state, user information, and authentication methods
@@ -146,6 +207,8 @@ interface AuthContextType {
   signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
   /** Signs in a user with Google OAuth */
   signInWithGoogle: () => Promise<{ error: Error | null }>;
+  /** Signs in a user with native Sign in with Apple */
+  signInWithApple: () => Promise<{ error: Error | null }>;
   /** Signs out the current user */
   signOut: () => void | Promise<void>;
 }
@@ -437,6 +500,98 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   /**
+   * Signs in a user with native Sign in with Apple and exchanges the ID token
+   * for a Supabase session.
+   * @returns Promise resolving to an object with error property (null if successful)
+   */
+  const signInWithApple = useCallback(async () => {
+    try {
+      if (Platform.OS !== "ios") {
+        return { error: new Error("Apple sign-in is only available on iOS") };
+      }
+
+      if (!Constants.isDevice) {
+        return {
+          error: new Error(
+            "Apple sign-in needs a real iPhone or TestFlight/App Store build for this app. The iOS simulator can show Apple Account prompts, but it cannot reliably complete native Sign in with Apple for this development build."
+          ),
+        };
+      }
+
+      const isAvailable = await AppleAuthentication.isAvailableAsync();
+      if (!isAvailable) {
+        return {
+          error: new Error("Apple sign-in is not available on this device"),
+        };
+      }
+
+      const rawNonce = createAppleNonce();
+      const hashedNonce = await Crypto.digestStringAsync(
+        Crypto.CryptoDigestAlgorithm.SHA256,
+        rawNonce
+      );
+
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+        nonce: hashedNonce,
+      });
+
+      if (!credential.identityToken) {
+        return { error: new Error("Apple did not return an identity token") };
+      }
+
+      const { error: sessionError } = await supabase.auth.signInWithIdToken({
+        provider: "apple",
+        token: credential.identityToken,
+        nonce: rawNonce,
+      });
+
+      if (sessionError) {
+        return { error: mapAppleAuthError(sessionError) };
+      }
+
+      const fullName = formatAppleFullName(credential.fullName);
+      if (fullName) {
+        const { error: metadataError } = await supabase.auth.updateUser({
+          data: {
+            full_name: fullName,
+            given_name: credential.fullName?.givenName ?? undefined,
+            family_name: credential.fullName?.familyName ?? undefined,
+          },
+        });
+
+        if (metadataError) {
+          logError(metadataError, { context: "signInWithApple.updateUser" });
+        }
+      }
+
+      const {
+        data: { session: verifySession },
+        error: verifyError,
+      } = await supabase.auth.getSession();
+
+      if (verifyError || !verifySession) {
+        return {
+          error: new Error("Session was not created after Apple sign-in"),
+        };
+      }
+
+      return { error: null };
+    } catch (error) {
+      logError(error, { context: "signInWithApple" });
+      return {
+        error:
+          error instanceof Error
+            ? mapAppleAuthError(error)
+            : new Error("Unknown error occurred"),
+      };
+    }
+  }, []);
+
+  /**
    * Signs out the current user
    * Clears the session state and signs out from Supabase
    */
@@ -474,9 +629,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       signIn,
       signUp,
       signInWithGoogle,
+      signInWithApple,
       signOut,
     }),
-    [session, user, loading, signIn, signUp, signInWithGoogle, signOut]
+    [
+      session,
+      user,
+      loading,
+      signIn,
+      signUp,
+      signInWithGoogle,
+      signInWithApple,
+      signOut,
+    ]
   );
 
   return (
