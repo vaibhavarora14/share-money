@@ -22,9 +22,9 @@ export const styles = StyleSheet.create({
     alignItems: "center",
   },
   iconContainer: {
-    width: 48, // Larger touch target/visual
-    height: 48,
-    borderRadius: 24,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
@@ -65,4 +65,3 @@ export const styles = StyleSheet.create({
   sectionSurface: {},
   sectionContent: {},
 });
-

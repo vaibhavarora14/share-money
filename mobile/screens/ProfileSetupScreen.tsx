@@ -12,6 +12,7 @@ import {
   Avatar,
   Button,
   Icon,
+  SegmentedButtons,
   Surface,
   Text,
   TextInput,
@@ -20,6 +21,10 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CountryCodePicker } from "../components/CountryCodePicker";
 import { useAuth } from "../contexts/AuthContext";
+import {
+  ThemePreference,
+  useThemePreference,
+} from "../contexts/ThemePreferenceContext";
 import { useProfile } from "../hooks/useProfile";
 import {
   CountryCode,
@@ -48,6 +53,8 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [loading, setLoading] = useState(false);
   const theme = useTheme();
+  const { resolvedTheme, setThemePreference, themePreference } =
+    useThemePreference();
   const insets = useSafeAreaInsets();
   const { data: profile, updateProfile } = useProfile();
   const { signOut, user } = useAuth();
@@ -165,6 +172,16 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     }
   };
 
+  const handleThemePreferenceChange = async (value: string) => {
+    const nextPreference = value as ThemePreference;
+
+    try {
+      await setThemePreference(nextPreference);
+    } catch (error) {
+      showErrorAlert(error, signOut, "Appearance");
+    }
+  };
+
   const getInitials = () => {
     if (fullName.trim()) {
       const names = fullName.trim().split(" ");
@@ -222,7 +239,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             <View
               style={[
                 styles.avatarContainer,
-                { backgroundColor: theme.colors.secondaryContainer },
+                { backgroundColor: theme.colors.primaryContainer },
               ]}
             >
               <Avatar.Text
@@ -309,6 +326,56 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                 placeholder="Enter your phone number"
                 keyboardType="phone-pad"
                 contentStyle={styles.phoneInputContent}
+              />
+            </View>
+
+            <View style={styles.appearanceSection}>
+              <View style={styles.appearanceHeader}>
+                <View>
+                  <Text
+                    variant="titleSmall"
+                    style={[
+                      styles.appearanceTitle,
+                      { color: theme.colors.onSurface },
+                    ]}
+                  >
+                    Appearance
+                  </Text>
+                  <Text
+                    variant="bodySmall"
+                    style={{ color: theme.colors.onSurfaceVariant }}
+                  >
+                    System is using {resolvedTheme} mode
+                  </Text>
+                </View>
+              </View>
+              <SegmentedButtons
+                value={themePreference}
+                onValueChange={handleThemePreferenceChange}
+                theme={{
+                  colors: {
+                    secondaryContainer: theme.colors.primaryContainer,
+                    onSecondaryContainer: theme.colors.onPrimaryContainer,
+                  },
+                }}
+                buttons={[
+                  {
+                    value: "system",
+                    label: "System",
+                    icon: "theme-light-dark",
+                  },
+                  {
+                    value: "light",
+                    label: "Light",
+                    icon: "white-balance-sunny",
+                  },
+                  {
+                    value: "dark",
+                    label: "Dark",
+                    icon: "moon-waning-crescent",
+                  },
+                ]}
+                style={styles.themeButtons}
               />
             </View>
 
@@ -427,6 +494,22 @@ const styles = StyleSheet.create({
   phoneInputContent: {
     paddingLeft: 12,
     paddingRight: 12,
+  },
+  appearanceSection: {
+    gap: 12,
+    marginBottom: 16,
+  },
+  appearanceHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  appearanceTitle: {
+    fontWeight: "700",
+    marginBottom: 2,
+  },
+  themeButtons: {
+    width: "100%",
   },
   button: {
     marginTop: 8,

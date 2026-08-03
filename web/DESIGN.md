@@ -8,9 +8,9 @@ This document is the canonical reference for the landing-page redesign.
 - Promise: clear balances, predictable settlement outcomes, and explicit payment boundaries.
 
 ## Core Copy
-- H1: `Shared expenses, clearly settled.`
-- Tagline: `Track trips, homes, and dinner groups in one place. ShareMoney keeps every balance visible and reduces the payments needed to settle up.`
-- Trust line: `No bank connection. No payment handling. Just a clear shared record.`
+- H1: `Split the trip. Settle up.`
+- Tagline: `One shared record for group money.`
+- Trust line: `No bank link. No payments. Web + mobile.`
 - Search intent focus: shared expense tracker, split expenses, group balances, settle up.
 
 ## Primary Conversion
@@ -30,24 +30,20 @@ This document is the canonical reference for the landing-page redesign.
   - Canvas `#F7F9FC`
   - Ink `#17202A`
   - Action blue `#1F5EFF`
-  - Social coral `#E76F51`
-  - Success green `#087A55`
+  - Berry `#C95872`
+  - Sea `#00866E`
 - 4px spacing and 4/8px radii.
 - Font: `Instrument Sans Variable`, loaded through `@fontsource-variable`.
 - Content width: `1180px`.
 - Dark mode is supported with equivalent contrast treatment.
 
 ## Layout Rules
-1. Sticky compact nav with section links + theme control + primary `Get the app` CTA.
-2. Hero: `Group Story Poster`, with headline and actions above a real group context. The
-   product screenshot sits inside that social story instead of floating as a device mockup.
-3. Product proof: `Group Pulse`, combining named member balances, a shared activity
-   timeline, and the final settlement result in one connected view.
-4. Use-case tabs: Trips / Roommates / Dinner Groups.
-5. 3-step workflow: Add expenses / Split fairly / Settle clearly.
-6. Alternating feature rows: minimized settlements, multi-currency, synchronized activity, summaries.
-7. Trust section: data storage boundaries, encryption, payment handling boundary.
-8. Accessible FAQ accordion + focused install + legal/support footer.
+1. Sticky compact nav with Product / How it works / Trust + primary `Get app` CTA.
+2. Hero: short claim, primary action, tiny trust pills, and one current product screenshot.
+3. Proof strip: Add / See / Settle.
+4. 3-step workflow: Add / See / Settle.
+5. Trust section: data storage boundaries, payment handling boundary.
+6. Short FAQ + focused install + legal/support footer.
 
 ## Asset Rules
 - Product screens use `avif`, `webp`, and `png` fallbacks.

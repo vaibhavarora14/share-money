@@ -143,7 +143,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
     
     // Google Material 3 colors often use Tonal palettes.
     // We'll stick to semantic red/green but with a "Google" feel (clean, readable).
-    const amountColor = isOwed ? "#1e8e3e" : "#d93025"; // Google Green / Google Red
+    const amountColor = isOwed ? theme.colors.tertiary : theme.colors.error;
 
     // Look up display name - backend now enriches full_name/email for all users (including invited)
     const displayName =
@@ -199,12 +199,12 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
               {/* Action Button: Small, Tonal / Outlined */}
                <View style={[
                    styles.actionChip, 
-                   { backgroundColor: isOwed ? theme.colors.secondaryContainer : theme.colors.errorContainer } 
+                   { backgroundColor: isOwed ? theme.colors.tertiaryContainer : theme.colors.errorContainer } 
                ]}>
                    <Text 
                     variant="labelSmall" 
                     style={{ 
-                        color: isOwed ? theme.colors.onSecondaryContainer : theme.colors.onErrorContainer,
+                        color: isOwed ? theme.colors.onTertiaryContainer : theme.colors.onErrorContainer,
                         fontWeight: '700'
                     }}
                    >

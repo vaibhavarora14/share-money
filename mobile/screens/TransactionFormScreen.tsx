@@ -54,6 +54,29 @@ interface TransactionFormScreenProps {
   groupId?: string;
 }
 
+const CATEGORY_OPTIONS = [
+  { label: "Food", value: "Food", icon: "silverware-fork-knife" },
+  { label: "Travel", value: "Travel", icon: "airplane" },
+  { label: "Groceries", value: "Groceries", icon: "cart-outline" },
+  { label: "Transport", value: "Transport", icon: "taxi" },
+  { label: "Entertainment", value: "Entertainment", icon: "movie-open-outline" },
+  { label: "Shopping", value: "Shopping", icon: "shopping-outline" },
+  { label: "Rent", value: "Rent", icon: "home-outline" },
+  { label: "Utilities", value: "Utilities", icon: "lightning-bolt-outline" },
+  { label: "Health", value: "Health", icon: "medical-bag" },
+  { label: "Other", value: "Other", icon: "tag-outline" },
+] as const;
+
+const isPresetCategory = (value: string) => {
+  const normalized = value.trim().toLowerCase();
+  return CATEGORY_OPTIONS.some((option) => option.value.toLowerCase() === normalized);
+};
+
+const getCategoryDisplayLabel = (value: string) => {
+  const normalized = value.trim().toLowerCase();
+  return CATEGORY_OPTIONS.find((option) => option.value.toLowerCase() === normalized)?.label || value.trim();
+};
+
 export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   transaction,
   onSave,
@@ -74,6 +97,8 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   const [date, setDate] = useState("");
   const [type, setType] = useState<"income" | "expense">("expense");
   const [category, setCategory] = useState("");
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [useCustomCategoryInput, setUseCustomCategoryInput] = useState(false);
   const [currency, setCurrency] = useState<string>(effectiveDefaultCurrency);
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -82,7 +107,6 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   const [paidBy, setPaidBy] = useState<string>("");
   const [splitAmong, setSplitAmong] = useState<string[]>([]);
   const [showPaidByPicker, setShowPaidByPicker] = useState(false);
-  const [showMoreOptions, setShowMoreOptions] = useState(false);
 
   // Error states
   const [descriptionError, setDescriptionError] = useState<string>("");
@@ -196,6 +220,8 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     setSelectedDate(today);
     setType("expense");
     setCategory("");
+    setShowCategoryPicker(false);
+    setUseCustomCategoryInput(false);
     setCurrency(effectiveDefaultCurrency);
     setPaidBy("");
     setSplitAmong([]);
@@ -214,7 +240,9 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       setSelectedDate(transactionDate);
       setDate(tx.date || "");
       setType(tx.type || "expense");
-      setCategory(tx.category || "");
+      const nextCategory = tx.category || "";
+      setCategory(nextCategory);
+      setUseCustomCategoryInput(!!nextCategory && !isPresetCategory(nextCategory));
       setCurrency(tx.currency || effectiveDefaultCurrency);
 
       if (tx.paid_by_participant_id) {
@@ -232,11 +260,6 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
         setSplitAmong([...new Set(tx.split_among_participant_ids)]);
       } else {
         setSplitAmong([]);
-      }
-      
-      // Show more options if type is income or category is set
-      if (tx.type === "income" || tx.category) {
-        setShowMoreOptions(true);
       }
     },
     [effectiveDefaultCurrency]
@@ -435,6 +458,10 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       setShowPaidByPicker(false);
       return true;
     }
+    if (showCategoryPicker) {
+      setShowCategoryPicker(false);
+      return true;
+    }
     if (
       showDatePicker &&
       (Platform.OS === "android" || Platform.OS === "web")
@@ -444,7 +471,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     }
     onDismiss();
     return true;
-  }, [onDismiss, showCurrencyPicker, showPaidByPicker, showDatePicker]);
+  }, [onDismiss, showCurrencyPicker, showPaidByPicker, showCategoryPicker, showDatePicker]);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener("hardwareBackPress", handleHardwareBack);
@@ -465,6 +492,33 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     if (splitAmong.length === 0 || !amount || parseFloat(amount) <= 0) return null;
     return parseFloat(amount) / splitAmong.length;
   }, [amount, splitAmong.length]);
+
+  const categoryPickerItems = useMemo(
+    () => [
+      {
+        key: "none",
+        label: "No category",
+        value: "",
+        icon: "help-circle-outline",
+        type: "none" as const,
+      },
+      ...CATEGORY_OPTIONS.map((option) => ({
+        key: option.value,
+        label: option.label,
+        value: option.value,
+        icon: option.icon,
+        type: "preset" as const,
+      })),
+      {
+        key: "custom",
+        label: "Custom...",
+        value: "",
+        icon: "pencil-outline",
+        type: "custom" as const,
+      },
+    ],
+    []
+  );
 
   return (
     <SafeAreaView
@@ -591,6 +645,56 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                   {dateError}
                 </Text>
               )}
+
+              <Divider style={styles.divider} />
+
+              <Pressable
+                onPress={() => setShowCategoryPicker(true)}
+                disabled={loading}
+              >
+                <View style={styles.selectRow}>
+                  <IconButton icon="tag-outline" size={24} />
+                  <View style={styles.selectRowContent}>
+                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                      Category
+                    </Text>
+                    <Text
+                      variant="bodyLarge"
+                      numberOfLines={1}
+                      style={{
+                        color: category.trim() || useCustomCategoryInput
+                          ? theme.colors.onSurface
+                          : theme.colors.onSurfaceVariant,
+                      }}
+                    >
+                      {useCustomCategoryInput
+                        ? category.trim() || "Custom"
+                        : category.trim()
+                          ? getCategoryDisplayLabel(category)
+                          : "No category"}
+                    </Text>
+                  </View>
+                  <IconButton icon="chevron-down" size={24} />
+                </View>
+              </Pressable>
+
+              {useCustomCategoryInput && (
+                <TextInput
+                  label="Custom category"
+                  value={category}
+                  onChangeText={setCategory}
+                  mode="flat"
+                  disabled={loading}
+                  style={[styles.flatInput, styles.customCategoryInput]}
+                  left={<TextInput.Icon icon="pencil-outline" />}
+                  right={
+                    category.trim() ? (
+                      <TextInput.Icon icon="close" onPress={() => setCategory("")} />
+                    ) : undefined
+                  }
+                  placeholder="Write your own category"
+                />
+              )}
             </Card.Content>
           </Card>
 
@@ -630,10 +734,16 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                             if (paidByError) setPaidByError("");
                           }}
                           style={[
-                            styles.chip, 
+                            styles.chip,
                             isFormer && styles.formerChip,
                             !isSelected && { backgroundColor: theme.colors.surfaceVariant },
                           ]}
+                          theme={{
+                            colors: {
+                              secondaryContainer: theme.colors.primaryContainer,
+                              onSecondaryContainer: theme.colors.onPrimaryContainer,
+                            },
+                          }}
                           disabled={loading}
                           showSelectedCheck={true}
                           testID={`paid-by-chip-${p.email || p.id}`}
@@ -699,6 +809,12 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                           isInvited && styles.invitedChip,
                           !isSelected && { backgroundColor: theme.colors.surfaceVariant },
                         ]}
+                        theme={{
+                          colors: {
+                            secondaryContainer: theme.colors.primaryContainer,
+                            onSecondaryContainer: theme.colors.onPrimaryContainer,
+                          },
+                        }}
                         disabled={loading}
                         showSelectedCheck={true}
                         testID={`split-among-chip-${p.email || p.id}`}
@@ -726,35 +842,6 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
             </Card>
           )}
 
-          {/* MORE OPTIONS */}
-          <Pressable onPress={() => setShowMoreOptions(!showMoreOptions)}>
-            <View style={styles.moreOptionsHeader}>
-              <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant }}>
-                More options
-              </Text>
-              <IconButton 
-                icon={showMoreOptions ? "chevron-up" : "chevron-down"} 
-                size={20} 
-              />
-            </View>
-          </Pressable>
-
-          {showMoreOptions && (
-            <Card style={styles.card} mode="outlined">
-              <Card.Content>
-                <TextInput
-                  label="Category (Optional)"
-                  value={category}
-                  onChangeText={setCategory}
-                  mode="flat"
-                  disabled={loading}
-                  style={styles.flatInput}
-                  left={<TextInput.Icon icon="tag-outline" />}
-                  placeholder="e.g., Food, Transportation"
-                />
-              </Card.Content>
-            </Card>
-          )}
         </ScrollView>
 
         {/* STICKY BOTTOM ACTION BAR */}
@@ -905,7 +992,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                   <TouchableOpacity
                     style={[
                       styles.pickerItem,
-                      isSelected && { backgroundColor: theme.colors.secondaryContainer },
+                      isSelected && { backgroundColor: theme.colors.primaryContainer },
                     ]}
                     onPress={() => {
                       setPaidBy(item.id);
@@ -918,6 +1005,76 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                       {item.type === 'invited' && " (Invited)"}
                       {item.type === 'former' && " (Former)"}
                     </Text>
+                    {isSelected && (
+                      <IconButton icon="check" size={20} iconColor={theme.colors.primary} />
+                    )}
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Category Picker Modal */}
+      <Modal
+        visible={showCategoryPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCategoryPicker(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowCategoryPicker(false)}
+        >
+          <View
+            style={[styles.pickerModal, { backgroundColor: theme.colors.surface }]}
+            onStartShouldSetResponder={() => true}
+          >
+            <View style={styles.pickerHeader}>
+              <Text variant="titleLarge">Select Category</Text>
+              <IconButton icon="close" onPress={() => setShowCategoryPicker(false)} />
+            </View>
+            <FlatList
+              data={categoryPickerItems}
+              keyExtractor={(item) => item.key}
+              style={styles.pickerList}
+              contentContainerStyle={styles.categoryPickerListContent}
+              renderItem={({ item }) => {
+                const isSelected =
+                  item.type === "custom"
+                    ? useCustomCategoryInput
+                    : item.type === "none"
+                      ? !category.trim() && !useCustomCategoryInput
+                      : !useCustomCategoryInput &&
+                        category.trim().toLowerCase() === item.value.toLowerCase();
+
+                return (
+                  <TouchableOpacity
+                    style={[
+                      styles.pickerItem,
+                      isSelected && { backgroundColor: theme.colors.primaryContainer },
+                    ]}
+                    onPress={() => {
+                      if (item.type === "custom") {
+                        setUseCustomCategoryInput(true);
+                      } else {
+                        setCategory(item.value);
+                        setUseCustomCategoryInput(false);
+                      }
+                      setShowCategoryPicker(false);
+                    }}
+                  >
+                    <View style={styles.pickerItemLabel}>
+                      <IconButton
+                        icon={item.icon}
+                        size={22}
+                        iconColor={theme.colors.onSurfaceVariant}
+                        style={styles.pickerItemIcon}
+                      />
+                      <Text variant="bodyLarge">{item.label}</Text>
+                    </View>
                     {isSelected && (
                       <IconButton icon="check" size={20} iconColor={theme.colors.primary} />
                     )}
@@ -959,7 +1116,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                   <TouchableOpacity
                     style={[
                       styles.pickerItem,
-                      isSelected && { backgroundColor: theme.colors.secondaryContainer },
+                      isSelected && { backgroundColor: theme.colors.primaryContainer },
                     ]}
                     onPress={() => {
                       setCurrency(item.code);
@@ -1044,6 +1201,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
+  selectRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  selectRowContent: {
+    flex: 1,
+    minWidth: 0,
+  },
+  customCategoryInput: {
+    marginTop: 8,
+  },
 
   // Section Headers
   sectionHeader: {
@@ -1090,15 +1258,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.04)",
     borderRadius: 12,
     alignItems: "center",
-  },
-
-  // More Options
-  moreOptionsHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 8,
-    marginBottom: 8,
   },
 
   // Type Row
@@ -1176,11 +1335,24 @@ const styles = StyleSheet.create({
   pickerList: {
     padding: 8,
   },
+  categoryPickerListContent: {
+    paddingBottom: 48,
+  },
   pickerItem: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     padding: 16,
     borderRadius: 12,
+  },
+  pickerItemLabel: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  pickerItemIcon: {
+    margin: 0,
+    marginRight: 8,
   },
 });

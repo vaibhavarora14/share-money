@@ -7,7 +7,6 @@ import { useAuth } from "../contexts/AuthContext";
 import { ActivityItem } from "../types";
 import {
     formatActivityTime,
-    getActivityColor,
     getUserDisplayName,
     groupActivitiesByDate,
 } from "../utils/activityDescriptions";
@@ -109,10 +108,21 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                   currentUserId,
                   activity.changed_by.full_name
                 );
-                const activityColor = getActivityColor(activity.type);
+                const isCreated = activity.type.endsWith("_created");
+                const isDeleted = activity.type.endsWith("_deleted");
+                const activityColor = isDeleted
+                  ? theme.colors.error
+                  : isCreated
+                  ? theme.colors.tertiary
+                  : theme.colors.primary;
+                const activityContainerColor = isDeleted
+                  ? theme.colors.errorContainer
+                  : isCreated
+                  ? theme.colors.tertiaryContainer
+                  : theme.colors.primaryContainer;
 
                 // Get icon based on activity category (transaction vs settlement)
-                // Action is indicated by color (green=created, orange=updated, red=deleted)
+                // Action is indicated by semantic color.
                 const getActivityIcon = (
                   type: ActivityItem["type"]
                 ): keyof typeof MaterialCommunityIcons.glyphMap => {
@@ -130,7 +140,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                         style={[
                           styles.iconContainer,
                           {
-                            backgroundColor: activityColor + "20",
+                            backgroundColor: activityContainerColor,
                           },
                         ]}
                       >
