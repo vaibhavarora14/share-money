@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import * as AppleAuthentication from "expo-apple-authentication";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   Image,
@@ -32,9 +33,40 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
+  const [appleSignInAvailable, setAppleSignInAvailable] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const { signIn, signUp, signInWithGoogle } = useAuth();
+  const { signIn, signUp, signInWithGoogle, signInWithApple } = useAuth();
   const theme = useTheme();
+  const socialLoading = googleLoading || appleLoading;
+  const formDisabled = loading || socialLoading;
+
+  useEffect(() => {
+    let mounted = true;
+
+    if (Platform.OS !== "ios") {
+      setAppleSignInAvailable(false);
+      return () => {
+        mounted = false;
+      };
+    }
+
+    AppleAuthentication.isAvailableAsync()
+      .then((available) => {
+        if (mounted) {
+          setAppleSignInAvailable(available);
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setAppleSignInAvailable(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const handleSubmit = async () => {
     if (!email.trim() || !password.trim()) {
@@ -95,6 +127,26 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     }
   };
 
+  const handleAppleSignIn = async () => {
+    setAppleLoading(true);
+    try {
+      const { error } = await signInWithApple();
+      if (error) {
+        const errorMessage = error.message || "Failed to sign in with Apple";
+        Alert.alert("Apple Sign In Failed", errorMessage, [
+          { text: "OK", style: "default" },
+        ]);
+      }
+    } catch (err) {
+      console.error("Error in Apple sign in:", err);
+      Alert.alert("Error", "An unexpected error occurred. Please try again.", [
+        { text: "OK", style: "default" },
+      ]);
+    } finally {
+      setAppleLoading(false);
+    }
+  };
+
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: theme.colors.background }]}
@@ -148,7 +200,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               keyboardType="email-address"
               autoCapitalize="none"
               autoComplete="email"
-              disabled={loading || googleLoading}
+              disabled={formDisabled}
               style={styles.input}
               left={<TextInput.Icon icon="email" />}
             />
@@ -161,7 +213,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               secureTextEntry={!showPassword}
               autoCapitalize="none"
               autoComplete="password"
-              disabled={loading || googleLoading}
+              disabled={formDisabled}
               style={styles.input}
               left={<TextInput.Icon icon="lock" />}
               right={
@@ -175,7 +227,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             <Button
               mode="contained"
               onPress={handleSubmit}
-              disabled={loading || googleLoading}
+              disabled={formDisabled}
               loading={loading}
               style={styles.button}
               contentStyle={styles.buttonContent}
@@ -197,10 +249,32 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               <Divider style={styles.divider} />
             </View>
 
+            {appleSignInAvailable && (
+              <View
+                pointerEvents={formDisabled ? "none" : "auto"}
+                style={[
+                  styles.appleButtonContainer,
+                  formDisabled && styles.disabledSocialButton,
+                ]}
+              >
+                <AppleAuthentication.AppleAuthenticationButton
+                  buttonType={
+                    AppleAuthentication.AppleAuthenticationButtonType.CONTINUE
+                  }
+                  buttonStyle={
+                    AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+                  }
+                  cornerRadius={8}
+                  onPress={handleAppleSignIn}
+                  style={styles.appleButton}
+                />
+              </View>
+            )}
+
             <Button
               mode="outlined"
               onPress={handleGoogleSignIn}
-              disabled={loading || googleLoading}
+              disabled={formDisabled}
               loading={googleLoading}
               style={styles.googleButton}
               contentStyle={styles.buttonContent}
@@ -212,7 +286,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             <Button
               mode="text"
               onPress={onToggleMode}
-              disabled={loading || googleLoading}
+              disabled={formDisabled}
               style={styles.toggleButton}
             >
               {isSignUp
@@ -289,6 +363,17 @@ const styles = StyleSheet.create({
   },
   googleButton: {
     marginBottom: 16,
+  },
+  appleButtonContainer: {
+    height: 48,
+    marginBottom: 16,
+  },
+  appleButton: {
+    width: "100%",
+    height: 48,
+  },
+  disabledSocialButton: {
+    opacity: 0.6,
   },
   toggleButton: {
     marginTop: 8,
