@@ -138,6 +138,12 @@ function mapAppleAuthError(error: Error & { code?: string }): Error {
     return new Error("Authentication was cancelled");
   }
 
+  if (message.includes("unknown reason")) {
+    return new Error(
+      "Apple sign-in could not start in this build. In the iOS simulator, this can happen when the app is not installed with an Apple-provisioned Sign in with Apple entitlement. Test this on a real iPhone or a TestFlight/App Store build with the Sign in with Apple capability enabled."
+    );
+  }
+
   if (
     message.includes("Unsupported provider") ||
     message.includes("provider is not enabled")
@@ -502,6 +508,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       if (Platform.OS !== "ios") {
         return { error: new Error("Apple sign-in is only available on iOS") };
+      }
+
+      if (!Constants.isDevice) {
+        return {
+          error: new Error(
+            "Apple sign-in needs a real iPhone or TestFlight/App Store build for this app. The iOS simulator can show Apple Account prompts, but it cannot reliably complete native Sign in with Apple for this development build."
+          ),
+        };
       }
 
       const isAvailable = await AppleAuthentication.isAvailableAsync();
