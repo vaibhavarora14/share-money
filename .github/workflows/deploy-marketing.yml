@@ -24,7 +24,7 @@ jobs:
 
       - name: 📦 Install Dependencies
         working-directory: web
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: 🛠 Build Project (Production Check)
         working-directory: web
