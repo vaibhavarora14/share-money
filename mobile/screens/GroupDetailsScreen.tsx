@@ -787,6 +787,12 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 onValueChange={(val: string) =>
                   setListMode(val as "transactions" | "activity")
                 }
+                theme={{
+                  colors: {
+                    secondaryContainer: theme.colors.primaryContainer,
+                    onSecondaryContainer: theme.colors.onPrimaryContainer,
+                  },
+                }}
                 buttons={[
                   {
                     value: "transactions",

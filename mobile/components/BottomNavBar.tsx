@@ -38,13 +38,13 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
     const iconColor = isLogout
       ? theme.colors.error
       : isActive
-      ? theme.colors.onSecondaryContainer
+      ? theme.colors.onPrimaryContainer
       : theme.colors.onSurfaceVariant;
 
     const labelColor = isLogout
       ? theme.colors.error
       : isActive
-      ? theme.colors.onSecondaryContainer
+      ? theme.colors.onPrimaryContainer
       : theme.colors.onSurfaceVariant;
 
     return (
@@ -55,7 +55,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
         rippleColor={
           isLogout
             ? theme.colors.errorContainer
-            : theme.colors.secondaryContainer
+            : theme.colors.primaryContainer
         }
       >
         <View style={styles.tabContent}>
@@ -64,7 +64,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
               styles.iconContainer,
               isActive &&
                 !isLogout && {
-                  backgroundColor: theme.colors.secondaryContainer,
+                  backgroundColor: theme.colors.primaryContainer,
                 },
             ]}
           >
@@ -105,14 +105,14 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
           onPress={onProfilePress}
           style={styles.tab}
           borderless
-          rippleColor={theme.colors.secondaryContainer}
+          rippleColor={theme.colors.primaryContainer}
         >
           <View style={styles.tabContent}>
             <View
               style={[
                 styles.iconContainer,
                 isProfileActive && {
-                  backgroundColor: theme.colors.secondaryContainer,
+                  backgroundColor: theme.colors.primaryContainer,
                 },
               ]}
             >
@@ -124,7 +124,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
                 styles.label,
                 {
                   color: isProfileActive
-                    ? theme.colors.onSecondaryContainer
+                    ? theme.colors.onPrimaryContainer
                     : theme.colors.onSurfaceVariant,
                   fontWeight: isProfileActive ? "bold" : "normal",
                 },

@@ -30,6 +30,10 @@ import { BannerNotice, InAppBanner } from "./components/InAppBanner";
 import { AUTH_TIMEOUTS } from "./constants/auth";
 import { WEB_MAX_WIDTH } from "./constants/layout";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import {
+  ThemePreferenceProvider,
+  useThemePreference,
+} from "./contexts/ThemePreferenceContext";
 import { UpgradeProvider, useUpgrade } from "./contexts/UpgradeContext";
 import { queryKeys } from "./hooks/queryKeys";
 import { fetchActivity } from "./hooks/useActivity";
@@ -729,7 +733,6 @@ if (!process.env.EXPO_PUBLIC_SENTRY_DSN) {
 
 export default function App() {
   const colorScheme = useColorScheme();
-  const theme = colorScheme === "dark" ? darkTheme : lightTheme;
 
   return (
     <ErrorBoundary
@@ -746,31 +749,42 @@ export default function App() {
     >
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
-          <PaperProvider theme={theme}>
-            <View
-              style={[
-                styles.mainContainer,
-                { backgroundColor: theme.colors.background },
-              ]}
-            >
-              <UpgradeProvider>
-                <AuthProvider>
-                  <View
-                    style={[
-                      styles.appWrapper,
-                      { backgroundColor: theme.colors.surface },
-                    ]}
-                  >
-                    <AppContent />
-                    <ForceUpdateOverlay />
-                  </View>
-                </AuthProvider>
-              </UpgradeProvider>
-            </View>
-          </PaperProvider>
+          <ThemePreferenceProvider systemColorScheme={colorScheme}>
+            <ThemedAppShell />
+          </ThemePreferenceProvider>
         </QueryClientProvider>
       </SafeAreaProvider>
     </ErrorBoundary>
+  );
+}
+
+function ThemedAppShell() {
+  const { resolvedTheme } = useThemePreference();
+  const theme = resolvedTheme === "dark" ? darkTheme : lightTheme;
+
+  return (
+    <PaperProvider theme={theme}>
+      <View
+        style={[
+          styles.mainContainer,
+          { backgroundColor: theme.colors.background },
+        ]}
+      >
+        <UpgradeProvider>
+          <AuthProvider>
+            <View
+              style={[
+                styles.appWrapper,
+                { backgroundColor: theme.colors.surface },
+              ]}
+            >
+              <AppContent />
+              <ForceUpdateOverlay />
+            </View>
+          </AuthProvider>
+        </UpgradeProvider>
+      </View>
+    </PaperProvider>
   );
 }
 

@@ -91,9 +91,8 @@ export const primaryDestinationByDevice: Record<DeviceType, Platform> = {
 
 export const sectionNav: LandingSection[] = [
   { id: "product", label: "Product" },
-  { id: "use-cases", label: "Use cases" },
+  { id: "how-it-works", label: "How it works" },
   { id: "trust", label: "Trust" },
-  { id: "faq", label: "FAQ" },
 ];
 
 export const useCaseKeys: UseCaseKey[] = ["trips", "roommates", "dinner"];
@@ -231,20 +230,20 @@ export const workflowSteps: WorkflowStep[] = [
   {
     step: "01",
     icon: ReceiptText,
-    title: "Add the expense",
-    summary: "Choose who paid, who joined, and whether the split is equal or custom.",
+    title: "Add",
+    summary: "Amount, payer, category, split.",
   },
   {
     step: "02",
     icon: UsersRound,
-    title: "Share one record",
-    summary: "Everyone sees the same activity, notes, totals, and running balances.",
+    title: "See",
+    summary: "Owes you, you owe, or settled.",
   },
   {
     step: "03",
     icon: Scale,
-    title: "Settle the balance",
-    summary: "ShareMoney turns the group balance into a short, readable payment plan.",
+    title: "Settle",
+    summary: "Record what closes the balance.",
   },
 ];
 

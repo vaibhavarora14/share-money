@@ -76,7 +76,11 @@ export const CountryCodePicker: React.FC<CountryCodePickerProps> = ({
             {item.dialCode}
           </Text>
         </View>
-        {isSelected && <Text style={styles.checkmark}>✓</Text>}
+        {isSelected && (
+          <Text style={[styles.checkmark, { color: theme.colors.primary }]}>
+            ✓
+          </Text>
+        )}
       </TouchableOpacity>
     );
   };
@@ -185,8 +189,6 @@ const styles = StyleSheet.create({
   },
   checkmark: {
     fontSize: 20,
-    color: "#4CAF50",
     fontWeight: "bold",
   },
 });
-

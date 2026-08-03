@@ -170,7 +170,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                                 variant="titleMedium"
                                 style={[
                                   styles.balanceAmount,
-                                  { color: "#10b981" },
+                                  { color: theme.colors.tertiary },
                                 ]}
                               >
                                 {formatCurrency(
@@ -250,7 +250,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                                 variant="titleMedium"
                                 style={[
                                   styles.balanceAmount,
-                                  { color: "#ef4444" },
+                                  { color: theme.colors.error },
                                 ]}
                               >
                                 {formatCurrency(
@@ -353,7 +353,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                                 variant="bodyMedium"
                                 style={[
                                   styles.balanceAmount,
-                                  { color: "#10b981" },
+                                  { color: theme.colors.tertiary },
                                 ]}
                               >
                                 {formatCurrency(
@@ -406,7 +406,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                                 variant="bodyMedium"
                                 style={[
                                   styles.balanceAmount,
-                                  { color: "#ef4444" },
+                                  { color: theme.colors.error },
                                 ]}
                               >
                                 {formatCurrency(
