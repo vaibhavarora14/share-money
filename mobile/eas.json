@@ -42,7 +42,7 @@
     "internal": {
       "android": {
         "track": "internal",
-        "releaseStatus": "draft"
+        "releaseStatus": "completed"
       },
       "ios": {
         "appleId": "contact@sharedmoney.app",
