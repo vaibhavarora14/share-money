@@ -102,7 +102,6 @@ module.exports = ({ config }) => {
         package: "com.vaibhavarora.sharemoney",
         scheme: "com.vaibhavarora.sharemoney",
         versionCode: versionConfig.buildNumber,
-        usesCleartextTraffic: true,
         adaptiveIcon: {
           foregroundImage: "./assets/adaptive-icon.png",
           backgroundColor: "#F7F9FC"
