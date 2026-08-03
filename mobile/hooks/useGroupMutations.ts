@@ -80,18 +80,19 @@ export function useAddMember(onSuccess?: () => void) {
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
-    mutationFn: async (variables: { groupId: string; email: string }) => {
-      const response = await fetchWithAuth("/group-members", {
+    mutationFn: async (variables: { groupId: string; fullName: string; email?: string | null }) => {
+      const response = await fetchWithAuth("/participants", {
         method: "POST",
         body: JSON.stringify({
           group_id: variables.groupId,
-          email: variables.email,
+          full_name: variables.fullName,
+          email: variables.email || null,
         }),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to add member");
+        throw new Error(errorData.error || "Failed to add person");
       }
 
       return response.status === 204 ? null : await response.json();
