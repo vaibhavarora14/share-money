@@ -188,7 +188,7 @@ export const MembersList: React.FC<MembersListProps> = ({
                           }
                         >
                           <Menu.Item
-                            title="Invite to ShareMoney"
+                            title="Invite to OweWho"
                             leadingIcon="email-outline"
                             onPress={() => {
                               setMenuParticipantId(null);

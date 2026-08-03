@@ -406,8 +406,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           useProxy: true,
         } as Parameters<typeof AuthSession.makeRedirectUri>[0]);
       } else {
-        // Use custom scheme for development/production builds
-        redirectTo = "com.vaibhavarora.sharemoney://auth/callback";
+        // Use OweWho's custom scheme for development/production builds.
+        redirectTo = "owewho://auth/callback";
       }
 
       // Get the OAuth URL from Supabase

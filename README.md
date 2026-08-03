@@ -1,6 +1,6 @@
-# ShareMoney
+# OweWho
 
-Track and settle shared expenses with friends, roommates, or groups. Split bills, manage balances, and settle up efficiently—no more awkward money conversations. **[Try ShareMoney →](https://share-money-web.vercel.app/)**
+Track and settle shared expenses with friends, roommates, or groups. Split bills, manage balances, and settle up efficiently—no more awkward money conversations. **[Try OweWho →](https://owewho.com)**
 
 [![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=flat&logo=supabase&logoColor=white)](https://supabase.com)
 [![React Native](https://img.shields.io/badge/React%20Native-61DAFB?style=flat&logo=react&logoColor=black)](https://reactnative.dev)
@@ -11,8 +11,8 @@ Track and settle shared expenses with friends, roommates, or groups. Split bills
 ## Screenshots
 
 <div align="center">
-  <img src="mobile/screenshots/Screenshot_1767700176.png" alt="ShareMoney app screenshot 1" width="300" />
-  <img src="mobile/screenshots/Screenshot_1767700183.png" alt="ShareMoney app screenshot 2" width="300" />
+  <img src="mobile/screenshots/Screenshot_1767700176.png" alt="OweWho app screenshot 1" width="300" />
+  <img src="mobile/screenshots/Screenshot_1767700183.png" alt="OweWho app screenshot 2" width="300" />
 </div>
 
 ---
@@ -42,7 +42,7 @@ Track and settle shared expenses with friends, roommates, or groups. Split bills
 
 ```bash
 git clone <repository-url>
-cd ShareMoney2
+cd OweWho
 npm install
 ```
 
@@ -133,7 +133,7 @@ The seed can be run repeatedly—it uses `ON CONFLICT DO NOTHING` to safely re-r
 ## 📁 Project Structure
 
 ```
-ShareMoney/
+OweWho/
 ├── supabase/
 │   ├── functions/        # Supabase Edge Functions
 │   ├── migrations/       # Database migrations
@@ -164,10 +164,10 @@ ShareMoney/
 | `ALLOWED_ORIGIN` | CORS origin for Edge Functions | `http://localhost:19000` |
 | `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID` | Google Web OAuth client ID for local Supabase Auth | `...apps.googleusercontent.com` |
 | `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET` | Google Web OAuth client secret for local Supabase Auth | `GOCSPX-...` |
-| `APP_URL` | App URL used in reminder email links | `https://share-money-web.vercel.app` |
+| `APP_URL` | App URL used in reminder email links | `https://owewho.com/app` |
 | `REMINDER_CRON_SECRET` | Shared secret required to invoke monthly reminders | random secret |
 | `RESEND_API_KEY` | Resend API key for reminder emails | `re_...` |
-| `REMINDER_FROM_EMAIL` | Verified sender for reminder emails | `ShareMoney <reminders@example.com>` |
+| `REMINDER_FROM_EMAIL` | Verified sender for reminder emails | `OweWho <reminders@example.com>` |
 | `REMINDER_LOGO_URL` | Optional hosted logo URL for reminder emails; falls back to `${APP_URL}/icon.png` | `https://yourdomain.com/icon.png` |
 
 **Supabase Vault secrets for monthly reminders:**

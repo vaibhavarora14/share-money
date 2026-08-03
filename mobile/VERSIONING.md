@@ -2,7 +2,7 @@
 
 ## Overview
 
-ShareMoney uses a centralized version management system. The version is stored in `version.json` and automatically synced to `app.config.js` and `package.json`.
+OweWho uses a centralized version management system. The version is stored in `version.json` and automatically synced to `app.config.js` and `package.json`.
 
 ## Version Format
 
