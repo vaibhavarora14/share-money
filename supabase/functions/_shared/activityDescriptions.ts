@@ -181,8 +181,7 @@ export function formatValue(
       } else {
         displayName = 'Unknown';
       }
-      const typeLabel = participant.type === 'former' ? ' (Former)' : 
-                       participant.type === 'invited' ? ' (Invited)' : '';
+      const typeLabel = participant.type === 'former' ? ' (Former)' : '';
       return `${displayName}${typeLabel}`;
     }
     // Fallback for legacy user_id
@@ -244,8 +243,7 @@ function formatSplitChanges(
       } else {
         displayName = 'Unknown';
       }
-      const typeLabel = participant.type === 'former' ? ' (Former)' : 
-                       participant.type === 'invited' ? ' (Invited)' : '';
+      const typeLabel = participant.type === 'former' ? ' (Former)' : '';
       return `${displayName}${typeLabel}`;
     }
     // Fallback to email map (for legacy user_ids)
