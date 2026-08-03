@@ -16,6 +16,7 @@ import React, {
 import { Platform } from "react-native";
 import { AUTH_TIMEOUTS } from "../constants/auth";
 import { supabase } from "../supabase";
+import { getConfiguredWebAppPath } from "../utils/inviteLinks";
 import { log, logError } from "../utils/logger";
 
 // Complete the auth session when browser closes
@@ -390,15 +391,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
    */
   const signInWithGoogle = useCallback(async () => {
     try {
-      // For Expo Go, we MUST use the Expo proxy service
-      // For Web, we use the window origin
+      // For Expo Go, we MUST use the Expo proxy service.
       const isExpoGo = Constants.appOwnership === "expo";
       const isWeb = Platform.OS === "web";
 
       let redirectTo: string;
       if (isWeb) {
-        // For Web, AuthSession.makeRedirectUri() correctly gets the window.location.origin
-        redirectTo = AuthSession.makeRedirectUri();
+        const appPath = getConfiguredWebAppPath();
+        redirectTo =
+          typeof window !== "undefined"
+            ? `${window.location.origin}${appPath || ""}`
+            : AuthSession.makeRedirectUri();
       } else if (isExpoGo) {
         // Use Expo's proxy service for Expo Go - this prevents email app from opening
         // useProxy is valid at runtime but not in types, so we use type assertion
