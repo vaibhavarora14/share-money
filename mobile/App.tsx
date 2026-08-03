@@ -363,14 +363,15 @@ function AppContent() {
     }
   };
 
-  const handleAddMember = async (email: string) => {
+  const handleAddMember = async (person: { fullName: string; email?: string | null }) => {
     if (!selectedGroup) {
       throw new Error("Invalid request");
     }
 
     const result = await addMemberMutation.mutate({
       groupId: selectedGroup.id,
-      email,
+      fullName: person.fullName,
+      email: person.email || null,
     });
 
     // Always trigger invitations refresh after adding a member
@@ -601,8 +602,8 @@ function AppContent() {
           <AddMemberScreen
             visible={showAddMember}
             groupId={selectedGroup.id}
-            onAddMember={async (email) => {
-              const result = await handleAddMember(email);
+            onAddMember={async (person) => {
+              const result = await handleAddMember(person);
               // Don't close modal automatically - let AddMemberScreen handle it
               return result;
             }}

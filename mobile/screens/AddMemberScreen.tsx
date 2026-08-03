@@ -6,10 +6,10 @@ import {
     KeyboardAvoidingView,
     Modal,
     Platform,
+    Pressable,
     ScrollView,
     Share,
     StyleSheet,
-    TouchableOpacity,
     View,
 } from "react-native";
 import {
@@ -30,7 +30,7 @@ import { showErrorAlert } from "../utils/errorHandling";
 interface AddMemberScreenProps {
   visible: boolean;
   groupId: string;
-  onAddMember: (email: string) => Promise<any>;
+  onAddMember: (person: { fullName: string; email?: string | null }) => Promise<any>;
   onDismiss: () => void;
 }
 
@@ -45,6 +45,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
   onAddMember,
   onDismiss,
 }) => {
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
@@ -75,6 +76,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
   }, [visible, slideAnim]);
 
   const handleDismiss = () => {
+    setFullName("");
     setEmail("");
     setInviteLink(null);
     setLinkCopied(false);
@@ -151,36 +153,31 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
   };
 
   const handleAdd = async () => {
-    // Validation
-    if (!email.trim()) {
-      Alert.alert("Error", "Please enter an email address");
+    const trimmedName = fullName.trim();
+    const trimmedEmail = email.trim();
+
+    if (!trimmedName) {
+      Alert.alert("Error", "Please enter a name");
       return;
     }
 
-    // Basic email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email.trim())) {
+    if (trimmedEmail && !emailRegex.test(trimmedEmail)) {
       Alert.alert("Error", "Please enter a valid email address");
       return;
     }
 
     setLoading(true);
     try {
-      const result = await onAddMember(email.trim());
-      // Check if result indicates an invitation was created
-      if (result && typeof result === 'object' && 'invitation' in result && result.invitation) {
-        Alert.alert(
-          "Invitation Sent",
-          result.message || "Invitation sent successfully! The user will be added to the group when they sign up.",
-          [{ text: "OK", onPress: handleDismiss }]
-        );
-      } else {
-        Alert.alert(
-          "Success",
-          "Member added successfully!",
-          [{ text: "OK", onPress: handleDismiss }]
-        );
-      }
+      await onAddMember({
+        fullName: trimmedName,
+        email: trimmedEmail || null,
+      });
+      Alert.alert(
+        "Added",
+        "This person can now be included in expenses.",
+        [{ text: "OK", onPress: handleDismiss }]
+      );
     } catch (error) {
       showErrorAlert(error, signOut, "Error");
     } finally {
@@ -188,7 +185,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
     }
   };
 
-  const bottomSheetHeight = Math.min(screenHeight * 0.58, 520);
+  const bottomSheetHeight = Math.min(screenHeight * 0.64, 560);
   const translateY = slideAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [bottomSheetHeight, 0],
@@ -202,9 +199,8 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
       onRequestClose={handleDismiss}
     >
       <View style={styles.modalOverlay}>
-        <TouchableOpacity
+        <Pressable
           style={styles.backdrop}
-          activeOpacity={1}
           onPress={handleDismiss}
         />
         <Animated.View
@@ -227,7 +223,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
             />
           </View>
           <Appbar.Header style={styles.header}>
-            <Appbar.Content title="Add Member" titleStyle={{ fontWeight: 'bold' }} />
+            <Appbar.Content title="Add person" titleStyle={{ fontWeight: 'bold' }} />
             <Appbar.Action icon="close" onPress={handleDismiss} />
           </Appbar.Header>
           <KeyboardAvoidingView
@@ -248,11 +244,24 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                   { color: theme.colors.onSurfaceVariant },
                 ]}
               >
-                Enter the email address of the user you want to add to this group. If the user doesn't have an account yet, an invitation will be sent and they'll be added automatically when they sign up.
+                Add them now and include them in expenses. Email is optional.
               </Text>
 
               <TextInput
-                label="Email Address"
+                label="Name"
+                value={fullName}
+                onChangeText={setFullName}
+                mode="outlined"
+                autoCapitalize="words"
+                disabled={loading}
+                style={styles.input}
+                left={<TextInput.Icon icon="account" />}
+                placeholder="Ayaan"
+                testID="person-name-input"
+              />
+
+              <TextInput
+                label="Email (optional)"
                 value={email}
                 onChangeText={setEmail}
                 mode="outlined"
@@ -262,7 +271,8 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                 disabled={loading}
                 style={styles.input}
                 left={<TextInput.Icon icon="email" />}
-                placeholder="user@example.com"
+                placeholder="ayaan@example.com"
+                testID="person-email-input"
               />
 
               <Button
@@ -273,7 +283,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                 style={styles.addButton}
                 testID="add-member-submit-button"
               >
-                Add Member
+                Add person
               </Button>
 
               <View style={styles.dividerRow}>
@@ -294,7 +304,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                   style={styles.linkButton}
                   testID="copy-invite-link-button"
                 >
-                  {Platform.OS === "web" && linkCopied ? "Copied!" : "Copy Link"}
+                  {Platform.OS === "web" && linkCopied ? "Copied!" : "Copy invite link"}
                 </Button>
                 <Button
                   mode="outlined"
@@ -305,7 +315,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                   style={styles.linkButton}
                   testID="share-invite-link-button"
                 >
-                  Share
+                  Invite to ShareMoney
                 </Button>
               </View>
 

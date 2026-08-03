@@ -5,43 +5,50 @@ import {
   Avatar,
   Divider,
   IconButton,
+  Menu,
   Surface,
   Text,
   useTheme,
 } from "react-native-paper";
-import { GroupMember } from "../types";
+import { Participant } from "../types";
 import { formatDate } from "../utils/date";
 import { styles } from "./MembersList.styles";
 
 interface MembersListProps {
-  members: GroupMember[];
+  people: Participant[];
   currentUserId?: string;
   /**
-   * If true, the current user can remove any member (including themselves).
+   * If true, the current user can remove account-backed people.
    */
   canManageMembers: boolean;
   removingMemberId: string | null;
+  workingParticipantId?: string | null;
   onRemove: (userId: string, email?: string) => void;
+  onInvite?: (participant: Participant) => void;
+  onConnect?: (participant: Participant) => void;
 }
 
 export const MembersList: React.FC<MembersListProps> = ({
-  members,
+  people,
   currentUserId,
   canManageMembers,
   removingMemberId,
+  workingParticipantId,
   onRemove,
+  onInvite,
+  onConnect,
 }) => {
   const theme = useTheme();
-  const sortedMembers = React.useMemo(() => {
-    // Show all members, just sort by status (active first)
-    return [...members].sort((a, b) => {
-      if (a.status === 'left' && b.status !== 'left') return 1;
-      if (a.status !== 'left' && b.status === 'left') return -1;
+  const [menuParticipantId, setMenuParticipantId] = React.useState<string | null>(null);
+  const sortedPeople = React.useMemo(() => {
+    return [...people].sort((a, b) => {
+      if (a.type === 'former' && b.type !== 'former') return 1;
+      if (a.type !== 'former' && b.type === 'former') return -1;
       return 0;
     });
-  }, [members]);
+  }, [people]);
 
-  if (members.length === 0) {
+  if (people.length === 0) {
     return (
       <Text
         variant="bodyMedium"
@@ -50,7 +57,7 @@ export const MembersList: React.FC<MembersListProps> = ({
           textAlign: "center",
         }}
       >
-        No members yet
+        No people yet
       </Text>
     );
   }
@@ -70,23 +77,27 @@ export const MembersList: React.FC<MembersListProps> = ({
       elevation={0}
       style={{ backgroundColor: theme.colors.surface, borderRadius: 12 }}
     >
-      {sortedMembers.map((member, index) => {
-        // Priority: full_name → email → fallback to truncated user_id
-        const memberName =
-          member.full_name ||
-          member.email ||
-          `User ${member.user_id.substring(0, 8)}...`;
-        const isCurrentUser = member.user_id === currentUserId;
-        const isActive = member.status !== "left";
+      {sortedPeople.map((person, index) => {
+        const personName =
+          person.full_name ||
+          person.email ||
+          `Person ${person.id.substring(0, 8)}`;
+        const isCurrentUser = person.user_id === currentUserId;
+        const isActive = person.type !== "former";
         const canRemove =
+          !!person.user_id &&
           isActive &&
           (canManageMembers ||
             (isCurrentUser && canManageMembers) ||
             isCurrentUser);
-        const isRemoving = removingMemberId === member.user_id;
+        const isRemoving = !!person.user_id && removingMemberId === person.user_id;
+        const isWorking = workingParticipantId === person.id || isRemoving;
+        const canInviteOrConnect = canManageMembers && !person.user_id && !!person.email && isActive;
+        const dateLabel = person.joined_at || person.created_at;
+        const detail = person.email || (dateLabel ? `Joined ${formatDate(dateLabel)}` : "");
 
         return (
-          <React.Fragment key={member.id}>
+          <React.Fragment key={person.id}>
             <View
               style={[
                 styles.memberContent,
@@ -96,12 +107,13 @@ export const MembersList: React.FC<MembersListProps> = ({
             >
               <Avatar.Text
                 size={40}
-                label={getInitials(memberName)}
+                label={getInitials(personName)}
                 style={{
 	                  backgroundColor: isActive
 	                    ? theme.colors.primaryContainer
 	                    : theme.colors.surfaceVariant,
                   marginRight: 16,
+                  opacity: isWorking ? 0.6 : 1,
                 }}
                 color={
 	                  isActive
@@ -119,19 +131,21 @@ export const MembersList: React.FC<MembersListProps> = ({
                       {},
                     ]}
                   >
-                    {memberName}{isCurrentUser ? " (You)" : ""}
+                    {personName}{isCurrentUser ? " (You)" : ""}
                     {!isActive ? " (Former)" : ""}
                   </Text>
                 </View>
-                <Text
-                  variant="bodyMedium"
-                  style={{
-                    color: theme.colors.onSurfaceVariant,
-                    opacity: isRemoving ? 0.6 : 1,
-                  }}
-                >
-                  Joined {formatDate(member.joined_at)}
-                </Text>
+                {detail ? (
+                  <Text
+                    variant="bodyMedium"
+                    style={{
+                      color: theme.colors.onSurfaceVariant,
+                      opacity: isRemoving ? 0.6 : 1,
+                    }}
+                  >
+                    {detail}
+                  </Text>
+                ) : null}
               </View>
               <View style={styles.memberRight}>
                 {isRemoving ? (
@@ -147,16 +161,56 @@ export const MembersList: React.FC<MembersListProps> = ({
                         icon="delete-outline"
                         size={24}
                         iconColor={theme.colors.error}
-                        onPress={() => onRemove(member.user_id, member.email)}
+                        onPress={() => person.user_id ? onRemove(person.user_id, person.email || undefined) : undefined}
                         style={styles.removeMemberButton}
                         disabled={removingMemberId !== null}
                       />
                     )}
+                    {canInviteOrConnect ? (
+                      isWorking ? (
+                        <ActivityIndicator
+                          size="small"
+                          color={theme.colors.primary}
+                          style={styles.removingIndicator}
+                        />
+                      ) : (
+                        <Menu
+                          visible={menuParticipantId === person.id}
+                          onDismiss={() => setMenuParticipantId(null)}
+                          anchor={
+                            <IconButton
+                              icon="dots-vertical"
+                              size={24}
+                              onPress={() => setMenuParticipantId(person.id)}
+                              style={styles.removeMemberButton}
+                              disabled={!!workingParticipantId}
+                            />
+                          }
+                        >
+                          <Menu.Item
+                            title="Invite to ShareMoney"
+                            leadingIcon="email-outline"
+                            onPress={() => {
+                              setMenuParticipantId(null);
+                              onInvite?.(person);
+                            }}
+                          />
+                          <Menu.Item
+                            title="Connect account"
+                            leadingIcon="account-check-outline"
+                            onPress={() => {
+                              setMenuParticipantId(null);
+                              onConnect?.(person);
+                            }}
+                          />
+                        </Menu>
+                      )
+                    ) : null}
                   </>
                 )}
               </View>
             </View>
-            {index < sortedMembers.length - 1 && <Divider />}
+            {index < sortedPeople.length - 1 && <Divider />}
           </React.Fragment>
         );
       })}

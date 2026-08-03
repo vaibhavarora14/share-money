@@ -26,9 +26,13 @@ import {
   useCancelInvitation,
   useGroupInvitations,
 } from "../hooks/useGroupInvitations";
-import { useAddMember, useRemoveMember } from "../hooks/useGroupMutations";
+import { useRemoveMember } from "../hooks/useGroupMutations";
 import { useGroupDetails } from "../hooks/useGroups";
-import { useParticipants } from "../hooks/useParticipants";
+import {
+  useConnectParticipant,
+  useInviteParticipant,
+  useParticipants,
+} from "../hooks/useParticipants";
 import {
   useCreateSettlement,
   useDeleteSettlement,
@@ -40,6 +44,7 @@ import {
   Balance,
   GroupInvitation,
   GroupWithMembers,
+  Participant,
   Settlement,
   Transaction,
 } from "../types";
@@ -81,6 +86,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 }) => {
   const [leaving, setLeaving] = useState<boolean>(false);
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
+  const [workingParticipantId, setWorkingParticipantId] = useState<string | null>(null);
   const [menuVisible, setMenuVisible] = useState<boolean>(false);
   const [showSettlementForm, setShowSettlementForm] = useState<boolean>(false);
   const [settlingBalance, setSettlingBalance] = useState<Balance | null>(null);
@@ -149,6 +155,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   } = useGroupInvitations(initialGroup.id);
   const {
     data: participants = [],
+    refetch: refetchParticipants,
   } = useParticipants(initialGroup.id);
   const {
     data: balancesData,
@@ -259,12 +266,17 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
   // Mutations
 
-  const addMemberMutation = useAddMember(() => {
+  const removeMemberMutation = useRemoveMember(() => {
     refetchGroup();
     refetchInvites();
   });
-  const removeMemberMutation = useRemoveMember(() => {
+  const inviteParticipant = useInviteParticipant(() => {
+    refetchParticipants();
+    refetchInvites();
+  });
+  const connectParticipant = useConnectParticipant(() => {
     refetchGroup();
+    refetchParticipants();
     refetchInvites();
   });
   const cancelInvite = useCancelInvitation(refetchInvites);
@@ -558,6 +570,38 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     }
   };
 
+  const handleInviteParticipant = async (participant: Participant) => {
+    try {
+      setWorkingParticipantId(participant.id);
+      const result = await inviteParticipant.mutate({
+        groupId: group.id,
+        participantId: participant.id,
+        email: participant.email,
+      });
+      Alert.alert("Invitation", result?.message || "Invitation sent successfully.");
+    } catch (error) {
+      showErrorAlert(error, signOut, "Error");
+    } finally {
+      setWorkingParticipantId(null);
+    }
+  };
+
+  const handleConnectParticipant = async (participant: Participant) => {
+    try {
+      setWorkingParticipantId(participant.id);
+      await connectParticipant.mutate({
+        groupId: group.id,
+        participantId: participant.id,
+        email: participant.email,
+      });
+      Alert.alert("Connected", "Their existing history is now connected to their account.");
+    } catch (error) {
+      showErrorAlert(error, signOut, "Error");
+    } finally {
+      setWorkingParticipantId(null);
+    }
+  };
+
   const handleStatNavigation = (mode: GroupStatsMode) => {
     if (onStatsPress) {
       onStatsPress(mode);
@@ -655,7 +699,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           testID="back-button"
         />
         <Appbar.Content
-          title={showMembers ? "Group Members" : group.name}
+          title={showMembers ? "People" : group.name}
           titleStyle={{ fontWeight: "bold" }}
         />
         
@@ -685,7 +729,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 handleCloseMenu();
                 setShowMembers(true);
               }}
-              title="View Members"
+              title="People"
               leadingIcon="account-group"
             />
             {onImportSplitwise && (
@@ -730,17 +774,19 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         scrollEventThrottle={16}
       >
         {showMembers ? (
-          // MEMBERS VIEW
+          // PEOPLE VIEW
           <View style={styles.sectionContent}>
             <MembersList
-              members={group.members || []}
+              people={participants}
               currentUserId={session?.user?.id}
               canManageMembers={canManageMembers}
               removingMemberId={removingMemberId}
+              workingParticipantId={workingParticipantId}
               onRemove={handleRemoveMember}
+              onInvite={handleInviteParticipant}
+              onConnect={handleConnectParticipant}
             />
-            {group.members &&
-              group.members.length > 0 &&
+            {participants.length > 0 &&
               invitations.length > 0 && <View style={{ height: 16 }} />}
             <InvitationsList
               invitations={invitations.filter((i) => i.status === 'pending')}
@@ -757,7 +803,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 style={{ marginTop: 24 }}
                 testID="add-member-button"
               >
-                Add Member
+                Add person
               </Button>
             )}
           </View>
@@ -768,7 +814,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               balances={balancesData?.group_balances?.[0]?.balances || []}
               transactions={transactions || []}
               currentUserId={session?.user?.id}
-              currentUserParticipantId={group.members?.find(m => m.user_id === session?.user?.id)?.participant_id}
+              currentUserParticipantId={participants.find(p => p.user_id === session?.user?.id)?.id}
               loading={balancesLoading}
               defaultCurrency={getDefaultCurrency()}
               onSettlePress={(balance) => {

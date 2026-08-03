@@ -10,7 +10,7 @@ export interface UserInfo {
  * Verifies the user's authentication token and returns user info
  * Throws an error if authentication fails
  */
-export async function verifyAuth(request: Request): Promise<{ user: UserInfo; supabase: ReturnType<typeof createClient> }> {
+export async function verifyAuth(request: Request): Promise<{ user: UserInfo; supabase: any }> {
 
   // Get authorization header
   const authHeader = request.headers.get('authorization') || request.headers.get('Authorization');
