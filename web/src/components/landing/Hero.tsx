@@ -14,8 +14,10 @@ export function Hero({
         <div className="hero-intro">
           <div className="hero-title-block">
             <p className="kicker">Shared expenses</p>
-            <h1>Split bills. Know who owes who.</h1>
-            <p className="hero-lead">One shared ledger for group money.</p>
+            <h1>SharedMoney</h1>
+            <p className="hero-lead">
+              Split bills, track group expenses, and know who owes who.
+            </p>
             <div className="hero-actions">
               <PlatformCta
                 destination={primaryDestination}
