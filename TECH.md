@@ -375,10 +375,31 @@ The workflow (`.github/workflows/deploy-edge-functions.yml`) automatically:
 3. Set the application home page to `https://sharedmoney.app` and keep the
    first viewport visibly branded as `SharedMoney`
 4. Set the privacy policy link to `https://sharedmoney.app/privacy`
-5. Create OAuth credentials in Google Cloud Console (Web application type)
-6. Add redirect URI: `https://xesuklogveedeppxbbit.supabase.co/auth/v1/callback`
-7. Configure the resulting client ID/secret in Supabase Dashboard > Authentication > Providers > Google
-8. Keep Supabase URL Configuration entries for `https://sharedmoney.app`, `https://sharedmoney.app/app`, `sharedmoney://auth/callback`, and the legacy `owewho` callbacks
+5. Verify `sharedmoney.app` in Google Search Console and include it in Google
+   Auth Platform authorized domains
+6. Enable Supabase Custom Domains for project `xesuklogveedeppxbbit` and attach
+   `auth.sharedmoney.app` as the project custom domain
+7. Add DNS records for the Supabase custom domain:
+   - `auth.sharedmoney.app` CNAME -> `xesuklogveedeppxbbit.supabase.co.`
+   - `_acme-challenge.auth.sharedmoney.app` TXT -> value returned by
+     `supabase domains create`
+8. Re-verify and activate the Supabase custom domain:
+   - `supabase domains create --project-ref xesuklogveedeppxbbit --custom-hostname auth.sharedmoney.app`
+   - `supabase domains reverify --project-ref xesuklogveedeppxbbit`
+   - `supabase domains activate --project-ref xesuklogveedeppxbbit`
+9. Create or update OAuth credentials in Google Cloud Console (Web application
+   type) and add both callback URIs during the migration:
+   - `https://xesuklogveedeppxbbit.supabase.co/auth/v1/callback`
+   - `https://auth.sharedmoney.app/auth/v1/callback`
+10. Configure the resulting client ID/secret in Supabase Dashboard >
+    Authentication > Providers > Google
+11. Update deploy/build secrets so `EXPO_PUBLIC_SUPABASE_URL` is
+    `https://auth.sharedmoney.app`, then redeploy the app
+12. Keep Supabase URL Configuration entries for `https://sharedmoney.app`,
+    `https://sharedmoney.app/app`, `sharedmoney://auth/callback`, and the legacy
+    `owewho` callbacks
+13. Run `npm run verify:google-branding` and confirm the deployed app bundle and
+    Google OAuth `redirect_uri` both use `auth.sharedmoney.app`
 
 ### Environment Variables
 

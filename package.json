@@ -11,7 +11,8 @@
     "bootstrap": "npm install --workspaces --include-workspace-root",
     "dev:mobile": "npm run start --workspace=mobile",
     "dev:server": "supabase functions serve --env-file supabase/.env",
-    "dev:web": "npm run dev --workspace=web"
+    "dev:web": "npm run dev --workspace=web",
+    "verify:google-branding": "node scripts/verify-google-branding.mjs"
   },
   "devDependencies": {
     "imagemin": "^9.0.1",
