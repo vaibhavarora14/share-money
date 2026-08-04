@@ -1,8 +1,8 @@
-# OweWho Landing Page
+# SharedMoney Landing Page
 
-**This is a landing page only** - a marketing/onboarding site for OweWho. The actual web application is located elsewhere.
+**This is a landing page only** - a marketing/onboarding site for SharedMoney. The actual web application is located elsewhere.
 
-This landing page is built with React + TypeScript + Vite and serves as the entry point for users to learn about OweWho and download the mobile apps (iOS/Android) or access the web beta.
+This landing page is built with React + TypeScript + Vite and serves as the entry point for users to learn about SharedMoney and download the mobile apps (iOS/Android) or access the web beta.
 
 Currently, two official plugins are available:
 

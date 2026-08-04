@@ -11,7 +11,7 @@ const pulseActivity = [
   { date: "Thu", text: "Kai added groceries", amount: "INR 7,020" },
   { date: "Sat", text: "Ari added dinner", amount: "INR 4,630" },
   { date: "Sun", text: "Sam added snacks", amount: "INR 3,000" },
-  { date: "Now", text: "OweWho calculated two transfers", amount: "Ready" },
+  { date: "Now", text: "SharedMoney calculated two transfers", amount: "Ready" },
 ] as const;
 
 export function GroupPulse() {

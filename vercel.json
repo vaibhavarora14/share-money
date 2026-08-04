@@ -1,9 +1,42 @@
 {
-  "buildCommand": "npm ci --prefix web && npm ci --prefix mobile && (test -e node_modules || ln -s mobile/node_modules node_modules) && npm run build --prefix web && npm run export:web:owewho --prefix mobile",
+  "buildCommand": "npm ci --prefix web && npm ci --prefix mobile && (test -e node_modules || ln -s mobile/node_modules node_modules) && npm run build --prefix web && npm run export:web:sharedmoney --prefix mobile",
   "outputDirectory": "web/dist",
   "installCommand": "echo 'Skipping root install'",
   "framework": null,
   "redirects": [
+    {
+      "source": "/:path((?!\\.well-known/(?:assetlinks\\.json|apple-app-site-association)$).*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "www.sharedmoney.app"
+        }
+      ],
+      "destination": "https://sharedmoney.app/:path",
+      "permanent": true
+    },
+    {
+      "source": "/:path((?!\\.well-known/(?:assetlinks\\.json|apple-app-site-association)$).*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "owewho.com"
+        }
+      ],
+      "destination": "https://sharedmoney.app/:path",
+      "permanent": true
+    },
+    {
+      "source": "/:path((?!\\.well-known/(?:assetlinks\\.json|apple-app-site-association)$).*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "www.owewho.com"
+        }
+      ],
+      "destination": "https://sharedmoney.app/:path",
+      "permanent": true
+    },
     {
       "source": "/join/:token",
       "destination": "/app/join/:token",
@@ -11,6 +44,24 @@
     }
   ],
   "headers": [
+    {
+      "source": "/.well-known/assetlinks.json",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/json"
+        }
+      ]
+    },
+    {
+      "source": "/.well-known/apple-app-site-association",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/json"
+        }
+      ]
+    },
     {
       "source": "/app",
       "headers": [
@@ -38,6 +89,10 @@
     {
       "source": "/delete-account",
       "destination": "/delete-account.html"
+    },
+    {
+      "source": "/support",
+      "destination": "/support.html"
     },
     {
       "source": "/account-deletion",

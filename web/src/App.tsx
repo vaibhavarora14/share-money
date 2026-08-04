@@ -22,7 +22,7 @@ function RouteIntro({ page }: { page: SeoPage }) {
           <h2 id="route-intro-title">{page.heading}</h2>
           <p>{page.body}</p>
         </div>
-        <ul aria-label="OweWho highlights">
+        <ul aria-label="SharedMoney highlights">
           {page.proof.map((item) => (
             <li key={item}>{item}</li>
           ))}

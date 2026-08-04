@@ -12,12 +12,12 @@ export const VERSION_CONFIG = {
   MIN_SUPPORTED_VERSION: "2.5.0",
 
   // Current latest version (informational)
-  LATEST_VERSION: "2.13.2",
+  LATEST_VERSION: "2.13.3",
 
   // Message shown to users who need to update
-  UPDATE_MESSAGE: "Please update your app to continue using OweWho.",
+  UPDATE_MESSAGE: "Please update your app to continue using SharedMoney.",
 
   // Store URLs for download
-  STORE_URL_IOS: "https://apps.apple.com/app/owewho/id000000000",
+  STORE_URL_IOS: "https://apps.apple.com/app/id6755923591",
   STORE_URL_ANDROID: "https://play.google.com/store/apps/details?id=com.vaibhavarora.sharemoney",
 };

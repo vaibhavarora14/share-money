@@ -2,7 +2,7 @@
 # https://supabase.com/docs/guides/local-development/cli/config
 # A string used to distinguish different Supabase projects on the same host. Defaults to the
 # working directory name when running `supabase init`.
-project_id = "OweWho"
+project_id = "SharedMoney"
 
 [api]
 enabled = true
@@ -124,6 +124,11 @@ site_url = "http://127.0.0.1:3000"
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
 additional_redirect_urls = [
   "https://127.0.0.1:3000",
+  "https://sharedmoney.app",
+  "https://sharedmoney.app/app",
+  "https://owewho.com",
+  "https://owewho.com/app",
+  "sharedmoney://auth/callback",
   "owewho://auth/callback",
   "com.vaibhavarora.sharemoney://auth/callback"
 ]
