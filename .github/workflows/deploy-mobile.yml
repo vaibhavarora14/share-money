@@ -153,7 +153,7 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "BUILD=$BUILD" >> "$GITHUB_ENV"
           echo "TAG=v${VERSION}" >> "$GITHUB_ENV"
-          echo "📦 Releasing ShareMoney ${VERSION} (build ${BUILD}) for ${{ matrix.platform }}"
+          echo "📦 Releasing SharedMoney ${VERSION} (build ${BUILD}) for ${{ matrix.platform }}"
 
       - name: 🔧 Inject client env into EAS production profile
         working-directory: mobile
@@ -326,13 +326,13 @@ jobs:
           EXT="${ARTIFACT_URL%%\?*}"
           EXT="${EXT##*.}"
           if [ -z "$EXT" ] || [ "$EXT" = "$ARTIFACT_URL" ]; then EXT=aab; fi
-          ARTIFACT_PATH="releases/sharemoney-${VERSION}.${EXT}"
+          ARTIFACT_PATH="releases/sharedmoney-${VERSION}.${EXT}"
           echo "⬇️ Downloading Android artifact..."
           curl -fsSL "$ARTIFACT_URL" -o "$ARTIFACT_PATH"
 
           PREV_TAG=$(git tag --sort=-v:refname | awk -v cur="$TAG" '$0 != cur && $0 !~ /^(android|ios)-/ { print; exit }')
           {
-            echo "## ShareMoney ${VERSION}"
+            echo "## SharedMoney ${VERSION}"
             echo ""
             echo "Build Number: ${BUILD}"
             echo ""

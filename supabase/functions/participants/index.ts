@@ -15,7 +15,7 @@ import { isValidEmail, isValidUUID, validateBodySize } from '../_shared/validati
  * - POST /participants - Add a person to a group with name and optional email
  * - PATCH /participants/:id - Edit a person's name/email
  * - POST /participants/:id/invite - Invite a person with an email
- * - POST /participants/:id/connect - Connect a person to an existing OweWho account by email
+ * - POST /participants/:id/connect - Connect a person to an existing SharedMoney account by email
  * 
  * @route /functions/v1/participants
  * @requires Authentication
@@ -351,7 +351,7 @@ Deno.serve(async (req: Request) => {
           }
 
           if (!targetUserId) {
-            return createErrorResponse(404, 'No OweWho account was found for this email yet', 'NOT_FOUND', undefined, req);
+            return createErrorResponse(404, 'No SharedMoney account was found for this email yet', 'NOT_FOUND', undefined, req);
           }
 
           const { data: canonicalParticipantId, error: connectError } = await supabase.rpc('connect_group_participant', {

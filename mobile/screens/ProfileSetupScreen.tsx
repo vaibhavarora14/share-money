@@ -188,7 +188,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   const handleDeleteAccount = () => {
     Alert.alert(
       "Delete Account",
-      "This permanently removes access to your ShareMoney account and anonymizes your profile in shared groups.",
+      "This permanently removes access to your SharedMoney account and anonymizes your profile in shared groups.",
       [
         { text: "Cancel", style: "cancel" },
         {

@@ -57,7 +57,7 @@ export function Header({
   return (
     <header className="site-header">
       <div className="container nav-shell">
-        <a className="brand" href="#main-content" aria-label="OweWho home">
+        <a className="brand" href="#main-content" aria-label="SharedMoney home">
           <BrandLockup />
         </a>
 

@@ -58,7 +58,7 @@ export function getInviteLinkBaseUrl(): string {
   if (Platform.OS === "web" && typeof window !== "undefined") {
     return window.location.origin;
   }
-  return "https://owewho.com/app";
+  return "https://sharedmoney.app/app";
 }
 
 export function getConfiguredWebAppPath(): string {
