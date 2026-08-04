@@ -36,10 +36,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const [appleLoading, setAppleLoading] = useState(false);
   const [appleSignInAvailable, setAppleSignInAvailable] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const { signIn, signUp, signInWithGoogle, signInWithApple } = useAuth();
   const theme = useTheme();
   const socialLoading = googleLoading || appleLoading;
   const formDisabled = loading || socialLoading;
+  const emailInvalid = Boolean(formError && formError.toLowerCase().includes("email"));
+  const passwordInvalid = Boolean(
+    formError && formError.toLowerCase().includes("password")
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -69,12 +74,28 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   }, []);
 
   const handleSubmit = async () => {
-    if (!email.trim() || !password.trim()) {
+    const trimmedEmail = email.trim();
+    setFormError(null);
+
+    if (!trimmedEmail) {
+      setFormError("Enter your email address.");
+      Alert.alert("Error", "Please fill in all fields");
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setFormError("Enter a valid email address.");
+      return;
+    }
+
+    if (!password.trim()) {
+      setFormError("Enter your password.");
       Alert.alert("Error", "Please fill in all fields");
       return;
     }
 
     if (password.length < 6) {
+      setFormError("Password must be at least 6 characters.");
       Alert.alert("Error", "Password must be at least 6 characters");
       return;
     }
@@ -82,12 +103,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     setLoading(true);
     try {
       const result = isSignUp
-        ? await signUp(email.trim(), password)
-        : await signIn(email.trim(), password);
+        ? await signUp(trimmedEmail, password)
+        : await signIn(trimmedEmail, password);
 
       if (result.error) {
         const errorMessage = result.error.message || "An error occurred";
         const errorTitle = isSignUp ? "Sign Up Failed" : "Sign In Failed";
+        setFormError(errorMessage);
         
         Alert.alert(
           errorTitle,
@@ -195,34 +217,63 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             <TextInput
               label="Email"
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(value) => {
+                setEmail(value);
+                if (formError) setFormError(null);
+              }}
               mode="outlined"
               keyboardType="email-address"
               autoCapitalize="none"
               autoComplete="email"
+              textContentType="emailAddress"
+              accessibilityLabel="Email"
+              accessibilityHint="Enter the email address for your SharedMoney account"
+              aria-describedby={formError ? "auth-form-error" : undefined}
+              aria-invalid={emailInvalid || undefined}
               disabled={formDisabled}
+              error={emailInvalid}
               style={styles.input}
-              left={<TextInput.Icon icon="email" />}
             />
 
             <TextInput
               label="Password"
               value={password}
-              onChangeText={setPassword}
+              onChangeText={(value) => {
+                setPassword(value);
+                if (formError) setFormError(null);
+              }}
               mode="outlined"
               secureTextEntry={!showPassword}
               autoCapitalize="none"
               autoComplete="password"
+              textContentType={isSignUp ? "newPassword" : "password"}
+              accessibilityLabel="Password"
+              accessibilityHint="Enter your SharedMoney password"
+              aria-describedby={formError ? "auth-form-error" : undefined}
+              aria-invalid={passwordInvalid || undefined}
               disabled={formDisabled}
+              error={passwordInvalid}
               style={styles.input}
-              left={<TextInput.Icon icon="lock" />}
               right={
                 <TextInput.Icon
                   icon={showPassword ? "eye-off" : "eye"}
+                  accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                  forceTextInputFocus={false}
                   onPress={() => setShowPassword(!showPassword)}
                 />
               }
             />
+
+            {formError ? (
+              <Text
+                nativeID="auth-form-error"
+                accessibilityRole="alert"
+                variant="bodyMedium"
+                style={[styles.formError, { color: theme.colors.error }]}
+              >
+                {formError}
+              </Text>
+            ) : null}
 
             <Button
               mode="contained"
@@ -288,6 +339,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               onPress={onToggleMode}
               disabled={formDisabled}
               style={styles.toggleButton}
+              contentStyle={styles.toggleButtonContent}
             >
               {isSignUp
                 ? "Already have an account? Sign In"
@@ -310,9 +362,13 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: "center",
+    alignItems: "center",
     padding: 24,
+    paddingVertical: 40,
   },
   header: {
+    width: "100%",
+    maxWidth: 440,
     marginBottom: 40,
     alignItems: "center",
   },
@@ -338,10 +394,16 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   formContainer: {
+    width: "100%",
+    maxWidth: 440,
     backgroundColor: 'transparent',
   },
   input: {
     marginBottom: 16,
+  },
+  formError: {
+    marginBottom: 16,
+    fontWeight: "600",
   },
   button: {
     marginTop: 8,
@@ -377,5 +439,8 @@ const styles = StyleSheet.create({
   },
   toggleButton: {
     marginTop: 8,
+  },
+  toggleButtonContent: {
+    minHeight: 44,
   },
 });

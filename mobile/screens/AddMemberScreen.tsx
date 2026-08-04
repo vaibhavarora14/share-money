@@ -56,13 +56,14 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
   const screenHeight = Dimensions.get("window").height;
   const { signOut } = useAuth();
   const createShareLink = useCreateGroupShareLink();
+  const useNativeDriver = Platform.OS !== "web";
 
   // Animation effect
   useEffect(() => {
     if (visible) {
       Animated.spring(slideAnim, {
         toValue: 1,
-        useNativeDriver: true,
+        useNativeDriver,
         tension: 65,
         friction: 11,
       }).start();
@@ -70,10 +71,10 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
       Animated.timing(slideAnim, {
         toValue: 0,
         duration: 250,
-        useNativeDriver: true,
+        useNativeDriver,
       }).start();
     }
-  }, [visible, slideAnim]);
+  }, [visible, slideAnim, useNativeDriver]);
 
   const handleDismiss = () => {
     setFullName("");
