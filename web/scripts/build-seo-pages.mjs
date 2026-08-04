@@ -18,9 +18,9 @@ const pages = [
     keywords:
       "split bills, group expense tracker, shared expense tracker, who owes who, split expenses app",
     eyebrow: "Shared expenses",
-    heading: "Split bills. Know who owes who.",
+    heading: "SharedMoney",
     body:
-      "Keep one shared ledger for trips, roommates, dinner groups, and everyday shared costs. SharedMoney shows balances clearly while payments stay in your preferred payment app.",
+      "SharedMoney helps groups split bills, track shared expenses, and know who owes who. Keep one shared ledger for trips, roommates, dinner groups, and everyday shared costs while payments stay in your preferred payment app.",
     proof: ["Trip and roommate ledgers", "Currency-specific balances", "No bank link or payment handling"],
   },
   {
