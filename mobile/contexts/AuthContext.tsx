@@ -115,7 +115,7 @@ function mapGoogleOAuthError(error: Error): Error {
     message.includes("provider is not enabled")
   ) {
     return new Error(
-      "Google sign-in is not enabled for this Supabase environment. For local Android testing, add [auth.external.google] to supabase/config.toml, set SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID and SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET in supabase/.env, then restart Supabase."
+      "Google sign-in is not enabled for this Supabase environment. For local Android testing, add [auth.external.google] to supabase/config.toml, use OAuth credentials from the sharedmoney-504507 Google Cloud project, set SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID and SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET in supabase/.env, then restart Supabase."
     );
   }
 
@@ -125,7 +125,7 @@ function mapGoogleOAuthError(error: Error): Error {
     message.includes("client")
   ) {
     return new Error(
-      `${message}\n\nFor local Android testing, make sure Google Cloud allows http://127.0.0.1:54321/auth/v1/callback and your local Supabase Google client ID/secret are set.`
+      `${message}\n\nFor local Android testing, make sure the sharedmoney-504507 Google Cloud project allows http://127.0.0.1:54321/auth/v1/callback and your local Supabase Google client ID/secret are set.`
     );
   }
 
@@ -191,6 +191,47 @@ function formatAppleFullName(
   return name || null;
 }
 
+function extractOAuthTokensFromUrl(url: string): {
+  access_token: string;
+  refresh_token: string;
+} | null {
+  const hash = url.split("#")[1];
+  if (!hash) return null;
+
+  const params = new URLSearchParams(hash);
+  const accessToken = params.get("access_token");
+  const refreshToken = params.get("refresh_token");
+
+  if (!accessToken || !refreshToken) return null;
+
+  return {
+    access_token: accessToken,
+    refresh_token: refreshToken,
+  };
+}
+
+function getWebOAuthTokensFromCurrentUrl(): {
+  access_token: string;
+  refresh_token: string;
+} | null {
+  if (Platform.OS !== "web" || typeof window === "undefined") {
+    return null;
+  }
+
+  return extractOAuthTokensFromUrl(window.location.href);
+}
+
+function clearWebOAuthHash() {
+  if (Platform.OS !== "web" || typeof window === "undefined") {
+    return;
+  }
+
+  if (!window.location.hash) return;
+
+  const cleanUrl = `${window.location.pathname}${window.location.search}`;
+  window.history.replaceState({}, document.title, cleanUrl);
+}
+
 /**
  * Authentication context type
  * Provides session state, user information, and authentication methods
@@ -253,10 +294,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     let mounted = true;
     let resolved = false;
     let timeoutId: NodeJS.Timeout | null = null;
+    const oauthTokens = getWebOAuthTokensFromCurrentUrl();
+    const initialSessionPromise = oauthTokens
+      ? supabase.auth.setSession(oauthTokens).finally(clearWebOAuthHash)
+      : supabase.auth.getSession();
 
-    // Get initial session
-    supabase.auth
-      .getSession()
+    // Get initial session. On web, also consume OAuth hash callbacks such as
+    // /app#access_token=... when Supabase does not auto-detect them in time.
+    initialSessionPromise
       .then(({ data: { session }, error }) => {
         // Check resolved BEFORE setting it to prevent race condition
         if (resolved || !mounted) return;
@@ -290,7 +335,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           timeoutId = null;
         }
 
-        logError(err, { context: "getSession", errorType: "exception" });
+        logError(err, {
+          context: oauthTokens ? "setSessionFromOAuthUrl" : "getSession",
+          errorType: "exception",
+        });
         // Log out on exception - can't get session means auth is broken
         supabase.auth.signOut();
         updateAuthState(null);
@@ -444,18 +492,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       if (result.type === "success") {
         // TypeScript doesn't narrow the type properly, but url exists on success
         const url = (result as { type: "success"; url: string }).url;
+        const tokens = extractOAuthTokensFromUrl(url);
 
-        // Extract tokens from URL hash (callback always contains access_token)
-        const hashMatch = url.match(/#(.+)/);
-        if (!hashMatch || !hashMatch[1]) {
-          return { error: new Error("Invalid callback URL: no hash found") };
-        }
-
-        const hash = hashMatch[1];
-        const accessToken = hash.match(/access_token=([^&]+)/)?.[1];
-        const refreshToken = hash.match(/refresh_token=([^&]+)/)?.[1];
-
-        if (!accessToken || !refreshToken) {
+        if (!tokens) {
           return {
             error: new Error(
               "Missing access_token or refresh_token in callback URL"
@@ -465,8 +504,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
         // Set session directly from tokens
         const { data, error: sessionError } = await supabase.auth.setSession({
-          access_token: decodeURIComponent(accessToken),
-          refresh_token: decodeURIComponent(refreshToken),
+          access_token: tokens.access_token,
+          refresh_token: tokens.refresh_token,
         });
 
         if (sessionError) {
