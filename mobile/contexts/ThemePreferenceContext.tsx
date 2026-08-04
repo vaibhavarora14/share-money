@@ -18,7 +18,8 @@ interface ThemePreferenceContextValue {
   setThemePreference: (preference: ThemePreference) => Promise<void>;
 }
 
-const THEME_PREFERENCE_STORAGE_KEY = "owewho.themePreference";
+const THEME_PREFERENCE_STORAGE_KEY = "sharedmoney.themePreference";
+const LEGACY_THEME_PREFERENCE_STORAGE_KEY = "owewho.themePreference";
 
 const ThemePreferenceContext =
   createContext<ThemePreferenceContextValue | null>(null);
@@ -54,12 +55,13 @@ export function ThemePreferenceProvider({
     let cancelled = false;
 
     const loadThemePreference = async () => {
-      const savedPreference = await AsyncStorage.getItem(
-        THEME_PREFERENCE_STORAGE_KEY
-      );
+      const savedPreference =
+        (await AsyncStorage.getItem(THEME_PREFERENCE_STORAGE_KEY)) ??
+        (await AsyncStorage.getItem(LEGACY_THEME_PREFERENCE_STORAGE_KEY));
 
       if (!cancelled && isThemePreference(savedPreference)) {
         setThemePreferenceState(savedPreference);
+        await AsyncStorage.setItem(THEME_PREFERENCE_STORAGE_KEY, savedPreference);
       }
     };
 

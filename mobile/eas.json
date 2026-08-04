@@ -25,7 +25,7 @@
       "channel": "production",
       "env": {
         "EAS_BUILD": "true",
-        "EXPO_PUBLIC_APP_URL": "https://owewho.com/app"
+        "EXPO_PUBLIC_APP_URL": "https://sharedmoney.app/app"
       }
     }
   },

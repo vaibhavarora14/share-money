@@ -31,7 +31,7 @@ export function ProductChapters() {
               <source type="image/webp" srcSet="/groups-overview.webp" />
               <img
                 src="/groups-overview.png"
-                alt="OweWho group list showing a trip and dinner group"
+                alt="SharedMoney group list showing a trip and dinner group"
                 width="900"
                 height="950"
                 loading="lazy"
@@ -47,7 +47,7 @@ export function ProductChapters() {
             <h3>Each currency keeps its own honest balance.</h3>
             <p>
               A trip can include INR, EUR, and AED without hiding the original amount.
-              OweWho keeps each currency visible and the final actions readable.
+              SharedMoney keeps each currency visible and the final actions readable.
             </p>
             <ul className="chapter-facts">
               <li><CheckCircle2 size={17} aria-hidden />Original currency retained</li>

@@ -38,7 +38,7 @@ export function UpgradeProvider({ children }: { children: ReactNode }) {
 
   const triggerUpgrade = useCallback((message?: string, details?: string) => {
     setIsUpgradeRequired(true);
-    setUpgradeMessage(message || "Please update your app to continue using OweWho.");
+    setUpgradeMessage(message || "Please update your app to continue using SharedMoney.");
     
     if (details) {
       try {

@@ -127,8 +127,8 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
       if (Platform.OS === "web") {
         if (typeof navigator !== "undefined" && navigator.share) {
           await navigator.share({
-            title: "Join my group on OweWho!",
-            text: `Join my group on OweWho! ${url}`,
+            title: "Join my group on SharedMoney!",
+            text: `Join my group on SharedMoney! ${url}`,
             url,
           });
         } else if (typeof navigator !== "undefined" && navigator.clipboard) {
@@ -137,7 +137,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
         }
       } else {
         await Share.share({
-          message: `Join my group on OweWho! ${url}`,
+          message: `Join my group on SharedMoney! ${url}`,
           url, // iOS only
         });
       }
@@ -315,7 +315,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                   style={styles.linkButton}
                   testID="share-invite-link-button"
                 >
-                  Invite to OweWho
+                  Invite to SharedMoney
                 </Button>
               </View>
 

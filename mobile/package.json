@@ -1,6 +1,6 @@
 {
   "name": "mobile",
-  "version": "2.12.2",
+  "version": "2.13.3",
   "main": "index.js",
   "scripts": {
     "start": "expo start",
@@ -18,7 +18,7 @@
     "version:show": "node scripts/version.js show",
     "android:release": "eas submit --platform android --profile internal",
     "deploy:web": "npx expo export -p web && eas deploy --prod --non-interactive",
-    "export:web:owewho": "EXPO_NO_TELEMETRY=1 EXPO_PUBLIC_APP_URL=https://owewho.com/app EXPO_PUBLIC_WEB_BASE_URL=/app node ./node_modules/expo/bin/cli export -p web --output-dir ../web/dist/app --max-workers 1"
+    "export:web:sharedmoney": "EXPO_NO_TELEMETRY=1 EXPO_PUBLIC_APP_URL=https://sharedmoney.app/app EXPO_PUBLIC_WEB_BASE_URL=/app node ./node_modules/expo/bin/cli export -p web --output-dir ../web/dist/app --max-workers 1"
   },
   "dependencies": {
     "@expo/cli": "^54.0.19",
