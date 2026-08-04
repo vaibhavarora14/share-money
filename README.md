@@ -162,7 +162,7 @@ SharedMoney/
 | `SUPABASE_ANON_KEY` | Public anon key | (from `supabase status`) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service role key | (from `supabase status`) |
 | `ALLOWED_ORIGIN` | CORS origin for Edge Functions | `http://localhost:19000` |
-| `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID` | Google Web OAuth client ID for local Supabase Auth | `...apps.googleusercontent.com` |
+| `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID` | Google Web OAuth client ID from the `sharedmoney-504507` Google Cloud project for local Supabase Auth | `...apps.googleusercontent.com` |
 | `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET` | Google Web OAuth client secret for local Supabase Auth | `GOCSPX-...` |
 | `APP_URL` | App URL used in reminder email links | `https://sharedmoney.app/app` |
 | `REMINDER_CRON_SECRET` | Shared secret required to invoke monthly reminders | random secret |
@@ -186,7 +186,7 @@ SharedMoney/
 | `EXPO_PUBLIC_API_URL` | Edge Functions base | `http://localhost:8888/api` |
 | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | Google Web OAuth client ID used by Supabase Google auth | `...apps.googleusercontent.com` |
 
-For Android emulator Google sign-in against local Supabase, add `http://127.0.0.1:54321/auth/v1/callback` as an Authorized redirect URI on the Google Web OAuth client, set the Google client ID/secret in `supabase/.env`, restart Supabase with `supabase stop && supabase start`, then run `adb reverse tcp:54321 tcp:54321`.
+For Android emulator Google sign-in against local Supabase, use the `sharedmoney-504507` Google Cloud project, add `http://127.0.0.1:54321/auth/v1/callback` as an Authorized redirect URI on the Google Web OAuth client, set the Google client ID/secret in `supabase/.env`, restart Supabase with `supabase stop && supabase start`, then run `adb reverse tcp:54321 tcp:54321`.
 
 ### Key Scripts
 
