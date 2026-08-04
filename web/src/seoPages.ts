@@ -12,7 +12,7 @@ export type SeoPage = {
 export const siteUrl = "https://sharedmoney.app";
 export const appUrl = `${siteUrl}/app`;
 export const brandName = "SharedMoney";
-export const tagline = "Split bills. Know who owes who.";
+export const tagline = "SharedMoney";
 
 export const seoPages: SeoPage[] = [
   {
@@ -25,7 +25,7 @@ export const seoPages: SeoPage[] = [
     eyebrow: "Shared expenses",
     heading: tagline,
     body:
-      "Keep one shared ledger for trips, roommates, dinner groups, and everyday shared costs. SharedMoney shows balances clearly while payments stay in your preferred payment app.",
+      "SharedMoney helps groups split bills, track shared expenses, and know who owes who. Keep one shared ledger for trips, roommates, dinner groups, and everyday shared costs while payments stay in your preferred payment app.",
     proof: ["Trip and roommate ledgers", "Currency-specific balances", "No bank link or payment handling"],
   },
   {
