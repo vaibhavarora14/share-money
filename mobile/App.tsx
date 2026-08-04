@@ -12,6 +12,7 @@ import React, { useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import {
   Platform,
+  LogBox,
   Text as RNText,
   StyleSheet,
   useColorScheme,
@@ -73,6 +74,29 @@ import {
 import { log, logError } from "./utils/logger";
 
 const PENDING_INVITE_TOKEN_KEY = "pending_invite_token";
+
+if (Platform.OS === "web") {
+  const ignoredWebWarning =
+    "Animated: `useNativeDriver` is not supported because the native animated module is missing.";
+
+  LogBox.ignoreLogs([
+    ignoredWebWarning,
+  ]);
+
+  if (typeof console !== "undefined") {
+    const originalWarn = console.warn;
+    console.warn = (...args) => {
+      if (
+        typeof args[0] === "string" &&
+        args[0].startsWith(ignoredWebWarning)
+      ) {
+        return;
+      }
+
+      originalWarn(...args);
+    };
+  }
+}
 
 /** Removes the invite token path from the web URL after handling it. */
 function clearJoinPathFromWebUrl() {
@@ -686,12 +710,12 @@ function ErrorFallback({
 // Initialize Sentry once at app startup. Guard against missing DSN so we
 // fail safely in development and avoid noisy misconfiguration in production.
 if (!process.env.EXPO_PUBLIC_SENTRY_DSN) {
-  const env = __DEV__ ? "development" : "production";
-  // In dev, make it very obvious that Sentry is not configured.
-  // eslint-disable-next-line no-console
-  console.warn(
-    `[Sentry] EXPO_PUBLIC_SENTRY_DSN is not set; Sentry will not be initialized (env=${env}).`
-  );
+  if (__DEV__) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[Sentry] EXPO_PUBLIC_SENTRY_DSN is not set; Sentry will not be initialized."
+    );
+  }
 } else {
   Sentry.init({
     dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
@@ -774,19 +798,35 @@ function ThemedAppShell() {
       >
         <UpgradeProvider>
           <AuthProvider>
-            <View
-              style={[
-                styles.appWrapper,
-                { backgroundColor: theme.colors.surface },
-              ]}
-            >
-              <AppContent />
-              <ForceUpdateOverlay />
-            </View>
+            <AppFrame />
           </AuthProvider>
         </UpgradeProvider>
       </View>
     </PaperProvider>
+  );
+}
+
+function AppFrame() {
+  const { loading, session } = useAuth();
+  const theme = useTheme();
+  const isAuthFrame = !loading && !session;
+
+  return (
+    <View
+      style={[
+        styles.appWrapper,
+        isAuthFrame && styles.authAppWrapper,
+        {
+          backgroundColor: isAuthFrame
+            ? theme.colors.background
+            : theme.colors.surface,
+          borderColor: theme.colors.outlineVariant,
+        },
+      ]}
+    >
+      <AppContent />
+      <ForceUpdateOverlay />
+    </View>
   );
 }
 
@@ -821,7 +861,6 @@ const styles = StyleSheet.create({
     // Border and shadow only on web for premium desktop experience
     ...(Platform.OS === "web" && {
       borderWidth: 1,
-      borderColor: "rgba(0, 0, 0, 0.05)",
       shadowColor: "#000",
       shadowOffset: {
         width: 0,
@@ -830,6 +869,14 @@ const styles = StyleSheet.create({
       shadowOpacity: 0.1,
       shadowRadius: 12,
       elevation: 5,
+    }),
+  },
+  authAppWrapper: {
+    ...(Platform.OS === "web" && {
+      maxWidth: 480,
+      borderWidth: 0,
+      shadowOpacity: 0,
+      elevation: 0,
     }),
   },
   centerContainer: {
