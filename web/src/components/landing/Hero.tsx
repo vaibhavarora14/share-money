@@ -14,9 +14,9 @@ export function Hero({
         <div className="hero-intro">
           <div className="hero-title-block">
             <p className="kicker">Shared expenses</p>
-            <h1>Split the trip. Settle up.</h1>
+            <h1>SharedMoney</h1>
             <p className="hero-lead">
-              One shared record for group money.
+              Split the trip. Settle up. One shared record for group money.
             </p>
             <div className="hero-actions">
               <PlatformCta

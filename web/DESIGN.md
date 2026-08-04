@@ -8,10 +8,13 @@ This document is the canonical reference for the landing-page redesign.
 - Promise: clear balances, predictable settlement outcomes, and explicit payment boundaries.
 
 ## Core Copy
-- H1: `Split the trip. Settle up.`
-- Tagline: `One shared record for group money.`
+- H1: `SharedMoney`
+- Tagline: `Split the trip. Settle up. One shared record for group money.`
 - Trust line: `No bank link. No payments. Web + mobile.`
 - Search intent focus: shared expense tracker, split expenses, group balances, settle up.
+- Google OAuth branding: keep `SharedMoney` as the visible first-viewport app
+  identity so Google Auth Platform brand verification can match the configured
+  OAuth app name to the public application home page.
 
 ## Primary Conversion
 - Android visitors: `Get the Android app`
