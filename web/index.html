@@ -9,6 +9,16 @@
     <meta name="color-scheme" content="light dark" />
     <script>
       (() => {
+        const storedTheme = sessionStorage.getItem("theme");
+
+        if (
+          storedTheme === "dark" ||
+          (storedTheme !== "light" &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches)
+        ) {
+          document.documentElement.classList.add("dark");
+        }
+
         const params = new URLSearchParams(window.location.search);
         const hash = window.location.hash || "";
         const hasAuthCallback =
@@ -23,23 +33,6 @@
         }
       })();
     </script>
-
-    <link
-      rel="preload"
-      as="image"
-      href="/group-story.avif"
-      type="image/avif"
-      media="(prefers-color-scheme: light)"
-      fetchpriority="high"
-    />
-    <link
-      rel="preload"
-      as="image"
-      href="/group-story-dark.avif"
-      type="image/avif"
-      media="(prefers-color-scheme: dark)"
-      fetchpriority="high"
-    />
 
     <title>SharedMoney - Split Bills and Track Group Expenses</title>
     <meta name="title" content="SharedMoney - Split Bills and Track Group Expenses" />

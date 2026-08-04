@@ -93,7 +93,7 @@ body {
 }
 
 body.menu-open {
-  overflow: hidden;
+  overflow: auto;
 }
 
 button,
@@ -452,7 +452,7 @@ img {
   position: relative;
   z-index: 2;
   display: grid;
-  max-width: 44rem;
+  max-width: 36rem;
   gap: var(--space-5);
   padding-bottom: var(--space-8);
 }
@@ -463,8 +463,8 @@ img {
 }
 
 .hero-title-block h1 {
-  max-width: 12.5ch;
-  font-size: clamp(3.25rem, 7vw, 6rem);
+  max-width: 10.5ch;
+  font-size: clamp(3.25rem, 6vw, 5.25rem);
   font-weight: 720;
   letter-spacing: 0;
 }
@@ -491,6 +491,11 @@ img {
   font-size: 0.875rem;
 }
 
+html.dark .hero-trust-row span {
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+
 .hero-actions {
   display: flex;
   align-items: center;
@@ -508,9 +513,9 @@ img {
   position: absolute;
   z-index: 1;
   top: var(--space-5);
-  right: 0;
+  right: var(--space-5);
   bottom: var(--space-8);
-  width: min(58%, 42rem);
+  width: min(45%, 34.5rem);
   height: auto;
   overflow: hidden;
   border: 0;
@@ -1516,7 +1521,7 @@ img {
     top: 100%;
     right: 0;
     left: 0;
-    height: calc(100svh - var(--header-height));
+    max-height: calc(100svh - var(--header-height));
     display: none;
     align-content: start;
     flex-direction: column;
@@ -1526,7 +1531,10 @@ img {
     padding: var(--space-4) var(--space-5);
     overflow-y: auto;
     border-top: 1px solid var(--color-border);
-    background: var(--color-canvas);
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-nav-bg);
+    box-shadow: 0 18px 36px -28px rgba(23, 32, 42, 0.45);
+    backdrop-filter: blur(14px);
   }
 
   .section-nav.is-open {

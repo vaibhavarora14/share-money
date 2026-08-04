@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef } from "react";
-import { Animated, Pressable, StyleSheet, View } from "react-native";
+import { Animated, Platform, Pressable, StyleSheet, View } from "react-native";
 import { Icon, IconButton, Text, useTheme } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WEB_MAX_WIDTH } from "../constants/layout";
@@ -33,6 +33,7 @@ export const InAppBanner: React.FC<InAppBannerProps> = ({
   const insets = useSafeAreaInsets();
   const slideAnim = useRef(new Animated.Value(0)).current;
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const useNativeDriver = Platform.OS !== "web";
 
   const dismiss = useCallback(() => {
     if (timerRef.current) {
@@ -42,9 +43,9 @@ export const InAppBanner: React.FC<InAppBannerProps> = ({
     Animated.timing(slideAnim, {
       toValue: 0,
       duration: 180,
-      useNativeDriver: true,
+      useNativeDriver,
     }).start(() => onDismiss());
-  }, [onDismiss, slideAnim]);
+  }, [onDismiss, slideAnim, useNativeDriver]);
 
   useEffect(() => {
     if (!notice) return;
@@ -52,7 +53,7 @@ export const InAppBanner: React.FC<InAppBannerProps> = ({
     slideAnim.setValue(0);
     Animated.spring(slideAnim, {
       toValue: 1,
-      useNativeDriver: true,
+      useNativeDriver,
       tension: 70,
       friction: 12,
     }).start();
@@ -62,7 +63,7 @@ export const InAppBanner: React.FC<InAppBannerProps> = ({
       if (timerRef.current) clearTimeout(timerRef.current);
     };
     // Re-run when a new notice object arrives so the timer restarts.
-  }, [notice, autoDismissMs, dismiss, slideAnim]);
+  }, [notice, autoDismissMs, dismiss, slideAnim, useNativeDriver]);
 
   if (!notice) return null;
 
