@@ -14,9 +14,9 @@ export function Hero({
         <div className="hero-intro">
           <div className="hero-title-block">
             <p className="kicker">Shared expenses</p>
-            <h1>SharedMoney</h1>
+            <h1>Split the trip. Settle up.</h1>
             <p className="hero-lead">
-              Split bills, track group expenses, and know who owes who.
+              One shared record for group money.
             </p>
             <div className="hero-actions">
               <PlatformCta
@@ -36,9 +36,9 @@ export function Hero({
               </div>
             </div>
             <div className="hero-trust-row" aria-label="Product boundaries">
-              <span>No bank link</span>
-              <span>No payments</span>
-              <span>Web + mobile</span>
+              <span>No bank link.</span>
+              <span>No payments.</span>
+              <span>Web + mobile.</span>
             </div>
           </div>
         </div>

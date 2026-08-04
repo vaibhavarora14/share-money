@@ -86,7 +86,7 @@ export const platformDestinations: PlatformDestination[] = [
 export const primaryDestinationByDevice: Record<DeviceType, Platform> = {
   android: "android",
   ios: "ios",
-  desktop: "web",
+  desktop: "android",
 };
 
 export const sectionNav: LandingSection[] = [
