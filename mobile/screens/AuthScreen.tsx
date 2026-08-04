@@ -172,11 +172,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 source={require('../assets/logo.png')} 
                 style={styles.logoImage}
                 resizeMode="contain"
-                accessibilityLabel="OweWho app icon"
+                accessibilityLabel="SharedMoney app icon"
               />
             </Surface>
             <Text variant="displaySmall" style={[styles.title, { color: theme.colors.onBackground }]}>
-              OweWho
+              SharedMoney
             </Text>
             <Text
               variant="bodyLarge"

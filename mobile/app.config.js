@@ -66,14 +66,19 @@ module.exports = ({ config }) => {
   }
 
   const webBaseUrl = process.env.EXPO_PUBLIC_WEB_BASE_URL;
+  const appLinkHosts = Array.from(
+    new Set([appUrlHostname, "owewho.com"].filter(Boolean))
+  );
+  const appSchemes = ["sharedmoney", "owewho"];
 
   return {
     ...config,
     expo: {
       ...config.expo,
-      name: "OweWho",
+      name: "SharedMoney",
       slug: "share-money",
       owner: "share-money",
+      scheme: appSchemes,
       version: versionConfig.version,
       orientation: "portrait",
       icon: "./assets/icon.png",
@@ -88,7 +93,7 @@ module.exports = ({ config }) => {
       ios: {
         supportsTablet: true,
         bundleIdentifier: "com.vaibhavarora.sharemoney",
-        scheme: "owewho",
+        scheme: appSchemes,
         buildNumber: versionConfig.buildNumber.toString(),
         usesAppleSignIn: true,
         // Avoid App Store Connect manual encryption questionnaire prompts.
@@ -101,13 +106,13 @@ module.exports = ({ config }) => {
         // IMPORTANT: omit the key entirely when disabled — an empty array can
         // still cause prebuild to request the entitlement.
         ...(process.env.EXPO_PUBLIC_ENABLE_ASSOCIATED_DOMAINS === 'true' &&
-        appUrlHostname
-          ? { associatedDomains: [`applinks:${appUrlHostname}`] }
+        appLinkHosts.length > 0
+          ? { associatedDomains: appLinkHosts.map((host) => `applinks:${host}`) }
           : {})
       },
       android: {
         package: "com.vaibhavarora.sharemoney",
-        scheme: "owewho",
+        scheme: appSchemes,
         versionCode: versionConfig.buildNumber,
         adaptiveIcon: {
           foregroundImage: "./assets/adaptive-icon.png",
@@ -116,14 +121,16 @@ module.exports = ({ config }) => {
         edgeToEdgeEnabled: true,
         // App Links for invite links; requires assetlinks.json hosted at
         // https://<host>/.well-known/assetlinks.json
-        intentFilters: appUrlHostname
+        intentFilters: appLinkHosts.length > 0
           ? [
               {
                 action: "VIEW",
                 autoVerify: true,
-                data: [
-                  { scheme: "https", host: appUrlHostname, pathPrefix: appLinkPathPrefix }
-                ],
+                data: appLinkHosts.map((host) => ({
+                  scheme: "https",
+                  host,
+                  pathPrefix: appLinkPathPrefix
+                })),
                 category: ["BROWSABLE", "DEFAULT"]
               }
             ]

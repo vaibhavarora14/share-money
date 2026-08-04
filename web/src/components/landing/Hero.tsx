@@ -44,7 +44,7 @@ export function Hero({
         <figure className="hero-product-shot">
           <img
             src="/app-group-current.png"
-            alt="OweWho group screen showing balances, summary cards, and transactions"
+            alt="SharedMoney group screen showing balances, summary cards, and transactions"
             width="1080"
             height="2400"
             loading="eager"
@@ -52,7 +52,7 @@ export function Hero({
           />
         </figure>
 
-        <div className="hero-proof-strip" aria-label="How OweWho works">
+        <div className="hero-proof-strip" aria-label="How SharedMoney works">
           <div><strong>Add</strong><span>Expense</span></div>
           <div><strong>See</strong><span>Balance</span></div>
           <div><strong>Settle</strong><span>Clearly</span></div>

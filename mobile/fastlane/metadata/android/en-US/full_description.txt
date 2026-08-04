@@ -1,0 +1,24 @@
+SharedMoney helps friends, roommates, families, and travel groups keep shared expenses clear.
+
+Create a group, add expenses, choose who paid, and split costs across the people involved. SharedMoney keeps a shared ledger of what happened and shows simple balances so everyone can see who owes who.
+
+Use SharedMoney for:
+
+- Trips and vacations
+- Roommate rent, utilities, and household costs
+- Dinner groups and shared plans
+- Family expenses
+- Any group that needs a clear record of shared spending
+
+SharedMoney focuses on tracking and settlement records. Payments happen outside the app in the payment method your group already prefers.
+
+Key features:
+
+- Create groups for different plans or households
+- Add shared expenses with clear participants
+- Track balances across group members
+- Record settlements when someone pays back
+- Invite people to groups
+- Keep receipts, splits, and balances organized in one place
+
+No more guessing, screenshots, or messy notes. SharedMoney gives your group a simple answer to the question: who owes who?

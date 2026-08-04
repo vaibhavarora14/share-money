@@ -10,7 +10,7 @@
 ## Project Structure
 
 ```
-OweWho/
+SharedMoney/
 ├── supabase/             # Supabase configuration
 │   ├── functions/        # Supabase Edge Functions
 │   └── migrations/       # Database migrations
@@ -134,7 +134,7 @@ EXPO_PUBLIC_API_URL=http://localhost:8888/api
 # For Production
 # EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 # EXPO_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
-# EXPO_PUBLIC_API_URL=https://owewho.com/api
+# EXPO_PUBLIC_API_URL=https://sharedmoney.app/api
 ```
 
 **Get your local IP:**
@@ -253,7 +253,7 @@ Set these in Supabase Dashboard > Project Settings > Edge Functions > Environmen
 - `APP_URL` - App URL used for links in reminder emails
 - `REMINDER_CRON_SECRET` - Random shared secret required to invoke `monthly-reminders`
 - `RESEND_API_KEY` - Resend API key
-- `REMINDER_FROM_EMAIL` - Verified Resend sender, e.g. `OweWho <reminders@example.com>`
+- `REMINDER_FROM_EMAIL` - Verified Resend sender, e.g. `SharedMoney <reminders@sharedmoney.app>`
 - `REMINDER_LOGO_URL` - Optional hosted logo URL for reminder emails; falls back to `${APP_URL}/icon.png`
 
 Set these in Supabase Vault before the monthly Cron job runs:
@@ -292,8 +292,8 @@ tables/functions.
 | Target | Mechanism | Trigger |
 |---|---|---|
 | Edge functions | `.github/workflows/deploy-edge-functions.yml` | Push to `main` (any path) + manual dispatch |
-| Web app (`owewho.com/app`) | Vercel export from `mobile/` into `web/dist/app` | Every Vercel marketing deploy |
-| Marketing site (`web/`, `owewho.com`) | Vercel Git integration (not GitHub Actions); `deploy-marketing.yml` is only a build check | Every push |
+| Web app (`sharedmoney.app/app`) | Vercel export from `mobile/` into `web/dist/app` | Every Vercel marketing deploy |
+| Marketing site (`web/`, `sharedmoney.app`) | Vercel Git integration (not GitHub Actions); `deploy-marketing.yml` is only a build check | Every push |
 | Database migrations | Manual `supabase db push` | — |
 | Android / iOS binaries & OTA updates | Manual (`mobile/build-release*.sh`, `eas submit`, `eas update`) | — |
 
@@ -373,7 +373,7 @@ The workflow (`.github/workflows/deploy-edge-functions.yml`) automatically:
 1. Create OAuth credentials in Google Cloud Console (Web application type)
 2. Add redirect URI: `https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback`
 3. Configure in Supabase Dashboard > Authentication > Providers
-4. Add mobile redirect URL: `owewho://auth/callback` (in Supabase URL Configuration)
+4. Add mobile redirect URLs: `sharedmoney://auth/callback` and legacy `owewho://auth/callback` (in Supabase URL Configuration)
 
 ### Environment Variables
 
@@ -390,7 +390,7 @@ The workflow (`.github/workflows/deploy-edge-functions.yml`) automatically:
 adb devices
 
 # View filtered logs
-adb logcat | grep -E "ReactNative|OweWho|com.vaibhavarora.sharemoney|ERROR|FATAL"
+adb logcat | grep -E "ReactNative|SharedMoney|com.vaibhavarora.sharemoney|ERROR|FATAL"
 
 # View only errors
 adb logcat *:E

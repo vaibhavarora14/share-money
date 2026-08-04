@@ -44,7 +44,7 @@ export function BrandLockup({ inverted = false }: { inverted?: boolean }) {
   return (
     <span className={`brand-lockup ${inverted ? "brand-lockup-inverse" : ""}`}>
       <BrandMark variant={inverted ? "inverse" : "color"} />
-      <span className="brand-wordmark">OweWho</span>
+      <span className="brand-wordmark">SharedMoney</span>
     </span>
   );
 }

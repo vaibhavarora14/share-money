@@ -50,7 +50,7 @@ To build for production:
 
 ## Current Configuration
 
-- **App Name**: OweWho
+- **App Name**: SharedMoney
 - **Slug**: share-money
 - **Owner**: share-money
 - **Version**: 1.0.0
