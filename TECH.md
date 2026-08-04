@@ -377,29 +377,51 @@ The workflow (`.github/workflows/deploy-edge-functions.yml`) automatically:
 4. Set the privacy policy link to `https://sharedmoney.app/privacy`
 5. Verify `sharedmoney.app` in Google Search Console and include it in Google
    Auth Platform authorized domains
-6. Enable Supabase Custom Domains for project `xesuklogveedeppxbbit` and attach
-   `auth.sharedmoney.app` as the project custom domain
-7. Add DNS records for the Supabase custom domain:
-   - `auth.sharedmoney.app` CNAME -> `xesuklogveedeppxbbit.supabase.co.`
-   - `_acme-challenge.auth.sharedmoney.app` TXT -> value returned by
-     `supabase domains create`
-8. Re-verify and activate the Supabase custom domain:
-   - `supabase domains create --project-ref xesuklogveedeppxbbit --custom-hostname auth.sharedmoney.app`
-   - `supabase domains reverify --project-ref xesuklogveedeppxbbit`
-   - `supabase domains activate --project-ref xesuklogveedeppxbbit`
-9. Create or update OAuth credentials in Google Cloud Console (Web application
-   type) and add both callback URIs during the migration:
+6. Submit the Google Auth Platform branding for verification, then publish it.
+   Google does not show the app name/logo to users until branding is verified
+   and published.
+7. Create or update OAuth credentials in Google Cloud Console (Web application
+   type) and add the Supabase callback URI:
    - `https://xesuklogveedeppxbbit.supabase.co/auth/v1/callback`
-   - `https://auth.sharedmoney.app/auth/v1/callback`
-10. Configure the resulting client ID/secret in Supabase Dashboard >
+8. Configure the resulting client ID/secret in Supabase Dashboard >
     Authentication > Providers > Google
-11. Update deploy/build secrets so `EXPO_PUBLIC_SUPABASE_URL` is
-    `https://auth.sharedmoney.app`, then redeploy the app
-12. Keep Supabase URL Configuration entries for `https://sharedmoney.app`,
+9. Keep Supabase URL Configuration entries for `https://sharedmoney.app`,
     `https://sharedmoney.app/app`, `sharedmoney://auth/callback`, and the legacy
     `owewho` callbacks
-13. Run `npm run verify:google-branding` and confirm the deployed app bundle and
-    Google OAuth `redirect_uri` both use `auth.sharedmoney.app`
+10. Run `npm run verify:google-branding` and confirm Google's rendered OAuth
+    page uses `SharedMoney` as the visible app name in the sign-in heading
+
+This matches the production Statements AI setup: it also routes Google OAuth
+through a Supabase callback domain, but Google renders the verified/published
+OAuth app brand (`Statements AI`) on the login page.
+
+To compare against Statements AI:
+
+```bash
+SHAREDMONEY_APP_URL=https://statements-ai.app \
+SHAREDMONEY_MARKETING_URL=https://statements-ai.app \
+EXPECTED_GOOGLE_BRAND="Statements AI" \
+SKIP_MARKETING_CHECK=1 \
+npm run verify:google-branding
+```
+
+Optional future hardening: enable Supabase Custom Domains for project
+`xesuklogveedeppxbbit` and attach `auth.sharedmoney.app` so the OAuth
+`redirect_uri` host is also branded. That requires the Supabase Custom Domain
+add-on / Pro plan and DNS:
+
+- `auth.sharedmoney.app` CNAME -> `xesuklogveedeppxbbit.supabase.co.`
+- `_acme-challenge.auth.sharedmoney.app` TXT -> value returned by
+  `supabase domains create`
+
+Then run:
+
+- `supabase domains create --project-ref xesuklogveedeppxbbit --custom-hostname auth.sharedmoney.app`
+- `supabase domains reverify --project-ref xesuklogveedeppxbbit`
+- `supabase domains activate --project-ref xesuklogveedeppxbbit`
+- Add `https://auth.sharedmoney.app/auth/v1/callback` to the Google OAuth client
+- Set `EXPO_PUBLIC_SUPABASE_URL=https://auth.sharedmoney.app` and redeploy
+- Run `EXPECTED_SUPABASE_AUTH_HOST=auth.sharedmoney.app npm run verify:google-branding`
 
 ### Environment Variables
 
