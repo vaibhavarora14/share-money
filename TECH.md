@@ -370,10 +370,12 @@ The workflow (`.github/workflows/deploy-edge-functions.yml`) automatically:
 
 ### Google OAuth Setup
 
-1. Create OAuth credentials in Google Cloud Console (Web application type)
-2. Add redirect URI: `https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback`
-3. Configure in Supabase Dashboard > Authentication > Providers
-4. Add mobile redirect URLs: `sharedmoney://auth/callback` and legacy `owewho://auth/callback` (in Supabase URL Configuration)
+1. Use the dedicated Google Cloud project `sharedmoney-504507` (`SharedMoney`)
+2. Configure Google Auth Platform branding as `SharedMoney`
+3. Create OAuth credentials in Google Cloud Console (Web application type)
+4. Add redirect URI: `https://xesuklogveedeppxbbit.supabase.co/auth/v1/callback`
+5. Configure the resulting client ID/secret in Supabase Dashboard > Authentication > Providers > Google
+6. Keep Supabase URL Configuration entries for `https://sharedmoney.app`, `https://sharedmoney.app/app`, `sharedmoney://auth/callback`, and the legacy `owewho` callbacks
 
 ### Environment Variables
 

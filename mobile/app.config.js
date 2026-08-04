@@ -66,6 +66,8 @@ module.exports = ({ config }) => {
   }
 
   const webBaseUrl = process.env.EXPO_PUBLIC_WEB_BASE_URL;
+  const webExportBaseUrl =
+    webBaseUrl && !/^https?:\/\//i.test(webBaseUrl) ? webBaseUrl : null;
   const appLinkHosts = Array.from(
     new Set([appUrlHostname, "owewho.com"].filter(Boolean))
   );
@@ -141,11 +143,11 @@ module.exports = ({ config }) => {
         bundler: "metro",
         output: "single"
       },
-      ...(webBaseUrl
+      ...(webExportBaseUrl
         ? {
             experiments: {
               ...(config.expo?.experiments || {}),
-              baseUrl: webBaseUrl
+              baseUrl: webExportBaseUrl
             }
           }
         : {}),
