@@ -122,7 +122,7 @@ function fallbackMarkup(page) {
 
   return `<main id="main-content"><section><p>${escapeHtml(page.eyebrow)}</p><h1>${escapeHtml(
     page.heading,
-  )}</h1><p>${escapeHtml(page.body)}</p><ul>${proofItems}</ul><p><a href="${appUrl}">Open the SharedMoney web app</a></p></section></main>`;
+  )}</h1><p>${escapeHtml(page.body)}</p><ul>${proofItems}</ul><p><a href="${appUrl}">Open the SharedMoney web app</a></p><nav aria-label="SharedMoney legal links"><a href="/privacy">Privacy Policy</a><a href="/delete-account">Delete Account</a><a href="mailto:support@sharedmoney.app">Contact support</a></nav></section></main>`;
 }
 
 function jsonLd(page) {
