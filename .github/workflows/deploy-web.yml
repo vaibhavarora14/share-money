@@ -1,9 +1,13 @@
-name: Deploy Web to EAS
+name: Deploy Expo Redirect
 
 on:
   push:
     branches:
       - "main"
+    paths:
+      - "mobile/expo-redirect/**"
+      - "mobile/scripts/export-expo-redirect.mjs"
+      - ".github/workflows/deploy-web.yml"
   workflow_dispatch:
     # Allow manual triggering
 
@@ -47,69 +51,41 @@ jobs:
             exit 1
           fi
           
-          # Type check (if TypeScript is configured)
-          if [ -f "tsconfig.json" ]; then
-            echo "📝 Running TypeScript type check..."
-            npx tsc --noEmit || {
-              echo "❌ TypeScript type check failed"
-              exit 1
-            }
-          fi
-          
           # Verify package.json scripts exist
-          if ! grep -q '"deploy:web"' package.json; then
-            echo "❌ deploy:web script not found in package.json"
+          if ! grep -q '"deploy:web:expo-redirect"' package.json; then
+            echo "❌ deploy:web:expo-redirect script not found in package.json"
+            exit 1
+          fi
+
+          if ! grep -q '"export:web:expo-redirect"' package.json; then
+            echo "❌ export:web:expo-redirect script not found in package.json"
             exit 1
           fi
           
           echo "✅ Pre-deployment validation passed"
 
-      - name: 🚀 Export and Deploy Web
+      - name: 🚀 Export and Deploy Expo Redirect
         working-directory: mobile
-        run: |
-          # Fail fast if client env is missing: `expo export` inlines
-          # EXPO_PUBLIC_* values at build time, so a bundle built without them
-          # ships with undefined Supabase credentials and crashes on load
-          # (this took production down after the first CI deploy — previous
-          # deploys were manual from a machine with a local .env).
-          # These values are public by design (they ship in every client
-          # bundle); they live in the Production environment secrets.
-          for var in EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_ANON_KEY EXPO_PUBLIC_API_URL; do
-            if [ -z "${!var}" ]; then
-              echo "❌ $var is not set — refusing to build a bundle with missing client env"
-              exit 1
-            fi
-          done
-          npm run deploy:web
+        run: npm run deploy:web:expo-redirect
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
-          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
-          EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL }}
-          EXPO_PUBLIC_APP_URL: ${{ secrets.EXPO_PUBLIC_APP_URL }}
-          EXPO_PUBLIC_DEFAULT_CURRENCY: ${{ secrets.EXPO_PUBLIC_DEFAULT_CURRENCY }}
 
       - name: 🏥 Post-deployment health check
         run: |
           echo "🏥 Running post-deployment health checks..."
           
-          # Note: EAS deployment URL would need to be retrieved from deployment output
-          # For now, we'll just verify the deployment completed successfully
-          echo "✅ Deployment completed. Please verify the web app is accessible."
+          echo "✅ Legacy Expo redirect deployment completed."
           echo ""
           echo "**Next steps:**"
-          echo "1. Verify the web app loads correctly"
-          echo "2. Test key user flows (auth, groups, transactions)"
-          echo "3. Check browser console for any errors"
+          echo "1. Verify https://share-money.expo.app redirects to https://sharedmoney.app/app"
+          echo "2. Verify path-preserving redirects for /groups/:id and /join/:token"
           
           # Add deployment summary
-          echo "## ✅ Web Deployment Completed" >> $GITHUB_STEP_SUMMARY
+          echo "## ✅ Expo Redirect Deployment Completed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "The web application has been deployed to production via EAS." >> $GITHUB_STEP_SUMMARY
+          echo "The legacy Expo redirect artifact has been deployed to production via EAS." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Please verify:**" >> $GITHUB_STEP_SUMMARY
-          echo "- Web app is accessible" >> $GITHUB_STEP_SUMMARY
-          echo "- Authentication works correctly" >> $GITHUB_STEP_SUMMARY
-          echo "- Layout respects max-width on desktop" >> $GITHUB_STEP_SUMMARY
-          echo "- Modals are centered and properly sized" >> $GITHUB_STEP_SUMMARY
+          echo "- https://share-money.expo.app redirects to https://sharedmoney.app/app" >> $GITHUB_STEP_SUMMARY
+          echo "- Legacy deep-link paths are preserved" >> $GITHUB_STEP_SUMMARY
         continue-on-error: true

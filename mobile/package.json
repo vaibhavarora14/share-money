@@ -16,6 +16,7 @@
     "version:major": "node scripts/version.js major",
     "version:build": "node scripts/version.js build",
     "version:show": "node scripts/version.js show",
+    "verify:canonical-links": "node scripts/verify-canonical-links.mjs",
     "android:release": "eas submit --platform android --profile internal",
     "deploy:web": "npx expo export -p web && eas deploy --prod --non-interactive",
     "export:web:expo-redirect": "node scripts/export-expo-redirect.mjs",
