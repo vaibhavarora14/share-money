@@ -13,6 +13,19 @@ function assertEquals(actual: unknown, expected: unknown) {
   }
 }
 
+function assertThrows(fn: () => unknown, expectedMessage: string) {
+  try {
+    fn();
+  } catch (err) {
+    if (err instanceof Error && err.message.includes(expectedMessage)) {
+      return;
+    }
+    throw err;
+  }
+
+  throw new Error(`Expected function to throw "${expectedMessage}"`);
+}
+
 const participants = [
   {
     id: 'alice-participant',
@@ -264,6 +277,7 @@ Deno.test('aggregateMonthlyReminderEmails creates one digest per user across rol
   assertEquals(alice?.actions.map((action) => action.direction), ['owe', 'owed']);
   assertEquals(alice?.subject, 'SharedMoney pending balances for August 2026');
   assertEquals(alice?.html.includes('src="https://assets.example.com/sharedmoney-logo.png"'), true);
+  assertEquals(alice?.html.includes('href="https://app.example.com/groups/group-1"'), true);
   assertEquals(alice?.html.includes('SharedMoney'), true);
   assertEquals(alice?.html.includes('Time for a quick balance tidy-up'), true);
   assertEquals(alice?.html.includes('New month, clean slate energy.'), true);
@@ -296,6 +310,33 @@ Deno.test('aggregateMonthlyReminderEmails falls back to app icon for logo', () =
   });
 
   assertEquals(emails[0].html.includes('src="https://app.example.com/icon.png"'), true);
+});
+
+Deno.test('aggregateMonthlyReminderEmails rejects legacy Expo app URLs', () => {
+  assertThrows(
+    () =>
+      aggregateMonthlyReminderEmails({
+        periodKey: '2026-08',
+        appUrl: 'https://share-money.expo.app',
+        edges: [
+          {
+            group_id: 'group-1',
+            group_name: 'Trip',
+            from_participant_id: 'alice-participant',
+            from_user_id: 'alice-user',
+            from_email: 'alice@example.com',
+            from_name: 'Alice',
+            to_participant_id: 'bob-participant',
+            to_user_id: 'bob-user',
+            to_email: 'bob@example.com',
+            to_name: 'Bob',
+            amount: 12.5,
+            currency: 'USD',
+          },
+        ],
+      }),
+    'legacy Expo redirect host',
+  );
 });
 
 Deno.test('getDeliveryReservationMode skips duplicates but allows failed retries', () => {
