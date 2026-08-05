@@ -1,6 +1,8 @@
 import { Platform } from "react-native";
 import { getUserFriendlyErrorMessage } from "./errorMessages";
 
+export const CANONICAL_WEB_APP_URL = "https://sharedmoney.app/app";
+
 /** Invite-link tokens are 64 lowercase hex chars (256-bit secrets). */
 export const INVITE_TOKEN_REGEX = /(?:^|\/)(?:app\/)?join\/([a-f0-9]{64})(?:[/?#]|$)/i;
 export const GROUP_DEEP_LINK_REGEX =
@@ -58,17 +60,33 @@ export function extractGroupDeepLinkId(
 
 /**
  * Base URL used when generating shareable invite links.
- * Priority: explicit EXPO_PUBLIC_APP_URL, then the current web origin,
- * then the production web app URL.
+ * New share links should always use the canonical branded web app, not the
+ * current host, so legacy Expo-hosted sessions never mint more Expo links.
  */
 export function getInviteLinkBaseUrl(): string {
-  if (process.env.EXPO_PUBLIC_APP_URL) {
-    return process.env.EXPO_PUBLIC_APP_URL.replace(/\/$/, "");
-  }
-  if (Platform.OS === "web" && typeof window !== "undefined") {
-    return window.location.origin;
-  }
-  return "https://sharedmoney.app/app";
+  return getCanonicalWebAppUrl();
+}
+
+export function getCanonicalWebAppUrl(): string {
+  return CANONICAL_WEB_APP_URL;
+}
+
+export function buildWebAppUrl(path: string): string {
+  const pathWithoutLeadingSlash = path.replace(/^\/+/, "");
+  const normalizedPath = pathWithoutLeadingSlash.startsWith("app/")
+    ? pathWithoutLeadingSlash.slice(4)
+    : pathWithoutLeadingSlash;
+  return normalizedPath
+    ? `${getCanonicalWebAppUrl()}/${normalizedPath}`
+    : getCanonicalWebAppUrl();
+}
+
+export function getInviteLinkUrl(token: string): string {
+  return buildWebAppUrl(`join/${encodeURIComponent(token)}`);
+}
+
+export function getGroupLinkUrl(groupId: string): string {
+  return buildWebAppUrl(`groups/${encodeURIComponent(groupId)}`);
 }
 
 export function getConfiguredWebAppPath(): string {
