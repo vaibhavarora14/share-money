@@ -79,7 +79,7 @@ module.exports = ({ config }) => {
       ...config.expo,
       name: "SharedMoney",
       slug: "share-money",
-      owner: "share-money",
+      owner: "varora1406",
       scheme: appSchemes,
       version: versionConfig.version,
       orientation: "portrait",

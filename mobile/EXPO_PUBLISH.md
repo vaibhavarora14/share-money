@@ -5,7 +5,7 @@
 The app has been configured and published to Expo. Here's what's been done:
 
 - ✅ EAS project linked: `afddb7db-3d7d-46da-a1b5-0d6e4b4374ce`
-- ✅ App published to Expo organization: `share-money`
+- ✅ App published to Expo account: `varora1406`
 - ✅ OTA updates configured and published
 - ✅ Android build in progress
 - ✅ iOS configuration ready
@@ -52,7 +52,7 @@ To build for production:
 
 - **App Name**: SharedMoney
 - **Slug**: share-money
-- **Owner**: share-money
+- **Owner**: varora1406
 - **Version**: 1.0.0
 - **Android Package**: com.vaibhavarora.sharemoney
 - **iOS Bundle ID**: com.vaibhavarora.sharemoney
@@ -60,7 +60,6 @@ To build for production:
 
 ## View Your App
 
-- **Dashboard**: https://expo.dev/accounts/share-money/projects/share-money
-- **Updates**: https://expo.dev/accounts/share-money/projects/share-money/updates
-- **Builds**: https://expo.dev/accounts/share-money/projects/share-money/builds
-
+- **Dashboard**: https://expo.dev/accounts/varora1406/projects/share-money
+- **Updates**: https://expo.dev/accounts/varora1406/projects/share-money/updates
+- **Builds**: https://expo.dev/accounts/varora1406/projects/share-money/builds
