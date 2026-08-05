@@ -67,6 +67,7 @@ import { darkTheme, lightTheme } from "./theme";
 import { Group, GroupWithMembers } from "./types";
 import { getDefaultCurrency } from "./utils/currency";
 import {
+  extractGroupDeepLinkId,
   extractInviteToken,
   getConfiguredWebAppPath,
   getInviteLinkErrorMessage,
@@ -74,6 +75,7 @@ import {
 import { log, logError } from "./utils/logger";
 
 const PENDING_INVITE_TOKEN_KEY = "pending_invite_token";
+const PENDING_GROUP_DEEP_LINK_KEY = "pending_group_deep_link";
 
 if (Platform.OS === "web") {
   const ignoredWebWarning =
@@ -146,6 +148,7 @@ function AppContent() {
   const stuckTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const initialUrlHandledRef = React.useRef(false);
   const redeemingTokenRef = React.useRef<string | null>(null);
+  const openingGroupDeepLinkRef = React.useRef<string | null>(null);
   const prefetchGroupData = React.useCallback(
     async (groupId: string) => {
       await Promise.all([
@@ -221,24 +224,70 @@ function AppContent() {
     }
   }, []);
 
-  // Handle invite links: initial URL (cold start / web navigation) + url events
+  const openGroupDeepLink = React.useCallback(async (groupId: string) => {
+    if (openingGroupDeepLinkRef.current === groupId) return;
+    openingGroupDeepLinkRef.current = groupId;
+
+    try {
+      const group = await queryClientInstance.fetchQuery({
+        queryKey: queryKeys.group(groupId),
+        queryFn: () => fetchGroupDetails(groupId),
+        staleTime: 60_000,
+      });
+
+      setBanner(null);
+      setShowAddMember(false);
+      setEditingTransaction(null);
+      setStatsContext(null);
+      setSelectedGroup(group);
+      setCurrentRoute("group-details");
+    } catch (err) {
+      logError(err, { context: "openGroupDeepLink", groupId });
+      setSelectedGroup(null);
+      setStatsContext(null);
+      setCurrentRoute("groups");
+      setBanner({
+        type: "error",
+        message: "We couldn't open that group. Make sure you have access.",
+      });
+    } finally {
+      await AsyncStorage.removeItem(PENDING_GROUP_DEEP_LINK_KEY).catch(
+        () => {}
+      );
+      openingGroupDeepLinkRef.current = null;
+    }
+  }, [queryClientInstance]);
+
+  // Handle deep links: initial URL (cold start / web navigation) + url events.
   useEffect(() => {
     const handleUrl = async (url: string | null) => {
       const token = extractInviteToken(url);
-      if (!token) return;
+      if (token) {
+        if (session?.user?.id) {
+          await redeemInviteToken(token);
+        } else {
+          // Logged out: stash the token for post-auth redemption and go
+          // straight to the sign-in screen (no preview step). Clean the URL
+          // immediately — leaving /join/<token> in the address bar during the
+          // auth flow is what allowed re-processing (remounts, url events) to
+          // yank users back to a join screen mid-sign-in.
+          await AsyncStorage.setItem(PENDING_INVITE_TOKEN_KEY, token).catch(
+            () => {}
+          );
+          clearJoinPathFromWebUrl();
+        }
+        return;
+      }
+
+      const groupId = extractGroupDeepLinkId(url);
+      if (!groupId) return;
 
       if (session?.user?.id) {
-        await redeemInviteToken(token);
+        await openGroupDeepLink(groupId);
       } else {
-        // Logged out: stash the token for post-auth redemption and go
-        // straight to the sign-in screen (no preview step). Clean the URL
-        // immediately — leaving /join/<token> in the address bar during the
-        // auth flow is what allowed re-processing (remounts, url events) to
-        // yank users back to a join screen mid-sign-in.
-        await AsyncStorage.setItem(PENDING_INVITE_TOKEN_KEY, token).catch(
+        await AsyncStorage.setItem(PENDING_GROUP_DEEP_LINK_KEY, groupId).catch(
           () => {}
         );
-        clearJoinPathFromWebUrl();
       }
     };
 
@@ -260,13 +309,13 @@ function AppContent() {
           }
           await handleUrl(url);
         } catch (err) {
-          logError(err, { context: "invite link initial URL" });
+          logError(err, { context: "deep link initial URL" });
         }
       })();
     }
 
     return () => subscription.remove();
-  }, [session?.user?.id, redeemInviteToken]);
+  }, [session?.user?.id, redeemInviteToken, openGroupDeepLink]);
 
   // After sign-in/sign-up, consume any invite token saved before auth.
   useEffect(() => {
@@ -287,6 +336,26 @@ function AppContent() {
       cancelled = true;
     };
   }, [session?.user?.id, redeemInviteToken]);
+
+  // After sign-in/sign-up, open any group deep link saved before auth.
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const groupId = await AsyncStorage.getItem(PENDING_GROUP_DEEP_LINK_KEY);
+        if (!groupId || cancelled) return;
+        await openGroupDeepLink(groupId);
+      } catch (err) {
+        logError(err, { context: "pending group deep link processing" });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.id, openGroupDeepLink]);
 
   // Debug routing / loading state to track "stuck on spinner" issues.
   // To avoid noisy duplicate breadcrumbs, only log when the state snapshot changes.

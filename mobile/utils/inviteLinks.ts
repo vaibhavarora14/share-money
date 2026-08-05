@@ -3,6 +3,8 @@ import { getUserFriendlyErrorMessage } from "./errorMessages";
 
 /** Invite-link tokens are 64 lowercase hex chars (256-bit secrets). */
 export const INVITE_TOKEN_REGEX = /(?:^|\/)(?:app\/)?join\/([a-f0-9]{64})(?:[/?#]|$)/i;
+export const GROUP_DEEP_LINK_REGEX =
+  /(?:^|\/)(?:app\/)?groups\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:[/?#]|$)/i;
 
 /**
  * Human-readable message for invite-link redemption failures.
@@ -43,6 +45,14 @@ export function getInviteLinkErrorMessage(err: unknown): string {
 export function extractInviteToken(url: string | null | undefined): string | null {
   if (!url) return null;
   const match = url.match(INVITE_TOKEN_REGEX);
+  return match ? match[1].toLowerCase() : null;
+}
+
+export function extractGroupDeepLinkId(
+  url: string | null | undefined
+): string | null {
+  if (!url) return null;
+  const match = url.match(GROUP_DEEP_LINK_REGEX);
   return match ? match[1].toLowerCase() : null;
 }
 
