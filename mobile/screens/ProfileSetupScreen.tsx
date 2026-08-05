@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   ScrollView,
   StyleSheet,
@@ -34,8 +35,9 @@ import {
   getDefaultCountry,
   parsePhoneNumber,
 } from "../utils/countryCodes";
-import { useDeleteAccount } from "../hooks/useDeleteAccount";
 import { showErrorAlert } from "../utils/errorHandling";
+
+const ACCOUNT_DELETION_EMAIL = "varora1406@gmail.com";
 
 interface ProfileSetupScreenProps {
   onComplete: () => void;
@@ -59,7 +61,6 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     useThemePreference();
   const insets = useSafeAreaInsets();
   const { data: profile, updateProfile } = useProfile();
-  const deleteAccount = useDeleteAccount();
   const { signOut, user } = useAuth();
 
   useEffect(() => {
@@ -185,26 +186,21 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     }
   };
 
-  const handleDeleteAccount = () => {
-    Alert.alert(
-      "Delete Account",
-      "This permanently removes access to your SharedMoney account and anonymizes your profile in shared groups.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete Account",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteAccount.mutateAsync();
-              Alert.alert("Account Deleted", "Your account has been deleted.");
-            } catch (error) {
-              showErrorAlert(error, signOut, "Delete Account");
-            }
-          },
-        },
-      ]
+  const handleEmailAccountDeletion = async () => {
+    const subject = encodeURIComponent("Delete Account");
+    const body = encodeURIComponent(
+      `Please delete my SharedMoney account.\n\nRegistered email: ${user?.email || ""}`
     );
+    const mailtoUrl = `mailto:${ACCOUNT_DELETION_EMAIL}?subject=${subject}&body=${body}`;
+
+    try {
+      await Linking.openURL(mailtoUrl);
+    } catch {
+      Alert.alert(
+        "Email Account Deletion",
+        `Please email ${ACCOUNT_DELETION_EMAIL} from your registered email with the subject "Delete Account".`
+      );
+    }
   };
 
   const getInitials = () => {
@@ -407,7 +403,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             <Button
               mode="contained"
               onPress={handleComplete}
-              disabled={loading || deleteAccount.isPending || !hasChanges}
+              disabled={loading || !hasChanges}
               loading={loading}
               style={styles.button}
               contentStyle={styles.buttonContent}
@@ -418,39 +414,41 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
 
           <Surface
             style={[
-              styles.dangerCard,
-              { backgroundColor: theme.colors.errorContainer },
+              styles.supportCard,
+              { backgroundColor: theme.colors.surfaceVariant },
             ]}
             elevation={0}
           >
-            <View style={styles.dangerHeader}>
-              <Icon source="alert-outline" size={22} color={theme.colors.error} />
-              <View style={styles.dangerText}>
+            <View style={styles.supportHeader}>
+              <Icon
+                source="email-outline"
+                size={22}
+                color={theme.colors.onSurfaceVariant}
+              />
+              <View style={styles.supportText}>
                 <Text
                   variant="titleSmall"
-                  style={{ color: theme.colors.onErrorContainer }}
+                  style={{ color: theme.colors.onSurface }}
                 >
-                  Delete Account
+                  Account Support
                 </Text>
                 <Text
                   variant="bodySmall"
-                  style={{ color: theme.colors.onErrorContainer }}
+                  style={{ color: theme.colors.onSurfaceVariant }}
                 >
-                  Remove access to your account and anonymize your profile in shared groups.
+                  For account deletion requests, email {ACCOUNT_DELETION_EMAIL} from your registered address.
                 </Text>
               </View>
             </View>
             <Button
-              mode="contained-tonal"
-              onPress={handleDeleteAccount}
-              disabled={loading || deleteAccount.isPending}
-              loading={deleteAccount.isPending}
-              textColor={theme.colors.error}
-              style={styles.deleteButton}
+              mode="outlined"
+              onPress={handleEmailAccountDeletion}
+              disabled={loading}
+              style={styles.supportButton}
               contentStyle={styles.buttonContent}
-              icon="delete-outline"
+              icon="email-outline"
             >
-              Delete Account
+              Email
             </Button>
           </Surface>
         </ScrollView>
@@ -581,21 +579,21 @@ const styles = StyleSheet.create({
   buttonContent: {
     paddingVertical: 6,
   },
-  dangerCard: {
+  supportCard: {
     borderRadius: 16,
     marginTop: 16,
     padding: 16,
   },
-  dangerHeader: {
+  supportHeader: {
     flexDirection: "row",
     gap: 12,
     marginBottom: 12,
   },
-  dangerText: {
+  supportText: {
     flex: 1,
     gap: 4,
   },
-  deleteButton: {
+  supportButton: {
     alignSelf: "flex-start",
     borderRadius: 8,
   },
