@@ -21,6 +21,21 @@ eas update --branch production --message "Your update message"
 
 This pushes Over-The-Air updates that users receive automatically.
 
+## Legacy Web Redirect
+
+`https://share-money.expo.app` is not the canonical web app. It hosts only a
+small path-preserving redirect artifact for old links. New user-facing app links
+must use `https://sharedmoney.app/app`.
+
+To deploy the legacy redirect artifact:
+
+```bash
+npm run deploy:web:expo-redirect
+```
+
+The full web app is exported into the Vercel-hosted marketing site with
+`npm run export:web:sharedmoney`.
+
 ## Production Builds (EAS Build)
 
 For production builds (standalone apps):

@@ -24,7 +24,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WEB_MAX_WIDTH } from "../constants/layout";
 import { useAuth } from "../contexts/AuthContext";
 import { useCreateGroupShareLink } from "../hooks/useGroupInvitations";
-import { getInviteLinkBaseUrl } from "../utils/inviteLinks";
+import { getInviteLinkUrl } from "../utils/inviteLinks";
 import { showErrorAlert } from "../utils/errorHandling";
 
 interface AddMemberScreenProps {
@@ -93,7 +93,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
       maxUses: LINK_MAX_USES,
       validDays: LINK_VALID_DAYS,
     });
-    const url = `${getInviteLinkBaseUrl()}/join/${token}`;
+    const url = getInviteLinkUrl(token);
     setInviteLink(url);
     return url;
   };
