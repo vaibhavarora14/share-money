@@ -4,6 +4,23 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex, nofollow" />
+    <script>
+      (() => {
+        const target = new URL("https://sharedmoney.app/app");
+        const legacyPath = window.location.pathname.replace(/^\/+|\/+$/g, "");
+        const appRelativePath = legacyPath.startsWith("app/")
+          ? legacyPath.slice(4)
+          : legacyPath;
+
+        if (appRelativePath) {
+          target.pathname = `/app/${appRelativePath}`;
+        }
+
+        target.search = window.location.search;
+        target.hash = window.location.hash;
+        window.location.replace(target.href);
+      })();
+    </script>
     <meta http-equiv="refresh" content="0; url=https://sharedmoney.app/app" />
     <link rel="canonical" href="https://sharedmoney.app/app" />
     <title>SharedMoney</title>
@@ -43,21 +60,5 @@
         </a>
       </p>
     </main>
-    <script>
-      const target = new URL("https://sharedmoney.app/app");
-      const legacyPath = window.location.pathname.replace(/^\/+|\/+$/g, "");
-      const appRelativePath = legacyPath.startsWith("app/")
-        ? legacyPath.slice(4)
-        : legacyPath;
-
-      if (appRelativePath) {
-        target.pathname = `/app/${appRelativePath}`;
-      }
-
-      target.search = window.location.search;
-      target.hash = window.location.hash;
-      document.getElementById("continue-link").href = target.href;
-      window.location.replace(target.href);
-    </script>
   </body>
 </html>
