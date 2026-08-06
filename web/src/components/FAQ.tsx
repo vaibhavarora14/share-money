@@ -19,7 +19,7 @@ const faqs: FAQItem[] = [
   {
     question: "Do my friends need to download an app?",
     answer:
-      "SharedMoney is available through the web app for anyone, and Android users can install the app from Google Play. iOS is currently available via TestFlight.",
+      "SharedMoney is available through the web app for anyone, and Android users can install the app from Google Play.",
   },
   {
     question: "What happens if someone doesn’t pay?",
