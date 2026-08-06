@@ -17,7 +17,7 @@ export function InstallSection({
           <div>
             <p className="kicker kicker-inverse">Free to use</p>
             <h2>Start the group. Keep the money part simple.</h2>
-            <p>Android is available now. iOS remains clearly labeled as a TestFlight beta.</p>
+            <p>Use SharedMoney on the web or install the Android app from Google Play.</p>
           </div>
         </div>
         <div className="install-actions">

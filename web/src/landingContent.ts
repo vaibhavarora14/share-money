@@ -69,10 +69,10 @@ export const platformDestinations: PlatformDestination[] = [
   },
   {
     platform: "ios",
-    label: "Join the iOS beta",
-    status: "iOS | TestFlight beta",
-    href: "https://testflight.apple.com/join/j23pnEmX",
-    ariaLabel: "Join the SharedMoney iOS beta on TestFlight",
+    label: "Open on iOS",
+    status: "iOS | Web access",
+    href: "https://sharedmoney.app/app",
+    ariaLabel: "Open SharedMoney on iOS",
   },
   {
     platform: "web",

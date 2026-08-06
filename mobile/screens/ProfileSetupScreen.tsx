@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   ScrollView,
   StyleSheet,
@@ -36,6 +37,8 @@ import {
 } from "../utils/countryCodes";
 import { useDeleteAccount } from "../hooks/useDeleteAccount";
 import { showErrorAlert } from "../utils/errorHandling";
+
+const ACCOUNT_DELETION_EMAIL = "varora1406@gmail.com";
 
 interface ProfileSetupScreenProps {
   onComplete: () => void;
@@ -182,6 +185,23 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
       await setThemePreference(nextPreference);
     } catch (error) {
       showErrorAlert(error, signOut, "Appearance");
+    }
+  };
+
+  const handleEmailAccountDeletion = async () => {
+    const subject = encodeURIComponent("Delete Account");
+    const body = encodeURIComponent(
+      `Please delete my SharedMoney account.\n\nRegistered email: ${user?.email || ""}`
+    );
+    const mailtoUrl = `mailto:${ACCOUNT_DELETION_EMAIL}?subject=${subject}&body=${body}`;
+
+    try {
+      await Linking.openURL(mailtoUrl);
+    } catch {
+      Alert.alert(
+        "Email Account Deletion",
+        `Please email ${ACCOUNT_DELETION_EMAIL} from your registered email with the subject "Delete Account".`
+      );
     }
   };
 
@@ -453,6 +473,46 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
               Delete Account
             </Button>
           </Surface>
+
+          <Surface
+            style={[
+              styles.supportCard,
+              { backgroundColor: theme.colors.surfaceVariant },
+            ]}
+            elevation={0}
+          >
+            <View style={styles.supportHeader}>
+              <Icon
+                source="email-outline"
+                size={22}
+                color={theme.colors.onSurfaceVariant}
+              />
+              <View style={styles.supportText}>
+                <Text
+                  variant="titleSmall"
+                  style={{ color: theme.colors.onSurface }}
+                >
+                  Account Support
+                </Text>
+                <Text
+                  variant="bodySmall"
+                  style={{ color: theme.colors.onSurfaceVariant }}
+                >
+                  If you cannot access your account, email {ACCOUNT_DELETION_EMAIL} from your registered address.
+                </Text>
+              </View>
+            </View>
+            <Button
+              mode="outlined"
+              onPress={handleEmailAccountDeletion}
+              disabled={loading}
+              style={styles.supportButton}
+              contentStyle={styles.buttonContent}
+              icon="email-outline"
+            >
+              Email
+            </Button>
+          </Surface>
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -596,6 +656,24 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   deleteButton: {
+    alignSelf: "flex-start",
+    borderRadius: 8,
+  },
+  supportCard: {
+    borderRadius: 16,
+    marginTop: 16,
+    padding: 16,
+  },
+  supportHeader: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 12,
+  },
+  supportText: {
+    flex: 1,
+    gap: 4,
+  },
+  supportButton: {
     alignSelf: "flex-start",
     borderRadius: 8,
   },
