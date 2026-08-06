@@ -1,31 +1,31 @@
 appId: com.sharemoney.app
 ---
 # Test: Sign In Success
-# This test verifies that a user can successfully sign in to the app
-# Note: App should be launched manually or already running before running this test
+# This test verifies that the method chooser reveals the email sign-in form
+# and that a user can successfully sign in.
 
 # Reset to signed-out state first
 - runFlow: signout.yaml
 - waitForAnimationToEnd
 
-- runFlow:
-    when:
-      visible: "Welcome Back"
-    commands:
-      - tapOn:
-          text: "Email"
-      - inputText: "alice@test.com"
-      - tapOn:
-          text: "Password"
-      - inputText: "testpassword123"
-      - hideKeyboard
-      - tapOn:
-          text: "Sign In"
-      - waitForAnimationToEnd
+- assertVisible: "Log in to SharedMoney"
+- assertVisible: "Continue with email"
+- tapOn: "Continue with email"
+- assertVisible: "Log in with email"
+- tapOn:
+    text: "Email"
+- inputText: "alice@test.com"
+- tapOn:
+    text: "Password"
+- inputText: "testpassword123"
+- hideKeyboard
+- tapOn:
+    text: "Sign In"
+- waitForAnimationToEnd
 
 # Wait for navigation to groups screen
 - runFlow: _helpers/ensure-groups.yaml
-- assertNotVisible: "Welcome Back"
+- assertNotVisible: "Log in with email"
 # Also verify the bottom nav bar is visible
 - assertVisible: "Home"
 - runFlow: signout.yaml
