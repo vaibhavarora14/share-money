@@ -26,7 +26,7 @@
         "sharedmoney",
         "owewho"
       ],
-      "buildNumber": "63",
+      "buildNumber": "64",
       "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
