@@ -30,13 +30,13 @@ on:
         default: true
         type: boolean
       submit_profile:
-        description: "EAS submit profile"
+        description: "EAS submit profile (Android uses Internal first; use store only for an intentional public rollout)"
         required: true
-        default: "production"
+        default: "internal"
         type: choice
         options:
-          - production
           - internal
+          - store
       create_github_release:
         description: "Create GitHub release with Android artifact"
         required: true
@@ -78,7 +78,7 @@ jobs:
             esac
           fi
           SUBMIT="${{ github.event.inputs.submit || 'true' }}"
-          SUBMIT_PROFILE="${{ github.event.inputs.submit_profile || 'production' }}"
+          SUBMIT_PROFILE="${{ github.event.inputs.submit_profile || 'internal' }}"
           CREATE_GH="${{ github.event.inputs.create_github_release || 'true' }}"
 
           if [ "$PLATFORM" = "all" ]; then

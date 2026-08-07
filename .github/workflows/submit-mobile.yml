@@ -72,7 +72,15 @@ jobs:
             exit 1
           fi
 
-          ARGS=(--platform "$PLATFORM" --profile production --non-interactive --wait)
+          # Android must always enter Internal testing first. Production rollout
+          # requires the explicit `store` EAS submit profile.
+          if [ "$PLATFORM" = "android" ]; then
+            SUBMIT_PROFILE=internal
+          else
+            SUBMIT_PROFILE=production
+          fi
+
+          ARGS=(--platform "$PLATFORM" --profile "$SUBMIT_PROFILE" --non-interactive --wait)
           if [ "$TARGET" = "latest" ]; then
             ARGS+=(--latest)
             echo "Submitting latest ${PLATFORM} build"
@@ -82,4 +90,4 @@ jobs:
           fi
 
           eas submit "${ARGS[@]}"
-          echo "✅ Submit finished for ${PLATFORM} (${TARGET})"
+          echo "✅ Submit finished for ${PLATFORM} (${TARGET}) using ${SUBMIT_PROFILE}"
