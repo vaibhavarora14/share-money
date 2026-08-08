@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Menu, Moon, Sun, X } from "lucide-react";
 import type { PlatformDestination } from "../../landingContent";
-import { sectionNav } from "../../landingContent";
+import { primaryNavigation } from "../../seoPages";
 import { useTheme } from "../../contexts/ThemeContext";
 import { BrandLockup } from "./BrandMark";
 import { PlatformCta } from "./PlatformCta";
@@ -57,7 +57,7 @@ export function Header({
   return (
     <header className="site-header">
       <div className="container nav-shell">
-        <a className="brand" href="#main-content" aria-label="SharedMoney home">
+        <a className="brand" href="/" aria-label="SharedMoney home">
           <BrandLockup />
         </a>
 
@@ -66,14 +66,14 @@ export function Header({
           className={`section-nav ${menuOpen ? "is-open" : ""}`}
           aria-label="Main navigation"
         >
-          {sectionNav.map((item, index) => (
+          {primaryNavigation.map((item, index) => (
             <a
               ref={index === 0 ? firstLinkRef : undefined}
-              href={`#${item.id}`}
+              href={item.path}
               key={item.id}
               onClick={() => closeMenu()}
             >
-              {item.label}
+              {item.id === "tools" ? "Calculators" : item.eyebrow}
             </a>
           ))}
         </nav>

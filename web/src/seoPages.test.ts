@@ -1,0 +1,33 @@
+import { describe, expect, it } from "vitest";
+import { normalizeSeoPath, pageByPath, relatedPages, seoPages } from "./seoPages";
+
+describe("SEO route content", () => {
+  it("has the approved ten indexable routes", () => {
+    expect(seoPages).toHaveLength(10);
+    expect([...pageByPath.keys()]).toEqual([
+      "/",
+      "/split-bills",
+      "/group-expense-tracker",
+      "/trip-expense-splitter",
+      "/roommate-expense-tracker",
+      "/splitwise-alternative",
+      "/in/splitwise-alternative",
+      "/tools",
+      "/tools/split-bill-calculator",
+      "/tools/settle-up-calculator",
+    ]);
+  });
+
+  it("only resolves known paths and maintains related-page links", () => {
+    const splitBills = pageByPath.get("/split-bills");
+
+    expect(normalizeSeoPath("/tools/split-bill-calculator/")).toBe("/tools/split-bill-calculator");
+    expect(normalizeSeoPath("/not-a-real-route")).toBeNull();
+    expect(splitBills).toBeDefined();
+    expect(relatedPages(splitBills!).map((page) => page.id)).toEqual([
+      "split-bill-calculator",
+      "group-expense-tracker",
+      "roommate-expense-tracker",
+    ]);
+  });
+});
