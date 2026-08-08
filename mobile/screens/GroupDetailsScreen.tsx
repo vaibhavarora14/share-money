@@ -32,6 +32,7 @@ import {
   useConnectParticipant,
   useInviteParticipant,
   useParticipants,
+  useRemoveParticipant,
 } from "../hooks/useParticipants";
 import {
   useCreateSettlement,
@@ -279,6 +280,10 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     refetchParticipants();
     refetchInvites();
   });
+  const removeParticipant = useRemoveParticipant(() => {
+    refetchGroup();
+    refetchParticipants();
+  });
   const cancelInvite = useCancelInvitation(refetchInvites);
   const createSettlement = useCreateSettlement(refetchAll);
   const updateSettlement = useUpdateSettlement(refetchAll);
@@ -396,21 +401,24 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     }
   };
 
-  const handleRemoveMember = async (
-    memberUserId: string,
-    memberEmail?: string
-  ) => {
-    const memberName = memberEmail || `User ${memberUserId.substring(0, 8)}...`;
-    const isRemovingSelf = memberUserId === session?.user?.id;
+  const handleRemoveMember = async (participant: Participant) => {
+    const memberName = participant.full_name || participant.email || "this person";
+    const isRemovingSelf = participant.user_id === session?.user?.id;
 
     const performRemove = async () => {
       try {
-        setRemovingMemberId(memberUserId);
-        // Use the local mutation which will refetch group data
-        await removeMemberMutation.mutate({
-          groupId: group.id,
-          userId: memberUserId,
-        });
+        setRemovingMemberId(participant.id);
+        if (participant.user_id) {
+          await removeMemberMutation.mutate({
+            groupId: group.id,
+            userId: participant.user_id,
+          });
+        } else {
+          await removeParticipant.mutate({
+            groupId: group.id,
+            participantId: participant.id,
+          });
+        }
         // If removing self, navigate back
         if (isRemovingSelf && onLeaveGroup) {
           onLeaveGroup();

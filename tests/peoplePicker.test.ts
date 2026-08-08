@@ -1,4 +1,5 @@
 import {
+  canRemovePerson,
   type ExistingPerson,
   filterAndSortExistingPeople,
 } from "../mobile/utils/peoplePicker.ts";
@@ -45,5 +46,38 @@ Deno.test("sorts the full directory by person name then group name", () => {
   const expected = ["Anuj:Goa Trip", "Anuj:Weekend Plan", "Arya:Flat Expenses"];
   if (labels.join("|") !== expected.join("|")) {
     throw new Error("unexpected sort order");
+  }
+});
+
+Deno.test("allows a group manager to remove an unlinked active person", () => {
+  const canRemove = canRemovePerson(
+    { id: "p-1", type: "member", user_id: null },
+    { canManageMembers: true, currentUserId: "owner-id" },
+  );
+
+  if (!canRemove) {
+    throw new Error("expected an unlinked active person to be removable");
+  }
+});
+
+Deno.test("does not allow removal of a former person", () => {
+  const canRemove = canRemovePerson(
+    { id: "p-1", type: "former", user_id: null },
+    { canManageMembers: true, currentUserId: "owner-id" },
+  );
+
+  if (canRemove) {
+    throw new Error("former people should not have a removal action");
+  }
+});
+
+Deno.test("does not offer removal for an invited person", () => {
+  const canRemove = canRemovePerson(
+    { id: "p-1", type: "invited", user_id: null },
+    { canManageMembers: true, currentUserId: "owner-id" },
+  );
+
+  if (canRemove) {
+    throw new Error("invited people should be cancelled through their invitation");
   }
 });

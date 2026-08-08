@@ -574,6 +574,95 @@ Deno.serve(async (req: Request) => {
       }
 
       if (
+        httpMethod === "DELETE" && participantId && isValidUUID(participantId)
+      ) {
+        const participant = await fetchParticipantById(supabase, participantId);
+        if (!participant) {
+          return createErrorResponse(
+            404,
+            "Person not found",
+            "NOT_FOUND",
+            undefined,
+            req,
+          );
+        }
+
+        if (participant.user_id || participant.type !== "member") {
+          return createErrorResponse(
+            400,
+            "Only unlinked people without a pending invitation can be removed directly",
+            "VALIDATION_ERROR",
+            undefined,
+            req,
+          );
+        }
+
+        const canManage = await requireCanManageParticipants(
+          supabase,
+          participant.group_id,
+          user.id,
+        );
+        if (!canManage) {
+          return createErrorResponse(
+            403,
+            "You must be an active group member to remove people",
+            "PERMISSION_DENIED",
+            undefined,
+            req,
+          );
+        }
+
+        const [splitResult, payerResult, settlementResult] = await Promise.all([
+          supabase
+            .from("transaction_splits")
+            .select("id")
+            .eq("participant_id", participant.id)
+            .limit(1),
+          supabase
+            .from("transactions")
+            .select("id")
+            .eq("paid_by_participant_id", participant.id)
+            .limit(1),
+          supabase
+            .from("settlements")
+            .select("id")
+            .or(
+              `from_participant_id.eq.${participant.id},to_participant_id.eq.${participant.id}`,
+            )
+            .limit(1),
+        ]);
+
+        if (splitResult.error) return handleError(splitResult.error, "checking expense history", req);
+        if (payerResult.error) return handleError(payerResult.error, "checking expense history", req);
+        if (settlementResult.error) return handleError(settlementResult.error, "checking settlement history", req);
+
+        if (
+          (splitResult.data?.length || 0) > 0 ||
+          (payerResult.data?.length || 0) > 0 ||
+          (settlementResult.data?.length || 0) > 0
+        ) {
+          return createErrorResponse(
+            409,
+            "This person has expense history and cannot be removed",
+            "CONFLICT",
+            undefined,
+            req,
+          );
+        }
+
+        const { error: deleteError } = await supabase
+          .from("participants")
+          .delete()
+          .eq("id", participant.id);
+
+        if (deleteError) {
+          return handleError(deleteError, "removing person", req);
+        }
+
+        return createSuccessResponse({ success: true }, 200, 0, req);
+      }
+
+      if (
         httpMethod === "PATCH" && participantId && isValidUUID(participantId)
       ) {
         const participant = await fetchParticipantById(supabase, participantId);
