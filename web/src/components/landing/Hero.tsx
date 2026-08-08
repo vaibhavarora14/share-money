@@ -1,22 +1,25 @@
 import type { PlatformDestination } from "../../landingContent";
+import type { SeoPage } from "../../seoPages";
 import { PlatformCta } from "./PlatformCta";
 
 export function Hero({
   primaryDestination,
   secondaryDestinations,
+  page,
 }: {
   primaryDestination: PlatformDestination;
   secondaryDestinations: PlatformDestination[];
+  page: SeoPage;
 }) {
   return (
     <section id="product" className="hero">
       <div className="container hero-shell">
         <div className="hero-intro">
           <div className="hero-title-block">
-            <p className="kicker">Shared expenses</p>
-            <h1>SharedMoney</h1>
+            <p className="kicker">{page.eyebrow}</p>
+            <h1>{page.heading}</h1>
             <p className="hero-lead">
-              Split the trip. Settle up. One shared record for group money.
+              {page.body}
             </p>
             <div className="hero-actions">
               <PlatformCta
@@ -35,10 +38,8 @@ export function Hero({
                 ))}
               </div>
             </div>
-            <div className="hero-trust-row" aria-label="Product boundaries">
-              <span>No bank link.</span>
-              <span>No payments.</span>
-              <span>Web + mobile.</span>
+            <div className="hero-trust-row" aria-label="SharedMoney highlights">
+              {page.proof.map((item) => <span key={item}>{item}</span>)}
             </div>
           </div>
         </div>
