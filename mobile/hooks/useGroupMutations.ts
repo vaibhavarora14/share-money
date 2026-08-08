@@ -80,13 +80,22 @@ export function useAddMember(onSuccess?: () => void) {
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
-    mutationFn: async (variables: { groupId: string; fullName: string; email?: string | null }) => {
+    mutationFn: async (variables: {
+      groupId: string;
+      fullName?: string;
+      email?: string | null;
+      sourceParticipantId?: string;
+    }) => {
       const response = await fetchWithAuth("/participants", {
         method: "POST",
         body: JSON.stringify({
           group_id: variables.groupId,
-          full_name: variables.fullName,
-          email: variables.email || null,
+          ...(variables.sourceParticipantId
+            ? { source_participant_id: variables.sourceParticipantId }
+            : {
+              full_name: variables.fullName,
+              email: variables.email || null,
+            }),
         }),
       });
 
@@ -99,6 +108,7 @@ export function useAddMember(onSuccess?: () => void) {
     },
     onSuccess: (_data, variables) => {
       invalidateGroupAdjacents(queryClient, variables.groupId);
+      queryClient.invalidateQueries({ queryKey: ["existing-people"] });
       onSuccess?.();
     },
   });
