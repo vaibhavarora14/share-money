@@ -5,106 +5,15 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.resolve(__dirname, "../dist");
 const indexPath = path.join(distDir, "index.html");
+const contentPath = path.resolve(__dirname, "../src/seo-content.json");
 const siteUrl = "https://sharedmoney.app";
 const appUrl = `${siteUrl}/app`;
 const ogImage = `${siteUrl}/og-sharedmoney.png`;
-
-const pages = [
-  {
-    path: "/",
-    title: "SharedMoney - Split Bills and Track Group Expenses",
-    description:
-      "SharedMoney helps friends, roommates, and travel groups split bills, track shared expenses, and see who owes who without handling payments.",
-    keywords:
-      "split bills, group expense tracker, shared expense tracker, who owes who, split expenses app",
-    eyebrow: "Shared expenses",
-    heading: "SharedMoney",
-    body:
-      "SharedMoney helps groups split bills, track shared expenses, and know who owes who. Keep one shared ledger for trips, roommates, dinner groups, and everyday shared costs while payments stay in your preferred payment app.",
-    proof: ["Trip and roommate ledgers", "Currency-specific balances", "No bank link or payment handling"],
-  },
-  {
-    path: "/split-bills",
-    title: "Split Bills Online with Friends | SharedMoney",
-    description:
-      "Split bills with friends and keep every expense, payer, participant, and balance visible in one shared ledger.",
-    keywords:
-      "split bills, split bills with friends, bill splitting app, split expenses online",
-    eyebrow: "Split bills",
-    heading: "Split bills without losing the thread.",
-    body:
-      "Add the payer, choose who joined, adjust the split, and keep the final balance readable for everyone in the group.",
-    proof: ["Equal and uneven splits", "Clear payer history", "Simple settlement records"],
-  },
-  {
-    path: "/group-expense-tracker",
-    title: "Group Expense Tracker for Friends and Families | SharedMoney",
-    description:
-      "Track group expenses for shared plans, homes, meals, and recurring costs with clear balances for every member.",
-    keywords:
-      "group expense tracker, shared expense tracker, group spending tracker, shared ledger app",
-    eyebrow: "Group expense tracker",
-    heading: "One group ledger everyone can read.",
-    body:
-      "SharedMoney keeps group costs organized by member, currency, and activity so every person can see what changed and what remains open.",
-    proof: ["Member balances", "Expense activity", "Shared group history"],
-  },
-  {
-    path: "/trip-expense-splitter",
-    title: "Trip Expense Splitter for Travel Groups | SharedMoney",
-    description:
-      "Split hotels, rides, food, tickets, and travel costs with a trip expense splitter built for changing payers and mixed currencies.",
-    keywords:
-      "trip expense splitter, travel expense splitter, vacation expense tracker, split travel costs",
-    eyebrow: "Trip expense splitter",
-    heading: "Split the trip while the trip keeps moving.",
-    body:
-      "Hotels, rides, meals, tickets, and local purchases stay in one travel ledger, even when different people pay across the trip.",
-    proof: ["Travel group balances", "Multiple currencies shown separately", "Fewer end-of-trip arguments"],
-  },
-  {
-    path: "/roommate-expense-tracker",
-    title: "Roommate Expense Tracker for Rent and Utilities | SharedMoney",
-    description:
-      "Track rent, utilities, groceries, subscriptions, and shared household costs with roommate balances that stay easy to review.",
-    keywords:
-      "roommate expense tracker, split rent app, split utilities, household expense tracker",
-    eyebrow: "Roommate expenses",
-    heading: "Roommate costs, kept calm.",
-    body:
-      "Rent, electricity, groceries, and household supplies can be tracked as they happen, so no one has to reconstruct the month later.",
-    proof: ["Monthly shared costs", "Household member balances", "Settlement history"],
-  },
-  {
-    path: "/splitwise-alternative",
-    title: "Splitwise Alternative for Shared Expenses | SharedMoney",
-    description:
-      "Looking for a Splitwise alternative? SharedMoney gives groups a simple shared ledger, clear balances, and payment-free settlement tracking.",
-    keywords:
-      "Splitwise alternative, free Splitwise alternative, shared expense app, expense splitting app",
-    eyebrow: "Splitwise alternative",
-    heading: "A simple Splitwise alternative for clear group balances.",
-    body:
-      "SharedMoney focuses on the shared record: who paid, who joined, what remains open, and when a balance was settled outside the app.",
-    proof: ["Splitwise CSV import", "No payment instruments stored", "Free shared expense tracking"],
-  },
-  {
-    path: "/in/splitwise-alternative",
-    title: "Splitwise Alternative India for Friends and Trips | SharedMoney",
-    description:
-      "SharedMoney is a Splitwise alternative for India-focused groups that track trip, roommate, and dinner expenses while settling outside the app.",
-    keywords:
-      "Splitwise alternative India, split expenses India, split bills India, group expense tracker India",
-    eyebrow: "India groups",
-    heading: "Split expenses in India, then settle your way.",
-    body:
-      "Track INR group expenses for trips, roommates, and dinner plans. When the balance is clear, settle in your preferred payment app and record it in SharedMoney.",
-    proof: ["INR-friendly examples", "UPI can happen outside the app", "Trip and roommate use cases"],
-  },
-];
+const pages = JSON.parse(await readFile(contentPath, "utf8"));
+const pagesById = new Map(pages.map((page) => [page.id, page]));
 
 function escapeHtml(value) {
-  return value
+  return String(value)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
@@ -115,59 +24,144 @@ function pageUrl(pagePath) {
   return `${siteUrl}${pagePath === "/" ? "" : pagePath}`;
 }
 
-function fallbackMarkup(page) {
-  const proofItems = page.proof
-    .map((item) => `<li>${escapeHtml(item)}</li>`)
-    .join("");
-
-  return `<main id="main-content"><section><p>${escapeHtml(page.eyebrow)}</p><h1>${escapeHtml(
-    page.heading,
-  )}</h1><p>${escapeHtml(page.body)}</p><ul>${proofItems}</ul><p><a href="${appUrl}">Open the SharedMoney web app</a></p><nav aria-label="SharedMoney legal links"><a href="/privacy">Privacy Policy</a><a href="/delete-account">Delete Account</a><a href="mailto:support@sharedmoney.app">Contact support</a></nav></section></main>`;
+function linkedPages(page) {
+  return page.related.map((id) => pagesById.get(id)).filter(Boolean);
 }
 
-function jsonLd(page) {
-  return JSON.stringify({
-    "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    name: "SharedMoney",
-    url: siteUrl,
-    applicationCategory: "FinanceApplication",
-    operatingSystem: "Android, iOS (TestFlight), Web",
-    offers: {
-      "@type": "Offer",
-      price: "0",
-      priceCurrency: "USD",
+function pageLink(page) {
+  return `<a href="${escapeHtml(page.path)}">${escapeHtml(page.heading)}</a>`;
+}
+
+function fallbackMarkup(page) {
+  const proofItems = page.proof.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+  const sections = page.sections
+    .map((section) => {
+      const bullets = section.bullets.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+      return `<section><h2>${escapeHtml(section.heading)}</h2><p>${escapeHtml(section.body)}</p><ul>${bullets}</ul></section>`;
+    })
+    .join("");
+  const faqs = page.faqs
+    .map(
+      (faq) =>
+        `<details><summary>${escapeHtml(faq.question)}</summary><p>${escapeHtml(faq.answer)}</p></details>`,
+    )
+    .join("");
+  const related = linkedPages(page).map((relatedPage) => `<li>${pageLink(relatedPage)}</li>`).join("");
+
+  return `<main id="main-content"><article class="seo-source"><header><p>${escapeHtml(page.eyebrow)}</p><h1>${escapeHtml(page.heading)}</h1><p>${escapeHtml(page.body)}</p><ul>${proofItems}</ul><p><a href="${appUrl}?utm_source=organic&utm_medium=seo&utm_campaign=${escapeHtml(page.id)}">Open the SharedMoney web app</a></p></header>${sections}<section><h2>Common questions</h2>${faqs}</section><nav aria-label="Related SharedMoney pages"><h2>Explore SharedMoney</h2><ul>${related}</ul></nav><footer><a href="/privacy">Privacy Policy</a><a href="/delete-account">Delete Account</a><a href="mailto:support@sharedmoney.app">Contact support</a></footer></article></main>`;
+}
+
+function structuredData(page) {
+  const canonical = pageUrl(page.path);
+  const breadcrumb = {
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "SharedMoney", item: siteUrl },
+      ...(page.path === "/"
+        ? []
+        : [
+            {
+              "@type": "ListItem",
+              position: 2,
+              name: page.heading,
+              item: canonical,
+            },
+          ]),
+    ],
+  };
+
+  if (page.kind === "home") {
+    return {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebSite",
+          name: "SharedMoney",
+          url: siteUrl,
+        },
+        {
+          "@type": "Organization",
+          name: "SharedMoney",
+          url: siteUrl,
+          logo: `${siteUrl}/sharedmoney-mark.svg`,
+        },
+        {
+          "@type": "SoftwareApplication",
+          name: "SharedMoney",
+          url: siteUrl,
+          applicationCategory: "FinanceApplication",
+          operatingSystem: "Android, iOS, Web",
+          offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+          description: page.description,
+        },
+      ],
+    };
+  }
+
+  const graph = [
+    {
+      "@type": "WebPage",
+      name: page.title,
+      description: page.description,
+      url: canonical,
+      isPartOf: { "@type": "WebSite", name: "SharedMoney", url: siteUrl },
+      breadcrumb,
     },
-    description: page.description,
-  });
+    breadcrumb,
+  ];
+
+  if (page.kind === "tool") {
+    graph.push({
+      "@type": "WebApplication",
+      name: page.heading,
+      url: canonical,
+      applicationCategory: "FinanceApplication",
+      operatingSystem: "Web",
+      description: page.description,
+      offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+    });
+  }
+
+  return { "@context": "https://schema.org", "@graph": graph };
+}
+
+function replaceMeta(html, selector, markup) {
+  const expression = new RegExp(`<meta\\s+${selector}[^>]*>`, "i");
+  return expression.test(html) ? html.replace(expression, markup) : html.replace("</head>", `    ${markup}\n  </head>`);
 }
 
 function renderPage(template, page) {
   const canonical = pageUrl(page.path);
+  const jsonLd = escapeHtml(JSON.stringify(structuredData(page))).replaceAll("&quot;", '"');
   let html = template
-    .replace(/<title>.*?<\/title>/s, `<title>${escapeHtml(page.title)}</title>`)
-    .replace(/<meta name="title" content=".*?" \/>/s, `<meta name="title" content="${escapeHtml(page.title)}" />`)
-    .replace(/<meta\s+name="description"\s+content=".*?"\s+\/>/s, `<meta name="description" content="${escapeHtml(page.description)}" />`)
-    .replace(/<meta\s+name="keywords"\s+content=".*?"\s+\/>/s, `<meta name="keywords" content="${escapeHtml(page.keywords)}" />`)
-    .replace(/<link rel="canonical" href=".*?" \/>/s, `<link rel="canonical" href="${canonical}" />`)
-    .replace(/<meta property="og:url" content=".*?" \/>/s, `<meta property="og:url" content="${canonical}" />`)
-    .replace(/<meta property="og:title" content=".*?" \/>/s, `<meta property="og:title" content="${escapeHtml(page.title)}" />`)
-    .replace(/<meta\s+property="og:description"\s+content=".*?"\s+\/>/s, `<meta property="og:description" content="${escapeHtml(page.description)}" />`)
-    .replace(/<meta property="og:image" content=".*?" \/>/s, `<meta property="og:image" content="${ogImage}" />`)
-    .replace(/<meta property="og:image:alt" content=".*?" \/>/s, `<meta property="og:image:alt" content="SharedMoney group balances and shared expense ledger." />`)
-    .replace(/<meta property="twitter:url" content=".*?" \/>/s, `<meta property="twitter:url" content="${canonical}" />`)
-    .replace(/<meta property="twitter:title" content=".*?" \/>/s, `<meta property="twitter:title" content="${escapeHtml(page.title)}" />`)
-    .replace(/<meta\s+property="twitter:description"\s+content=".*?"\s+\/>/s, `<meta property="twitter:description" content="${escapeHtml(page.description)}" />`)
-    .replace(/<meta property="twitter:image" content=".*?" \/>/s, `<meta property="twitter:image" content="${ogImage}" />`)
-    .replace(/<meta property="twitter:image:alt" content=".*?" \/>/s, `<meta property="twitter:image:alt" content="SharedMoney group balances and shared expense ledger." />`)
-    .replace(/<script type="application\/ld\+json">.*?<\/script>/s, `<script type="application/ld+json">${jsonLd(page)}</script>`)
+    .replace(/<title>.*?<\/title>/is, `<title>${escapeHtml(page.title)}</title>`)
+    .replace(/<meta\s+name="title"[^>]*>/i, `<meta name="title" content="${escapeHtml(page.title)}" />`)
+    .replace(/<meta\s+name="keywords"[^>]*>\s*/i, "")
+    .replace(/<link\s+rel="canonical"[^>]*>/i, `<link rel="canonical" href="${canonical}" />`)
+    .replace(/<meta\s+property="og:url"[^>]*>/i, `<meta property="og:url" content="${canonical}" />`)
+    .replace(/<meta\s+property="og:title"[^>]*>/i, `<meta property="og:title" content="${escapeHtml(page.title)}" />`)
+    .replace(/<meta\s+property="og:image"[^>]*>/i, `<meta property="og:image" content="${ogImage}" />`)
+    .replace(/<meta\s+property="og:image:alt"[^>]*>/i, `<meta property="og:image:alt" content="SharedMoney group balances and shared expense ledger." />`)
+    .replace(/<meta\s+property="twitter:url"[^>]*>/i, `<meta property="twitter:url" content="${canonical}" />`)
+    .replace(/<meta\s+property="twitter:title"[^>]*>/i, `<meta property="twitter:title" content="${escapeHtml(page.title)}" />`)
+    .replace(/<meta\s+property="twitter:image"[^>]*>/i, `<meta property="twitter:image" content="${ogImage}" />`)
+    .replace(/<meta\s+property="twitter:image:alt"[^>]*>/i, `<meta property="twitter:image:alt" content="SharedMoney group balances and shared expense ledger." />`)
+    .replace(/<script\s+type="application\/ld\+json">.*?<\/script>/is, `<script type="application/ld+json">${jsonLd}</script>`)
     .replace('<div id="root"></div>', `<div id="root">${fallbackMarkup(page)}</div>`);
+
+  html = replaceMeta(html, 'name="description"', `<meta name="description" content="${escapeHtml(page.description)}" />`);
+  html = replaceMeta(html, 'property="og:description"', `<meta property="og:description" content="${escapeHtml(page.description)}" />`);
+  html = replaceMeta(html, 'property="twitter:description"', `<meta property="twitter:description" content="${escapeHtml(page.description)}" />`);
 
   if (!html.includes('rel="canonical"')) {
     html = html.replace("</head>", `    <link rel="canonical" href="${canonical}" />\n  </head>`);
   }
 
   return html;
+}
+
+function notFoundMarkup() {
+  return `<!doctype html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="robots" content="noindex,follow" /><title>Page not found | SharedMoney</title></head><body><main><h1>Page not found</h1><p>The page you requested is not available.</p><p><a href="/">Return to SharedMoney</a></p></main></body></html>`;
 }
 
 const template = await readFile(indexPath, "utf8");
@@ -180,7 +174,8 @@ for (const page of pages) {
 }
 
 const sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${pages
-  .map((page) => `  <url><loc>${pageUrl(page.path)}</loc></url>`)
+  .map((page) => `  <url><loc>${pageUrl(page.path)}</loc><lastmod>${page.updated}</lastmod></url>`)
   .join("\n")}\n</urlset>\n`;
 
 await writeFile(path.join(distDir, "sitemap.xml"), sitemap);
+await writeFile(path.join(distDir, "404.html"), notFoundMarkup());

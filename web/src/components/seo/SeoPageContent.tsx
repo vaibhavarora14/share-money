@@ -1,0 +1,110 @@
+import { trackRelatedPageClick } from "../../analytics";
+import type { PlatformDestination } from "../../landingContent";
+import { relatedPages, type SeoPage } from "../../seoPages";
+import { PlatformCta } from "../landing/PlatformCta";
+
+export function PageHero({
+  page,
+  primaryDestination,
+}: {
+  page: SeoPage;
+  primaryDestination: PlatformDestination;
+}) {
+  return (
+    <section className="route-hero">
+      <div className="container route-hero-shell">
+        <div>
+          <p className="kicker">{page.eyebrow}</p>
+          <h1>{page.heading}</h1>
+          <p>{page.body}</p>
+          <div className="route-hero-actions">
+            <PlatformCta
+              destination={primaryDestination}
+              placement={`route_${page.id}`}
+              appearance="primary"
+            />
+          </div>
+        </div>
+        <ul aria-label={`${page.heading} highlights`}>
+          {page.proof.map((item) => <li key={item}>{item}</li>)}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+export function SeoPageContent({ page }: { page: SeoPage }) {
+  const related = relatedPages(page);
+
+  return (
+    <>
+      <section className="section seo-sections">
+        <div className="container seo-section-grid">
+          {page.sections.map((section) => (
+            <article className="seo-copy-card" key={section.heading}>
+              <h2>{section.heading}</h2>
+              <p>{section.body}</p>
+              <ul>
+                {section.bullets.map((item) => <li key={item}>{item}</li>)}
+              </ul>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="section seo-faq-section" aria-labelledby="page-faq-title">
+        <div className="container seo-faq-shell">
+          <div className="section-head">
+            <p className="kicker">Questions, answered</p>
+            <h2 id="page-faq-title">Useful details before you start.</h2>
+          </div>
+          <div className="seo-faq-list">
+            {page.faqs.map((faq) => (
+              <details key={faq.question} className="seo-faq-item">
+                <summary>{faq.question}</summary>
+                <p>{faq.answer}</p>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {related.length > 0 ? (
+        <section className="section related-section" aria-labelledby="related-pages-title">
+          <div className="container">
+            <div className="section-head">
+              <p className="kicker">Keep exploring</p>
+              <h2 id="related-pages-title">More ways to make group money clear.</h2>
+            </div>
+            <nav className="related-pages" aria-label="Related SharedMoney pages">
+              {related.map((relatedPage) => (
+                <a
+                  href={relatedPage.path}
+                  key={relatedPage.id}
+                  onClick={() => trackRelatedPageClick(page, relatedPage)}
+                >
+                  <span>{relatedPage.eyebrow}</span>
+                  <strong>{relatedPage.heading}</strong>
+                  <small>Explore</small>
+                </a>
+              ))}
+            </nav>
+          </div>
+        </section>
+      ) : null}
+    </>
+  );
+}
+
+export function NotFoundPage() {
+  return (
+    <main id="main-content" className="not-found-page">
+      <div className="container">
+        <p className="kicker">404</p>
+        <h1>That page is not here.</h1>
+        <p>Try the SharedMoney home page or explore the free calculators.</p>
+        <p><a className="cta cta-primary" href="/">Return home</a></p>
+      </div>
+    </main>
+  );
+}
