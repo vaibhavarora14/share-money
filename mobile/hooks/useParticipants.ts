@@ -166,3 +166,33 @@ export function useConnectParticipant(onSuccess?: () => void) {
     error: (mutation.error as Error | null) ?? null,
   };
 }
+
+export function useRemoveParticipant(onSuccess?: () => void) {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: async (variables: { groupId: string; participantId: string }) => {
+      const response = await fetchWithAuth(`/participants/${variables.participantId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to remove person");
+      }
+
+      return response.status === 204 ? null : response.json();
+    },
+    onSuccess: (_data, variables) => {
+      invalidateParticipantAdjacents(queryClient, variables.groupId);
+      queryClient.invalidateQueries({ queryKey: ["existing-people"] });
+      onSuccess?.();
+    },
+  });
+
+  return {
+    mutate: mutation.mutateAsync,
+    isLoading: mutation.isPending,
+    error: (mutation.error as Error | null) ?? null,
+  };
+}

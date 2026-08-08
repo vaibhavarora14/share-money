@@ -12,18 +12,17 @@ import {
 } from "react-native-paper";
 import { Participant } from "../types";
 import { formatDate } from "../utils/date";
+import { canRemovePerson } from "../utils/peoplePicker";
 import { styles } from "./MembersList.styles";
 
 interface MembersListProps {
   people: Participant[];
   currentUserId?: string;
-  /**
-   * If true, the current user can remove account-backed people.
-   */
+  /** If true, the current user can remove people from this group. */
   canManageMembers: boolean;
   removingMemberId: string | null;
   workingParticipantId?: string | null;
-  onRemove: (userId: string, email?: string) => void;
+  onRemove: (participant: Participant) => void;
   onInvite?: (participant: Participant) => void;
   onConnect?: (participant: Participant) => void;
 }
@@ -84,13 +83,11 @@ export const MembersList: React.FC<MembersListProps> = ({
           `Person ${person.id.substring(0, 8)}`;
         const isCurrentUser = person.user_id === currentUserId;
         const isActive = person.type !== "former";
-        const canRemove =
-          !!person.user_id &&
-          isActive &&
-          (canManageMembers ||
-            (isCurrentUser && canManageMembers) ||
-            isCurrentUser);
-        const isRemoving = !!person.user_id && removingMemberId === person.user_id;
+        const canRemove = canRemovePerson(person, {
+          canManageMembers,
+          currentUserId,
+        });
+        const isRemoving = removingMemberId === person.id;
         const isWorking = workingParticipantId === person.id || isRemoving;
         const canInviteOrConnect = canManageMembers && !person.user_id && !!person.email && isActive;
         const dateLabel = person.joined_at || person.created_at;
@@ -161,7 +158,7 @@ export const MembersList: React.FC<MembersListProps> = ({
                         icon="delete-outline"
                         size={24}
                         iconColor={theme.colors.error}
-                        onPress={() => person.user_id ? onRemove(person.user_id, person.email || undefined) : undefined}
+                        onPress={() => onRemove(person)}
                         style={styles.removeMemberButton}
                         disabled={removingMemberId !== null}
                       />

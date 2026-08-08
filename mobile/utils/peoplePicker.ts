@@ -6,6 +6,22 @@ export interface ExistingPerson {
   source_group_name: string;
 }
 
+interface RemovablePerson {
+  id: string;
+  type: "member" | "invited" | "former";
+  user_id?: string | null;
+}
+
+/** A person without an account can be removed by any group member who can manage people. */
+export function canRemovePerson(
+  person: RemovablePerson,
+  options: { canManageMembers: boolean; currentUserId?: string },
+): boolean {
+  if (person.type === "former") return false;
+  if (!person.user_id) return options.canManageMembers;
+  return options.canManageMembers || person.user_id === options.currentUserId;
+}
+
 /**
  * Keeps duplicate names visible by sorting their group context rather than
  * collapsing them into a single match.
