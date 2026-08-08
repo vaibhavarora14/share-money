@@ -41,6 +41,26 @@
       "source": "/join/:token",
       "destination": "/app/join/:token",
       "permanent": true
+    },
+    {
+      "source": "/privacy.html",
+      "destination": "/privacy",
+      "permanent": true
+    },
+    {
+      "source": "/delete-account.html",
+      "destination": "/delete-account",
+      "permanent": true
+    },
+    {
+      "source": "/support.html",
+      "destination": "/support",
+      "permanent": true
+    },
+    {
+      "source": "/account-deletion",
+      "destination": "/delete-account",
+      "permanent": true
     }
   ],
   "headers": [
@@ -79,6 +99,15 @@
           "value": "noindex, nofollow"
         }
       ]
+    },
+    {
+      "source": "/404.html",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, follow"
+        }
+      ]
     }
   ],
   "rewrites": [
@@ -93,10 +122,6 @@
     {
       "source": "/support",
       "destination": "/support.html"
-    },
-    {
-      "source": "/account-deletion",
-      "destination": "/delete-account.html"
     },
     {
       "source": "/app",

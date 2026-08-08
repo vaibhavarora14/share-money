@@ -7,11 +7,14 @@
     "dev": "vite",
     "build": "tsc -b && vite build && node scripts/build-seo-pages.mjs",
     "lint": "eslint .",
+    "test": "vitest run",
+    "verify:seo": "npm run build && node scripts/verify-seo-pages.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
     "@fontsource-variable/instrument-sans": "^5.3.0",
     "lucide-react": "^1.28.0",
+    "posthog-js": "^1.414.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
@@ -31,6 +34,7 @@
     "globals": "^16.5.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
-    "vite": "^7.2.4"
+    "vite": "^7.2.4",
+    "vitest": "^4.1.10"
   }
 }
