@@ -1,41 +1,51 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-    Alert,
-    Animated,
-    Dimensions,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    Pressable,
-    ScrollView,
-    Share,
-    StyleSheet,
-    View,
+  Alert,
+  Animated,
+  Dimensions,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  View,
 } from "react-native";
 import {
-    Appbar,
-    Button,
-    Divider,
-    Text,
-    TextInput,
-    useTheme,
+  ActivityIndicator,
+  Appbar,
+  Button,
+  Divider,
+  Text,
+  TextInput,
+  useTheme,
 } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WEB_MAX_WIDTH } from "../constants/layout";
 import { useAuth } from "../contexts/AuthContext";
 import { useCreateGroupShareLink } from "../hooks/useGroupInvitations";
+import { useExistingPeople } from "../hooks/useParticipants";
 import { getInviteLinkUrl } from "../utils/inviteLinks";
 import { showErrorAlert } from "../utils/errorHandling";
+import {
+  type ExistingPerson,
+  filterAndSortExistingPeople,
+} from "../utils/peoplePicker";
 
 interface AddMemberScreenProps {
   visible: boolean;
   groupId: string;
-  onAddMember: (person: { fullName: string; email?: string | null }) => Promise<any>;
+  onAddMember: (person: {
+    fullName?: string;
+    email?: string | null;
+    sourceParticipantId?: string;
+  }) => Promise<unknown>;
   onDismiss: () => void;
 }
 
-// Fixed link settings for UI-created links; the RPC stays configurable
-// server-side, the sheet just doesn't expose the knobs.
+type SheetMode = "chooser" | "create" | "existing";
+
 const LINK_MAX_USES = 10;
 const LINK_VALID_DAYS = 30;
 
@@ -45,11 +55,12 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
   onAddMember,
   onDismiss,
 }) => {
+  const [mode, setMode] = useState<SheetMode>("chooser");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
-  const [linkCopied, setLinkCopied] = useState(false);
   const [slideAnim] = useState(new Animated.Value(0));
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -57,36 +68,36 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
   const { signOut } = useAuth();
   const createShareLink = useCreateGroupShareLink();
   const useNativeDriver = Platform.OS !== "web";
+  const { data: existingPeople, isLoading: existingPeopleLoading } =
+    useExistingPeople(
+      groupId,
+      visible && mode === "existing",
+    );
 
-  // Animation effect
+  const filteredPeople = useMemo(
+    () => filterAndSortExistingPeople(existingPeople, search),
+    [existingPeople, search],
+  );
+
   useEffect(() => {
-    if (visible) {
-      Animated.spring(slideAnim, {
-        toValue: 1,
-        useNativeDriver,
-        tension: 65,
-        friction: 11,
-      }).start();
-    } else {
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 250,
-        useNativeDriver,
-      }).start();
-    }
+    Animated.spring(slideAnim, {
+      toValue: visible ? 1 : 0,
+      useNativeDriver,
+      tension: 65,
+      friction: 11,
+    }).start();
   }, [visible, slideAnim, useNativeDriver]);
 
   const handleDismiss = () => {
+    setMode("chooser");
     setFullName("");
     setEmail("");
+    setSearch("");
     setInviteLink(null);
-    setLinkCopied(false);
     onDismiss();
   };
 
   const generateInviteLink = async (): Promise<string> => {
-    // Reuse the link generated in this session so repeated Copy/Share taps
-    // don't mint a new invitation each time.
     if (inviteLink) return inviteLink;
     const token = await createShareLink.mutateAsync({
       groupId,
@@ -98,33 +109,10 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
     return url;
   };
 
-  const handleCopyLink = async () => {
-    setLoading(true);
-    try {
-      const url = await generateInviteLink();
-
-      if (Platform.OS === "web") {
-        if (typeof navigator !== "undefined" && navigator.clipboard) {
-          await navigator.clipboard.writeText(url);
-          setLinkCopied(true);
-        }
-        // Link is also shown inline below the buttons as a fallback.
-      } else {
-        // Native: the share sheet allows copying on both platforms.
-        await Share.share({ message: url, url });
-      }
-    } catch (err) {
-      showErrorAlert(err, signOut, "Error creating invite link");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleShareLink = async () => {
     setLoading(true);
     try {
       const url = await generateInviteLink();
-
       if (Platform.OS === "web") {
         if (typeof navigator !== "undefined" && navigator.share) {
           await navigator.share({
@@ -134,16 +122,18 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
           });
         } else if (typeof navigator !== "undefined" && navigator.clipboard) {
           await navigator.clipboard.writeText(url);
-          setLinkCopied(true);
+          Alert.alert(
+            "Invite link copied",
+            "Share it with the people you want to invite.",
+          );
         }
       } else {
         await Share.share({
           message: `Join my group on SharedMoney! ${url}`,
-          url, // iOS only
+          url,
         });
       }
     } catch (err) {
-      // Ignore user-cancelled shares
       const message = err instanceof Error ? err.message : "";
       if (!/abort|cancel/i.test(message)) {
         showErrorAlert(err, signOut, "Error sharing invite link");
@@ -156,29 +146,21 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
   const handleAdd = async () => {
     const trimmedName = fullName.trim();
     const trimmedEmail = email.trim();
-
     if (!trimmedName) {
       Alert.alert("Error", "Please enter a name");
       return;
     }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (trimmedEmail && !emailRegex.test(trimmedEmail)) {
+    if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
       Alert.alert("Error", "Please enter a valid email address");
       return;
     }
 
     setLoading(true);
     try {
-      await onAddMember({
-        fullName: trimmedName,
-        email: trimmedEmail || null,
-      });
-      Alert.alert(
-        "Added",
-        "This person can now be included in expenses.",
-        [{ text: "OK", onPress: handleDismiss }]
-      );
+      await onAddMember({ fullName: trimmedName, email: trimmedEmail || null });
+      Alert.alert("Added", "This person can now be included in expenses.", [
+        { text: "OK", onPress: handleDismiss },
+      ]);
     } catch (error) {
       showErrorAlert(error, signOut, "Error");
     } finally {
@@ -186,7 +168,24 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
     }
   };
 
-  const bottomSheetHeight = Math.min(screenHeight * 0.64, 560);
+  const handleAddExisting = async (person: ExistingPerson) => {
+    setLoading(true);
+    try {
+      await onAddMember({ sourceParticipantId: person.id });
+      Alert.alert("Added", `${person.full_name} was added to this group.`, [
+        { text: "OK", onPress: handleDismiss },
+      ]);
+    } catch (error) {
+      showErrorAlert(error, signOut, "Error adding person");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const isExistingPicker = mode === "existing";
+  const bottomSheetHeight = isExistingPicker
+    ? screenHeight
+    : Math.min(screenHeight * 0.64, 560);
   const translateY = slideAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [bottomSheetHeight, 0],
@@ -200,230 +199,389 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
       onRequestClose={handleDismiss}
     >
       <View style={styles.modalOverlay}>
-        <Pressable
-          style={styles.backdrop}
-          onPress={handleDismiss}
-        />
+        {!isExistingPicker && (
+          <Pressable style={styles.backdrop} onPress={handleDismiss} />
+        )}
         <Animated.View
           style={[
-            styles.bottomSheet,
+            styles.sheet,
+            isExistingPicker && styles.pickerSheet,
             {
               height: bottomSheetHeight,
               transform: [{ translateY }],
               paddingBottom: insets.bottom,
+              paddingTop: isExistingPicker ? insets.top : 0,
               backgroundColor: theme.colors.surface,
             },
           ]}
         >
-          <View style={styles.handleContainer}>
-            <View
-              style={[
-                styles.handle,
-                { backgroundColor: theme.colors.outlineVariant },
-              ]}
-            />
-          </View>
-          <Appbar.Header style={styles.header}>
-            <Appbar.Content title="Add person" titleStyle={{ fontWeight: 'bold' }} />
-            <Appbar.Action icon="close" onPress={handleDismiss} />
-          </Appbar.Header>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
-            style={styles.keyboardView}
-            keyboardVerticalOffset={0}
-          >
-            <ScrollView
-              style={styles.scrollView}
-              contentContainerStyle={styles.scrollContent}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              <Text
-                variant="bodyMedium"
-                style={[
-                  styles.subtitle,
-                  { color: theme.colors.onSurfaceVariant },
-                ]}
-              >
-                Add them now and include them in expenses. Email is optional.
-              </Text>
-
-              <TextInput
-                label="Name"
-                value={fullName}
-                onChangeText={setFullName}
-                mode="outlined"
-                autoCapitalize="words"
-                disabled={loading}
-                style={styles.input}
-                left={<TextInput.Icon icon="account" />}
-                placeholder="Ayaan"
-                testID="person-name-input"
-              />
-
-              <TextInput
-                label="Email (optional)"
-                value={email}
-                onChangeText={setEmail}
-                mode="outlined"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-                disabled={loading}
-                style={styles.input}
-                left={<TextInput.Icon icon="email" />}
-                placeholder="ayaan@example.com"
-                testID="person-email-input"
-              />
-
-              <Button
-                mode="contained"
-                onPress={handleAdd}
-                disabled={loading}
-                loading={loading}
-                style={styles.addButton}
-                testID="add-member-submit-button"
-              >
-                Add person
-              </Button>
-
-              <View style={styles.dividerRow}>
-                <Divider style={styles.dividerLine} />
-                <Text style={{ marginHorizontal: 16, color: theme.colors.outline }}>
-                  OR
-                </Text>
-                <Divider style={styles.dividerLine} />
+          {isExistingPicker
+            ? (
+              <View style={styles.pickerContent}>
+                <Appbar.Header style={styles.header}>
+                  <Appbar.BackAction onPress={() => setMode("chooser")} />
+                  <Appbar.Content
+                    title="Choose existing person"
+                    titleStyle={styles.title}
+                  />
+                  <Appbar.Action icon="close" onPress={handleDismiss} />
+                </Appbar.Header>
+                <View style={styles.pickerBody}>
+                  <TextInput
+                    mode="outlined"
+                    value={search}
+                    onChangeText={setSearch}
+                    placeholder="Search people"
+                    left={<TextInput.Icon icon="magnify" />}
+                    autoCapitalize="words"
+                    disabled={loading}
+                    accessibilityLabel="Search existing people"
+                  />
+                  <Text
+                    variant="labelLarge"
+                    style={[styles.sectionLabel, {
+                      color: theme.colors.onSurfaceVariant,
+                    }]}
+                  >
+                    People you’ve added before
+                  </Text>
+                </View>
+                <ScrollView
+                  contentContainerStyle={styles.peopleList}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {existingPeopleLoading
+                    ? <ActivityIndicator style={styles.loadingIndicator} />
+                    : filteredPeople.length > 0
+                    ? (
+                      filteredPeople.map((person) => (
+                        <Pressable
+                          key={person.id}
+                          onPress={() => handleAddExisting(person)}
+                          disabled={loading}
+                          style={(
+                            { pressed },
+                          ) => [styles.personRow, pressed && styles.pressedRow]}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Add ${person.full_name} from ${person.source_group_name}`}
+                        >
+                          <View
+                            style={[styles.avatar, {
+                              backgroundColor: theme.colors.primaryContainer,
+                            }]}
+                          >
+                            <Text
+                              style={{
+                                color: theme.colors.onPrimaryContainer,
+                                fontWeight: "700",
+                              }}
+                            >
+                              {person.full_name.slice(0, 2).toUpperCase()}
+                            </Text>
+                          </View>
+                          <View style={styles.personText}>
+                            <Text variant="bodyLarge">{person.full_name}</Text>
+                            <Text
+                              variant="bodySmall"
+                              style={{ color: theme.colors.onSurfaceVariant }}
+                            >
+                              Also in {person.source_group_name}
+                            </Text>
+                          </View>
+                          <Appbar.Action
+                            icon="chevron-right"
+                            onPress={() => handleAddExisting(person)}
+                          />
+                        </Pressable>
+                      ))
+                    )
+                    : (
+                      <View style={styles.emptyState}>
+                        <Text variant="titleMedium">
+                          No people to reuse yet
+                        </Text>
+                        <Text
+                          style={{
+                            color: theme.colors.onSurfaceVariant,
+                            textAlign: "center",
+                          }}
+                        >
+                          Create a person once, then reuse them in your other
+                          groups.
+                        </Text>
+                        <Button
+                          mode="outlined"
+                          onPress={() => setMode("create")}
+                          icon="account-plus"
+                        >
+                          Create new person
+                        </Button>
+                      </View>
+                    )}
+                </ScrollView>
               </View>
-
-              <View style={styles.linkButtonsRow}>
-                <Button
-                  mode="outlined"
-                  onPress={handleCopyLink}
-                  disabled={loading}
-                  loading={createShareLink.isPending}
-                  icon="content-copy"
-                  style={styles.linkButton}
-                  testID="copy-invite-link-button"
-                >
-                  {Platform.OS === "web" && linkCopied ? "Copied!" : "Copy invite link"}
-                </Button>
-                <Button
-                  mode="outlined"
-                  onPress={handleShareLink}
-                  disabled={loading}
-                  loading={createShareLink.isPending}
-                  icon="share-variant"
-                  style={styles.linkButton}
-                  testID="share-invite-link-button"
-                >
-                  Invite to SharedMoney
-                </Button>
-              </View>
-
-              {inviteLink && (
-                <Text
-                  variant="bodySmall"
-                  selectable
-                  style={[styles.linkPreview, { color: theme.colors.primary }]}
-                >
-                  {inviteLink}
-                </Text>
-              )}
-
-              <Text
-                variant="bodySmall"
-                style={[styles.linkHint, { color: theme.colors.onSurfaceVariant }]}
-              >
-                {`Link lets up to ${LINK_MAX_USES} people join · valid ${LINK_VALID_DAYS} days`}
-              </Text>
-            </ScrollView>
-          </KeyboardAvoidingView>
+            )
+            : (
+              <>
+                <View style={styles.handleContainer}>
+                  <View
+                    style={[styles.handle, {
+                      backgroundColor: theme.colors.outlineVariant,
+                    }]}
+                  />
+                </View>
+                <Appbar.Header style={styles.header}>
+                  {mode === "create" && (
+                    <Appbar.BackAction onPress={() => setMode("chooser")} />
+                  )}
+                  <Appbar.Content
+                    title="Add people"
+                    titleStyle={styles.title}
+                  />
+                  <Appbar.Action icon="close" onPress={handleDismiss} />
+                </Appbar.Header>
+                {mode === "chooser"
+                  ? (
+                    <View style={styles.chooserContent}>
+                      <Text
+                        style={[styles.subtitle, {
+                          color: theme.colors.onSurfaceVariant,
+                        }]}
+                      >
+                        Reuse someone you already added, or create someone new.
+                      </Text>
+                      <ChoiceCard
+                        icon="account-group"
+                        title="Choose existing person"
+                        description="From another group"
+                        primary
+                        onPress={() => setMode("existing")}
+                      />
+                      <ChoiceCard
+                        icon="account-plus"
+                        title="Create new person"
+                        description="Add someone new to this group"
+                        onPress={() => setMode("create")}
+                      />
+                      <View style={styles.dividerRow}>
+                        <Divider style={styles.dividerLine} />
+                        <Text
+                          style={{
+                            marginHorizontal: 16,
+                            color: theme.colors.outline,
+                          }}
+                        >
+                          OR
+                        </Text>
+                        <Divider style={styles.dividerLine} />
+                      </View>
+                      <Button
+                        mode="outlined"
+                        onPress={handleShareLink}
+                        disabled={loading}
+                        loading={createShareLink.isPending}
+                        icon="share-variant"
+                      >
+                        Invite to SharedMoney
+                      </Button>
+                      <Text
+                        style={[styles.linkHint, {
+                          color: theme.colors.onSurfaceVariant,
+                        }]}
+                      >
+                        {`Send a link — up to ${LINK_MAX_USES} people · valid ${LINK_VALID_DAYS} days`}
+                      </Text>
+                    </View>
+                  )
+                  : (
+                    <KeyboardAvoidingView
+                      behavior={Platform.OS === "ios" ? "padding" : "height"}
+                      style={styles.keyboardView}
+                    >
+                      <ScrollView
+                        contentContainerStyle={styles.formContent}
+                        keyboardShouldPersistTaps="handled"
+                      >
+                        <Text
+                          style={[styles.subtitle, {
+                            color: theme.colors.onSurfaceVariant,
+                          }]}
+                        >
+                          Add them now and include them in expenses. Email is
+                          optional.
+                        </Text>
+                        <TextInput
+                          label="Name"
+                          value={fullName}
+                          onChangeText={setFullName}
+                          mode="outlined"
+                          autoCapitalize="words"
+                          disabled={loading}
+                          style={styles.input}
+                          left={<TextInput.Icon icon="account" />}
+                          placeholder="Ayaan"
+                          testID="person-name-input"
+                        />
+                        <TextInput
+                          label="Email (optional)"
+                          value={email}
+                          onChangeText={setEmail}
+                          mode="outlined"
+                          keyboardType="email-address"
+                          autoCapitalize="none"
+                          autoComplete="email"
+                          disabled={loading}
+                          style={styles.input}
+                          left={<TextInput.Icon icon="email" />}
+                          placeholder="ayaan@example.com"
+                          testID="person-email-input"
+                        />
+                        <Button
+                          mode="contained"
+                          onPress={handleAdd}
+                          disabled={loading}
+                          loading={loading}
+                          style={styles.addButton}
+                          testID="add-member-submit-button"
+                        >
+                          Add person
+                        </Button>
+                      </ScrollView>
+                    </KeyboardAvoidingView>
+                  )}
+              </>
+            )}
         </Animated.View>
       </View>
     </Modal>
   );
 };
 
+function ChoiceCard({
+  icon,
+  title,
+  description,
+  primary = false,
+  onPress,
+}: {
+  icon: string;
+  title: string;
+  description: string;
+  primary?: boolean;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.choiceCard,
+        { borderColor: primary ? theme.colors.primary : theme.colors.outline },
+        pressed && styles.pressedRow,
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}. ${description}`}
+    >
+      <View
+        style={[styles.choiceIcon, {
+          backgroundColor: theme.colors.surfaceVariant,
+        }]}
+      >
+        <Appbar.Action
+          icon={icon}
+          onPress={onPress}
+          color={theme.colors.primary}
+        />
+      </View>
+      <View style={styles.personText}>
+        <Text variant="titleSmall">{title}</Text>
+        <Text
+          variant="bodySmall"
+          style={{ color: theme.colors.onSurfaceVariant }}
+        >
+          {description}
+        </Text>
+      </View>
+      <Appbar.Action icon="chevron-right" onPress={onPress} />
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    width: "100%",
-    justifyContent: "flex-end",
-  },
+  modalOverlay: { flex: 1, width: "100%", justifyContent: "flex-end" },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
-  bottomSheet: {
+  sheet: {
     width: "100%",
     maxWidth: WEB_MAX_WIDTH,
     alignSelf: "center",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: -2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
     elevation: 5,
   },
-  handleContainer: {
+  pickerSheet: {
+    maxWidth: WEB_MAX_WIDTH,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+  },
+  handleContainer: { alignItems: "center", paddingTop: 8, paddingBottom: 4 },
+  handle: { width: 40, height: 4, borderRadius: 2 },
+  header: { elevation: 0, backgroundColor: "transparent" },
+  title: { fontWeight: "700" },
+  chooserContent: { paddingHorizontal: 20, paddingBottom: 24 },
+  formContent: { padding: 20, paddingBottom: 32 },
+  subtitle: { textAlign: "center", marginBottom: 20 },
+  choiceCard: {
+    minHeight: 86,
+    borderWidth: 1.5,
+    borderRadius: 14,
+    flexDirection: "row",
     alignItems: "center",
-    paddingTop: 8,
-    paddingBottom: 4,
+    paddingHorizontal: 12,
+    marginBottom: 12,
   },
-  handle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-  },
-  header: {
-    elevation: 0,
-    backgroundColor: "transparent",
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 20,
-    paddingBottom: 32,
-  },
-  subtitle: {
-    textAlign: "center",
-    marginBottom: 24,
-  },
-  input: {
-    marginBottom: 16,
-  },
-  addButton: {
-    marginTop: 8,
+  choiceIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
   },
   dividerRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginVertical: 24,
+    marginVertical: 18,
   },
-  dividerLine: {
-    flex: 1,
-  },
-  linkButtonsRow: {
+  dividerLine: { flex: 1 },
+  linkHint: { textAlign: "center", marginTop: 10, fontSize: 12 },
+  keyboardView: { flex: 1 },
+  input: { marginBottom: 16 },
+  addButton: { marginTop: 8 },
+  pickerContent: { flex: 1 },
+  pickerBody: { paddingHorizontal: 20 },
+  sectionLabel: { marginTop: 24, marginBottom: 8 },
+  peopleList: { paddingBottom: 32 },
+  personRow: {
+    minHeight: 72,
     flexDirection: "row",
-    gap: 12,
+    alignItems: "center",
+    paddingHorizontal: 20,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "rgba(128, 128, 128, 0.25)",
   },
-  linkButton: {
-    flex: 1,
+  pressedRow: { opacity: 0.7 },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
   },
-  linkPreview: {
-    textAlign: "center",
-    marginTop: 12,
-  },
-  linkHint: {
-    textAlign: "center",
-    marginTop: 12,
-  },
+  personText: { flex: 1, gap: 2 },
+  loadingIndicator: { marginTop: 32 },
+  emptyState: { padding: 32, gap: 12, alignItems: "center" },
 });
