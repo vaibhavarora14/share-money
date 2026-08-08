@@ -457,7 +457,11 @@ function AppContent() {
     }
   };
 
-  const handleAddMember = async (person: { fullName: string; email?: string | null }) => {
+  const handleAddMember = async (person: {
+    fullName?: string;
+    email?: string | null;
+    sourceParticipantId?: string;
+  }) => {
     if (!selectedGroup) {
       throw new Error("Invalid request");
     }
@@ -466,6 +470,7 @@ function AppContent() {
       groupId: selectedGroup.id,
       fullName: person.fullName,
       email: person.email || null,
+      sourceParticipantId: person.sourceParticipantId,
     });
 
     // Always trigger invitations refresh after adding a member
