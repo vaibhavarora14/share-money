@@ -7,7 +7,9 @@ function invalidateGroupAdjacents(queryClient: QueryClient, groupId?: string) {
   queryClient.invalidateQueries({ queryKey: queryKeys.groups });
   if (!groupId) return;
   queryClient.invalidateQueries({ queryKey: queryKeys.group(groupId) });
-  queryClient.invalidateQueries({ queryKey: queryKeys.transactionsFeed(groupId) });
+  queryClient.invalidateQueries({
+    queryKey: queryKeys.transactionsFeed(groupId),
+  });
   queryClient.invalidateQueries({ queryKey: queryKeys.groupStats(groupId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.balances(groupId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.activity(groupId) });
@@ -80,13 +82,22 @@ export function useAddMember(onSuccess?: () => void) {
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
-    mutationFn: async (variables: { groupId: string; fullName: string; email?: string | null }) => {
+    mutationFn: async (variables: {
+      groupId: string;
+      fullName?: string;
+      email?: string | null;
+      sourceParticipantId?: string;
+    }) => {
       const response = await fetchWithAuth("/participants", {
         method: "POST",
         body: JSON.stringify({
           group_id: variables.groupId,
-          full_name: variables.fullName,
-          email: variables.email || null,
+          ...(variables.sourceParticipantId
+            ? { source_participant_id: variables.sourceParticipantId }
+            : {
+              full_name: variables.fullName,
+              email: variables.email || null,
+            }),
         }),
       });
 
@@ -99,6 +110,7 @@ export function useAddMember(onSuccess?: () => void) {
     },
     onSuccess: (_data, variables) => {
       invalidateGroupAdjacents(queryClient, variables.groupId);
+      queryClient.invalidateQueries({ queryKey: ["existing-people"] });
       onSuccess?.();
     },
   });
@@ -117,7 +129,7 @@ export function useRemoveMember(onSuccess?: () => void) {
     mutationFn: async (variables: { groupId: string; userId: string }) => {
       const response = await fetchWithAuth(
         `/group-members?group_id=${variables.groupId}&user_id=${variables.userId}`,
-        { method: "DELETE" }
+        { method: "DELETE" },
       );
 
       if (!response.ok && response.status !== 204) {

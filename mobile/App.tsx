@@ -12,8 +12,8 @@ import React, { useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import {
   Platform,
-  Text as RNText,
   StyleSheet,
+  Text as RNText,
   useColorScheme,
   View,
 } from "react-native";
@@ -105,16 +105,19 @@ function AppContent() {
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [showAddMember, setShowAddMember] = useState(false);
   const [currentRoute, setCurrentRoute] = useState<string>("groups");
-  const [invitationsRefreshTrigger, setInvitationsRefreshTrigger] =
-    useState<number>(0);
+  const [invitationsRefreshTrigger, setInvitationsRefreshTrigger] = useState<
+    number
+  >(0);
   const [groupRefreshTrigger, setGroupRefreshTrigger] = useState<number>(0);
   const [editingTransaction, setEditingTransaction] = useState<any>(null);
   const [banner, setBanner] = useState<BannerNotice | null>(null);
   const dismissBanner = React.useCallback(() => setBanner(null), []);
-  const [statsContext, setStatsContext] = useState<{
-    groupId: string;
-    mode: GroupStatsMode;
-  } | null>(null);
+  const [statsContext, setStatsContext] = useState<
+    {
+      groupId: string;
+      mode: GroupStatsMode;
+    } | null
+  >(null);
   const prevSessionRef = React.useRef<Session | null>(null);
   const groupsListRefetchRef = React.useRef<(() => void) | null>(null);
   const lastLoggedStateRef = React.useRef<string | null>(null);
@@ -146,7 +149,7 @@ function AppContent() {
         }),
       ]);
     },
-    [queryClientInstance]
+    [queryClientInstance],
   );
 
   // Clear and isolate cache on logout
@@ -211,14 +214,15 @@ function AppContent() {
         // auth flow is what allowed re-processing (remounts, url events) to
         // yank users back to a join screen mid-sign-in.
         await AsyncStorage.setItem(PENDING_INVITE_TOKEN_KEY, token).catch(
-          () => {}
+          () => {},
         );
         clearJoinPathFromWebUrl();
       }
     };
 
-    const subscription = Linking.addEventListener("url", (event) =>
-      handleUrl(event.url)
+    const subscription = Linking.addEventListener(
+      "url",
+      (event) => handleUrl(event.url),
     );
 
     if (!initialUrlHandledRef.current) {
@@ -363,7 +367,11 @@ function AppContent() {
     }
   };
 
-  const handleAddMember = async (person: { fullName: string; email?: string | null }) => {
+  const handleAddMember = async (person: {
+    fullName?: string;
+    email?: string | null;
+    sourceParticipantId?: string;
+  }) => {
     if (!selectedGroup) {
       throw new Error("Invalid request");
     }
@@ -372,6 +380,7 @@ function AppContent() {
       groupId: selectedGroup.id,
       fullName: person.fullName,
       email: person.email || null,
+      sourceParticipantId: person.sourceParticipantId,
     });
 
     // Always trigger invitations refresh after adding a member
@@ -689,15 +698,14 @@ if (!process.env.EXPO_PUBLIC_SENTRY_DSN) {
   // In dev, make it very obvious that Sentry is not configured.
   // eslint-disable-next-line no-console
   console.warn(
-    `[Sentry] EXPO_PUBLIC_SENTRY_DSN is not set; Sentry will not be initialized (env=${env}).`
+    `[Sentry] EXPO_PUBLIC_SENTRY_DSN is not set; Sentry will not be initialized (env=${env}).`,
   );
 } else {
   Sentry.init({
     dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
 
     // Explicit environment so dev vs prod are separated in Sentry
-    environment:
-      process.env.EXPO_PUBLIC_SENTRY_ENV ||
+    environment: process.env.EXPO_PUBLIC_SENTRY_ENV ||
       (__DEV__ ? "development" : "production"),
 
     // Errors & sessions
@@ -707,7 +715,7 @@ if (!process.env.EXPO_PUBLIC_SENTRY_DSN) {
 
     // Performance
     tracesSampleRate: Number(
-      process.env.EXPO_PUBLIC_SENTRY_TRACES_SAMPLE_RATE ?? "0.1"
+      process.env.EXPO_PUBLIC_SENTRY_TRACES_SAMPLE_RATE ?? "0.1",
     ),
     integrations: [
       // Cast through `any` to avoid TypeScript issues with the
@@ -724,10 +732,10 @@ if (!process.env.EXPO_PUBLIC_SENTRY_DSN) {
     // Session Replay
     // Capture a portion of sessions and 100% of sessions with an error.
     replaysSessionSampleRate: Number(
-      process.env.EXPO_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE ?? "0.1"
+      process.env.EXPO_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE ?? "0.1",
     ),
     replaysOnErrorSampleRate: Number(
-      process.env.EXPO_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE ?? "1.0"
+      process.env.EXPO_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE ?? "1.0",
     ),
   });
 }
