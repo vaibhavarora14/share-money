@@ -32,7 +32,8 @@
   "submit": {
     "production": {
       "android": {
-        "track": "production"
+        "track": "internal",
+        "releaseStatus": "completed"
       },
       "ios": {
         "appleId": "varora1406@gmail.com",
@@ -43,6 +44,17 @@
     "internal": {
       "android": {
         "track": "internal",
+        "releaseStatus": "completed"
+      },
+      "ios": {
+        "appleId": "varora1406@gmail.com",
+        "ascAppId": "6755923591",
+        "appleTeamId": "BQ8LZKL6TG"
+      }
+    },
+    "store": {
+      "android": {
+        "track": "production",
         "releaseStatus": "completed"
       },
       "ios": {
