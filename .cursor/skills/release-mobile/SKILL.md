@@ -38,7 +38,8 @@ Release progress:
 - [ ] 6. Build local Android `.aab`
 - [ ] 7. Build local iOS `.ipa`
 - [ ] 8. Submit/release local artifacts with `eas submit --path`
-- [ ] 9. Report artifact paths, submission status, and manual follow-ups
+- [ ] 9. Add and verify release notes in Play Console and App Store Connect
+- [ ] 10. Report artifact paths, submission status, notes, and manual follow-ups
 ```
 
 ## 1. Inspect worktree
@@ -114,13 +115,23 @@ Guidelines:
   or promotional language.
 - Android Play release notes are limited to 500 Unicode characters per language.
   Use `<en-US>...</en-US>` if entering notes manually in Play Console.
-- iOS/TestFlight notes should be entered manually in App Store Connect unless
-  the account supports EAS changelog submission.
-- EAS Submit uploads Android binaries but does **not** manage Play release notes.
-  For Android, add notes in Play Console after submit, or switch the submit
-  profile to `releaseStatus: "draft"` when notes must be entered before rollout.
-  Fastlane `supply` can also automate Play changelogs via
-  `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`.
+- Treat release notes as a **required release step**, not a manual follow-up.
+  EAS Submit uploads binaries but does not reliably add notes to either store.
+  After each successful submission, add the drafted text in the relevant store
+  console and verify the saved text is visible before declaring the release complete.
+- Android: open Play Console in the in-app browser, go to the submitted track
+  and version code, enter the English (US) release notes, save them, and verify
+  the saved notes. For an internal-track release, update the internal release;
+  for production, update the production release. Do not claim notes were added
+  merely because the AAB upload succeeded.
+- iOS: after App Store Connect finishes processing the upload, open the build in
+  TestFlight, populate **What to Test** with the drafted notes, save, and verify
+  the saved text. If Apple processing has not completed, wait or report the
+  precise pending state and keep the browser open for handoff.
+- If browser authentication, permissions, or a store-side validation blocks the
+  edit, stop and report the blocker. Never silently downgrade the requirement to
+  a suggested manual task. Do not use `eas submit --what-to-test` by default;
+  add TestFlight notes in App Store Connect instead.
 
 ## 5. Quality gate
 
@@ -199,7 +210,7 @@ npx eas-cli@latest build \
 - Do not submit artifacts built from a dirty worktree unless the dirty files are
   only untracked final `.aab`/`.ipa` outputs.
 
-## 8. Submit/release with EAS
+## 8. Submit/release with EAS, then apply release notes
 
 Submit only the local artifacts. Do not rebuild in EAS cloud during submit:
 
@@ -238,6 +249,22 @@ npx eas-cli@latest submit \
 - If submit fails after a valid local artifact is produced, rerun only
   `eas submit --path`; do not rebuild unless the artifact itself is invalid.
 
+### Mandatory store-note application
+
+Once both submissions finish, use the in-app browser to apply the notes drafted
+in Step 4. Prefer a store API or CLI only when it explicitly supports editing
+the required note field; otherwise use the browser UI.
+
+1. **Play Console:** choose the exact submitted track and version code, enter
+   the English (US) notes, save, then re-open the release details and confirm
+   the text persisted.
+2. **App Store Connect:** wait for the exact iOS build to finish processing,
+   choose it in TestFlight, enter **What to Test**, save, then re-open it and
+   confirm the text persisted.
+3. Record the store URLs and the exact note text in the final report. If either
+   store cannot be updated, report it as a release blocker with the precise
+   state and leave the relevant browser tab open for the user.
+
 ## 9. Fallback cloud workflow
 
 Use `.github/workflows/deploy-mobile.yml` only when local builds are impossible
@@ -262,7 +289,8 @@ Return:
 - Local artifact paths and file sizes
 - EAS submission status for Android and iOS
 - Play internal + TestFlight / ASC links when available
-- Release notes text and whether it was applied to TestFlight and Play
+- Release notes text, store URLs, and explicit verification that it was applied
+  to the submitted Android track and TestFlight build
 - Manual follow-ups: Apple processing, device smoke-test (sign-in, sync,
   Spend widget), **Submit for Review** / promote beyond internal remain manual
 
