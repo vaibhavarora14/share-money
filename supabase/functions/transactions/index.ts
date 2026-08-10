@@ -131,6 +131,25 @@ function parsePositiveInt(input: string | null): number | null {
   return parsed;
 }
 
+async function activateGroupFromManualExpense(supabase: any, groupId: string): Promise<void> {
+  const { error } = await supabase
+    .from('groups')
+    .update({
+      activated_at: new Date().toISOString(),
+      activation_method: 'manual_expense',
+    })
+    .eq('id', groupId)
+    .is('activated_at', null);
+
+  if (error) {
+    log.warn('Failed to mark group as activated after manual expense', 'transaction-creation', {
+      groupId,
+      error: error.message,
+      code: error.code,
+    });
+  }
+}
+
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -528,6 +547,10 @@ Deno.serve(async (req: Request) => {
         } else {
           responseTransaction.split_among = [];
         }
+      }
+
+      if (transactionData.group_id && transactionData.type === 'expense') {
+        await activateGroupFromManualExpense(supabase, transactionData.group_id);
       }
 
       return createSuccessResponse(responseTransaction, 201, 0, req);

@@ -45,9 +45,19 @@ interface ImportSettlement {
 }
 
 interface ImportRequest {
+  import_id?: string;
   group_id: string;
   expenses: ImportExpense[];
   settlements: ImportSettlement[];
+}
+
+interface StoredImport {
+  id: string;
+  group_id: string;
+  status: 'processing' | 'completed' | 'failed';
+  imported_expenses: number;
+  imported_settlements: number;
+  activated: boolean;
 }
 
 const MAX_IMPORT_ITEMS = 2000;
@@ -56,6 +66,47 @@ const MAX_DESCRIPTION_LENGTH = 1000;
 const MAX_CATEGORY_LENGTH = 50; // transactions.category is VARCHAR(50)
 const MAX_NOTES_LENGTH = 1000;
 const SPLIT_SUM_TOLERANCE = 0.02;
+
+async function markImportFailed(supabase: any, importId: string | undefined): Promise<void> {
+  if (!importId) return;
+
+  const { error } = await supabase
+    .from('splitwise_imports')
+    .update({ status: 'failed', updated_at: new Date().toISOString() })
+    .eq('id', importId)
+    .eq('status', 'processing');
+
+  if (error) {
+    log.warn('Failed to mark Splitwise import as failed', 'import-splitwise', {
+      importId,
+      error: error.message,
+      code: error.code,
+    });
+  }
+}
+
+async function activateImportedGroup(supabase: any, groupId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('groups')
+    .update({
+      activated_at: new Date().toISOString(),
+      activation_method: 'splitwise_import',
+    })
+    .eq('id', groupId)
+    .is('activated_at', null)
+    .select('id');
+
+  if (error) {
+    log.warn('Failed to mark group as activated after Splitwise import', 'import-splitwise', {
+      groupId,
+      error: error.message,
+      code: error.code,
+    });
+    return false;
+  }
+
+  return (data || []).length > 0;
+}
 
 function isValidAmount(value: unknown): value is number {
   return (
@@ -175,6 +226,9 @@ Deno.serve(async (req: Request) => {
     return createEmptyResponse(200, req);
   }
 
+  let importId: string | undefined;
+  let importReservationStarted = false;
+
   try {
     if (req.method !== 'POST') {
       return createErrorResponse(405, 'Method not allowed', 'METHOD_NOT_ALLOWED', undefined, req);
@@ -209,6 +263,11 @@ Deno.serve(async (req: Request) => {
     if (!importData.group_id || !isValidUUID(importData.group_id)) {
       return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR', undefined, req);
     }
+
+    if (importData.import_id !== undefined && !isValidUUID(importData.import_id)) {
+      return createErrorResponse(400, 'Invalid import_id format. Expected UUID.', 'VALIDATION_ERROR', undefined, req);
+    }
+    importId = importData.import_id;
 
     const expenses = Array.isArray(importData.expenses) ? importData.expenses : [];
     const settlements = Array.isArray(importData.settlements) ? importData.settlements : [];
@@ -277,6 +336,64 @@ Deno.serve(async (req: Request) => {
       return createErrorResponse(400, `Invalid participant_ids: ${invalidParticipantIds.join(', ')}`, 'VALIDATION_ERROR', undefined, req);
     }
 
+    if (importId) {
+      const { data: existingImport, error: existingImportError } = await supabase
+        .from('splitwise_imports')
+        .select('id, group_id, status, imported_expenses, imported_settlements, activated')
+        .eq('id', importId)
+        .maybeSingle();
+
+      if (existingImportError) {
+        return handleError(existingImportError, 'checking Splitwise import idempotency', req);
+      }
+
+      if (existingImport) {
+        const storedImport = existingImport as StoredImport;
+        if (storedImport.group_id !== importData.group_id) {
+          return createErrorResponse(409, 'That import id is already associated with another group', 'CONFLICT', undefined, req);
+        }
+
+        if (storedImport.status === 'completed') {
+          return createSuccessResponse(
+            {
+              import_id: importId,
+              imported_expenses: storedImport.imported_expenses,
+              imported_settlements: storedImport.imported_settlements,
+              activated: storedImport.activated,
+              duplicate: true,
+            },
+            200,
+            0,
+            req,
+          );
+        }
+
+        if (storedImport.status === 'processing') {
+          return createErrorResponse(409, 'This import is already being processed. Please wait before trying again.', 'CONFLICT', undefined, req);
+        }
+
+        const { error: retryError } = await supabase
+          .from('splitwise_imports')
+          .update({ status: 'processing', updated_at: new Date().toISOString() })
+          .eq('id', importId)
+          .eq('status', 'failed');
+
+        if (retryError) {
+          return handleError(retryError, 'restarting Splitwise import', req);
+        }
+      } else {
+        const { error: reserveError } = await supabase
+          .from('splitwise_imports')
+          .insert({ id: importId, group_id: importData.group_id, created_by: user.id });
+
+        if (reserveError) {
+          return handleError(reserveError, 'reserving Splitwise import', req);
+        }
+      }
+
+      importReservationStarted = true;
+    }
+
     // Insert transactions in bulk. Postgres INSERT ... RETURNING preserves the
     // order of the VALUES list, so returned ids line up with `expenses`.
     let insertedTransactionIds: number[] = [];
@@ -300,6 +417,7 @@ Deno.serve(async (req: Request) => {
         .select('id');
 
       if (transactionsInsertError || !insertedTransactions || insertedTransactions.length !== expenses.length) {
+        await markImportFailed(supabase, importId);
         return handleError(
           transactionsInsertError || new Error('Transaction insert returned unexpected row count'),
           'importing transactions',
@@ -323,6 +441,7 @@ Deno.serve(async (req: Request) => {
 
       if (splitsInsertError) {
         await rollbackTransactions(supabase, insertedTransactionIds);
+        await markImportFailed(supabase, importId);
         log.error('Failed to insert splits during Splitwise import', 'import-splitwise', {
           groupId: importData.group_id,
           error: splitsInsertError.message,
@@ -351,6 +470,7 @@ Deno.serve(async (req: Request) => {
         // Keep the import all-or-nothing: undo the transactions inserted above
         // (splits are removed via ON DELETE CASCADE).
         await rollbackTransactions(supabase, insertedTransactionIds);
+        await markImportFailed(supabase, importId);
         log.error('Failed to insert settlements during Splitwise import', 'import-splitwise', {
           groupId: importData.group_id,
           error: settlementsInsertError.message,
@@ -360,22 +480,57 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    const activated = await activateImportedGroup(supabase, importData.group_id);
+
+    if (importId) {
+      const { error: completeImportError } = await supabase
+        .from('splitwise_imports')
+        .update({
+          status: 'completed',
+          imported_expenses: expenses.length,
+          imported_settlements: settlements.length,
+          activated,
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', importId)
+        .eq('status', 'processing');
+
+      if (completeImportError) {
+        await markImportFailed(supabase, importId);
+        return handleError(completeImportError, 'recording Splitwise import completion', req);
+      }
+    }
+
     log.info('Splitwise import completed', 'import-splitwise', {
       groupId: importData.group_id,
+      importId,
       expenses: expenses.length,
       settlements: settlements.length,
     });
 
     return createSuccessResponse(
       {
+        import_id: importId ?? null,
         imported_expenses: expenses.length,
         imported_settlements: settlements.length,
+        activated,
+        duplicate: false,
       },
       201,
       0,
       req
     );
   } catch (error: unknown) {
+    if (importReservationStarted) {
+      try {
+        const authResult = await verifyAuth(req);
+        await markImportFailed(authResult.supabase, importId);
+      } catch {
+        // Preserve the original error. A stale processing row is safer than
+        // permitting an unverified retry that could duplicate ledger entries.
+      }
+    }
     return handleError(error, 'import-splitwise handler', req);
   }
 });

@@ -4,6 +4,7 @@ import { parsePath } from '../_shared/path-parser.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
 import { fetchUserEmails } from '../_shared/user-email.ts';
 import { fetchUserProfiles } from '../_shared/user-profiles.ts';
+import { sanitizeAcquisitionContext } from '../_shared/growth.ts';
 import { isValidUUID, validateBodySize, validateGroupData } from '../_shared/validation.ts';
 import { requireMinVersion } from '../_shared/version-check.ts';
 
@@ -39,6 +40,12 @@ interface GroupMember {
 
 interface GroupWithMembers extends Group {
   members?: Array<GroupMember & { email?: string; full_name?: string | null; avatar_url?: string | null }>;
+}
+
+interface CreateGroupRequest {
+  name?: string;
+  description?: string;
+  acquisition_context?: unknown;
 }
 
 Deno.serve(async (req: Request) => {
@@ -181,7 +188,7 @@ Deno.serve(async (req: Request) => {
 
     // Handle POST /groups - Create new group
     if (httpMethod === 'POST') {
-      let groupData: Partial<Group>;
+      let groupData: CreateGroupRequest;
       try {
         groupData = body ? JSON.parse(body) : {};
       } catch {
@@ -199,11 +206,20 @@ Deno.serve(async (req: Request) => {
         return createErrorResponse(400, validation.error || 'Invalid group data', 'VALIDATION_ERROR', undefined, req);
       }
 
+      const acquisitionContext = groupData.acquisition_context === undefined
+        ? null
+        : sanitizeAcquisitionContext(groupData.acquisition_context);
+
+      if (groupData.acquisition_context !== undefined && !acquisitionContext) {
+        return createErrorResponse(400, 'Invalid acquisition context', 'VALIDATION_ERROR', undefined, req);
+      }
+
       // Create group using SECURITY DEFINER function to bypass RLS issues
       // This ensures auth.uid() is properly recognized
       const { data: groupResult, error } = await supabase.rpc('create_group', {
         group_name: groupData.name.trim(),
         group_description: groupData.description?.trim() || null,
+        group_acquisition_context: acquisitionContext,
       });
 
       if (error) {
