@@ -221,6 +221,9 @@ function AppContent() {
           message: "This invite link has expired. Ask for a new one.",
         });
       }
+      if (result.status === "joined") {
+        trackGrowthEvent("member joined", { method: "share_link" });
+      }
       // 'joined' and 'already_member' are intentionally silent: the joined
       // group appears in the list with a NEW tag until first opened.
     } catch (err) {
@@ -279,6 +282,8 @@ function AppContent() {
           medium: acquisitionContext.medium,
           campaign: acquisitionContext.campaign,
           content: acquisitionContext.content,
+          landing_path: acquisitionContext.landingPath,
+          referrer_host: acquisitionContext.referrerHost,
           intent: acquisitionContext.intent,
         });
       }

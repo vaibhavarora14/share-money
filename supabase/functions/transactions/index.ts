@@ -131,15 +131,16 @@ function parsePositiveInt(input: string | null): number | null {
   return parsed;
 }
 
-async function activateGroupFromManualExpense(supabase: any, groupId: string): Promise<void> {
-  const { error } = await supabase
+async function activateGroupFromManualExpense(supabase: any, groupId: string): Promise<boolean> {
+  const { data, error } = await supabase
     .from('groups')
     .update({
       activated_at: new Date().toISOString(),
       activation_method: 'manual_expense',
     })
     .eq('id', groupId)
-    .is('activated_at', null);
+    .is('activated_at', null)
+    .select('id');
 
   if (error) {
     log.warn('Failed to mark group as activated after manual expense', 'transaction-creation', {
@@ -147,7 +148,10 @@ async function activateGroupFromManualExpense(supabase: any, groupId: string): P
       error: error.message,
       code: error.code,
     });
+    return false;
   }
+
+  return Array.isArray(data) && data.length === 1;
 }
 
 Deno.serve(async (req: Request) => {
@@ -431,7 +435,9 @@ Deno.serve(async (req: Request) => {
               return createErrorResponse(400, 'Failed to validate participants', 'VALIDATION_ERROR', undefined, req);
             }
 
-            const foundParticipantIds = new Set((participants || []).map(p => p.id));
+            const foundParticipantIds = new Set(
+              (participants || []).map((participant: { id: string }) => participant.id),
+            );
             const invalidParticipantIds = uniqueParticipantIds.filter(id => !foundParticipantIds.has(id));
             
             if (invalidParticipantIds.length > 0) {
@@ -549,11 +555,12 @@ Deno.serve(async (req: Request) => {
         }
       }
 
+      let activated = false;
       if (transactionData.group_id && transactionData.type === 'expense') {
-        await activateGroupFromManualExpense(supabase, transactionData.group_id);
+        activated = await activateGroupFromManualExpense(supabase, transactionData.group_id);
       }
 
-      return createSuccessResponse(responseTransaction, 201, 0, req);
+      return createSuccessResponse({ ...responseTransaction, activated }, 201, 0, req);
     }
 
     // Handle PUT - Update existing transaction
@@ -636,7 +643,9 @@ Deno.serve(async (req: Request) => {
               return createErrorResponse(400, 'Failed to validate participants', 'VALIDATION_ERROR', undefined, req);
             }
 
-            const foundParticipantIds = new Set((participants || []).map(p => p.id));
+            const foundParticipantIds = new Set(
+              (participants || []).map((participant: { id: string }) => participant.id),
+            );
             const invalidParticipantIds = uniqueParticipantIds.filter(id => !foundParticipantIds.has(id));
             
             if (invalidParticipantIds.length > 0) {
@@ -716,7 +725,9 @@ Deno.serve(async (req: Request) => {
 
         if (!splitsFetchError && existingSplits && existingSplits.length > 0) {
           const newAmount = transactionData.amount;
-          const participantIds = existingSplits.map(s => s.participant_id).filter((id): id is string => !!id);
+          const participantIds = existingSplits
+            .map((split: { participant_id: string | null }) => split.participant_id)
+            .filter((id: string | null): id is string => !!id);
           const newSplits = calculateEqualSplits(newAmount, participantIds);
           newSplits.forEach(split => {
             split.transaction_id = transaction.id;
@@ -775,8 +786,8 @@ Deno.serve(async (req: Request) => {
       // Populate split_among_participant_ids from splits for backward compatibility in response
       if (responseTransaction.splits && Array.isArray(responseTransaction.splits)) {
         responseTransaction.split_among_participant_ids = responseTransaction.splits
-          .map(s => s.participant_id)
-          .filter((id): id is string => !!id);
+          .map((split: { participant_id: string | null }) => split.participant_id)
+          .filter((id: string | null): id is string => !!id);
       }
 
       return createSuccessResponse(responseTransaction, 200, 0, req);

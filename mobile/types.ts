@@ -42,6 +42,8 @@ export interface Transaction {
   split_among?: string[]; // Legacy: Array of user IDs/emails (deprecated, use split_among_participant_ids)
   split_among_participant_ids?: string[]; // Array of participant IDs to split among
   splits?: TransactionSplit[]; // From transaction_splits table (preferred for reading)
+  /** Returned only after creation when this expense first activated its group. */
+  activated?: boolean;
 }
 
 export interface Currency {

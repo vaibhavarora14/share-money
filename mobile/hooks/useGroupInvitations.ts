@@ -3,6 +3,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../supabase";
 import { GroupInvitation } from "../types";
 import { fetchWithAuth } from "../utils/api";
+import { trackGrowthEvent } from "../utils/analytics";
 import { queryKeys } from "./queryKeys";
 
 export interface CreateShareLinkOptions {
@@ -59,6 +60,9 @@ export async function redeemGroupInviteLinkRPC(
 export function useCreateGroupShareLink() {
   return useMutation({
     mutationFn: createGroupShareLinkRPC,
+    onSuccess: () => {
+      trackGrowthEvent("invite link created", { kind: "shareable" });
+    },
   });
 }
 

@@ -22,6 +22,7 @@ import { parseCsv } from "./csv";
 
 // Matches the server-side cap in the import-splitwise edge function
 const MAX_AMOUNT = 1000000;
+export const MAX_SPLITWISE_IMPORT_ITEMS = 2_000;
 
 const FIXED_COLUMNS = ["date", "description", "category", "cost", "currency"];
 
@@ -276,6 +277,13 @@ export function parseSplitwiseExport(csvText: string): SplitwiseParseResult {
       payerIndex,
       shares,
     });
+  }
+
+  const importableItemCount = result.expenses.length + result.payments.length;
+  if (importableItemCount > MAX_SPLITWISE_IMPORT_ITEMS) {
+    throw new Error(
+      `This file has ${importableItemCount.toLocaleString("en-US")} importable items. Imports support up to ${MAX_SPLITWISE_IMPORT_ITEMS.toLocaleString("en-US")} items at a time.`,
+    );
   }
 
   return result;

@@ -3,6 +3,7 @@ import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-q
 import { useAuth } from "../contexts/AuthContext";
 import { Transaction } from "../types";
 import { fetchWithAuth } from "../utils/api";
+import { trackGrowthEvent } from "../utils/analytics";
 import { queryKeys } from "./queryKeys";
 
 export interface TransactionsCursor {
@@ -196,8 +197,11 @@ export function useCreateTransaction(onSuccess?: () => void) {
         );
       }
     },
-    onSuccess: (_data, variables, context) => {
+    onSuccess: (data, variables, context) => {
       const groupId = variables.group_id;
+      if (data?.activated) {
+        trackGrowthEvent("group activated", { method: "manual_expense" });
+      }
       invalidateTransactionAdjacents(queryClient, groupId);
       if (context?.groupId) {
         queryClient.invalidateQueries({

@@ -1,4 +1,8 @@
 import PostHog from "posthog-react-native";
+import {
+  sanitizeGrowthProperties,
+  type GrowthPropertyValue,
+} from "./growthProperties";
 
 type GrowthEvent =
   | "acquisition landing viewed"
@@ -14,7 +18,7 @@ type GrowthEvent =
   | "member joined"
   | "group day 7 active";
 
-type GrowthProperties = Record<string, string | number | boolean | undefined>;
+type GrowthProperties = Record<string, GrowthPropertyValue>;
 
 let client: PostHog | null | undefined;
 
@@ -38,11 +42,7 @@ function getClient(): PostHog | null {
 }
 
 export function trackGrowthEvent(event: GrowthEvent, properties: GrowthProperties = {}): void {
-  const safeProperties: Record<string, string | number | boolean> = {};
-  Object.entries(properties).forEach(([key, value]) => {
-    if (value !== undefined) safeProperties[key] = value;
-  });
-  getClient()?.capture(event, safeProperties);
+  getClient()?.capture(event, sanitizeGrowthProperties(properties));
 }
 
 export function identifyGrowthUser(userId: string): void {
