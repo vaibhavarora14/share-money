@@ -4,6 +4,7 @@ import {
   KeyboardAvoidingView,
   Linking,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
@@ -14,6 +15,8 @@ import {
   Avatar,
   Button,
   Icon,
+  Modal,
+  Portal,
   SegmentedButtons,
   Surface,
   Text,
@@ -35,10 +38,13 @@ import {
   getDefaultCountry,
   parsePhoneNumber,
 } from "../utils/countryCodes";
-import { useDeleteAccount } from "../hooks/useDeleteAccount";
 import { showErrorAlert } from "../utils/errorHandling";
-
-const ACCOUNT_DELETION_EMAIL = "contact@sharedmoney.app";
+import {
+  buildSupportEmailUrl,
+  SUPPORT_EMAIL,
+  SUPPORT_TOPICS,
+  type SupportTopic,
+} from "../utils/supportEmail";
 
 interface ProfileSetupScreenProps {
   onComplete: () => void;
@@ -56,13 +62,13 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     getDefaultCountry()
   );
   const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [supportSheetVisible, setSupportSheetVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const theme = useTheme();
   const { resolvedTheme, setThemePreference, themePreference } =
     useThemePreference();
   const insets = useSafeAreaInsets();
   const { data: profile, updateProfile } = useProfile();
-  const deleteAccount = useDeleteAccount();
   const { signOut, user } = useAuth();
 
   useEffect(() => {
@@ -188,43 +194,18 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     }
   };
 
-  const handleEmailAccountDeletion = async () => {
-    const subject = encodeURIComponent("Delete Account");
-    const body = encodeURIComponent(
-      `Please delete my SharedMoney account.\n\nRegistered email: ${user?.email || ""}`
-    );
-    const mailtoUrl = `mailto:${ACCOUNT_DELETION_EMAIL}?subject=${subject}&body=${body}`;
+  const handleEmailSupport = async (topic: SupportTopic) => {
+    const mailtoUrl = buildSupportEmailUrl(topic, user?.email);
 
     try {
       await Linking.openURL(mailtoUrl);
+      setSupportSheetVisible(false);
     } catch {
       Alert.alert(
-        "Email Account Deletion",
-        `Please email ${ACCOUNT_DELETION_EMAIL} from your registered email with the subject "Delete Account".`
+        "Email Support",
+        `Please email ${SUPPORT_EMAIL} from your registered email with the subject "SharedMoney support — ${topic.label}".`
       );
     }
-  };
-
-  const handleDeleteAccount = () => {
-    Alert.alert(
-      "Delete Account",
-      "This permanently removes access to your SharedMoney account and anonymizes your profile in shared groups.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete Account",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteAccount.mutateAsync();
-              Alert.alert("Account Deleted", "Your account has been deleted.");
-            } catch (error) {
-              showErrorAlert(error, signOut, "Delete Account");
-            }
-          },
-        },
-      ]
-    );
   };
 
   const getInitials = () => {
@@ -427,50 +408,12 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             <Button
               mode="contained"
               onPress={handleComplete}
-              disabled={loading || deleteAccount.isPending || !hasChanges}
+              disabled={loading || !hasChanges}
               loading={loading}
               style={styles.button}
               contentStyle={styles.buttonContent}
             >
               Save Changes
-            </Button>
-          </Surface>
-
-          <Surface
-            style={[
-              styles.dangerCard,
-              { backgroundColor: theme.colors.errorContainer },
-            ]}
-            elevation={0}
-          >
-            <View style={styles.dangerHeader}>
-              <Icon source="alert-outline" size={22} color={theme.colors.error} />
-              <View style={styles.dangerText}>
-                <Text
-                  variant="titleSmall"
-                  style={{ color: theme.colors.onErrorContainer }}
-                >
-                  Delete Account
-                </Text>
-                <Text
-                  variant="bodySmall"
-                  style={{ color: theme.colors.onErrorContainer }}
-                >
-                  Remove access to your account and anonymize your profile in shared groups.
-                </Text>
-              </View>
-            </View>
-            <Button
-              mode="contained-tonal"
-              onPress={handleDeleteAccount}
-              disabled={loading || deleteAccount.isPending}
-              loading={deleteAccount.isPending}
-              textColor={theme.colors.error}
-              style={styles.deleteButton}
-              contentStyle={styles.buttonContent}
-              icon="delete-outline"
-            >
-              Delete Account
             </Button>
           </Surface>
 
@@ -492,26 +435,43 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                   variant="titleSmall"
                   style={{ color: theme.colors.onSurface }}
                 >
-                  Account Support
+                  Get help
                 </Text>
                 <Text
                   variant="bodySmall"
                   style={{ color: theme.colors.onSurfaceVariant }}
                 >
-                  If you cannot access your account, email {ACCOUNT_DELETION_EMAIL} from your registered address.
+                  Contact SharedMoney support for any issue.
                 </Text>
               </View>
             </View>
-            <Button
-              mode="outlined"
-              onPress={handleEmailAccountDeletion}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Email SharedMoney support"
+              accessibilityHint="Choose a support topic before opening an email"
               disabled={loading}
-              style={styles.supportButton}
-              contentStyle={styles.buttonContent}
-              icon="email-outline"
+              onPress={() => setSupportSheetVisible(true)}
+              style={[
+                styles.supportButton,
+                {
+                  borderColor: theme.colors.outline,
+                  backgroundColor: theme.colors.surface,
+                },
+                loading && styles.supportButtonDisabled,
+              ]}
             >
-              Email
-            </Button>
+              <Text
+                variant="labelLarge"
+                style={{ color: theme.colors.onSurface, fontWeight: "700" }}
+              >
+                Email support
+              </Text>
+              <Icon
+                source="chevron-right"
+                size={20}
+                color={theme.colors.onSurfaceVariant}
+              />
+            </Pressable>
           </Surface>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -522,6 +482,82 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
         onSelect={setSelectedCountry}
         selectedCountry={selectedCountry}
       />
+      <Portal>
+        <Modal
+          visible={supportSheetVisible}
+          onDismiss={() => setSupportSheetVisible(false)}
+          style={styles.supportModal}
+          contentContainerStyle={[
+            styles.supportModalContent,
+            {
+              backgroundColor: theme.colors.surface,
+              paddingBottom: Math.max(insets.bottom, 20),
+            },
+          ]}
+        >
+          <View style={styles.supportSheetHandle} />
+          <Text
+            variant="titleMedium"
+            style={{ color: theme.colors.onSurface, fontWeight: "700" }}
+          >
+            What do you need help with?
+          </Text>
+          <Text
+            variant="bodySmall"
+            style={[
+              styles.supportSheetSubtitle,
+              { color: theme.colors.onSurfaceVariant },
+            ]}
+          >
+            We’ll open an email with the right subject.
+          </Text>
+          <View>
+            {SUPPORT_TOPICS.map((topic) => (
+              <Pressable
+                key={topic.id}
+                accessibilityRole="button"
+                accessibilityLabel={`Email support about ${topic.label}`}
+                onPress={() => void handleEmailSupport(topic)}
+                style={({ pressed }) => [
+                  styles.supportTopic,
+                  {
+                    borderBottomColor: theme.colors.outlineVariant,
+                    backgroundColor: pressed
+                      ? theme.colors.surfaceVariant
+                      : "transparent",
+                  },
+                ]}
+              >
+                <Icon
+                  source={topic.icon}
+                  size={22}
+                  color={theme.colors.primary}
+                />
+                <View style={styles.supportTopicText}>
+                  <Text
+                    variant="bodyMedium"
+                    style={{ color: theme.colors.onSurface, fontWeight: "600" }}
+                  >
+                    {topic.label}
+                  </Text>
+                  <Text
+                    variant="bodySmall"
+                    style={{ color: theme.colors.onSurfaceVariant }}
+                  >
+                    {topic.description}
+                  </Text>
+                </View>
+                <Icon
+                  source="chevron-right"
+                  size={20}
+                  color={theme.colors.onSurfaceVariant}
+                />
+              </Pressable>
+            ))}
+          </View>
+          <Button onPress={() => setSupportSheetVisible(false)}>Cancel</Button>
+        </Modal>
+      </Portal>
     </View>
   );
 };
@@ -641,24 +677,6 @@ const styles = StyleSheet.create({
   buttonContent: {
     paddingVertical: 6,
   },
-  dangerCard: {
-    borderRadius: 16,
-    marginTop: 16,
-    padding: 16,
-  },
-  dangerHeader: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 12,
-  },
-  dangerText: {
-    flex: 1,
-    gap: 4,
-  },
-  deleteButton: {
-    alignSelf: "flex-start",
-    borderRadius: 8,
-  },
   supportCard: {
     borderRadius: 16,
     marginTop: 16,
@@ -674,7 +692,50 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   supportButton: {
-    alignSelf: "flex-start",
+    alignItems: "center",
     borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  supportButtonDisabled: {
+    opacity: 0.6,
+  },
+  supportModal: {
+    justifyContent: "flex-end",
+    margin: 0,
+  },
+  supportModalContent: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+  },
+  supportSheetHandle: {
+    alignSelf: "center",
+    backgroundColor: "#D0D5DD",
+    borderRadius: 2,
+    height: 4,
+    marginBottom: 20,
+    width: 36,
+  },
+  supportSheetSubtitle: {
+    marginBottom: 12,
+    marginTop: 4,
+  },
+  supportTopic: {
+    alignItems: "center",
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    gap: 12,
+    minHeight: 68,
+    paddingHorizontal: 4,
+  },
+  supportTopicText: {
+    flex: 1,
+    gap: 2,
   },
 });
