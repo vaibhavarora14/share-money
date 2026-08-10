@@ -1,7 +1,14 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
 import { View } from "react-native";
-import { ActivityIndicator, Card, Text, useTheme } from "react-native-paper";
+import {
+  ActivityIndicator,
+  Card,
+  IconButton,
+  Menu,
+  Text,
+  useTheme,
+} from "react-native-paper";
 import { ACTIVITY_FEED_UI, ACTIVITY_ICONS } from "../constants/activityFeed";
 import { useAuth } from "../contexts/AuthContext";
 import { ActivityItem } from "../types";
@@ -16,16 +23,21 @@ interface ActivityFeedProps {
   items: ActivityItem[];
   loading: boolean;
   isFiltered?: boolean;
+  onReport?: (activity: ActivityItem) => void;
+  onBlock?: (activity: ActivityItem) => void;
 }
 
 export const ActivityFeed: React.FC<ActivityFeedProps> = ({
   items,
   loading,
   isFiltered,
+  onReport,
+  onBlock,
 }) => {
   const theme = useTheme();
   const { session } = useAuth();
   const currentUserId = session?.user?.id;
+  const [menuActivityId, setMenuActivityId] = React.useState<string | null>(null);
 
   // Error boundary - catch any rendering errors
   try {
@@ -157,9 +169,47 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                             <Text variant="bodyLarge" style={[styles.activityUser, { color: theme.colors.onSurface }]}>
                                 {userDisplayName}
                             </Text>
-                            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                                {formatActivityTime(activity.changed_at)}
-                            </Text>
+                            <View style={styles.activityMeta}>
+                              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                                  {formatActivityTime(activity.changed_at)}
+                              </Text>
+                              {activity.changed_by.id !== currentUserId && (onReport || onBlock) ? (
+                                <Menu
+                                  visible={menuActivityId === activity.id}
+                                  onDismiss={() => setMenuActivityId(null)}
+                                  anchor={
+                                    <IconButton
+                                      icon="dots-vertical"
+                                      size={20}
+                                      accessibilityLabel={`Safety options for ${userDisplayName}`}
+                                      onPress={() => setMenuActivityId(activity.id)}
+                                      style={styles.safetyMenuButton}
+                                    />
+                                  }
+                                >
+                                  {onReport ? (
+                                    <Menu.Item
+                                      title="Report content"
+                                      leadingIcon="flag-outline"
+                                      onPress={() => {
+                                        setMenuActivityId(null);
+                                        onReport(activity);
+                                      }}
+                                    />
+                                  ) : null}
+                                  {onBlock ? (
+                                    <Menu.Item
+                                      title={`Block ${userDisplayName}`}
+                                      leadingIcon="account-cancel-outline"
+                                      onPress={() => {
+                                        setMenuActivityId(null);
+                                        onBlock(activity);
+                                      }}
+                                    />
+                                  ) : null}
+                                </Menu>
+                              ) : null}
+                            </View>
                          </View>
                          
                          <Text 

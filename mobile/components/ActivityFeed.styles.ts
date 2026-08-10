@@ -56,6 +56,14 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 2,
   },
+  activityMeta: {
+    alignItems: "center",
+    flexDirection: "row",
+  },
+  safetyMenuButton: {
+    margin: -8,
+    marginLeft: 0,
+  },
   activityUser: {
     fontWeight: "600",
     flex: 1,

@@ -25,6 +25,7 @@ interface MembersListProps {
   onRemove: (participant: Participant) => void;
   onInvite?: (participant: Participant) => void;
   onConnect?: (participant: Participant) => void;
+  onBlock?: (participant: Participant) => void;
 }
 
 export const MembersList: React.FC<MembersListProps> = ({
@@ -36,6 +37,7 @@ export const MembersList: React.FC<MembersListProps> = ({
   onRemove,
   onInvite,
   onConnect,
+  onBlock,
 }) => {
   const theme = useTheme();
   const [menuParticipantId, setMenuParticipantId] = React.useState<string | null>(null);
@@ -90,6 +92,8 @@ export const MembersList: React.FC<MembersListProps> = ({
         const isRemoving = removingMemberId === person.id;
         const isWorking = workingParticipantId === person.id || isRemoving;
         const canInviteOrConnect = canManageMembers && !person.user_id && !!person.email && isActive;
+        const canBlock = !!onBlock && !!person.user_id && !isCurrentUser;
+        const hasMenuActions = canInviteOrConnect || canBlock;
         const dateLabel = person.joined_at || person.created_at;
         const detail = person.email || (dateLabel ? `Joined ${formatDate(dateLabel)}` : "");
 
@@ -163,7 +167,7 @@ export const MembersList: React.FC<MembersListProps> = ({
                         disabled={removingMemberId !== null}
                       />
                     )}
-                    {canInviteOrConnect ? (
+                    {hasMenuActions ? (
                       isWorking ? (
                         <ActivityIndicator
                           size="small"
@@ -184,22 +188,36 @@ export const MembersList: React.FC<MembersListProps> = ({
                             />
                           }
                         >
-                          <Menu.Item
-                            title="Invite to SharedMoney"
-                            leadingIcon="email-outline"
-                            onPress={() => {
-                              setMenuParticipantId(null);
-                              onInvite?.(person);
-                            }}
-                          />
-                          <Menu.Item
-                            title="Connect account"
-                            leadingIcon="account-check-outline"
-                            onPress={() => {
-                              setMenuParticipantId(null);
-                              onConnect?.(person);
-                            }}
-                          />
+                          {canInviteOrConnect ? (
+                            <>
+                              <Menu.Item
+                                title="Invite to SharedMoney"
+                                leadingIcon="email-outline"
+                                onPress={() => {
+                                  setMenuParticipantId(null);
+                                  onInvite?.(person);
+                                }}
+                              />
+                              <Menu.Item
+                                title="Connect account"
+                                leadingIcon="account-check-outline"
+                                onPress={() => {
+                                  setMenuParticipantId(null);
+                                  onConnect?.(person);
+                                }}
+                              />
+                            </>
+                          ) : null}
+                          {canBlock ? (
+                            <Menu.Item
+                              title={`Block ${personName}`}
+                              leadingIcon="account-cancel-outline"
+                              onPress={() => {
+                                setMenuParticipantId(null);
+                                onBlock?.(person);
+                              }}
+                            />
+                          ) : null}
                         </Menu>
                       )
                     ) : null}
