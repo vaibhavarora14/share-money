@@ -137,14 +137,21 @@ Deno.serve(async (req: Request) => {
       }, 200, 0, req);
     }
 
+    let blockWasCreated = false;
     if (input.action === 'block') {
-      const { error } = await supabase
+      const { data: createdBlock, error } = await supabase
         .from('user_blocks')
         .upsert({
           blocker_id: user.id,
           blocked_user_id: input.target_user_id,
-        }, { onConflict: 'blocker_id,blocked_user_id' });
+        }, {
+          onConflict: 'blocker_id,blocked_user_id',
+          ignoreDuplicates: true,
+        })
+        .select('blocked_user_id')
+        .maybeSingle();
       if (error) return handleError(error, 'blocking user', req);
+      blockWasCreated = !!createdBlock;
     }
 
     const { data: report, error: reportError } = await supabase
@@ -162,7 +169,7 @@ Deno.serve(async (req: Request) => {
       .single();
 
     if (reportError) {
-      if (input.action === 'block') {
+      if (input.action === 'block' && blockWasCreated) {
         await supabase
           .from('user_blocks')
           .delete()
