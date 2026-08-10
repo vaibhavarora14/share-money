@@ -27,14 +27,18 @@ export interface SplitwiseImportSettlement {
 }
 
 export interface SplitwiseImportInput {
+  import_id: string;
   group_id: string;
   expenses: SplitwiseImportExpense[];
   settlements: SplitwiseImportSettlement[];
 }
 
 export interface SplitwiseImportResult {
+  import_id: string | null;
   imported_expenses: number;
   imported_settlements: number;
+  activated: boolean;
+  duplicate: boolean;
 }
 
 function invalidateImportAdjacents(queryClient: QueryClient, groupId: string) {

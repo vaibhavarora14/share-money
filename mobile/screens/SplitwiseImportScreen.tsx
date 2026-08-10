@@ -1,4 +1,5 @@
 import * as DocumentPicker from "expo-document-picker";
+import * as Crypto from "expo-crypto";
 import React, { useEffect, useMemo, useState } from "react";
 import {
     BackHandler,
@@ -28,6 +29,7 @@ import {
 import { Participant } from "../types";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 import { logError } from "../utils/logger";
+import { trackGrowthEvent } from "../utils/analytics";
 import {
     autoMatchPeopleToParticipants,
     parseSplitwiseExport,
@@ -83,6 +85,7 @@ export const SplitwiseImportScreen: React.FC<SplitwiseImportScreenProps> = ({
   const [mapping, setMapping] = useState<(string | null)[]>([]);
   const [openMenuIndex, setOpenMenuIndex] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
+  const [importId, setImportId] = useState<string | null>(null);
   const [importResult, setImportResult] =
     useState<SplitwiseImportResult | null>(null);
 
@@ -138,9 +141,15 @@ export const SplitwiseImportScreen: React.FC<SplitwiseImportScreenProps> = ({
 
       setFileName(asset.name || "export.csv");
       setParsed(parseResult);
+      setImportId(null);
       setMapping(
         autoMatchPeopleToParticipants(parseResult.people, participants || [])
       );
+      trackGrowthEvent("splitwise csv parsed", {
+        expense_count: parseResult.expenses.length,
+        settlement_count: parseResult.payments.length,
+        skipped_count: parseResult.skipped.length,
+      });
       setStep("map");
     } catch (err) {
       logError(err, { context: "SplitwiseImportScreen.pickFile" });
@@ -156,6 +165,7 @@ export const SplitwiseImportScreen: React.FC<SplitwiseImportScreenProps> = ({
     setParsed(null);
     setMapping([]);
     setFileName("");
+    setImportId(null);
     setErrorMessage("");
     setStep("pick");
   };
@@ -183,6 +193,8 @@ export const SplitwiseImportScreen: React.FC<SplitwiseImportScreenProps> = ({
   const handleImport = async () => {
     if (!parsed || !mappingValid) return;
     setErrorMessage("");
+    const nextImportId = importId ?? Crypto.randomUUID();
+    setImportId(nextImportId);
 
     const expenses = parsed.expenses.map((expense) => ({
       description: expense.description,
@@ -206,12 +218,26 @@ export const SplitwiseImportScreen: React.FC<SplitwiseImportScreenProps> = ({
     }));
 
     try {
+      trackGrowthEvent("migration mapping completed", {
+        member_count: mapping.length,
+        expense_count: expenses.length,
+        settlement_count: settlements.length,
+      });
       const result = await importMutation.mutate({
+        import_id: nextImportId,
         group_id: groupId,
         expenses,
         settlements,
       });
       setImportResult(result);
+      trackGrowthEvent("migration completed", {
+        expense_count: result.imported_expenses,
+        settlement_count: result.imported_settlements,
+        duplicate: result.duplicate,
+      });
+      if (result.activated) {
+        trackGrowthEvent("group activated", { method: "splitwise_import" });
+      }
       setStep("done");
     } catch (err) {
       logError(err, { context: "SplitwiseImportScreen.import" });

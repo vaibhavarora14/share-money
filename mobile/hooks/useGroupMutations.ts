@@ -1,7 +1,9 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchWithAuth } from "../utils/api";
+import type { AcquisitionContext } from "../utils/acquisition";
 import { queryKeys } from "./queryKeys";
+import type { Group } from "../types";
 
 function invalidateGroupAdjacents(queryClient: QueryClient, groupId?: string) {
   queryClient.invalidateQueries({ queryKey: queryKeys.groups });
@@ -19,8 +21,12 @@ function invalidateGroupAdjacents(queryClient: QueryClient, groupId?: string) {
 export function useCreateGroup(onSuccess?: () => void) {
   const queryClient = useQueryClient();
 
-  const mutation = useMutation({
-    mutationFn: async (groupData: { name: string; description?: string }) => {
+  const mutation = useMutation<Group, Error, {
+    name: string;
+    description?: string;
+    acquisition_context?: AcquisitionContext;
+  }>({
+    mutationFn: async (groupData) => {
       const response = await fetchWithAuth("/groups", {
         method: "POST",
         body: JSON.stringify(groupData),
@@ -30,7 +36,7 @@ export function useCreateGroup(onSuccess?: () => void) {
         throw new Error("Failed to create group");
       }
 
-      return response.json();
+      return response.json() as Promise<Group>;
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.groups });

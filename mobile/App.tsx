@@ -67,6 +67,11 @@ import { darkTheme, lightTheme } from "./theme";
 import { Group, GroupWithMembers } from "./types";
 import { getDefaultCurrency } from "./utils/currency";
 import {
+  getAcquisitionContext,
+  persistAcquisitionContextFromUrl,
+} from "./utils/acquisition";
+import { trackGrowthEvent } from "./utils/analytics";
+import {
   extractGroupDeepLinkId,
   extractInviteToken,
   getConfiguredWebAppPath,
@@ -261,6 +266,17 @@ function AppContent() {
   // Handle deep links: initial URL (cold start / web navigation) + url events.
   useEffect(() => {
     const handleUrl = async (url: string | null) => {
+      const acquisitionContext = await persistAcquisitionContextFromUrl(url);
+      if (acquisitionContext) {
+        trackGrowthEvent("acquisition landing viewed", {
+          source: acquisitionContext.source,
+          medium: acquisitionContext.medium,
+          campaign: acquisitionContext.campaign,
+          content: acquisitionContext.content,
+          intent: acquisitionContext.intent,
+        });
+      }
+
       const token = extractInviteToken(url);
       if (token) {
         if (session?.user?.id) {
@@ -450,11 +466,16 @@ function AppContent() {
     name: string;
     description?: string;
   }) => {
-    await createGroupMutation.mutate(groupData);
+    const acquisitionContext = await getAcquisitionContext();
+    const group = await createGroupMutation.mutate({
+      ...groupData,
+      ...(acquisitionContext ? { acquisition_context: acquisitionContext } : {}),
+    });
     // Refetch groups list to show the newly created group
     if (groupsListRefetchRef.current) {
       groupsListRefetchRef.current();
     }
+    return group;
   };
 
   const handleAddMember = async (person: {

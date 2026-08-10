@@ -17,6 +17,7 @@ import { Platform } from "react-native";
 import { AUTH_TIMEOUTS } from "../constants/auth";
 import { supabase } from "../supabase";
 import { getConfiguredWebAppPath } from "../utils/inviteLinks";
+import { identifyGrowthUser, resetGrowthAnalytics } from "../utils/analytics";
 import { log, logError } from "../utils/logger";
 
 // Complete the auth session when browser closes
@@ -288,6 +289,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           }
         : null
     );
+
+    if (user) {
+      identifyGrowthUser(user.id);
+    } else {
+      resetGrowthAnalytics();
+    }
   }, []);
 
   useEffect(() => {

@@ -20,6 +20,7 @@ import {
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
+import { trackGrowthEvent } from "../utils/analytics";
 
 type AuthStep = "methods" | "email";
 
@@ -140,6 +141,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
     setLoading(true);
     try {
+      if (isSignUp) trackGrowthEvent("signup started", { method: "email" });
       const result = isSignUp
         ? await signUp(trimmedEmail, password)
         : await signIn(trimmedEmail, password);
@@ -149,6 +151,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         const errorTitle = isSignUp ? "Sign Up Failed" : "Sign In Failed";
         setFormError(errorMessage);
         Alert.alert(errorTitle, errorMessage, [{ text: "OK", style: "default" }]);
+      } else if (isSignUp) {
+        trackGrowthEvent("signup completed", { method: "email" });
       }
     } catch (err) {
       console.error("Unexpected error in authentication:", err);
@@ -161,6 +165,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
     try {
+      if (isSignUp) trackGrowthEvent("signup started", { method: "google" });
       const { error } = await signInWithGoogle();
       if (error) {
         Alert.alert("Google Sign In Failed", error.message || "Failed to sign in with Google", [
@@ -180,6 +185,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const handleAppleSignIn = async () => {
     setAppleLoading(true);
     try {
+      if (isSignUp) trackGrowthEvent("signup started", { method: "apple" });
       const { error } = await signInWithApple();
       if (error) {
         Alert.alert("Apple Sign In Failed", error.message || "Failed to sign in with Apple", [

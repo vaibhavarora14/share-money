@@ -29,7 +29,7 @@ interface GroupsListScreenProps {
   onCreateGroup: (groupData: {
     name: string;
     description?: string;
-  }) => Promise<void>;
+  }) => Promise<Group>;
   onLogout?: () => void;
   onRefetchReady?: (refetch: () => Promise<any>) => void;
   refetchTrigger?: number; // Added to trigger refetch from parent
