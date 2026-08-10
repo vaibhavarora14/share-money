@@ -1,4 +1,5 @@
 import * as AppleAuthentication from "expo-apple-authentication";
+import * as Linking from "expo-linking";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -13,6 +14,7 @@ import {
 } from "react-native";
 import {
   Button,
+  Checkbox,
   Surface,
   Text,
   TextInput,
@@ -40,6 +42,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const [appleLoading, setAppleLoading] = useState(false);
   const [appleSignInAvailable, setAppleSignInAvailable] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const emailInputRef = useRef<any>(null);
   const { signIn, signUp, signInWithGoogle, signInWithApple } = useAuth();
@@ -112,6 +115,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   };
 
   const handleSubmit = async () => {
+    if (!termsAccepted) {
+      Alert.alert("Terms required", "Please agree to the Terms of Use and Privacy Policy to continue.");
+      return;
+    }
     const trimmedEmail = email.trim();
     setFormError(null);
 
@@ -159,6 +166,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   };
 
   const handleGoogleSignIn = async () => {
+    if (!termsAccepted) {
+      Alert.alert("Terms required", "Please agree to the Terms of Use and Privacy Policy to continue.");
+      return;
+    }
     setGoogleLoading(true);
     try {
       const { error } = await signInWithGoogle();
@@ -178,6 +189,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   };
 
   const handleAppleSignIn = async () => {
+    if (!termsAccepted) {
+      Alert.alert("Terms required", "Please agree to the Terms of Use and Privacy Policy to continue.");
+      return;
+    }
     setAppleLoading(true);
     try {
       const { error } = await signInWithApple();
@@ -223,6 +238,43 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     </View>
   );
 
+  const renderTermsAgreement = () => (
+    <View style={styles.termsAgreement}>
+      <View
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: termsAccepted, disabled: formDisabled }}
+        accessibilityLabel="Agree to the Terms of Use and Privacy Policy"
+      >
+        <Checkbox
+          status={termsAccepted ? "checked" : "unchecked"}
+          onPress={() => setTermsAccepted((accepted) => !accepted)}
+          disabled={formDisabled}
+        />
+      </View>
+      <Text variant="bodySmall" style={[styles.termsText, { color: theme.colors.onSurfaceVariant }]}>
+        I agree to the{" "}
+        <Text
+          variant="bodySmall"
+          accessibilityRole="link"
+          style={{ color: theme.colors.primary, textDecorationLine: "underline" }}
+          onPress={() => Linking.openURL("https://sharedmoney.app/terms")}
+        >
+          Terms of Use
+        </Text>
+        {" and "}
+        <Text
+          variant="bodySmall"
+          accessibilityRole="link"
+          style={{ color: theme.colors.primary, textDecorationLine: "underline" }}
+          onPress={() => Linking.openURL("https://sharedmoney.app/privacy")}
+        >
+          Privacy Policy
+        </Text>
+        .
+      </Text>
+    </View>
+  );
+
   const renderMethods = () => (
     <View style={styles.methodScreen}>
       {!isDesktopWeb ? renderLogo("compact") : null}
@@ -235,7 +287,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           mode="contained"
           icon="google"
           onPress={handleGoogleSignIn}
-          disabled={formDisabled}
+          disabled={formDisabled || !termsAccepted}
           loading={googleLoading}
           style={styles.methodButton}
           contentStyle={styles.methodButtonContent}
@@ -245,10 +297,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
         {appleSignInAvailable ? (
           <View
-            pointerEvents={formDisabled ? "none" : "auto"}
+            pointerEvents={formDisabled || !termsAccepted ? "none" : "auto"}
             style={[
               styles.appleButtonContainer,
-              formDisabled && styles.disabledSocialButton,
+              (formDisabled || !termsAccepted) && styles.disabledSocialButton,
             ]}
           >
             <AppleAuthentication.AppleAuthenticationButton
@@ -267,7 +319,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         <Button
           mode="outlined"
           onPress={showEmailForm}
-          disabled={formDisabled}
+          disabled={formDisabled || !termsAccepted}
           style={styles.methodButton}
           contentStyle={styles.methodButtonContent}
         >
@@ -275,6 +327,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         </Button>
       </View>
 
+      {renderTermsAgreement()}
       {renderAccountToggle()}
     </View>
   );
@@ -358,10 +411,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         </Text>
       ) : null}
 
+      {renderTermsAgreement()}
       <Button
         mode="contained"
         onPress={handleSubmit}
-        disabled={formDisabled}
+        disabled={formDisabled || !termsAccepted}
         loading={loading}
         style={styles.methodButton}
         contentStyle={styles.methodButtonContent}
@@ -532,6 +586,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     marginTop: 20,
+  },
+  termsAgreement: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    marginTop: 20,
+    width: "100%",
+  },
+  termsText: {
+    flex: 1,
+    lineHeight: 20,
+    paddingTop: 8,
   },
   accountToggleButtonContent: {
     minHeight: 32,
