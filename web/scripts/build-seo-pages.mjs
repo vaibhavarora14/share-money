@@ -32,6 +32,12 @@ function pageLink(page) {
   return `<a href="${escapeHtml(page.path)}">${escapeHtml(page.heading)}</a>`;
 }
 
+function callToActionMarkup(page) {
+  const href = page.cta?.href ?? `${appUrl}?utm_source=organic&utm_medium=seo&utm_campaign=${encodeURIComponent(page.id)}`;
+  const label = page.cta?.label ?? "Open the SharedMoney web app";
+  return `<p><a href="${escapeHtml(href)}">${escapeHtml(label)}</a></p>`;
+}
+
 function fallbackMarkup(page) {
   const proofItems = page.proof.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
   const sections = page.sections
@@ -46,9 +52,28 @@ function fallbackMarkup(page) {
         `<details><summary>${escapeHtml(faq.question)}</summary><p>${escapeHtml(faq.answer)}</p></details>`,
     )
     .join("");
+  const steps = page.steps?.length
+    ? `<section><h2>How the move works</h2><ol>${page.steps
+      .map((step) => `<li><h3>${escapeHtml(step.title)}</h3><p>${escapeHtml(step.body)}</p></li>`)
+      .join("")}</ol></section>`
+    : "";
+  const comparison = page.comparison?.length
+    ? `<section><h2>At a glance</h2><table><caption>SharedMoney and continuing with your current Splitwise group</caption><thead><tr><th scope="col">What you need</th><th scope="col">SharedMoney</th><th scope="col">Current Splitwise group</th></tr></thead><tbody>${page.comparison
+      .map((row) => `<tr><th scope="row">${escapeHtml(row.feature)}</th><td>${escapeHtml(row.sharedMoney)}</td><td>${escapeHtml(row.splitwise)}</td></tr>`)
+      .join("")}</tbody></table></section>`
+    : "";
+  const screenshots = page.screenshots?.length
+    ? `<section><h2>See the group view</h2>${page.screenshots
+      .map((screenshot) => `<figure><img src="${escapeHtml(screenshot.src)}" alt="${escapeHtml(screenshot.alt)}" /><figcaption>${escapeHtml(screenshot.caption)}</figcaption></figure>`)
+      .join("")}</section>`
+    : "";
+  const limitations = page.limitations?.length
+    ? `<section><h2>Before you import</h2><ul>${page.limitations.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>`
+    : "";
+  const disclaimer = page.disclaimer ? `<p>${escapeHtml(page.disclaimer)}</p>` : "";
   const related = linkedPages(page).map((relatedPage) => `<li>${pageLink(relatedPage)}</li>`).join("");
 
-  return `<main id="main-content"><article class="seo-source"><header><p>${escapeHtml(page.eyebrow)}</p><h1>${escapeHtml(page.heading)}</h1><p>${escapeHtml(page.body)}</p><ul>${proofItems}</ul><p><a href="${appUrl}?utm_source=organic&utm_medium=seo&utm_campaign=${escapeHtml(page.id)}">Open the SharedMoney web app</a></p></header>${sections}<section><h2>Common questions</h2>${faqs}</section><nav aria-label="Related SharedMoney pages"><h2>Explore SharedMoney</h2><ul>${related}</ul></nav><footer><a href="/privacy">Privacy Policy</a><a href="/delete-account">Delete Account</a><a href="mailto:support@sharedmoney.app">Contact support</a></footer></article></main>`;
+  return `<main id="main-content"><article class="seo-source"><header><p>${escapeHtml(page.eyebrow)}</p><h1>${escapeHtml(page.heading)}</h1><p>${escapeHtml(page.body)}</p><ul>${proofItems}</ul>${callToActionMarkup(page)}</header>${sections}${screenshots}${comparison}${steps}${limitations}<section><h2>Common questions</h2>${faqs}</section>${disclaimer}<nav aria-label="Related SharedMoney pages"><h2>Explore SharedMoney</h2><ul>${related}</ul></nav><footer><a href="/privacy">Privacy Policy</a><a href="/delete-account">Delete Account</a><a href="mailto:support@sharedmoney.app">Contact support</a></footer></article></main>`;
 }
 
 function structuredData(page) {
@@ -119,6 +144,32 @@ function structuredData(page) {
       operatingSystem: "Web",
       description: page.description,
       offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+    });
+  }
+
+  if (page.cta) {
+    graph.push({
+      "@type": "SoftwareApplication",
+      name: "SharedMoney",
+      url: appUrl,
+      applicationCategory: "FinanceApplication",
+      operatingSystem: "Android, iOS, Web",
+      description: "A shared expense ledger for groups that track expenses and settle outside the app.",
+      offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+    });
+  }
+
+  if (page.faqs.length > 0) {
+    graph.push({
+      "@type": "FAQPage",
+      mainEntity: page.faqs.map((faq) => ({
+        "@type": "Question",
+        name: faq.question,
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: faq.answer,
+        },
+      })),
     });
   }
 

@@ -14,6 +14,29 @@ export type SeoFaq = {
   answer: string;
 };
 
+export type SeoStep = {
+  title: string;
+  body: string;
+};
+
+export type SeoComparisonRow = {
+  feature: string;
+  sharedMoney: string;
+  splitwise: string;
+};
+
+export type SeoScreenshot = {
+  src: string;
+  alt: string;
+  caption: string;
+};
+
+export type SeoCta = {
+  label: string;
+  href: string;
+  ariaLabel: string;
+};
+
 export type SeoPage = {
   id: string;
   path: string;
@@ -29,6 +52,12 @@ export type SeoPage = {
   proof: string[];
   sections: SeoSection[];
   faqs: SeoFaq[];
+  steps?: SeoStep[];
+  comparison?: SeoComparisonRow[];
+  limitations?: string[];
+  screenshots?: SeoScreenshot[];
+  cta?: SeoCta;
+  disclaimer?: string;
   related: string[];
 };
 

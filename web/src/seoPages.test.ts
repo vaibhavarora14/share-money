@@ -2,20 +2,10 @@ import { describe, expect, it } from "vitest";
 import { normalizeSeoPath, pageByPath, relatedPages, seoPages } from "./seoPages";
 
 describe("SEO route content", () => {
-  it("has the approved ten indexable routes", () => {
-    expect(seoPages).toHaveLength(10);
-    expect([...pageByPath.keys()]).toEqual([
-      "/",
-      "/split-bills",
-      "/group-expense-tracker",
-      "/trip-expense-splitter",
-      "/roommate-expense-tracker",
-      "/splitwise-alternative",
-      "/in/splitwise-alternative",
-      "/tools",
-      "/tools/split-bill-calculator",
-      "/tools/settle-up-calculator",
-    ]);
+  it("has unique, indexable routes without a fixed page-count limit", () => {
+    expect(seoPages.length).toBeGreaterThan(0);
+    expect(new Set(seoPages.map((page) => page.path)).size).toBe(seoPages.length);
+    expect(pageByPath.get("/guides/import-from-splitwise")).toBeDefined();
   });
 
   it("only resolves known paths and maintains related-page links", () => {

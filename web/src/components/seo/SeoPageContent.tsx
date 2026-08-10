@@ -1,4 +1,4 @@
-import { trackRelatedPageClick } from "../../analytics";
+import { trackMigrationCtaClick, trackRelatedPageClick } from "../../analytics";
 import type { PlatformDestination } from "../../landingContent";
 import { relatedPages, type SeoPage } from "../../seoPages";
 import { PlatformCta } from "../landing/PlatformCta";
@@ -18,11 +18,22 @@ export function PageHero({
           <h1>{page.heading}</h1>
           <p>{page.body}</p>
           <div className="route-hero-actions">
-            <PlatformCta
-              destination={primaryDestination}
-              placement={`route_${page.id}`}
-              appearance="primary"
-            />
+            {page.cta ? (
+              <a
+                className="cta cta-primary migration-cta"
+                href={page.cta.href}
+                aria-label={page.cta.ariaLabel}
+                onClick={() => trackMigrationCtaClick(page)}
+              >
+                <span className="cta-label">{page.cta.label}</span>
+              </a>
+            ) : (
+              <PlatformCta
+                destination={primaryDestination}
+                placement={`route_${page.id}`}
+                appearance="primary"
+              />
+            )}
           </div>
         </div>
         <ul aria-label={`${page.heading} highlights`}>
@@ -52,6 +63,93 @@ export function SeoPageContent({ page }: { page: SeoPage }) {
         </div>
       </section>
 
+      {page.screenshots?.length ? (
+        <section className="section seo-media-section" aria-labelledby="page-media-title">
+          <div className="container">
+            <div className="section-head">
+              <p className="kicker">See the group view</p>
+              <h2 id="page-media-title">A shared ledger the group can check together.</h2>
+            </div>
+            <div className="seo-media-grid">
+              {page.screenshots.map((screenshot) => (
+                <figure className="seo-media" key={screenshot.src}>
+                  <img src={screenshot.src} alt={screenshot.alt} loading="lazy" />
+                  <figcaption>{screenshot.caption}</figcaption>
+                </figure>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {page.comparison?.length ? (
+        <section className="section seo-comparison-section" aria-labelledby="comparison-title">
+          <div className="container seo-comparison-shell">
+            <div className="section-head">
+              <p className="kicker">At a glance</p>
+              <h2 id="comparison-title">Choose the path that fits your group.</h2>
+            </div>
+            <div className="seo-comparison-scroll">
+              <table className="seo-comparison">
+                <caption>SharedMoney and continuing with your current Splitwise group</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">What you need</th>
+                    <th scope="col">SharedMoney</th>
+                    <th scope="col">Current Splitwise group</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {page.comparison.map((row) => (
+                    <tr key={row.feature}>
+                      <th scope="row">{row.feature}</th>
+                      <td>{row.sharedMoney}</td>
+                      <td>{row.splitwise}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {page.steps?.length ? (
+        <section className="section seo-steps-section" aria-labelledby="migration-steps-title">
+          <div className="container">
+            <div className="section-head">
+              <p className="kicker">How the move works</p>
+              <h2 id="migration-steps-title">A reviewable path from export to invite.</h2>
+            </div>
+            <ol className="seo-steps">
+              {page.steps.map((step, index) => (
+                <li key={step.title}>
+                  <span aria-hidden="true">{index + 1}</span>
+                  <div>
+                    <h3>{step.title}</h3>
+                    <p>{step.body}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </section>
+      ) : null}
+
+      {page.limitations?.length ? (
+        <section className="section seo-limitations-section" aria-labelledby="limitations-title">
+          <div className="container seo-limitations">
+            <div>
+              <p className="kicker">Before you import</p>
+              <h2 id="limitations-title">A few useful limits to know.</h2>
+            </div>
+            <ul>
+              {page.limitations.map((limitation) => <li key={limitation}>{limitation}</li>)}
+            </ul>
+          </div>
+        </section>
+      ) : null}
+
       <section className="section seo-faq-section" aria-labelledby="page-faq-title">
         <div className="container seo-faq-shell">
           <div className="section-head">
@@ -68,6 +166,14 @@ export function SeoPageContent({ page }: { page: SeoPage }) {
           </div>
         </div>
       </section>
+
+      {page.disclaimer ? (
+        <section className="seo-disclaimer" aria-label="Trademark disclaimer">
+          <div className="container">
+            <p>{page.disclaimer}</p>
+          </div>
+        </section>
+      ) : null}
 
       {related.length > 0 ? (
         <section className="section related-section" aria-labelledby="related-pages-title">

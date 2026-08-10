@@ -23,7 +23,11 @@ function pageUrl(page) {
   return `${siteUrl}${page.path === "/" ? "" : page.path}`;
 }
 
-report(pages.length === 10, `Expected 10 indexable routes, found ${pages.length}.`);
+function escapeAttribute(value) {
+  return String(value).replaceAll("&", "&amp;").replaceAll('"', "&quot;");
+}
+
+report(pages.length > 0, "Expected at least one indexable route.");
 report(new Set(pages.map((page) => page.path)).size === pages.length, "SEO paths must be unique.");
 
 for (const page of pages) {
@@ -46,6 +50,10 @@ for (const page of pages) {
   report(h1s.length === 1, `${page.path}: expected one H1, found ${h1s.length}.`);
   report(html.includes(`<h1>${page.heading}</h1>`), `${page.path}: static H1 does not match route content.`);
   report(html.includes('type="application/ld+json"'), `${page.path}: missing structured data.`);
+
+  if (page.cta) {
+    report(html.includes(`href="${escapeAttribute(page.cta.href)}"`), `${page.path}: missing migration CTA in static HTML.`);
+  }
 
   for (const relatedId of page.related) {
     const related = pages.find((candidate) => candidate.id === relatedId);

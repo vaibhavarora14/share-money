@@ -70,7 +70,7 @@
     "path": "/trip-expense-splitter",
     "kind": "page",
     "region": "global",
-    "updated": "2026-08-08",
+    "updated": "2026-08-11",
     "title": "Trip Expense Splitter for Travel Groups | SharedMoney",
     "description": "Split hotels, rides, food, tickets, and travel costs with a trip expense splitter built for changing payers and mixed currencies.",
     "eyebrow": "Trip expense splitter",
@@ -80,19 +80,20 @@
     "sections": [
       {"heading": "Capture costs when they happen", "body": "Travel spending is easier to track before the details fade. Add a hotel, meal, taxi, ticket, or grocery run as it happens and select only the people who shared it.", "bullets": ["Changing payers are easy to record", "Exclude people who did not join a cost", "Keep a note with the purchase"]},
       {"heading": "Do not force a fake exchange rate", "body": "Groups often spend in more than one currency. SharedMoney separates those balances, which makes the record more faithful and lets the group choose how to settle later.", "bullets": ["Currency-specific group balances", "No hidden conversion", "Useful for international travel"]}
+      ,{"heading": "Moving an existing trip group?", "body": "If your trip expenses already live in Splitwise, start with that group’s CSV export instead of re-entering every hotel, ride, and meal. SharedMoney lets you review what is importable before confirming the move.", "bullets": ["Choose a new or existing SharedMoney group", "Match exported members before importing", "Review skipped rows with the group"]}
     ],
     "faqs": [
       {"question": "Can I use SharedMoney for a weekend trip?", "answer": "Yes. It is designed for short or long trips where multiple people cover shared meals, transport, stays, and activities."},
       {"question": "What if only some people join an activity?", "answer": "Choose the people who shared that cost, rather than splitting it across the whole trip group."}
     ],
-    "related": ["split-bills", "split-bill-calculator", "settle-up-calculator"]
+    "related": ["split-bills", "split-bill-calculator", "import-from-splitwise", "settle-up-calculator"]
   },
   {
     "id": "roommate-expense-tracker",
     "path": "/roommate-expense-tracker",
     "kind": "page",
     "region": "global",
-    "updated": "2026-08-08",
+    "updated": "2026-08-11",
     "title": "Roommate Expense Tracker for Rent and Utilities | SharedMoney",
     "description": "Track rent, utilities, groceries, subscriptions, and shared household costs with roommate balances that stay easy to review.",
     "eyebrow": "Roommate expenses",
@@ -102,56 +103,129 @@
     "sections": [
       {"heading": "A calmer monthly reset", "body": "Recurring home costs are easier to discuss when the record is complete. Use a shared group to capture the bills that matter and review balances before they turn into a memory test.", "bullets": ["Rent and utilities", "Groceries and shared supplies", "Subscriptions and occasional repairs"]},
       {"heading": "Split costs the way the household agrees", "body": "Not every bill is a straight 50/50. SharedMoney lets the group record who joined each expense and how it was divided, leaving the agreement visible in the record.", "bullets": ["Equal or uneven splits", "A visible history of contributions", "Settlements recorded after paying outside the app"]}
+      ,{"heading": "Keep your household history when you switch", "body": "A household does not need to begin from a blank ledger. Export a Splitwise group as CSV, check the imported rows, and invite your roommates into the SharedMoney group once the record is ready.", "bullets": ["Bring one group at a time", "Create people who do not have accounts yet", "Share an invite after the import"]}
     ],
     "faqs": [
       {"question": "Can roommates use it for recurring bills?", "answer": "Yes. A household group can hold recurring bills alongside one-off costs such as supplies and repairs."},
       {"question": "Does it collect rent or utility payments?", "answer": "No. SharedMoney tracks the ledger and balances, while payments stay with the method the household prefers."}
     ],
-    "related": ["split-bills", "group-expense-tracker", "settle-up-calculator"]
+    "related": ["split-bills", "group-expense-tracker", "import-from-splitwise", "settle-up-calculator"]
   },
   {
     "id": "splitwise-alternative",
     "path": "/splitwise-alternative",
     "kind": "page",
     "region": "global",
-    "updated": "2026-08-08",
-    "title": "Splitwise Alternative for Shared Expenses | SharedMoney",
-    "description": "Looking for a Splitwise alternative? SharedMoney gives groups a simple shared ledger, clear balances, and payment-free settlement tracking.",
+    "updated": "2026-08-11",
+    "title": "Move from Splitwise with Your Group History | SharedMoney",
+    "description": "Import a Splitwise group CSV into SharedMoney, review what will move, and continue tracking shared expenses in a payment-free group ledger.",
     "eyebrow": "Splitwise alternative",
-    "heading": "A simple Splitwise alternative for clear group balances.",
-    "body": "SharedMoney focuses on the shared record: who paid, who joined, what remains open, and when a balance was settled outside the app.",
-    "proof": ["Splitwise CSV import", "No payment instruments stored", "Free shared expense tracking"],
+    "heading": "Leave Splitwise without leaving your group history behind.",
+    "body": "Import a group CSV, match the people in it, review the rows, and keep tracking shared expenses in a SharedMoney group. Payments remain outside the app.",
+    "proof": ["Guided Splitwise CSV import", "Local CSV parsing before review", "Payment-free shared ledger"],
     "sections": [
-      {"heading": "Bring the ledger, not the payment account", "body": "For groups that want an expense record without making the app part of the payment flow, SharedMoney keeps the focus on the ledger. Members can use their own preferred way to settle.", "bullets": ["A shared view of expenses and balances", "Payment-free by design", "Settlements can be recorded when complete"]},
-      {"heading": "Move a previous group carefully", "body": "SharedMoney supports Splitwise CSV import for groups that want to bring their record over. Review the imported data with the group before relying on it for a final settlement.", "bullets": ["Import a CSV export", "Review entries and balances together", "Start new activity in a shared group"]}
+      {"heading": "Bring the ledger, not your payment account", "body": "SharedMoney keeps the shared record separate from how people send money. After the group agrees on balances, members settle using their preferred payment method and can record that settlement in the ledger.", "bullets": ["A shared view of expenses and balances", "No payment instruments stored", "Settlements recorded after they happen"]},
+      {"heading": "Review the move before it changes the group", "body": "The importer parses the selected CSV on your device, shows importable and skipped rows, then asks you to confirm. That gives a group a chance to catch mapping issues before relying on the new record.", "bullets": ["Import one group export at a time", "Map exported people to group participants", "See why any supported rows were skipped"]}
     ],
     "faqs": [
-      {"question": "Can I import data from Splitwise?", "answer": "SharedMoney supports Splitwise CSV import. Imported group data should be reviewed with the group before it is used for a final settlement."},
+      {"question": "Can I import data from Splitwise?", "answer": "Yes. SharedMoney supports importing a Splitwise group CSV. Review the imported results with the group before using them for a final settlement."},
       {"question": "Does SharedMoney replace my payment app?", "answer": "No. It is an expense tracker and shared ledger; groups use their preferred payment method outside the app."}
     ],
-    "related": ["india-splitwise-alternative", "split-bills", "tools"]
+    "steps": [
+      {"title": "Export one group", "body": "Create a spreadsheet or CSV export for the Splitwise group you want to move."},
+      {"title": "Choose the CSV", "body": "Open the importer, choose the CSV, and review the importable and skipped rows on your device."},
+      {"title": "Match the people", "body": "Choose a new or existing SharedMoney group and match each exported person to a participant."},
+      {"title": "Confirm and invite", "body": "Confirm the import, check the result, and share the group invite with the people who should join."}
+    ],
+    "comparison": [
+      {"feature": "Starting with a previous group", "sharedMoney": "Import a Splitwise group CSV and review the result", "splitwise": "Continue using the existing group"},
+      {"feature": "Shared expense record", "sharedMoney": "Group ledger with expenses, balances, and settlements", "splitwise": "Existing group record"},
+      {"feature": "Settling a balance", "sharedMoney": "Use the payment method your group prefers outside the app", "splitwise": "Use the method already chosen by your group"}
+    ],
+    "limitations": ["A single import supports up to 2,000 items.", "Rows with more than one payer may be skipped.", "Payment rows must be between two people.", "Currencies stay separate; SharedMoney does not automatically convert them."],
+    "screenshots": [
+      {"src": "/app-group-current.png", "alt": "SharedMoney group screen with member balance, transaction list, and add expense action.", "caption": "A SharedMoney group keeps its balances and activity in one shared view."}
+    ],
+    "cta": {"label": "Import your Splitwise CSV", "href": "/app?intent=splitwise-import&utm_source=organic&utm_medium=seo&utm_campaign=splitwise-alternative&utm_content=hero", "ariaLabel": "Import your Splitwise CSV in SharedMoney"},
+    "disclaimer": "Splitwise is a trademark of its owner. SharedMoney is not affiliated with or endorsed by Splitwise.",
+    "related": ["india-splitwise-alternative", "import-from-splitwise", "split-bills", "tools"]
   },
   {
     "id": "india-splitwise-alternative",
     "path": "/in/splitwise-alternative",
     "kind": "page",
     "region": "india",
-    "updated": "2026-08-08",
-    "title": "Splitwise Alternative India for Friends and Trips | SharedMoney",
-    "description": "SharedMoney is a Splitwise alternative for India-focused groups that track trip, roommate, and dinner expenses while settling outside the app.",
+    "updated": "2026-08-11",
+    "title": "Splitwise Alternative India: Import Your Group CSV | SharedMoney",
+    "description": "Move a Splitwise group CSV to SharedMoney, then track INR trip, roommate, and dinner expenses while settling through the UPI app your group already uses.",
     "eyebrow": "India groups",
-    "heading": "Split expenses in India, then settle your way.",
-    "body": "Track INR group expenses for trips, roommates, and dinner plans. When the balance is clear, settle in your preferred payment app and record it in SharedMoney.",
-    "proof": ["INR-friendly examples", "UPI can happen outside the app", "Trip and roommate use cases"],
+    "heading": "Move your Splitwise group, then settle your way in India.",
+    "body": "Bring a group’s CSV history into SharedMoney, continue tracking INR expenses for trips, roommates, and dinners, then settle through the UPI app your group already uses.",
+    "proof": ["Guided Splitwise CSV import", "INR group expense tracking", "UPI settlement outside SharedMoney"],
     "sections": [
       {"heading": "Keep the shared record in one place", "body": "Whether a group is splitting a cab, a weekend trip, flat expenses, or a dinner, SharedMoney creates a common ledger. It shows what was paid and what the group has agreed is owed.", "bullets": ["INR balances stay separate and readable", "Useful for friends, flatmates, and travel groups", "A running record rather than a one-time calculation"]},
-      {"heading": "Settle with the payment method you already use", "body": "SharedMoney does not process or store payment instruments. Once the group agrees on its balances, members can settle outside the app, including through their preferred UPI app, and record the settlement.", "bullets": ["No UPI or bank account connection", "The group chooses its settlement method", "Recorded settlements keep the history clear"]}
+      {"heading": "Settle with the payment method you already use", "body": "SharedMoney does not process or store payment instruments. Once the group agrees on its balances, members can settle outside the app, including through their preferred UPI app, and record the settlement.", "bullets": ["No UPI or bank account connection", "The group chooses its settlement method", "Recorded settlements keep the history clear"]},
+      {"heading": "Switch without re-entering every expense", "body": "Start with the Splitwise CSV for one trip, household, or dinner group. SharedMoney lets you choose a new or existing group, identify yourself in the export, and create non-account participants for people who have not joined yet.", "bullets": ["Review importable and skipped rows", "Invite the group after a completed import", "Keep imported currencies separate"]}
     ],
     "faqs": [
       {"question": "Does SharedMoney make UPI payments?", "answer": "No. SharedMoney tracks shared expenses and balances. UPI payments happen in the payment app that group members choose."},
       {"question": "Can it be used for flat expenses in India?", "answer": "Yes. Groups can use it to track rent-related costs, utilities, groceries, subscriptions, and other shared household spending."}
     ],
-    "related": ["splitwise-alternative", "trip-expense-splitter", "roommate-expense-tracker", "split-bill-calculator"]
+    "steps": [
+      {"title": "Export the group CSV", "body": "Download the spreadsheet or CSV for the Splitwise group you want to move."},
+      {"title": "Start the guided import", "body": "Choose the CSV in SharedMoney and review the rows it can import."},
+      {"title": "Choose your group and people", "body": "Create a group or choose an existing one, identify yourself, and map the exported members."},
+      {"title": "Confirm, then share", "body": "Confirm the import and send the group invite to your friends or flatmates."}
+    ],
+    "comparison": [
+      {"feature": "Moving a group history", "sharedMoney": "Review and import a Splitwise group CSV", "splitwise": "Keep the current group in Splitwise"},
+      {"feature": "INR expenses", "sharedMoney": "Track expenses and balances as INR", "splitwise": "Continue tracking in the current group"},
+      {"feature": "UPI settlement", "sharedMoney": "Settle in your chosen UPI app, then record it", "splitwise": "Use the payment method your group chooses"}
+    ],
+    "limitations": ["A single import supports up to 2,000 items.", "Rows with more than one payer may be skipped.", "Payment rows must be between two people.", "Currencies stay separate; SharedMoney does not automatically convert them."],
+    "screenshots": [
+      {"src": "/app-group-current.png", "alt": "SharedMoney group screen showing INR balances and group transaction activity.", "caption": "A SharedMoney group can show INR balances alongside its shared expense activity."}
+    ],
+    "cta": {"label": "Import your Splitwise CSV", "href": "/app?intent=splitwise-import&utm_source=organic&utm_medium=seo&utm_campaign=india-splitwise-alternative&utm_content=hero", "ariaLabel": "Import your Splitwise CSV in SharedMoney"},
+    "disclaimer": "Splitwise is a trademark of its owner. SharedMoney is not affiliated with or endorsed by Splitwise.",
+    "related": ["splitwise-alternative", "import-from-splitwise", "trip-expense-splitter", "roommate-expense-tracker", "split-bill-calculator"]
+  },
+  {
+    "id": "import-from-splitwise",
+    "path": "/guides/import-from-splitwise",
+    "kind": "page",
+    "region": "global",
+    "updated": "2026-08-11",
+    "title": "How to Import a Splitwise CSV into SharedMoney",
+    "description": "Export a Splitwise group CSV, review supported rows locally, map group members, and import the confirmed group history into SharedMoney.",
+    "eyebrow": "Splitwise CSV import guide",
+    "heading": "Move a Splitwise group without re-entering every expense.",
+    "body": "Export one group as a spreadsheet or CSV, review it in the guided importer, map the people, and confirm the group history you want SharedMoney to record.",
+    "proof": ["CSV parsed locally before review", "New or existing group destination", "Invite the group after importing"],
+    "sections": [
+      {"heading": "Export one group at a time", "body": "Choose the Splitwise group that you want to move and create its spreadsheet or CSV export. One group at a time makes it easier to check members, dates, currencies, and balances before you continue.", "bullets": ["Use the export created for the specific group", "Keep the original CSV until the group has checked the result", "Start with the group that is easiest to verify together"]},
+      {"heading": "Review the CSV before it is sent", "body": "SharedMoney parses the file on your device and shows the rows that can be imported or skipped. The raw CSV is not uploaded as part of this review; only the confirmed normalized import is sent to create the shared record.", "bullets": ["Choose a new or existing SharedMoney group", "Identify which exported member represents you", "Create non-account participants for unmatched people"]},
+      {"heading": "Confirm, check, and invite", "body": "Before importing, check the participant mapping and the displayed limitations. After a successful import, review the result with the group and use the invite link to bring in the people who should have access.", "bullets": ["See imported and skipped counts", "Retry a lost response without duplicating a completed import", "Share the group only after you are ready"]}
+    ],
+    "faqs": [
+      {"question": "Does SharedMoney upload my raw Splitwise CSV?", "answer": "No. SharedMoney parses the selected CSV on your device for review. After you confirm, it sends the normalized import needed to create the selected group record."},
+      {"question": "Why might a row be skipped?", "answer": "Rows may be skipped when they are malformed or use an unsupported pattern, including rows with more than one payer. The importer shows the skipped count before you confirm."},
+      {"question": "What is the import size limit?", "answer": "One import supports up to 2,000 items."},
+      {"question": "Will currencies be converted?", "answer": "No. SharedMoney keeps currencies separate instead of automatically converting them."}
+    ],
+    "steps": [
+      {"title": "Export from Splitwise", "body": "Create a spreadsheet or CSV export for the single group you want to move."},
+      {"title": "Choose the CSV in SharedMoney", "body": "Start the guided import and see the importable and skipped rows after local parsing."},
+      {"title": "Choose and map the group", "body": "Create a new group or choose an existing one, identify yourself, and map the other people."},
+      {"title": "Confirm the result", "body": "Confirm the reviewed import, then share the invite link with the group when the record is ready."}
+    ],
+    "limitations": ["One import supports up to 2,000 items.", "Rows with more than one payer may be skipped.", "Payment rows must be between two people.", "Currencies remain separate and are not automatically converted."],
+    "screenshots": [
+      {"src": "/app-group-current.png", "alt": "SharedMoney group screen with a member balance, group summary, transactions, and an add expense action.", "caption": "After importing, a group can continue tracking expenses and balances in one shared place."}
+    ],
+    "cta": {"label": "Import your Splitwise CSV", "href": "/app?intent=splitwise-import&utm_source=organic&utm_medium=seo&utm_campaign=import-from-splitwise&utm_content=hero", "ariaLabel": "Start a Splitwise CSV import in SharedMoney"},
+    "disclaimer": "Splitwise is a trademark of its owner. SharedMoney is not affiliated with or endorsed by Splitwise.",
+    "related": ["india-splitwise-alternative", "splitwise-alternative", "trip-expense-splitter", "roommate-expense-tracker"]
   },
   {
     "id": "tools",
