@@ -61,13 +61,18 @@ import { GroupDetailsScreen } from "./screens/GroupDetailsScreen";
 import { GroupStatsMode, GroupStatsScreen } from "./screens/GroupStatsScreen";
 import { GroupsListScreen } from "./screens/GroupsListScreen";
 import { ProfileSetupScreen } from "./screens/ProfileSetupScreen";
-import { SplitwiseImportScreen } from "./screens/SplitwiseImportScreen";
+import {
+  SplitwiseImportScreen,
+  type PreparedSplitwiseImport,
+} from "./screens/SplitwiseImportScreen";
+import { SplitwiseMigrationScreen } from "./screens/SplitwiseMigrationScreen";
 import { TransactionFormScreen } from "./screens/TransactionFormScreen";
 import { darkTheme, lightTheme } from "./theme";
 import { Group, GroupWithMembers } from "./types";
 import { getDefaultCurrency } from "./utils/currency";
 import {
   getAcquisitionContext,
+  consumePendingMigrationIntent,
   persistAcquisitionContextFromUrl,
 } from "./utils/acquisition";
 import { trackGrowthEvent } from "./utils/analytics";
@@ -135,6 +140,7 @@ function AppContent() {
   } = useProfile();
   const [isSignUp, setIsSignUp] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
+  const [guidedImport, setGuidedImport] = useState<PreparedSplitwiseImport | null>(null);
   const [showAddMember, setShowAddMember] = useState(false);
   const [currentRoute, setCurrentRoute] = useState<string>("groups");
   const [invitationsRefreshTrigger, setInvitationsRefreshTrigger] =
@@ -373,6 +379,25 @@ function AppContent() {
     };
   }, [session?.user?.id, openGroupDeepLink]);
 
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    let cancelled = false;
+
+    void consumePendingMigrationIntent().then((intent) => {
+      if (cancelled || intent !== "splitwise-import") return;
+      setSelectedGroup(null);
+      setGuidedImport(null);
+      setCurrentRoute("splitwise-migration");
+      trackGrowthEvent("migration started", { entry: "campaign_handoff" });
+    }).catch((error) => {
+      logError(error, { context: "pending Splitwise migration intent" });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.id]);
+
   // Debug routing / loading state to track "stuck on spinner" issues.
   // To avoid noisy duplicate breadcrumbs, only log when the state snapshot changes.
   useEffect(() => {
@@ -453,6 +478,7 @@ function AppContent() {
     if (hadSession !== hasSession) {
       setCurrentRoute("groups");
       setSelectedGroup(null);
+      setGuidedImport(null);
       setShowAddMember(false);
       setEditingTransaction(null);
     }
@@ -626,6 +652,26 @@ function AppContent() {
     );
   }
 
+  if (currentRoute === "splitwise-migration") {
+    return (
+      <>
+        <SplitwiseMigrationScreen
+          onBack={() => {
+            setGuidedImport(null);
+            setCurrentRoute("groups");
+          }}
+          onCreateGroup={({ name }) => handleCreateGroup({ name })}
+          onImportReady={(group, preparedImport) => {
+            setSelectedGroup(group);
+            setGuidedImport(preparedImport);
+            setCurrentRoute("splitwise-import");
+          }}
+        />
+        <StatusBar style={theme.dark ? "light" : "dark"} />
+      </>
+    );
+  }
+
   // Show Splitwise import screen
   if (currentRoute === "splitwise-import" && selectedGroup) {
     return (
@@ -634,7 +680,11 @@ function AppContent() {
           groupId={selectedGroup.id}
           groupName={selectedGroup.name}
           onBack={() => setCurrentRoute("group-details")}
-          onDone={() => setCurrentRoute("group-details")}
+          onDone={() => {
+            setGuidedImport(null);
+            setCurrentRoute("group-details");
+          }}
+          initialImport={guidedImport}
         />
         <StatusBar style={theme.dark ? "light" : "dark"} />
       </>

@@ -16,6 +16,28 @@ export async function fetchParticipants(
   return response.json();
 }
 
+export async function createParticipant(input: {
+  groupId: string;
+  fullName: string;
+  email?: string | null;
+}): Promise<Participant> {
+  const response = await fetchWithAuth("/participants", {
+    method: "POST",
+    body: JSON.stringify({
+      group_id: input.groupId,
+      full_name: input.fullName,
+      email: input.email || null,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || "Failed to add person");
+  }
+
+  return response.json();
+}
+
 export function useParticipants(groupId: string | null) {
   const { user } = useAuth();
 

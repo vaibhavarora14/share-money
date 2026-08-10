@@ -6,6 +6,7 @@ import {
 } from "./acquisitionContext";
 
 const ACQUISITION_CONTEXT_KEY = "acquisition_context_v1";
+const CONSUMED_MIGRATION_CONTEXT_KEY = "consumed_migration_context_v1";
 const ACQUISITION_CONTEXT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 export type { AcquisitionContext, MigrationIntent };
@@ -22,6 +23,7 @@ export async function persistAcquisitionContextFromUrl(url: string | null | unde
   if (!context) return null;
 
   await AsyncStorage.setItem(ACQUISITION_CONTEXT_KEY, JSON.stringify(context));
+  await AsyncStorage.removeItem(CONSUMED_MIGRATION_CONTEXT_KEY);
   return context;
 }
 
@@ -45,4 +47,15 @@ export async function getAcquisitionContext(): Promise<AcquisitionContext | null
 export async function getMigrationIntent(): Promise<MigrationIntent> {
   const context = await getAcquisitionContext();
   return context?.intent ?? "standard";
+}
+
+export async function consumePendingMigrationIntent(): Promise<MigrationIntent> {
+  const context = await getAcquisitionContext();
+  if (!context || context.intent !== "splitwise-import") return "standard";
+
+  const consumedAt = await AsyncStorage.getItem(CONSUMED_MIGRATION_CONTEXT_KEY);
+  if (consumedAt === context.capturedAt) return "standard";
+
+  await AsyncStorage.setItem(CONSUMED_MIGRATION_CONTEXT_KEY, context.capturedAt);
+  return "splitwise-import";
 }

@@ -42,7 +42,14 @@ interface SplitwiseImportScreenProps {
   onBack: () => void;
   /** Called after a successful import (navigates back to the group). */
   onDone: () => void;
+  initialImport?: PreparedSplitwiseImport | null;
 }
+
+export type PreparedSplitwiseImport = {
+  fileName: string;
+  parsed: SplitwiseParseResult;
+  mapping?: string[];
+};
 
 type ImportStep = "pick" | "map" | "done";
 
@@ -74,15 +81,16 @@ export const SplitwiseImportScreen: React.FC<SplitwiseImportScreenProps> = ({
   groupName,
   onBack,
   onDone,
+  initialImport,
 }) => {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
 
-  const [step, setStep] = useState<ImportStep>("pick");
-  const [fileName, setFileName] = useState<string>("");
-  const [parsed, setParsed] = useState<SplitwiseParseResult | null>(null);
+  const [step, setStep] = useState<ImportStep>(initialImport ? "map" : "pick");
+  const [fileName, setFileName] = useState<string>(initialImport?.fileName ?? "");
+  const [parsed, setParsed] = useState<SplitwiseParseResult | null>(initialImport?.parsed ?? null);
   // participant id (or null) per Splitwise member, indexed like parsed.people
-  const [mapping, setMapping] = useState<(string | null)[]>([]);
+  const [mapping, setMapping] = useState<(string | null)[]>(initialImport?.mapping ?? []);
   const [openMenuIndex, setOpenMenuIndex] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [importId, setImportId] = useState<string | null>(null);
@@ -93,6 +101,13 @@ export const SplitwiseImportScreen: React.FC<SplitwiseImportScreenProps> = ({
     useParticipants(groupId);
   const importMutation = useSplitwiseImport();
   const importing = importMutation.isLoading;
+
+  useEffect(() => {
+    if (!initialImport?.parsed || initialImport.mapping || mapping.length > 0 || participants.length === 0) {
+      return;
+    }
+    setMapping(autoMatchPeopleToParticipants(initialImport.parsed.people, participants));
+  }, [initialImport, mapping.length, participants]);
 
   // Android hardware back mirrors the appbar back action
   useEffect(() => {
