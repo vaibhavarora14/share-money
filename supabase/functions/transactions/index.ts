@@ -533,10 +533,12 @@ Deno.serve(async (req: Request) => {
       }
 
       let activated = false;
+      let invitePrompt = false;
+      let day7Active = false;
       if (transactionData.group_id && transactionData.type === 'expense') {
         const { data: activation, error: activationError } = await supabase
           .from('groups')
-          .select('activation_method, activation_source_id')
+          .select('activation_method, activation_source_id, manual_expense_count, day_7_activity_source_id')
           .eq('id', transactionData.group_id)
           .maybeSingle();
 
@@ -550,10 +552,17 @@ Deno.serve(async (req: Request) => {
         } else {
           activated = activation?.activation_method === 'manual_expense' &&
             activation?.activation_source_id === String(transaction.id);
+          invitePrompt = activation?.manual_expense_count === 3;
+          day7Active = activation?.day_7_activity_source_id === String(transaction.id);
         }
       }
 
-      return createSuccessResponse({ ...responseTransaction, activated }, 201, 0, req);
+      return createSuccessResponse({
+        ...responseTransaction,
+        activated,
+        invite_prompt: invitePrompt,
+        day_7_active: day7Active,
+      }, 201, 0, req);
     }
 
     // Handle PUT - Update existing transaction

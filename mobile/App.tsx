@@ -75,7 +75,7 @@ import {
   consumePendingMigrationIntent,
   persistAcquisitionContextFromUrl,
 } from "./utils/acquisition";
-import { trackGrowthEvent } from "./utils/analytics";
+import { registerGrowthJourney, trackGrowthEvent } from "./utils/analytics";
 import {
   extractGroupDeepLinkId,
   extractInviteToken,
@@ -115,6 +115,30 @@ function clearJoinPathFromWebUrl() {
   if (Platform.OS === "web" && typeof window !== "undefined") {
     window.history.replaceState({}, "", getConfiguredWebAppPath() || "/");
   }
+}
+
+/** Removes one-time acquisition handoff parameters without changing the app path. */
+function clearAcquisitionHandoffFromWebUrl() {
+  if (Platform.OS !== "web" || typeof window === "undefined") return;
+
+  const url = new URL(window.location.href);
+  const keys = [
+    "intent",
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "utm_content",
+    "acq_source",
+    "acq_medium",
+    "acq_campaign",
+    "acq_content",
+    "acq_landing_path",
+    "acq_referrer_host",
+    "acq_captured_at",
+    "journey_id",
+  ];
+  keys.forEach((key) => url.searchParams.delete(key));
+  window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
 const queryClient = new QueryClient({
@@ -160,6 +184,7 @@ function AppContent() {
   const initialUrlHandledRef = React.useRef(false);
   const redeemingTokenRef = React.useRef<string | null>(null);
   const openingGroupDeepLinkRef = React.useRef<string | null>(null);
+  const migrationIntentQueueRef = React.useRef<Promise<void>>(Promise.resolve());
   const prefetchGroupData = React.useCallback(
     async (groupId: string) => {
       await Promise.all([
@@ -272,20 +297,29 @@ function AppContent() {
     }
   }, [queryClientInstance]);
 
+  const openPendingMigrationIntent = React.useCallback(() => {
+    const next = migrationIntentQueueRef.current.then(async () => {
+      const intent = await consumePendingMigrationIntent();
+      if (intent !== "splitwise-import") return;
+      setSelectedGroup(null);
+      setGuidedImport(null);
+      setCurrentRoute("splitwise-migration");
+      trackGrowthEvent("migration started", { entry: "campaign_handoff" });
+    });
+    migrationIntentQueueRef.current = next.catch(() => {});
+    return next;
+  }, []);
+
   // Handle deep links: initial URL (cold start / web navigation) + url events.
   useEffect(() => {
     const handleUrl = async (url: string | null) => {
       const acquisitionContext = await persistAcquisitionContextFromUrl(url);
       if (acquisitionContext) {
-        trackGrowthEvent("acquisition landing viewed", {
-          source: acquisitionContext.source,
-          medium: acquisitionContext.medium,
-          campaign: acquisitionContext.campaign,
-          content: acquisitionContext.content,
-          landing_path: acquisitionContext.landingPath,
-          referrer_host: acquisitionContext.referrerHost,
-          intent: acquisitionContext.intent,
-        });
+        registerGrowthJourney(acquisitionContext.journeyId);
+        clearAcquisitionHandoffFromWebUrl();
+        if (session?.user?.id && acquisitionContext.intent === "splitwise-import") {
+          await openPendingMigrationIntent();
+        }
       }
 
       const token = extractInviteToken(url);
@@ -342,7 +376,7 @@ function AppContent() {
     }
 
     return () => subscription.remove();
-  }, [session?.user?.id, redeemInviteToken, openGroupDeepLink]);
+  }, [session?.user?.id, redeemInviteToken, openGroupDeepLink, openPendingMigrationIntent]);
 
   // After sign-in/sign-up, consume any invite token saved before auth.
   useEffect(() => {
@@ -388,20 +422,15 @@ function AppContent() {
     if (!session?.user?.id) return;
     let cancelled = false;
 
-    void consumePendingMigrationIntent().then((intent) => {
-      if (cancelled || intent !== "splitwise-import") return;
-      setSelectedGroup(null);
-      setGuidedImport(null);
-      setCurrentRoute("splitwise-migration");
-      trackGrowthEvent("migration started", { entry: "campaign_handoff" });
-    }).catch((error) => {
+    void openPendingMigrationIntent().catch((error) => {
+      if (cancelled) return;
       logError(error, { context: "pending Splitwise migration intent" });
     });
 
     return () => {
       cancelled = true;
     };
-  }, [session?.user?.id]);
+  }, [session?.user?.id, openPendingMigrationIntent]);
 
   // Debug routing / loading state to track "stuck on spinner" issues.
   // To avoid noisy duplicate breadcrumbs, only log when the state snapshot changes.
@@ -465,14 +494,17 @@ function AppContent() {
   const removeMemberMutation = useRemoveMember(refetchSelectedGroup);
 
   // Transaction mutations
-  const onTransactionSuccess = () => {
+  const onTransactionSuccess = (result?: { invite_prompt?: boolean } | null) => {
     setCurrentRoute("group-details");
     setEditingTransaction(null);
+    if (result?.invite_prompt) {
+      setShowAddMember(true);
+    }
   };
 
   const createTx = useCreateTransaction(onTransactionSuccess);
-  const updateTx = useUpdateTransaction(onTransactionSuccess);
-  const deleteTx = useDeleteTransaction(onTransactionSuccess);
+  const updateTx = useUpdateTransaction(() => onTransactionSuccess());
+  const deleteTx = useDeleteTransaction(() => onTransactionSuccess());
 
   // Reset navigation state on logout and login (only when session state changes)
   useEffect(() => {
@@ -496,10 +528,13 @@ function AppContent() {
   const handleCreateGroup = async (groupData: {
     name: string;
     description?: string;
+    creationId?: string;
   }) => {
     const acquisitionContext = await getAcquisitionContext();
+    const { creationId, ...groupFields } = groupData;
     const group = await createGroupMutation.mutate({
-      ...groupData,
+      ...groupFields,
+      ...(creationId ? { creation_id: creationId } : {}),
       ...(acquisitionContext ? { acquisition_context: acquisitionContext } : {}),
     });
     // Refetch groups list to show the newly created group
@@ -665,7 +700,7 @@ function AppContent() {
             setGuidedImport(null);
             setCurrentRoute("groups");
           }}
-          onCreateGroup={({ name }) => handleCreateGroup({ name })}
+          onCreateGroup={({ name, creationId }) => handleCreateGroup({ name, creationId })}
           onImportReady={(group, preparedImport) => {
             setSelectedGroup(group);
             setGuidedImport(preparedImport);
@@ -688,6 +723,11 @@ function AppContent() {
           onDone={() => {
             setGuidedImport(null);
             setCurrentRoute("group-details");
+          }}
+          onInvite={() => {
+            setGuidedImport(null);
+            setCurrentRoute("group-details");
+            setShowAddMember(true);
           }}
           initialImport={guidedImport}
         />
@@ -754,6 +794,7 @@ function AppContent() {
             setCurrentRoute("transaction-form");
           }}
           onImportSplitwise={() => {
+            trackGrowthEvent("migration started", { entry: "group_menu" });
             setCurrentRoute("splitwise-import");
           }}
           onStatsPress={(mode) => {

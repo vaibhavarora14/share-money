@@ -2,8 +2,11 @@ import type { PlatformDestination } from "./landingContent";
 import {
   acquisitionContextFromUrl,
   acquisitionContextToProperties,
+  buildMigrationHandoffUrl,
+  selectFirstTouchAcquisition,
   type AcquisitionContext,
 } from "./acquisition";
+import { sanitizePostHogProperties } from "./analyticsPrivacy";
 import type { SeoPage, SeoTool } from "./seoPages";
 import { detectDevice } from "./utils/deviceDetection";
 
@@ -14,6 +17,41 @@ let analyticsEnabled = false;
 let posthogClient: PostHogClient | null = null;
 const queuedEvents: Array<{ event: string; properties: Record<string, string> }> = [];
 let acquisitionContext: AcquisitionContext | null = null;
+let journeyId: string | null = null;
+const ACQUISITION_STORAGE_KEY = "sharedmoney_first_touch_v1";
+const JOURNEY_STORAGE_KEY = "sharedmoney_journey_v1";
+
+function readStoredAcquisitionContext(): AcquisitionContext | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(ACQUISITION_STORAGE_KEY);
+    return raw ? JSON.parse(raw) as AcquisitionContext : null;
+  } catch {
+    return null;
+  }
+}
+
+function currentJourneyId(): string {
+  if (journeyId) return journeyId;
+  if (typeof window === "undefined") return "server";
+  let stored: string | null = null;
+  try {
+    stored = window.localStorage.getItem(JOURNEY_STORAGE_KEY);
+  } catch {
+    // Continue with an in-memory journey when storage is unavailable.
+  }
+  if (stored && /^[a-z0-9][a-z0-9_-]{0,119}$/i.test(stored)) {
+    journeyId = stored;
+    return stored;
+  }
+  journeyId = globalThis.crypto?.randomUUID?.() ?? `journey-${Date.now()}`;
+  try {
+    window.localStorage.setItem(JOURNEY_STORAGE_KEY, journeyId);
+  } catch {
+    // The in-memory value still joins events within this page lifecycle.
+  }
+  return journeyId;
+}
 
 function currentAcquisitionContext(): AcquisitionContext {
   if (acquisitionContext) {
@@ -24,12 +62,23 @@ function currentAcquisitionContext(): AcquisitionContext {
     ? new URL("https://sharedmoney.app/")
     : new URL(window.location.href);
   const referrer = typeof document === "undefined" ? "" : document.referrer;
-  acquisitionContext = acquisitionContextFromUrl(url, referrer);
+  const incoming = acquisitionContextFromUrl(url, referrer);
+  acquisitionContext = selectFirstTouchAcquisition(readStoredAcquisitionContext(), incoming);
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(ACQUISITION_STORAGE_KEY, JSON.stringify(acquisitionContext));
+    } catch {
+      // Analytics persistence is best effort and must never block the page.
+    }
+  }
   return acquisitionContext;
 }
 
 function acquisitionProperties(): Record<string, string> {
-  return acquisitionContextToProperties(currentAcquisitionContext());
+  return {
+    ...acquisitionContextToProperties(currentAcquisitionContext()),
+    journey_id: currentJourneyId(),
+  };
 }
 
 function capture(event: string, properties: Record<string, string>) {
@@ -61,10 +110,20 @@ export function initializeAnalytics(): boolean {
         capture_pageleave: false,
         disable_session_recording: true,
         person_profiles: "never",
-        persistence: "memory",
+        persistence: "localStorage",
+        property_denylist: ["$current_url", "$referrer", "$initial_referrer", "$initial_current_url"],
+        before_send: (event) => event
+          ? {
+              ...event,
+              properties: sanitizePostHogProperties(event.properties),
+              $set: undefined,
+              $set_once: undefined,
+            }
+          : null,
       });
       posthogClient = posthog;
       analyticsEnabled = true;
+      posthog.identify(currentJourneyId());
 
       queuedEvents.splice(0).forEach(({ event, properties }) => {
         posthog.capture(event, properties);
@@ -113,6 +172,11 @@ export function trackMigrationCtaClick(page: SeoPage) {
 
   capture("seo cta clicked", properties);
   capture("acquisition cta clicked", properties);
+}
+
+export function migrationCtaHref(page: SeoPage): string {
+  if (!page.cta) return "/app?intent=splitwise-import";
+  return buildMigrationHandoffUrl(page.cta.href, currentAcquisitionContext(), currentJourneyId());
 }
 
 export function trackToolStarted(tool: SeoTool) {

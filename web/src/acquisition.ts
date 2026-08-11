@@ -13,6 +13,7 @@ export type AcquisitionContext = {
 
 const MAX_ATTRIBUTION_VALUE_LENGTH = 120;
 const SAFE_ATTRIBUTION_VALUE = /^[a-z0-9][a-z0-9_-]*$/i;
+const ACQUISITION_CONTEXT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 function readAttributionValue(value: string | null): string | undefined {
   if (!value || value.length > MAX_ATTRIBUTION_VALUE_LENGTH) return undefined;
@@ -67,12 +68,43 @@ export function acquisitionContextToProperties(
   context: AcquisitionContext,
 ): Record<string, string> {
   return {
-    acquisition_source: context.source,
-    acquisition_medium: context.medium,
-    acquisition_campaign: context.campaign ?? "",
-    acquisition_content: context.content ?? "",
-    acquisition_landing_path: context.landingPath,
-    acquisition_referrer_host: context.referrerHost ?? "",
-    acquisition_intent: context.intent,
+    source: context.source,
+    medium: context.medium,
+    campaign: context.campaign ?? "",
+    content: context.content ?? "",
+    landing_path: context.landingPath,
+    referrer_host: context.referrerHost ?? "",
+    intent: context.intent,
   };
+}
+
+export function selectFirstTouchAcquisition(
+  existing: AcquisitionContext | null,
+  incoming: AcquisitionContext,
+  now = Date.now(),
+): AcquisitionContext {
+  const capturedAt = existing ? Date.parse(existing.capturedAt) : Number.NaN;
+  const existingIsFresh = Number.isFinite(capturedAt) && now >= capturedAt &&
+    now - capturedAt <= ACQUISITION_CONTEXT_MAX_AGE_MS;
+  return existingIsFresh ? existing! : incoming;
+}
+
+export function buildMigrationHandoffUrl(
+  href: string,
+  context: AcquisitionContext,
+  journeyId?: string,
+): string {
+  const url = new URL(href, "https://sharedmoney.app");
+  url.searchParams.set("intent", "splitwise-import");
+  url.searchParams.set("acq_source", context.source);
+  url.searchParams.set("acq_medium", context.medium);
+  if (context.campaign) url.searchParams.set("acq_campaign", context.campaign);
+  if (context.content) url.searchParams.set("acq_content", context.content);
+  url.searchParams.set("acq_landing_path", context.landingPath);
+  if (context.referrerHost) url.searchParams.set("acq_referrer_host", context.referrerHost);
+  url.searchParams.set("acq_captured_at", context.capturedAt);
+  if (journeyId && readAttributionValue(journeyId)) {
+    url.searchParams.set("journey_id", journeyId);
+  }
+  return `${url.pathname}${url.search}${url.hash}`;
 }

@@ -33,7 +33,7 @@ export function PlatformCta({
       target="_blank"
       rel="noopener noreferrer"
       className={`cta cta-${appearance}`}
-      aria-label={destination.ariaLabel}
+      title={destination.ariaLabel}
       onClick={() => trackCtaClick(destination, placement)}
     >
       <PlatformIcon platform={destination.platform} />

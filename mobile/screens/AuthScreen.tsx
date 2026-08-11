@@ -21,6 +21,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
 import { trackGrowthEvent } from "../utils/analytics";
+import { clearPendingSignup, markSignupStarted } from "../utils/pendingSignup";
 
 type AuthStep = "methods" | "email";
 
@@ -141,18 +142,20 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
     setLoading(true);
     try {
-      if (isSignUp) trackGrowthEvent("signup started", { method: "email" });
+      if (isSignUp) {
+        await markSignupStarted("email");
+        trackGrowthEvent("signup started", { method: "email" });
+      }
       const result = isSignUp
         ? await signUp(trimmedEmail, password)
         : await signIn(trimmedEmail, password);
 
       if (result.error) {
+        if (isSignUp) await clearPendingSignup();
         const errorMessage = result.error.message || "An error occurred";
         const errorTitle = isSignUp ? "Sign Up Failed" : "Sign In Failed";
         setFormError(errorMessage);
         Alert.alert(errorTitle, errorMessage, [{ text: "OK", style: "default" }]);
-      } else if (isSignUp) {
-        trackGrowthEvent("signup completed", { method: "email" });
       }
     } catch (err) {
       console.error("Unexpected error in authentication:", err);
@@ -165,9 +168,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
     try {
-      if (isSignUp) trackGrowthEvent("signup started", { method: "google" });
+      if (isSignUp) {
+        await markSignupStarted("google");
+        trackGrowthEvent("signup started", { method: "google" });
+      }
       const { error } = await signInWithGoogle();
       if (error) {
+        if (isSignUp) await clearPendingSignup();
         Alert.alert("Google Sign In Failed", error.message || "Failed to sign in with Google", [
           { text: "OK", style: "default" },
         ]);
@@ -185,9 +192,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const handleAppleSignIn = async () => {
     setAppleLoading(true);
     try {
-      if (isSignUp) trackGrowthEvent("signup started", { method: "apple" });
+      if (isSignUp) {
+        await markSignupStarted("apple");
+        trackGrowthEvent("signup started", { method: "apple" });
+      }
       const { error } = await signInWithApple();
       if (error) {
+        if (isSignUp) await clearPendingSignup();
         Alert.alert("Apple Sign In Failed", error.message || "Failed to sign in with Apple", [
           { text: "OK", style: "default" },
         ]);

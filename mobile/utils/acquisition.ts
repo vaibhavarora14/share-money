@@ -1,20 +1,16 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   acquisitionContextFromUrl,
+  isFreshAcquisitionContext,
+  selectFirstTouchAcquisition,
   type AcquisitionContext,
   type MigrationIntent,
 } from "./acquisitionContext";
 
 const ACQUISITION_CONTEXT_KEY = "acquisition_context_v1";
-const CONSUMED_MIGRATION_CONTEXT_KEY = "consumed_migration_context_v1";
-const ACQUISITION_CONTEXT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+const PENDING_MIGRATION_INTENT_KEY = "pending_migration_intent_v1";
 
 export type { AcquisitionContext, MigrationIntent };
-
-function isFreshContext(context: AcquisitionContext): boolean {
-  const capturedAt = Date.parse(context.capturedAt);
-  return Number.isFinite(capturedAt) && Date.now() - capturedAt <= ACQUISITION_CONTEXT_MAX_AGE_MS;
-}
 
 export async function persistAcquisitionContextFromUrl(url: string | null | undefined): Promise<AcquisitionContext | null> {
   if (!url) return null;
@@ -22,8 +18,14 @@ export async function persistAcquisitionContextFromUrl(url: string | null | unde
   const context = acquisitionContextFromUrl(url);
   if (!context) return null;
 
-  await AsyncStorage.setItem(ACQUISITION_CONTEXT_KEY, JSON.stringify(context));
-  await AsyncStorage.removeItem(CONSUMED_MIGRATION_CONTEXT_KEY);
+  const existing = await getAcquisitionContext();
+  const firstTouch = selectFirstTouchAcquisition(existing, context);
+  if (firstTouch && firstTouch !== existing) {
+    await AsyncStorage.setItem(ACQUISITION_CONTEXT_KEY, JSON.stringify(firstTouch));
+  }
+  if (context.intent === "splitwise-import") {
+    await AsyncStorage.setItem(PENDING_MIGRATION_INTENT_KEY, context.capturedAt);
+  }
   return context;
 }
 
@@ -33,7 +35,7 @@ export async function getAcquisitionContext(): Promise<AcquisitionContext | null
 
   try {
     const context = JSON.parse(rawContext) as AcquisitionContext;
-    if (!isFreshContext(context)) {
+    if (!isFreshAcquisitionContext(context)) {
       await AsyncStorage.removeItem(ACQUISITION_CONTEXT_KEY);
       return null;
     }
@@ -44,18 +46,16 @@ export async function getAcquisitionContext(): Promise<AcquisitionContext | null
   }
 }
 
-export async function getMigrationIntent(): Promise<MigrationIntent> {
-  const context = await getAcquisitionContext();
-  return context?.intent ?? "standard";
+export async function consumePendingMigrationIntent(): Promise<MigrationIntent> {
+  const pending = await AsyncStorage.getItem(PENDING_MIGRATION_INTENT_KEY);
+  if (!pending) return "standard";
+  await AsyncStorage.removeItem(PENDING_MIGRATION_INTENT_KEY);
+  return "splitwise-import";
 }
 
-export async function consumePendingMigrationIntent(): Promise<MigrationIntent> {
-  const context = await getAcquisitionContext();
-  if (!context || context.intent !== "splitwise-import") return "standard";
-
-  const consumedAt = await AsyncStorage.getItem(CONSUMED_MIGRATION_CONTEXT_KEY);
-  if (consumedAt === context.capturedAt) return "standard";
-
-  await AsyncStorage.setItem(CONSUMED_MIGRATION_CONTEXT_KEY, context.capturedAt);
-  return "splitwise-import";
+export async function clearAcquisitionState(): Promise<void> {
+  await AsyncStorage.multiRemove([
+    ACQUISITION_CONTEXT_KEY,
+    PENDING_MIGRATION_INTENT_KEY,
+  ]);
 }

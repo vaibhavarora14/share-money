@@ -1,5 +1,8 @@
 import { assertEquals } from "jsr:@std/assert";
-import { sanitizeGrowthProperties } from "../mobile/utils/growthProperties.ts";
+import {
+  sanitizeGrowthProperties,
+  sanitizePostHogEventProperties,
+} from "../mobile/utils/growthProperties.ts";
 
 Deno.test("analytics properties retain only bounded acquisition dimensions and aggregate counts", () => {
   assertEquals(
@@ -26,6 +29,27 @@ Deno.test("analytics properties retain only bounded acquisition dimensions and a
       referrer_host: "www.google.com",
       expense_count: 3,
       duplicate: false,
+    },
+  );
+});
+
+Deno.test("the final PostHog payload strips SDK-added location and personal properties", () => {
+  assertEquals(
+    sanitizePostHogEventProperties({
+      token: "project-key",
+      $distinct_id: "anonymous-id",
+      $device_name: "Vaibhav's iPhone",
+      $locale: "en-IN",
+      $timezone: "Asia/Kolkata",
+      journey_id: "a-safe-journey",
+      email: "person@example.com",
+      amount: 1200,
+      description: "Dinner",
+    }),
+    {
+      token: "project-key",
+      $distinct_id: "anonymous-id",
+      journey_id: "a-safe-journey",
     },
   );
 });

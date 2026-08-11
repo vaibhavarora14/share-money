@@ -16,6 +16,29 @@ const SAFE_PROPERTY_KEYS = new Set([
   "skipped_count",
   "duplicate",
   "kind",
+  "journey_id",
+]);
+
+const SAFE_POSTHOG_PROPERTY_KEYS = new Set([
+  "token",
+  "distinct_id",
+  "$distinct_id",
+  "$anon_distinct_id",
+  "$device_id",
+  "$session_id",
+  "$window_id",
+  "$lib",
+  "$lib_version",
+  "$os_name",
+  "$os_version",
+  "$device_type",
+  "$app_version",
+  "$app_build",
+  "$app_namespace",
+  "$process_person_profile",
+  "alias",
+  "$alias",
+  ...SAFE_PROPERTY_KEYS,
 ]);
 
 const SAFE_LABEL = /^[a-z0-9][a-z0-9_-]*$/i;
@@ -63,5 +86,19 @@ export function sanitizeGrowthProperties(
     if (SAFE_LABEL.test(value)) safe[key] = value;
   });
 
+  return safe;
+}
+
+/** Applies the privacy allowlist after the SDK has added device properties. */
+export function sanitizePostHogEventProperties(
+  properties: Record<string, unknown> | undefined,
+): Record<string, string | number | boolean | null> {
+  const safe: Record<string, string | number | boolean | null> = {};
+  Object.entries(properties ?? {}).forEach(([key, value]) => {
+    if (!SAFE_POSTHOG_PROPERTY_KEYS.has(key)) return;
+    if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+      safe[key] = value;
+    }
+  });
   return safe;
 }

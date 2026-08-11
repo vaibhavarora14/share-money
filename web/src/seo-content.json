@@ -146,7 +146,7 @@
     "screenshots": [
       {"src": "/app-group-current.png", "alt": "SharedMoney group screen with member balance, transaction list, and add expense action.", "caption": "A SharedMoney group keeps its balances and activity in one shared view."}
     ],
-    "cta": {"label": "Import your Splitwise CSV", "href": "/app?intent=splitwise-import&utm_source=organic&utm_medium=seo&utm_campaign=splitwise-alternative&utm_content=hero", "ariaLabel": "Import your Splitwise CSV in SharedMoney"},
+    "cta": {"label": "Import your Splitwise CSV", "href": "/app?intent=splitwise-import", "ariaLabel": "Import your Splitwise CSV in SharedMoney"},
     "disclaimer": "Splitwise is a trademark of its owner. SharedMoney is not affiliated with or endorsed by Splitwise.",
     "related": ["india-splitwise-alternative", "import-from-splitwise", "split-bills", "tools"]
   },
@@ -186,7 +186,7 @@
     "screenshots": [
       {"src": "/app-group-current.png", "alt": "SharedMoney group screen showing INR balances and group transaction activity.", "caption": "A SharedMoney group can show INR balances alongside its shared expense activity."}
     ],
-    "cta": {"label": "Import your Splitwise CSV", "href": "/app?intent=splitwise-import&utm_source=organic&utm_medium=seo&utm_campaign=india-splitwise-alternative&utm_content=hero", "ariaLabel": "Import your Splitwise CSV in SharedMoney"},
+    "cta": {"label": "Import your Splitwise CSV", "href": "/app?intent=splitwise-import", "ariaLabel": "Import your Splitwise CSV in SharedMoney"},
     "disclaimer": "Splitwise is a trademark of its owner. SharedMoney is not affiliated with or endorsed by Splitwise.",
     "related": ["splitwise-alternative", "import-from-splitwise", "trip-expense-splitter", "roommate-expense-tracker", "split-bill-calculator"]
   },
@@ -223,7 +223,7 @@
     "screenshots": [
       {"src": "/app-group-current.png", "alt": "SharedMoney group screen with a member balance, group summary, transactions, and an add expense action.", "caption": "After importing, a group can continue tracking expenses and balances in one shared place."}
     ],
-    "cta": {"label": "Import your Splitwise CSV", "href": "/app?intent=splitwise-import&utm_source=organic&utm_medium=seo&utm_campaign=import-from-splitwise&utm_content=hero", "ariaLabel": "Start a Splitwise CSV import in SharedMoney"},
+    "cta": {"label": "Import your Splitwise CSV", "href": "/app?intent=splitwise-import", "ariaLabel": "Start a Splitwise CSV import in SharedMoney"},
     "disclaimer": "Splitwise is a trademark of its owner. SharedMoney is not affiliated with or endorsed by Splitwise.",
     "related": ["india-splitwise-alternative", "splitwise-alternative", "trip-expense-splitter", "roommate-expense-tracker"]
   },

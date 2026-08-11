@@ -8,7 +8,10 @@ ALTER TABLE public.groups
   ADD COLUMN IF NOT EXISTS activated_at TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS activation_method TEXT,
   ADD COLUMN IF NOT EXISTS activation_source_id TEXT,
-  ADD COLUMN IF NOT EXISTS creation_id UUID;
+  ADD COLUMN IF NOT EXISTS creation_id UUID,
+  ADD COLUMN IF NOT EXISTS manual_expense_count INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS day_7_active_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS day_7_activity_source_id TEXT;
 
 ALTER TABLE public.groups
   DROP CONSTRAINT IF EXISTS groups_activation_method_check;
@@ -211,11 +214,23 @@ BEGIN
   IF NEW.group_id IS NOT NULL AND NEW.type = 'expense' THEN
     UPDATE public.groups
     SET
-      activated_at = NOW(),
-      activation_method = CASE WHEN v_import_id IS NULL THEN 'manual_expense' ELSE 'splitwise_import' END,
-      activation_source_id = COALESCE(v_import_id, NEW.id::TEXT)
-    WHERE id = NEW.group_id
-      AND activated_at IS NULL;
+      activated_at = COALESCE(activated_at, NOW()),
+      activation_method = COALESCE(
+        activation_method,
+        CASE WHEN v_import_id IS NULL THEN 'manual_expense' ELSE 'splitwise_import' END
+      ),
+      activation_source_id = COALESCE(activation_source_id, v_import_id, NEW.id::TEXT),
+      manual_expense_count = manual_expense_count + CASE WHEN v_import_id IS NULL THEN 1 ELSE 0 END,
+      day_7_active_at = CASE
+        WHEN day_7_active_at IS NULL AND created_at <= NOW() - INTERVAL '7 days' THEN NOW()
+        ELSE day_7_active_at
+      END,
+      day_7_activity_source_id = CASE
+        WHEN day_7_active_at IS NULL AND created_at <= NOW() - INTERVAL '7 days'
+          THEN COALESCE(v_import_id, NEW.id::TEXT)
+        ELSE day_7_activity_source_id
+      END
+    WHERE id = NEW.group_id;
   END IF;
 
   RETURN NEW;
@@ -294,7 +309,7 @@ BEGIN
         'import_id', v_existing.id,
         'imported_expenses', v_existing.imported_expenses,
         'imported_settlements', v_existing.imported_settlements,
-        'activated', v_existing.activated,
+        'activated', FALSE,
         'duplicate', TRUE
       );
     END IF;

@@ -17,7 +17,14 @@ import { Platform } from "react-native";
 import { AUTH_TIMEOUTS } from "../constants/auth";
 import { supabase } from "../supabase";
 import { getConfiguredWebAppPath } from "../utils/inviteLinks";
-import { identifyGrowthUser, resetGrowthAnalytics } from "../utils/analytics";
+import {
+  clearGrowthJourney,
+  identifyGrowthUser,
+  resetGrowthAnalytics,
+  trackGrowthEvent,
+} from "../utils/analytics";
+import { clearAcquisitionState } from "../utils/acquisition";
+import { clearPendingSignup, consumeCompletedSignup } from "../utils/pendingSignup";
 import { log, logError } from "../utils/logger";
 
 // Complete the auth session when browser closes
@@ -292,6 +299,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
     if (user) {
       identifyGrowthUser(user.id);
+      void consumeCompletedSignup(user.created_at).then((method) => {
+        if (method) trackGrowthEvent("signup completed", { method });
+      }).catch((error) => logError(error, { context: "signup completion analytics" }));
     } else {
       resetGrowthAnalytics();
     }
@@ -645,6 +655,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       // Update state immediately - the auth state change listener will also fire
       // but we update immediately to ensure UI responds quickly, especially on web
       updateAuthState(null);
+      await Promise.all([
+        clearAcquisitionState(),
+        clearPendingSignup(),
+      ]);
+      clearGrowthJourney();
       
       // On web, ensure we wait a bit for the auth state change to propagate
       // This helps ensure the session is fully cleared
@@ -658,6 +673,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       logError(error, { context: "signOut", errorType: "exception" });
       // Even if signOut fails, clear local state
       updateAuthState(null);
+      await Promise.allSettled([
+        clearAcquisitionState(),
+        clearPendingSignup(),
+      ]);
+      clearGrowthJourney();
     }
   }, [updateAuthState]);
 

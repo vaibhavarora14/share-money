@@ -3,7 +3,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
 
-SELECT plan(13);
+SELECT plan(16);
 
 SELECT has_function(
   'public',
@@ -116,6 +116,12 @@ SELECT is(
   (SELECT result->>'duplicate' FROM replay_import_result),
   'true',
   'A completed import replay returns the stored result'
+);
+
+SELECT is(
+  (SELECT result->>'activated' FROM replay_import_result),
+  'false',
+  'A completed replay cannot emit group activation twice'
 );
 
 SELECT is(
@@ -234,6 +240,58 @@ SELECT is(
   ),
   (SELECT transaction_id::TEXT FROM member_activation_ids),
   'Manual activation records the transaction that won the race'
+);
+
+SELECT is(
+  (
+    SELECT manual_expense_count
+    FROM public.groups
+    WHERE id = (SELECT group_id FROM member_activation_ids)
+  ),
+  1,
+  'Manual expenses increment the durable invite-prompt counter'
+);
+
+RESET ROLE;
+UPDATE public.groups
+SET created_at = NOW() - INTERVAL '8 days'
+WHERE id = (SELECT group_id FROM member_activation_ids);
+
+SELECT set_config(
+  'request.jwt.claims',
+  '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}',
+  true
+);
+SET LOCAL ROLE authenticated;
+
+WITH inserted AS (
+  INSERT INTO public.transactions (
+    user_id, amount, description, date, type, group_id, currency, paid_by_participant_id
+  )
+  SELECT
+    '22222222-2222-2222-2222-222222222222'::uuid,
+    12,
+    'Day seven expense',
+    CURRENT_DATE,
+    'expense',
+    group_id,
+    'INR',
+    member_participant_id
+  FROM member_activation_ids
+  RETURNING id
+)
+UPDATE member_activation_ids
+SET transaction_id = inserted.id
+FROM inserted;
+
+SELECT is(
+  (
+    SELECT day_7_activity_source_id
+    FROM public.groups
+    WHERE id = (SELECT group_id FROM member_activation_ids)
+  ),
+  (SELECT transaction_id::TEXT FROM member_activation_ids),
+  'The first expense after day seven records the activity source once'
 );
 
 SELECT throws_ok(

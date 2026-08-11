@@ -1,4 +1,4 @@
-import { trackMigrationCtaClick, trackRelatedPageClick } from "../../analytics";
+import { migrationCtaHref, trackMigrationCtaClick, trackRelatedPageClick } from "../../analytics";
 import type { PlatformDestination } from "../../landingContent";
 import { relatedPages, type SeoPage } from "../../seoPages";
 import { PlatformCta } from "../landing/PlatformCta";
@@ -21,7 +21,7 @@ export function PageHero({
             {page.cta ? (
               <a
                 className="cta cta-primary migration-cta"
-                href={page.cta.href}
+                href={migrationCtaHref(page)}
                 aria-label={page.cta.ariaLabel}
                 onClick={() => trackMigrationCtaClick(page)}
               >
@@ -89,7 +89,12 @@ export function SeoPageContent({ page }: { page: SeoPage }) {
               <p className="kicker">At a glance</p>
               <h2 id="comparison-title">Choose the path that fits your group.</h2>
             </div>
-            <div className="seo-comparison-scroll">
+            <div
+              className="seo-comparison-scroll"
+              role="region"
+              aria-label="Feature comparison"
+              tabIndex={0}
+            >
               <table className="seo-comparison">
                 <caption>SharedMoney and continuing with your current Splitwise group</caption>
                 <thead>

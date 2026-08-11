@@ -33,7 +33,7 @@ function pageLink(page) {
 }
 
 function callToActionMarkup(page) {
-  const href = page.cta?.href ?? `${appUrl}?utm_source=organic&utm_medium=seo&utm_campaign=${encodeURIComponent(page.id)}`;
+  const href = page.cta?.href ?? `${appUrl}?intent=splitwise-import`;
   const label = page.cta?.label ?? "Open the SharedMoney web app";
   return `<p><a href="${escapeHtml(href)}">${escapeHtml(label)}</a></p>`;
 }
@@ -115,7 +115,7 @@ function structuredData(page) {
           name: "SharedMoney",
           url: siteUrl,
           applicationCategory: "FinanceApplication",
-          operatingSystem: "Android, iOS, Web",
+          operatingSystem: "Android, Web",
           offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
           description: page.description,
         },
@@ -153,7 +153,7 @@ function structuredData(page) {
       name: "SharedMoney",
       url: appUrl,
       applicationCategory: "FinanceApplication",
-      operatingSystem: "Android, iOS, Web",
+      operatingSystem: "Android, Web",
       description: "A shared expense ledger for groups that track expenses and settle outside the app.",
       offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
     });

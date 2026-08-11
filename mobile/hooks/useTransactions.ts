@@ -128,13 +128,18 @@ interface BaseTransactionInput extends Omit<Transaction, "created_at" | "user_id
 
 type CreateTransactionInput = Omit<BaseTransactionInput, "id">;
 type UpdateTransactionInput = BaseTransactionInput;
+type CreateTransactionResult = Transaction & {
+  activated?: boolean;
+  invite_prompt?: boolean;
+  day_7_active?: boolean;
+};
 
 // Mutation hooks
-export function useCreateTransaction(onSuccess?: () => void) {
+export function useCreateTransaction(onSuccess?: (result: CreateTransactionResult | null) => void) {
   const queryClient = useQueryClient();
 
   const mutation = useMutation<
-    Transaction | null,
+    CreateTransactionResult | null,
     Error,
     CreateTransactionInput,
     { previous?: InfiniteData<TransactionsPageResponse>; groupId: string }
@@ -202,13 +207,16 @@ export function useCreateTransaction(onSuccess?: () => void) {
       if (data?.activated) {
         trackGrowthEvent("group activated", { method: "manual_expense" });
       }
+      if (data?.day_7_active) {
+        trackGrowthEvent("group day 7 active", { method: "manual_expense" });
+      }
       invalidateTransactionAdjacents(queryClient, groupId);
       if (context?.groupId) {
         queryClient.invalidateQueries({
           queryKey: queryKeys.transactionsFeed(context.groupId),
         });
       }
-      onSuccess?.();
+      onSuccess?.(data);
     },
   });
 

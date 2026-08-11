@@ -22,16 +22,18 @@ import { trackGrowthEvent } from "../utils/analytics";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 import { logError } from "../utils/logger";
 import {
-  parseSplitwiseExport,
-  type SplitwiseParseResult,
-} from "../utils/splitwise";
+  bindPreparedMigrationToGroup,
+  prepareMigrationDraft,
+} from "../utils/migrationDraft";
+import type { MigrationDraft } from "../utils/migrationDraftCore";
+import { parseSplitwiseExport, type SplitwiseParseResult } from "../utils/splitwise";
 import type { PreparedSplitwiseImport } from "./SplitwiseImportScreen";
 
 type MigrationMode = "new" | "existing";
 
 interface SplitwiseMigrationScreenProps {
   onBack: () => void;
-  onCreateGroup: (input: { name: string }) => Promise<Group>;
+  onCreateGroup: (input: { name: string; creationId: string }) => Promise<Group>;
   onImportReady: (group: Group, preparedImport: PreparedSplitwiseImport) => void;
 }
 
@@ -61,8 +63,10 @@ export function SplitwiseMigrationScreen({
   const { data: groups, isLoading: groupsLoading } = useGroups();
   const [fileName, setFileName] = useState("");
   const [parsed, setParsed] = useState<SplitwiseParseResult | null>(null);
+  const [draft, setDraft] = useState<MigrationDraft | null>(null);
   const [mode, setMode] = useState<MigrationMode>("new");
   const [groupName, setGroupName] = useState("Imported Splitwise group");
+  const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [selfIndex, setSelfIndex] = useState<number | null>(null);
   const [selfMenuOpen, setSelfMenuOpen] = useState(false);
   const [createdGroup, setCreatedGroup] = useState<Group | null>(null);
@@ -88,15 +92,19 @@ export function SplitwiseMigrationScreen({
       if (result.canceled || !result.assets?.[0]) return;
 
       const asset = result.assets[0];
-      const nextParsed = parseSplitwiseExport(await readAssetText(asset));
+      const csvText = await readAssetText(asset);
+      const nextParsed = parseSplitwiseExport(csvText);
       if (nextParsed.expenses.length === 0 && nextParsed.payments.length === 0) {
         setErrorMessage("No importable expenses or payments were found in this file.");
         return;
       }
 
+      const nextDraft = await prepareMigrationDraft(csvText, null);
       setFileName(asset.name || "export.csv");
       setParsed(nextParsed);
+      setDraft(nextDraft);
       setSelfIndex(null);
+      setSelectedGroup(null);
       setCreatedGroup(null);
       setPreparedMapping([]);
       trackGrowthEvent("splitwise csv parsed", {
@@ -110,27 +118,43 @@ export function SplitwiseMigrationScreen({
     }
   };
 
-  const openExistingGroup = (group: Group) => {
-    if (!parsed) return;
-    onImportReady(group, { fileName, parsed });
+  const chooseMode = (nextMode: MigrationMode) => {
+    setMode(nextMode);
+    setSelectedGroup(null);
+    setCreatedGroup(null);
+    setPreparedMapping([]);
   };
 
-  const prepareNewGroup = async () => {
-    if (!parsed || selfIndex === null || !user?.id) return;
-    if (!groupName.trim()) {
+  const prepareImport = async () => {
+    if (!parsed || !draft || selfIndex === null || !user?.id) return;
+    if (mode === "new" && !groupName.trim()) {
       setErrorMessage("Enter a group name before importing.");
+      return;
+    }
+    if (mode === "existing" && !selectedGroup) {
+      setErrorMessage("Choose an existing group before continuing.");
       return;
     }
 
     setSubmitting(true);
     setErrorMessage("");
     try {
-      trackGrowthEvent("migration started", { entry: "guided_import" });
-      const group = createdGroup ?? await onCreateGroup({ name: groupName.trim() });
-      setCreatedGroup(group);
+      const group = mode === "new"
+        ? createdGroup ?? await onCreateGroup({
+          name: groupName.trim(),
+          creationId: draft.importId,
+        })
+        : selectedGroup as Group;
+      if (mode === "new") setCreatedGroup(group);
+
+      const boundDraft = await bindPreparedMigrationToGroup(draft, group.id);
+      setDraft(boundDraft);
 
       const participants = await fetchParticipants(group.id);
-      const selfParticipant = participants.find((participant) => participant.user_id === user.id);
+      const availableParticipants = [...participants];
+      const selfParticipant = availableParticipants.find(
+        (participant) => participant.user_id === user.id,
+      );
       if (!selfParticipant) {
         throw new Error("Your participant record was not ready. Please try again.");
       }
@@ -142,15 +166,17 @@ export function SplitwiseMigrationScreen({
         if (index === selfIndex) {
           nextMapping[index] = selfParticipant.id;
         } else {
-          const existing = participants.find((participant) =>
-            !participant.user_id && participant.type === "member" &&
-            participant.full_name === parsed.people[index] &&
+          const existing = availableParticipants.find((participant) =>
+            participant.id !== selfParticipant.id &&
+            participant.type !== "former" &&
+            participantName(participant) === parsed.people[index] &&
             !nextMapping.includes(participant.id)
           );
           const participant = existing ?? await createParticipant({
             groupId: group.id,
             fullName: parsed.people[index],
           });
+          if (!existing) availableParticipants.push(participant);
           nextMapping[index] = participant.id;
         }
         setPreparedMapping([...nextMapping]);
@@ -160,14 +186,15 @@ export function SplitwiseMigrationScreen({
         throw new Error("Every exported member must be matched before importing.");
       }
 
-      trackGrowthEvent("migration mapping completed", {
-        member_count: nextMapping.length,
-        expense_count: parsed.expenses.length,
-        settlement_count: parsed.payments.length,
+      onImportReady(group, {
+        fileName,
+        parsed,
+        mapping: nextMapping as string[],
+        importId: boundDraft.importId,
+        fingerprint: boundDraft.fingerprint,
       });
-      onImportReady(group, { fileName, parsed, mapping: nextMapping as string[] });
     } catch (error) {
-      logError(error, { context: "SplitwiseMigrationScreen.prepareNewGroup" });
+      logError(error, { context: "SplitwiseMigrationScreen.prepareImport" });
       setErrorMessage(getUserFriendlyErrorMessage(error));
     } finally {
       setSubmitting(false);
@@ -191,7 +218,7 @@ export function SplitwiseMigrationScreen({
           <Card.Content>
             <Text variant="titleMedium" style={styles.title}>1. Export your Splitwise group</Text>
             <Text variant="bodyMedium" style={styles.copy}>In Splitwise, open the group, choose group settings, then “Export as spreadsheet.” Your CSV stays on this device; SharedMoney only receives the confirmed import entries.</Text>
-            <Button mode="contained" icon="file-upload-outline" onPress={pickFile} disabled={submitting} style={styles.button}>
+            <Button mode="contained" icon="file-upload-outline" onPress={pickFile} disabled={submitting} style={styles.button} testID="migration-pick-file">
               {parsed ? "Choose another CSV" : "Choose CSV file"}
             </Button>
             {parsed ? <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>{fileName}: {importedItems} items ready{parsed.skipped.length ? `, ${parsed.skipped.length} rows skipped` : ""}.</Text> : null}
@@ -204,38 +231,53 @@ export function SplitwiseMigrationScreen({
               <Card.Content>
                 <Text variant="titleMedium" style={styles.title}>2. Choose where to import</Text>
                 <View style={styles.modeRow}>
-                  <Button mode={mode === "new" ? "contained" : "outlined"} onPress={() => setMode("new")}>New group</Button>
-                  <Button mode={mode === "existing" ? "contained" : "outlined"} onPress={() => setMode("existing")}>Existing group</Button>
+                  <Button mode={mode === "new" ? "contained" : "outlined"} onPress={() => chooseMode("new")}>New group</Button>
+                  <Button mode={mode === "existing" ? "contained" : "outlined"} onPress={() => chooseMode("existing")}>Existing group</Button>
                 </View>
                 {mode === "new" ? (
                   <>
                     <TextInput label="New group name" value={groupName} onChangeText={setGroupName} mode="outlined" disabled={submitting} style={styles.input} />
-                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>Everyone else will be added as a person without an account. You can send an invite link after the import.</Text>
+                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>Everyone else will be added as a person without an account. You can invite them after the import.</Text>
                   </>
                 ) : (
                   <View style={styles.groupList}>
-                    {groupsLoading ? <ActivityIndicator /> : groups.length === 0 ? <Text>You do not have an existing group yet.</Text> : groups.map((group) => <Button key={group.id} mode="outlined" onPress={() => openExistingGroup(group)} disabled={submitting}>{group.name}</Button>)}
+                    {groupsLoading ? <ActivityIndicator /> : groups.length === 0 ? <Text>You do not have an existing group yet.</Text> : groups.map((group) => (
+                      <Button
+                        key={group.id}
+                        mode={selectedGroup?.id === group.id ? "contained-tonal" : "outlined"}
+                        onPress={() => { setSelectedGroup(group); setPreparedMapping([]); }}
+                        disabled={submitting}
+                      >
+                        {group.name}
+                      </Button>
+                    ))}
                   </View>
                 )}
               </Card.Content>
             </Card>
 
-            {mode === "new" ? (
-              <Card mode="outlined" style={styles.card}>
-                <Card.Content>
-                  <Text variant="titleMedium" style={styles.title}>3. Match yourself</Text>
-                  <Text variant="bodyMedium" style={styles.copy}>Which exported name represents you? The remaining names become account-free people in the new group.</Text>
-                  <Menu visible={selfMenuOpen} onDismiss={() => setSelfMenuOpen(false)} anchor={<Button mode="outlined" icon="account" onPress={() => setSelfMenuOpen(true)}>{selfIndex === null ? "Select your name" : parsed.people[selfIndex]}</Button>}>
-                    {parsed.people.map((name, index) => <Menu.Item key={`${name}-${index}`} title={name} onPress={() => { setSelfIndex(index); setSelfMenuOpen(false); }} />)}
-                  </Menu>
-                  <Divider style={styles.divider} />
-                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>Import limits: up to 2,000 items. Rows paid by multiple people can be skipped. Payment rows must be between two people. Currencies remain separate rather than being converted.</Text>
-                  <Button mode="contained" icon="import" onPress={prepareNewGroup} disabled={selfIndex === null || submitting} loading={submitting} style={styles.button}>
-                    Create group and review import
-                  </Button>
-                </Card.Content>
-              </Card>
-            ) : null}
+            <Card mode="outlined" style={styles.card}>
+              <Card.Content>
+                <Text variant="titleMedium" style={styles.title}>3. Match yourself</Text>
+                <Text variant="bodyMedium" style={styles.copy}>Which exported name represents you? SharedMoney matches existing people and creates account-free people for anyone missing from the chosen group.</Text>
+                <Menu visible={selfMenuOpen} onDismiss={() => setSelfMenuOpen(false)} anchor={<Button mode="outlined" icon="account" onPress={() => setSelfMenuOpen(true)}>{selfIndex === null ? "Select your name" : parsed.people[selfIndex]}</Button>}>
+                  {parsed.people.map((name, index) => <Menu.Item key={`${name}-${index}`} title={name} onPress={() => { setSelfIndex(index); setPreparedMapping([]); setSelfMenuOpen(false); }} />)}
+                </Menu>
+                <Divider style={styles.divider} />
+                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>Import limits: up to 2,000 items. Rows paid by multiple people can be skipped. Payment rows must be between two people. Currencies remain separate rather than being converted.</Text>
+                <Button
+                  mode="contained"
+                  icon="import"
+                  onPress={prepareImport}
+                  disabled={selfIndex === null || submitting || (mode === "existing" && !selectedGroup)}
+                  loading={submitting}
+                  style={styles.button}
+                  testID="migration-review-import"
+                >
+                  {mode === "new" ? "Create group and review import" : "Prepare group and review import"}
+                </Button>
+              </Card.Content>
+            </Card>
           </>
         ) : null}
       </ScrollView>

@@ -25,6 +25,7 @@ export function useCreateGroup(onSuccess?: () => void) {
     name: string;
     description?: string;
     acquisition_context?: AcquisitionContext;
+    creation_id?: string;
   }>({
     mutationFn: async (groupData) => {
       const response = await fetchWithAuth("/groups", {

@@ -1,5 +1,4 @@
 import * as DocumentPicker from "expo-document-picker";
-import * as Crypto from "expo-crypto";
 import React, { useEffect, useMemo, useState } from "react";
 import {
     BackHandler,
@@ -29,6 +28,10 @@ import {
 import { Participant } from "../types";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 import { logError } from "../utils/logger";
+import {
+  clearCompletedMigrationDraft,
+  prepareMigrationDraft,
+} from "../utils/migrationDraft";
 import { trackGrowthEvent } from "../utils/analytics";
 import {
     autoMatchPeopleToParticipants,
@@ -42,6 +45,8 @@ interface SplitwiseImportScreenProps {
   onBack: () => void;
   /** Called after a successful import (navigates back to the group). */
   onDone: () => void;
+  /** Opens the existing invite/share flow for the imported group. */
+  onInvite: () => void;
   initialImport?: PreparedSplitwiseImport | null;
 }
 
@@ -49,6 +54,8 @@ export type PreparedSplitwiseImport = {
   fileName: string;
   parsed: SplitwiseParseResult;
   mapping?: string[];
+  importId?: string;
+  fingerprint?: string;
 };
 
 type ImportStep = "pick" | "map" | "done";
@@ -81,6 +88,7 @@ export const SplitwiseImportScreen: React.FC<SplitwiseImportScreenProps> = ({
   groupName,
   onBack,
   onDone,
+  onInvite,
   initialImport,
 }) => {
   const theme = useTheme();
@@ -93,7 +101,7 @@ export const SplitwiseImportScreen: React.FC<SplitwiseImportScreenProps> = ({
   const [mapping, setMapping] = useState<(string | null)[]>(initialImport?.mapping ?? []);
   const [openMenuIndex, setOpenMenuIndex] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
-  const [importId, setImportId] = useState<string | null>(null);
+  const [importId, setImportId] = useState<string | null>(initialImport?.importId ?? null);
   const [importResult, setImportResult] =
     useState<SplitwiseImportResult | null>(null);
 
@@ -156,7 +164,8 @@ export const SplitwiseImportScreen: React.FC<SplitwiseImportScreenProps> = ({
 
       setFileName(asset.name || "export.csv");
       setParsed(parseResult);
-      setImportId(null);
+      const draft = await prepareMigrationDraft(text, groupId);
+      setImportId(draft.importId);
       setMapping(
         autoMatchPeopleToParticipants(parseResult.people, participants || [])
       );
@@ -208,8 +217,10 @@ export const SplitwiseImportScreen: React.FC<SplitwiseImportScreenProps> = ({
   const handleImport = async () => {
     if (!parsed || !mappingValid) return;
     setErrorMessage("");
-    const nextImportId = importId ?? Crypto.randomUUID();
-    setImportId(nextImportId);
+    if (!importId) {
+      setErrorMessage("Choose the CSV again so SharedMoney can safely resume this import.");
+      return;
+    }
 
     const expenses = parsed.expenses.map((expense) => ({
       description: expense.description,
@@ -239,7 +250,7 @@ export const SplitwiseImportScreen: React.FC<SplitwiseImportScreenProps> = ({
         settlement_count: settlements.length,
       });
       const result = await importMutation.mutate({
-        import_id: nextImportId,
+        import_id: importId,
         group_id: groupId,
         expenses,
         settlements,
@@ -253,6 +264,9 @@ export const SplitwiseImportScreen: React.FC<SplitwiseImportScreenProps> = ({
       if (result.activated) {
         trackGrowthEvent("group activated", { method: "splitwise_import" });
       }
+      await clearCompletedMigrationDraft(importId).catch((error) => {
+        logError(error, { context: "SplitwiseImportScreen.clearDraft" });
+      });
       setStep("done");
     } catch (err) {
       logError(err, { context: "SplitwiseImportScreen.import" });
@@ -284,8 +298,8 @@ export const SplitwiseImportScreen: React.FC<SplitwiseImportScreenProps> = ({
             ]}
           >
             Expenses and settle-up payments are imported into "{groupName}"
-            with their original amounts and dates. Make sure everyone from the
-            Splitwise group has been added to this group first.
+            with their original amounts and dates. The guided flow can create
+            account-free people before you reach this screen.
           </Text>
         </Card.Content>
       </Card>
@@ -398,8 +412,8 @@ export const SplitwiseImportScreen: React.FC<SplitwiseImportScreenProps> = ({
                 { color: theme.colors.onSurfaceVariant },
               ]}
             >
-              Match each Splitwise member to a member of this group. Missing
-              someone? Go back and add them to the group first.
+              Match each Splitwise member to a person in this group before
+              confirming the import.
             </Text>
             {parsed.people.map(renderMappingRow)}
             {duplicateParticipantIds.size > 0 && (
@@ -439,6 +453,20 @@ export const SplitwiseImportScreen: React.FC<SplitwiseImportScreenProps> = ({
               {parsed.payments.length} settle-up payment
               {parsed.payments.length === 1 ? "" : "s"}
             </Text>
+            {[...parsed.expenses, ...parsed.payments].slice(0, 10).map((row) => (
+              <Text
+                key={`${row.line}-${row.description}`}
+                variant="bodySmall"
+                style={[styles.skippedLine, { color: theme.colors.onSurfaceVariant }]}
+              >
+                {row.date} · {row.description} · {row.currency} {row.amount.toFixed(2)}
+              </Text>
+            ))}
+            {parsed.expenses.length + parsed.payments.length > 10 ? (
+              <Text variant="bodySmall" style={[styles.skippedLine, { color: theme.colors.onSurfaceVariant }]}>
+                …and {parsed.expenses.length + parsed.payments.length - 10} more importable rows
+              </Text>
+            ) : null}
             {parsed.skipped.length > 0 && (
               <>
                 <Text
@@ -528,11 +556,20 @@ export const SplitwiseImportScreen: React.FC<SplitwiseImportScreenProps> = ({
 
       <Button
         mode="contained"
+        icon="account-multiple-plus-outline"
+        onPress={onInvite}
+        style={styles.primaryButton}
+        testID="splitwise-invite-button"
+      >
+        Invite your group
+      </Button>
+      <Button
+        mode="text"
         onPress={onDone}
         style={styles.primaryButton}
         testID="splitwise-done-button"
       >
-        Done
+        Done for now
       </Button>
     </>
   );
