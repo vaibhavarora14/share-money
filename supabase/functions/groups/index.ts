@@ -46,6 +46,7 @@ interface CreateGroupRequest {
   name?: string;
   description?: string;
   acquisition_context?: unknown;
+  creation_id?: string;
 }
 
 Deno.serve(async (req: Request) => {
@@ -214,12 +215,17 @@ Deno.serve(async (req: Request) => {
         return createErrorResponse(400, 'Invalid acquisition context', 'VALIDATION_ERROR', undefined, req);
       }
 
+      if (groupData.creation_id !== undefined && !isValidUUID(groupData.creation_id)) {
+        return createErrorResponse(400, 'Invalid creation_id format. Expected UUID.', 'VALIDATION_ERROR', undefined, req);
+      }
+
       // Create group using SECURITY DEFINER function to bypass RLS issues
       // This ensures auth.uid() is properly recognized
       const { data: groupResult, error } = await supabase.rpc('create_group', {
         group_name: groupData.name.trim(),
         group_description: groupData.description?.trim() || null,
         group_acquisition_context: acquisitionContext,
+        group_creation_id: groupData.creation_id ?? null,
       });
 
       if (error) {

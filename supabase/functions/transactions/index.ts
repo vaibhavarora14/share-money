@@ -131,29 +131,6 @@ function parsePositiveInt(input: string | null): number | null {
   return parsed;
 }
 
-async function activateGroupFromManualExpense(supabase: any, groupId: string): Promise<boolean> {
-  const { data, error } = await supabase
-    .from('groups')
-    .update({
-      activated_at: new Date().toISOString(),
-      activation_method: 'manual_expense',
-    })
-    .eq('id', groupId)
-    .is('activated_at', null)
-    .select('id');
-
-  if (error) {
-    log.warn('Failed to mark group as activated after manual expense', 'transaction-creation', {
-      groupId,
-      error: error.message,
-      code: error.code,
-    });
-    return false;
-  }
-
-  return Array.isArray(data) && data.length === 1;
-}
-
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -557,7 +534,23 @@ Deno.serve(async (req: Request) => {
 
       let activated = false;
       if (transactionData.group_id && transactionData.type === 'expense') {
-        activated = await activateGroupFromManualExpense(supabase, transactionData.group_id);
+        const { data: activation, error: activationError } = await supabase
+          .from('groups')
+          .select('activation_method, activation_source_id')
+          .eq('id', transactionData.group_id)
+          .maybeSingle();
+
+        if (activationError) {
+          log.warn('Could not verify group activation source', 'transaction-creation', {
+            groupId: transactionData.group_id,
+            transactionId: transaction.id,
+            error: activationError.message,
+            code: activationError.code,
+          });
+        } else {
+          activated = activation?.activation_method === 'manual_expense' &&
+            activation?.activation_source_id === String(transaction.id);
+        }
       }
 
       return createSuccessResponse({ ...responseTransaction, activated }, 201, 0, req);
