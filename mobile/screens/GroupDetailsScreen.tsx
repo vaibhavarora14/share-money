@@ -18,6 +18,7 @@ import { ActivityFeed } from "../components/ActivityFeed";
 import { GroupDashboard } from "../components/GroupDashboard";
 import { InvitationsList } from "../components/InvitationsList";
 import { MembersList } from "../components/MembersList";
+import { SafetyAction, SafetyActionModal } from "../components/SafetyActionModal";
 import { TransactionsSection } from "../components/TransactionsSection";
 import { useAuth } from "../contexts/AuthContext";
 import { useActivity } from "../hooks/useActivity";
@@ -28,6 +29,7 @@ import {
 } from "../hooks/useGroupInvitations";
 import { useRemoveMember } from "../hooks/useGroupMutations";
 import { useGroupDetails } from "../hooks/useGroups";
+import { SafetyTarget, useModeration } from "../hooks/useModeration";
 import {
   useConnectParticipant,
   useInviteParticipant,
@@ -43,6 +45,7 @@ import {
 import { useTransactions } from "../hooks/useTransactions";
 import {
   Balance,
+  ActivityItem,
   GroupInvitation,
   GroupWithMembers,
   Participant,
@@ -101,6 +104,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [showActivityFilters, setShowActivityFilters] = useState(false);
   const [activityFilterType, setActivityFilterType] = useState<"all" | "expenses" | "settlements">("all");
   const [activityFilterParticipantId, setActivityFilterParticipantId] = useState<string>("all");
+  const [safetyAction, setSafetyAction] = useState<SafetyAction | null>(null);
+  const [safetyTarget, setSafetyTarget] = useState<SafetyTarget | null>(null);
   
   // Web-compatible confirmation dialog state
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -173,6 +178,12 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     isLoading: activityLoading,
     refetch: refetchActivity,
   } = useActivity(initialGroup.id);
+  const {
+    report: reportContent,
+    block: blockUser,
+    isReporting,
+    isBlocking,
+  } = useModeration(initialGroup.id);
   const [cancellingInvitationId, setCancellingInvitationId] = useState<
     string | null
   >(null);
@@ -230,6 +241,64 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     
     return items;
   }, [activityData?.activities, activityFilterType, activityFilterParticipantId, userIdToParticipantId]);
+
+  const openActivitySafetyAction = (
+    action: SafetyAction,
+    activity: ActivityItem,
+  ) => {
+    setSafetyTarget({
+      targetUserId: activity.changed_by.id,
+      targetName: activity.changed_by.full_name || activity.changed_by.email || "this user",
+      contentType: "activity",
+      contentId: activity.id,
+    });
+    setSafetyAction(action);
+  };
+
+  const openParticipantBlock = (participant: Participant) => {
+    if (!participant.user_id) return;
+    setSafetyTarget({
+      targetUserId: participant.user_id,
+      targetName: participant.full_name || participant.email || "this user",
+      contentType: "profile",
+      contentId: participant.user_id,
+    });
+    setSafetyAction("block");
+  };
+
+  const dismissSafetyAction = () => {
+    if (isReporting || isBlocking) return;
+    setSafetyAction(null);
+    setSafetyTarget(null);
+  };
+
+  const handleReportContent = async (
+    reason: Parameters<typeof reportContent>[0]["reason"],
+    details: string,
+  ) => {
+    if (!safetyTarget) return;
+    try {
+      await reportContent({ ...safetyTarget, reason, details });
+      setSafetyAction(null);
+      setSafetyTarget(null);
+      Alert.alert("Report submitted", "Thank you. The SharedMoney team will review this content.");
+    } catch (error) {
+      Alert.alert("Could not submit report", getUserFriendlyErrorMessage(error));
+    }
+  };
+
+  const handleBlockUser = async () => {
+    if (!safetyTarget) return;
+    try {
+      const blockedName = safetyTarget.targetName;
+      await blockUser(safetyTarget);
+      setSafetyAction(null);
+      setSafetyTarget(null);
+      Alert.alert("User blocked", `${blockedName}'s activity has been removed from your feed.`);
+    } catch (error) {
+      Alert.alert("Could not block user", getUserFriendlyErrorMessage(error));
+    }
+  };
 
   // Auto sign-out on session expiration with alert
   useEffect(() => {
@@ -793,6 +862,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               onRemove={handleRemoveMember}
               onInvite={handleInviteParticipant}
               onConnect={handleConnectParticipant}
+              onBlock={openParticipantBlock}
             />
             {participants.length > 0 &&
               invitations.length > 0 && <View style={{ height: 16 }} />}
@@ -956,6 +1026,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                   items={filteredActivities}
                   loading={activityLoading}
                   isFiltered={activityFilterType !== "all" || activityFilterParticipantId !== "all"}
+                  onReport={(activity) => openActivitySafetyAction("report", activity)}
+                  onBlock={(activity) => openActivitySafetyAction("block", activity)}
                 />
               </View>
             )}
@@ -978,6 +1050,15 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           label="Add Expense"
         />
       )}
+
+      <SafetyActionModal
+        action={safetyAction}
+        target={safetyTarget}
+        submitting={isReporting || isBlocking}
+        onDismiss={dismissSafetyAction}
+        onReport={handleReportContent}
+        onBlock={handleBlockUser}
+      />
 
       {/* Settlement form modal */}
       <SettlementFormScreen

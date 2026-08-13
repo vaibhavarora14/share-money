@@ -13,6 +13,7 @@ jobs:
     environment: Production
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
     
     steps:
@@ -40,6 +41,11 @@ jobs:
             echo "❌ SUPABASE_PROJECT_REF secret is not set"
             echo "Please add it in: Settings > Secrets and variables > Actions"
             echo "You can find your Project ID in your Supabase project settings"
+            exit 1
+          fi
+          if [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "❌ SUPABASE_DB_PASSWORD secret is not set"
+            echo "Database migrations must succeed before Edge Functions deploy"
             exit 1
           fi
           echo "✅ Required secrets are configured"
@@ -90,6 +96,11 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
+      - name: Apply database migrations
+        run: |
+          echo "🗄️ Applying pending database migrations before function deployment..."
+          supabase db push --linked --password "$SUPABASE_DB_PASSWORD" --yes
+
       - name: Deploy all Edge Functions
         run: |
           echo "🚀 Deploying Supabase Edge Functions..."
@@ -109,7 +120,7 @@ jobs:
           echo ""
           
           # List of functions to check
-          FUNCTIONS=("groups" "transactions" "balances" "settlements" "invitations" "group-members" "activity" "profile" "import-splitwise" "monthly-reminders")
+          FUNCTIONS=("groups" "transactions" "balances" "settlements" "invitations" "group-members" "activity" "moderation" "profile" "import-splitwise" "monthly-reminders")
           
           echo "**Function Health Status:**" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -167,6 +178,7 @@ jobs:
           echo "- import-splitwise" >> $GITHUB_STEP_SUMMARY
           echo "- invitations" >> $GITHUB_STEP_SUMMARY
           echo "- monthly-reminders" >> $GITHUB_STEP_SUMMARY
+          echo "- moderation" >> $GITHUB_STEP_SUMMARY
           echo "- settlements" >> $GITHUB_STEP_SUMMARY
           echo "- transactions" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

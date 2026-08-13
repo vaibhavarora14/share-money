@@ -3,6 +3,7 @@ import { verifyAuth } from '../_shared/auth.ts';
 import { ACTIVITY_FEED_CONFIG } from '../_shared/constants.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { log } from '../_shared/logger.ts';
+import { filterBlockedActivityRecords } from '../_shared/moderation.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
 import { fetchUserEmails } from '../_shared/user-email.ts';
 import { fetchUserProfiles } from '../_shared/user-profiles.ts';
@@ -448,33 +449,69 @@ Deno.serve(async (req: Request) => {
     );
     const offset = parseInt(url.searchParams.get('offset') || '0');
 
-    const { data: historyRecords, error: historyError } = await supabase
+    const { data: blockedRows, error: blockedUsersError } = await supabase
+      .from('user_blocks')
+      .select('blocked_user_id')
+      .eq('blocker_id', user.id);
+
+    if (blockedUsersError) {
+      return handleError(blockedUsersError, 'fetching blocked users', req);
+    }
+
+    const blockedUserIds = new Set<string>(
+      (blockedRows || []).map((row: { blocked_user_id: string }) => row.blocked_user_id),
+    );
+
+    let historyQuery = supabase
       .from('transaction_history')
       .select('id, transaction_id, settlement_id, activity_type, group_id, action, changed_by, changed_at, changes, snapshot')
       .eq('group_id', groupId)
-      .order('changed_at', { ascending: false })
+      .order('changed_at', { ascending: false });
+
+    if (blockedUserIds.size > 0) {
+      historyQuery = historyQuery.not(
+        'changed_by',
+        'in',
+        `(${Array.from(blockedUserIds).join(',')})`,
+      );
+    }
+
+    const { data: historyRecords, error: historyError } = await historyQuery
       .range(offset, offset + limit - 1);
 
     if (historyError) {
       return handleError(historyError, 'fetching transaction history', req);
     }
 
+    const visibleHistoryRecords: TransactionHistory[] = filterBlockedActivityRecords(
+      (historyRecords || []) as TransactionHistory[],
+      blockedUserIds,
+    );
+
     const { emailMap, profileMap, participantMap } = await buildEmailMapForHistory(
-      historyRecords || [],
+      visibleHistoryRecords,
       user.id,
       user.email || null,
       supabase,
       groupId
     );
 
-    const activities: ActivityItem[] = (historyRecords || []).map((h: TransactionHistory) => 
+    const activities: ActivityItem[] = visibleHistoryRecords.map((h: TransactionHistory) =>
       transformHistoryToActivity(h, emailMap, profileMap, participantMap)
     );
 
-    const countQuery = supabase
+    let countQuery = supabase
       .from('transaction_history')
       .select('id', { count: 'exact', head: true })
       .eq('group_id', groupId);
+
+    if (blockedUserIds.size > 0) {
+      countQuery = countQuery.not(
+        'changed_by',
+        'in',
+        `(${Array.from(blockedUserIds).join(',')})`,
+      );
+    }
     
     const { count, error: countError } = await countQuery;
 
