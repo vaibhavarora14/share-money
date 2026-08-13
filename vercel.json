@@ -48,6 +48,11 @@
       "permanent": true
     },
     {
+      "source": "/terms.html",
+      "destination": "/terms",
+      "permanent": true
+    },
+    {
       "source": "/delete-account.html",
       "destination": "/delete-account",
       "permanent": true
@@ -114,6 +119,10 @@
     {
       "source": "/privacy",
       "destination": "/privacy.html"
+    },
+    {
+      "source": "/terms",
+      "destination": "/terms.html"
     },
     {
       "source": "/delete-account",

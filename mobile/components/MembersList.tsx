@@ -182,6 +182,7 @@ export const MembersList: React.FC<MembersListProps> = ({
                             <IconButton
                               icon="dots-vertical"
                               size={24}
+                              accessibilityLabel={`Actions for ${personName}`}
                               onPress={() => setMenuParticipantId(person.id)}
                               style={styles.removeMemberButton}
                               disabled={!!workingParticipantId}

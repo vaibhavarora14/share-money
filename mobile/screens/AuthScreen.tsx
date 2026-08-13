@@ -7,6 +7,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   useWindowDimensions,
@@ -239,20 +240,35 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   );
 
   const renderTermsAgreement = () => (
-    <View style={styles.termsAgreement}>
-      <View
+    <View style={styles.termsSection}>
+      <Pressable
+        onPress={() => setTermsAccepted((accepted) => !accepted)}
+        disabled={formDisabled}
+        style={({ pressed }) => [
+          styles.termsAgreement,
+          pressed && !formDisabled ? styles.termsAgreementPressed : null,
+        ]}
         accessibilityRole="checkbox"
         accessibilityState={{ checked: termsAccepted, disabled: formDisabled }}
         accessibilityLabel="Agree to the Terms of Use and Privacy Policy"
       >
-        <Checkbox
-          status={termsAccepted ? "checked" : "unchecked"}
-          onPress={() => setTermsAccepted((accepted) => !accepted)}
-          disabled={formDisabled}
-        />
-      </View>
-      <Text variant="bodySmall" style={[styles.termsText, { color: theme.colors.onSurfaceVariant }]}>
-        I agree to the{" "}
+        <View pointerEvents="none">
+          <Checkbox.Android
+            status={termsAccepted ? "checked" : "unchecked"}
+            disabled={formDisabled}
+          />
+        </View>
+        <Text
+          variant="bodySmall"
+          style={[styles.termsText, { color: theme.colors.onSurfaceVariant }]}
+        >
+          I agree to the Terms of Use and Privacy Policy.
+        </Text>
+      </Pressable>
+      <View style={styles.legalLinks}>
+        <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+          Review:
+        </Text>
         <Text
           variant="bodySmall"
           accessibilityRole="link"
@@ -261,7 +277,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         >
           Terms of Use
         </Text>
-        {" and "}
+        <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+          ·
+        </Text>
         <Text
           variant="bodySmall"
           accessibilityRole="link"
@@ -270,8 +288,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         >
           Privacy Policy
         </Text>
-        .
-      </Text>
+      </View>
     </View>
   );
 
@@ -587,16 +604,33 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 20,
   },
-  termsAgreement: {
-    alignItems: "flex-start",
-    flexDirection: "row",
+  termsSection: {
     marginTop: 20,
     width: "100%",
+  },
+  termsAgreement: {
+    alignItems: "center",
+    borderRadius: 8,
+    flexDirection: "row",
+    marginHorizontal: -6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    width: "100%",
+  },
+  termsAgreementPressed: {
+    opacity: 0.7,
   },
   termsText: {
     flex: 1,
     lineHeight: 20,
-    paddingTop: 8,
+  },
+  legalLinks: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginLeft: 42,
+    marginTop: 2,
   },
   accountToggleButtonContent: {
     minHeight: 32,

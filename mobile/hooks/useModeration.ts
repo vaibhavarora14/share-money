@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ActivityFeedResponse } from "../types";
 import { fetchWithAuth } from "../utils/api";
-import { queryKeys } from "./queryKeys";
+import { filterActivityQueriesForBlockedUser } from "./moderationCache";
 
 export type ReportReason =
   | "spam"
@@ -64,31 +64,28 @@ export function useModeration(groupId: string) {
         reason: "harassment",
       }),
     onMutate: async (input) => {
-      const queryKey = queryKeys.activity(groupId);
-      await queryClient.cancelQueries({ queryKey });
-      const previous = queryClient.getQueryData<ActivityFeedResponse>(queryKey);
-
-      queryClient.setQueryData<ActivityFeedResponse>(queryKey, (current) => {
-        if (!current) return current;
-        const activities = current.activities.filter(
-          (activity) => activity.changed_by.id !== input.targetUserId
-        );
-        return {
-          ...current,
-          activities,
-          total: Math.max(0, current.total - (current.activities.length - activities.length)),
-        };
+      const activityQueryKey = ["activity"] as const;
+      await queryClient.cancelQueries({ queryKey: activityQueryKey });
+      const previous = queryClient.getQueriesData<ActivityFeedResponse>({
+        queryKey: activityQueryKey,
       });
+
+      for (const [queryKey, updated] of filterActivityQueriesForBlockedUser(
+        previous,
+        input.targetUserId
+      )) {
+        queryClient.setQueryData(queryKey, updated);
+      }
 
       return { previous };
     },
     onError: (_error, _input, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(queryKeys.activity(groupId), context.previous);
+      for (const [queryKey, previous] of context?.previous ?? []) {
+        queryClient.setQueryData(queryKey, previous);
       }
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.activity(groupId) });
+      queryClient.invalidateQueries({ queryKey: ["activity"] });
     },
   });
 

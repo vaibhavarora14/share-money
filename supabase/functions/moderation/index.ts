@@ -4,63 +4,13 @@ import { validateModerationRequest } from '../_shared/moderation.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
 import { validateBodySize } from '../_shared/validation.ts';
 
-type SupabaseClient = Awaited<ReturnType<typeof verifyAuth>>['supabase'];
-
-async function verifySharedGroup(
-  supabase: SupabaseClient,
-  groupId: string,
-  currentUserId: string,
-  targetUserId: string,
-): Promise<boolean> {
-  const { data, error } = await supabase
-    .from('participants')
-    .select('user_id')
-    .eq('group_id', groupId)
-    .in('user_id', [currentUserId, targetUserId]);
-
-  if (error) throw error;
-  const userIds = new Set((data || []).map((participant: { user_id: string }) => participant.user_id));
-  return userIds.has(currentUserId) && userIds.has(targetUserId);
-}
-
-async function verifyReportedContent(
-  supabase: SupabaseClient,
-  input: {
-    group_id: string;
-    target_user_id: string;
-    content_type: 'activity' | 'transaction' | 'settlement' | 'profile' | null;
-    content_id: string | null;
-  },
-): Promise<boolean> {
-  if (!input.content_type || !input.content_id) return true;
-  if (input.content_type === 'profile') {
-    return input.content_id === input.target_user_id;
-  }
-
-  const lookups = {
-    activity: {
-      table: 'transaction_history',
-      authorColumn: 'changed_by',
-    },
-    transaction: {
-      table: 'transactions',
-      authorColumn: 'user_id',
-    },
-    settlement: {
-      table: 'settlements',
-      authorColumn: 'created_by',
-    },
-  } as const;
-  const lookup = lookups[input.content_type];
-  const { data, error } = await supabase
-    .from(lookup.table)
-    .select(`id, group_id, ${lookup.authorColumn}`)
-    .eq('id', input.content_id)
-    .eq('group_id', input.group_id)
-    .maybeSingle();
-
-  if (error) throw error;
-  return !!data && data[lookup.authorColumn] === input.target_user_id;
+interface ModerationRpcResult {
+  action: 'report' | 'block' | 'unblock';
+  target_user_id: string;
+  report_id: string | null;
+  report_status: string | null;
+  report_created_at: string | null;
+  blocked: boolean;
 }
 
 Deno.serve(async (req: Request) => {
@@ -98,92 +48,67 @@ Deno.serve(async (req: Request) => {
     }
     const input = validation.value;
 
-    if (!await verifySharedGroup(
-      supabase,
-      input.group_id,
-      user.id,
-      input.target_user_id,
-    )) {
-      return createErrorResponse(
-        403,
-        'You can only report or block people who share a group with you',
-        'PERMISSION_DENIED',
-        undefined,
-        req,
-      );
-    }
+    const { data, error: moderationError } = await supabase.rpc(
+      'submit_moderation_action',
+      {
+        p_action: input.action,
+        p_group_id: input.group_id,
+        p_target_user_id: input.target_user_id,
+        p_content_type: input.content_type,
+        p_content_id: input.content_id,
+        p_reason: input.reason,
+        p_details: input.details,
+      },
+    );
 
-    if (!await verifyReportedContent(supabase, input)) {
-      return createErrorResponse(
-        400,
-        'The reported content does not match this user or group',
-        'VALIDATION_ERROR',
-        undefined,
-        req,
-      );
-    }
-
-    if (input.action === 'unblock') {
-      const { error } = await supabase
-        .from('user_blocks')
-        .delete()
-        .eq('blocker_id', user.id)
-        .eq('blocked_user_id', input.target_user_id);
-      if (error) return handleError(error, 'unblocking user', req);
-
-      return createSuccessResponse({
-        action: 'unblock',
-        target_user_id: input.target_user_id,
-      }, 200, 0, req);
-    }
-
-    let blockWasCreated = false;
-    if (input.action === 'block') {
-      const { data: createdBlock, error } = await supabase
-        .from('user_blocks')
-        .upsert({
-          blocker_id: user.id,
-          blocked_user_id: input.target_user_id,
-        }, {
-          onConflict: 'blocker_id,blocked_user_id',
-          ignoreDuplicates: true,
-        })
-        .select('blocked_user_id')
-        .maybeSingle();
-      if (error) return handleError(error, 'blocking user', req);
-      blockWasCreated = !!createdBlock;
-    }
-
-    const { data: report, error: reportError } = await supabase
-      .from('user_safety_reports')
-      .insert({
-        reporter_id: user.id,
-        reported_user_id: input.target_user_id,
-        group_id: input.group_id,
-        content_type: input.content_type,
-        content_id: input.content_id,
-        reason: input.reason,
-        details: input.details,
-      })
-      .select('id, status, created_at')
-      .single();
-
-    if (reportError) {
-      if (input.action === 'block' && blockWasCreated) {
-        await supabase
-          .from('user_blocks')
-          .delete()
-          .eq('blocker_id', user.id)
-          .eq('blocked_user_id', input.target_user_id);
+    if (moderationError) {
+      if (moderationError.code === '42501') {
+        return createErrorResponse(
+          403,
+          moderationError.message,
+          'PERMISSION_DENIED',
+          undefined,
+          req,
+        );
       }
-      return handleError(reportError, 'submitting safety report', req);
+      if (moderationError.code === '22023') {
+        return createErrorResponse(
+          400,
+          moderationError.message,
+          'VALIDATION_ERROR',
+          undefined,
+          req,
+        );
+      }
+      return handleError(
+        new Error(moderationError.message),
+        'submitting moderation action',
+        req,
+      );
     }
+
+    const result = (data?.[0] || null) as ModerationRpcResult | null;
+    if (!result) {
+      return handleError(
+        new Error('Moderation action returned no result'),
+        'submitting moderation action',
+        req,
+      );
+    }
+
+    const report = result.report_id
+      ? {
+        id: result.report_id,
+        status: result.report_status,
+        created_at: result.report_created_at,
+      }
+      : null;
 
     return createSuccessResponse({
-      action: input.action,
-      target_user_id: input.target_user_id,
+      action: result.action,
+      target_user_id: result.target_user_id,
       report,
-      blocked: input.action === 'block',
+      blocked: result.blocked,
     }, input.action === 'report' ? 201 : 200, 0, req);
   } catch (error: unknown) {
     return handleError(error, 'moderation handler', req);
