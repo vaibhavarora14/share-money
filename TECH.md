@@ -263,11 +263,13 @@ Set these in Supabase Vault before the monthly Cron job runs:
 
 ### GitHub Actions (CI/CD)
 
-#### Database Migrations (manual)
+#### Database Migrations
 
-Database migrations are **not** automated. The old `supabase-migrations.yml` workflow
-was removed; new migration files in `supabase/migrations/` must be applied manually
-with the Supabase CLI:
+Production migrations are applied by `.github/workflows/deploy-edge-functions.yml`
+before any Edge Functions are deployed. A migration failure stops the deployment so
+new function code never runs against an older schema.
+
+For manual maintenance, use the Supabase CLI:
 
 ```bash
 # Link to your project (first time only)
@@ -277,9 +279,8 @@ supabase link --project-ref your-project-id
 supabase db push
 ```
 
-Run `supabase db push` before (or together with) merging PRs whose edge functions
-depend on new database objects, so the deployed functions never reference missing
-tables/functions.
+The production workflow requires `SUPABASE_DB_PASSWORD` in addition to the Supabase
+access token and project reference.
 
 **Security notes:**
 
@@ -295,7 +296,7 @@ tables/functions.
 | Web app (`sharedmoney.app/app`) | Vercel export from `mobile/` into `web/dist/app` | Every Vercel marketing deploy |
 | Marketing site (`web/`, `sharedmoney.app`) | Vercel Git integration (not GitHub Actions); `deploy-marketing.yml` is only a build check | Every push |
 | Legacy Expo redirect (`share-money.expo.app`) | EAS Hosting redirect artifact from `mobile/expo-redirect` | Changes to redirect artifact files + manual dispatch |
-| Database migrations | Manual `supabase db push` | — |
+| Database migrations | `.github/workflows/deploy-edge-functions.yml` before function deployment | Push to `main` + manual dispatch |
 | Android / iOS binaries & OTA updates | Manual (`mobile/build-release*.sh`, `eas submit`, `eas update`) | — |
 
 Canonical app links must use `https://sharedmoney.app/app`. The Expo hostname is
@@ -341,8 +342,9 @@ The workflow (`.github/workflows/deploy-edge-functions.yml`) automatically:
 1. **Triggers** on any push to `main` branch (and via manual dispatch)
 2. **Installs** Supabase CLI
 3. **Links** to your Supabase project
-4. **Deploys** all Edge Functions using `supabase functions deploy`
-5. **Reports** deployment status and summary
+4. **Applies** pending database migrations using `supabase db push`
+5. **Deploys** all Edge Functions using `supabase functions deploy`
+6. **Reports** deployment status and summary
 
 **Manual Triggering:**
 

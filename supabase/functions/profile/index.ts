@@ -2,6 +2,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { verifyAuth } from '../_shared/auth.ts';
 import { SUPABASE_SERVICE_ROLE_KEY, SUPABASE_URL } from '../_shared/env.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
+import { buildTermsAcceptanceUpdate } from '../_shared/profile.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
 import { fetchUserEmails } from '../_shared/user-email.ts';
 import { validateBodySize } from '../_shared/validation.ts';
@@ -13,11 +14,14 @@ interface Profile {
   phone?: string | null;
   country_code?: string | null;
   profile_completed: boolean;
+  terms_accepted_at?: string | null;
+  terms_version?: string | null;
   created_at: string;
   updated_at: string;
 }
 
 type ProfileUpdates = Partial<Pick<Profile, 'full_name' | 'avatar_url' | 'phone' | 'country_code' | 'profile_completed'>>;
+type ProfileUpdateRequest = ProfileUpdates & { accept_terms?: boolean };
 
 interface ValidationResult {
   valid: boolean;
@@ -56,7 +60,7 @@ function trimOrUndefined(value?: string | null): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function validateProfileUpdates(updates: ProfileUpdates): ValidationResult {
+function validateProfileUpdates(updates: ProfileUpdateRequest): ValidationResult {
   if (updates.full_name !== undefined && updates.full_name !== null) {
     if (typeof updates.full_name !== 'string') {
       return { valid: false, error: 'Full name must be a string' };
@@ -125,6 +129,10 @@ function validateProfileUpdates(updates: ProfileUpdates): ValidationResult {
 
   if (updates.profile_completed !== undefined && typeof updates.profile_completed !== 'boolean') {
     return { valid: false, error: 'profile_completed must be a boolean value' };
+  }
+
+  if (updates.accept_terms !== undefined && updates.accept_terms !== true) {
+    return { valid: false, error: 'Terms must be explicitly accepted' };
   }
 
   return { valid: true };
@@ -275,9 +283,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
         return createErrorResponse(400, 'Request body is required', 'VALIDATION_ERROR', undefined, req);
       }
 
-      let updates: ProfileUpdates;
+      let updates: ProfileUpdateRequest;
       try {
-        updates = JSON.parse(bodyText) as ProfileUpdates;
+        updates = JSON.parse(bodyText) as ProfileUpdateRequest;
       } catch {
         return createErrorResponse(400, 'Invalid JSON in request body', 'VALIDATION_ERROR', undefined, req);
       }
@@ -294,7 +302,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
         }
       }
 
-      const sanitizedUpdates: ProfileUpdates & { updated_at: string } = {
+      const sanitizedUpdates: ProfileUpdates & {
+        updated_at: string;
+        terms_accepted_at?: string;
+        terms_version?: string;
+      } = {
         updated_at: new Date().toISOString(),
       };
 
@@ -322,6 +334,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
         sanitizedUpdates.profile_completed = updates.profile_completed;
       }
 
+      if (updates.accept_terms === true) {
+        Object.assign(sanitizedUpdates, buildTermsAcceptanceUpdate(true));
+      }
+
       const { data: updatedProfile, error } = await supabase
         .from('profiles')
         .update(sanitizedUpdates)
@@ -340,6 +356,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
               phone: sanitizedUpdates.phone ?? null,
               country_code: sanitizedUpdates.country_code ?? null,
               profile_completed: sanitizedUpdates.profile_completed ?? false,
+              terms_accepted_at: sanitizedUpdates.terms_accepted_at ?? null,
+              terms_version: sanitizedUpdates.terms_version ?? null,
             })
             .select('*')
             .single();
