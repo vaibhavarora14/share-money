@@ -62,6 +62,7 @@ import { GroupStatsMode, GroupStatsScreen } from "./screens/GroupStatsScreen";
 import { GroupsListScreen } from "./screens/GroupsListScreen";
 import { ProfileSetupScreen } from "./screens/ProfileSetupScreen";
 import { SplitwiseImportScreen } from "./screens/SplitwiseImportScreen";
+import { TermsAcceptanceScreen } from "./screens/TermsAcceptanceScreen";
 import { TransactionFormScreen } from "./screens/TransactionFormScreen";
 import { darkTheme, lightTheme } from "./theme";
 import { Group, GroupWithMembers } from "./types";
@@ -73,6 +74,7 @@ import {
   getInviteLinkErrorMessage,
 } from "./utils/inviteLinks";
 import { log, logError } from "./utils/logger";
+import { needsTermsAcceptance } from "./utils/onboardingFlow";
 
 const PENDING_INVITE_TOKEN_KEY = "pending_invite_token";
 const PENDING_GROUP_DEEP_LINK_KEY = "pending_group_deep_link";
@@ -126,8 +128,11 @@ function AppContent() {
   const {
     data: profile,
     isLoading: profileLoading,
+    error: profileError,
     refetch: refetchProfile,
   } = useProfile();
+  const hasAcceptedCurrentTerms =
+    !!profile && !needsTermsAcceptance(profile);
   const [isSignUp, setIsSignUp] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [showAddMember, setShowAddMember] = useState(false);
@@ -263,10 +268,10 @@ function AppContent() {
     const handleUrl = async (url: string | null) => {
       const token = extractInviteToken(url);
       if (token) {
-        if (session?.user?.id) {
+        if (session?.user?.id && hasAcceptedCurrentTerms) {
           await redeemInviteToken(token);
         } else {
-          // Logged out: stash the token for post-auth redemption and go
+          // Stash the token until authentication and onboarding are complete.
           // straight to the sign-in screen (no preview step). Clean the URL
           // immediately — leaving /join/<token> in the address bar during the
           // auth flow is what allowed re-processing (remounts, url events) to
@@ -282,7 +287,7 @@ function AppContent() {
       const groupId = extractGroupDeepLinkId(url);
       if (!groupId) return;
 
-      if (session?.user?.id) {
+      if (session?.user?.id && hasAcceptedCurrentTerms) {
         await openGroupDeepLink(groupId);
       } else {
         await AsyncStorage.setItem(PENDING_GROUP_DEEP_LINK_KEY, groupId).catch(
@@ -315,11 +320,16 @@ function AppContent() {
     }
 
     return () => subscription.remove();
-  }, [session?.user?.id, redeemInviteToken, openGroupDeepLink]);
+  }, [
+    session?.user?.id,
+    hasAcceptedCurrentTerms,
+    redeemInviteToken,
+    openGroupDeepLink,
+  ]);
 
-  // After sign-in/sign-up, consume any invite token saved before auth.
+  // After authentication and onboarding, consume any saved invite token.
   useEffect(() => {
-    if (!session?.user?.id) return;
+    if (!session?.user?.id || !hasAcceptedCurrentTerms) return;
 
     let cancelled = false;
     (async () => {
@@ -335,11 +345,11 @@ function AppContent() {
     return () => {
       cancelled = true;
     };
-  }, [session?.user?.id, redeemInviteToken]);
+  }, [session?.user?.id, hasAcceptedCurrentTerms, redeemInviteToken]);
 
-  // After sign-in/sign-up, open any group deep link saved before auth.
+  // After authentication and onboarding, open any saved group deep link.
   useEffect(() => {
-    if (!session?.user?.id) return;
+    if (!session?.user?.id || !hasAcceptedCurrentTerms) return;
 
     let cancelled = false;
     (async () => {
@@ -355,7 +365,7 @@ function AppContent() {
     return () => {
       cancelled = true;
     };
-  }, [session?.user?.id, openGroupDeepLink]);
+  }, [session?.user?.id, hasAcceptedCurrentTerms, openGroupDeepLink]);
 
   // Debug routing / loading state to track "stuck on spinner" issues.
   // To avoid noisy duplicate breadcrumbs, only log when the state snapshot changes.
@@ -553,6 +563,49 @@ function AppContent() {
           isSignUp={isSignUp}
           onToggleMode={() => setIsSignUp(!isSignUp)}
         />
+        <StatusBar style={theme.dark ? "light" : "dark"} />
+      </>
+    );
+  }
+
+  if (profileLoading) {
+    return (
+      <View
+        style={[
+          styles.centerContainer,
+          { backgroundColor: theme.colors.background },
+        ]}
+      >
+        <ActivityIndicator size="large" />
+        <StatusBar style={theme.dark ? "light" : "dark"} />
+      </View>
+    );
+  }
+
+  if (profileError || !profile) {
+    return (
+      <View
+        style={[
+          styles.centerContainer,
+          { backgroundColor: theme.colors.background },
+        ]}
+      >
+        <RNText style={{ color: theme.colors.onBackground }}>
+          We couldn't load your account setup.
+        </RNText>
+        <Button onPress={() => void refetchProfile()}>Try again</Button>
+        <Button mode="text" onPress={() => void signOut()}>
+          Sign out
+        </Button>
+        <StatusBar style={theme.dark ? "light" : "dark"} />
+      </View>
+    );
+  }
+
+  if (needsTermsAcceptance(profile)) {
+    return (
+      <>
+        <TermsAcceptanceScreen />
         <StatusBar style={theme.dark ? "light" : "dark"} />
       </>
     );

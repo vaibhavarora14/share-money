@@ -11,9 +11,15 @@ export interface Profile {
   phone?: string;
   country_code?: string;
   profile_completed: boolean;
+  terms_accepted_at?: string | null;
+  terms_version?: string | null;
   created_at: string;
   updated_at: string;
 }
+
+export type ProfileUpdate = Partial<Profile> & {
+  accept_terms?: true;
+};
 
 export function useProfile() {
   const { user } = useAuth();
@@ -43,8 +49,8 @@ export function useProfile() {
     staleTime: 60_000,
   });
 
-  const updateProfileMutation = useMutation<Profile, Error, Partial<Profile>>({
-    mutationFn: async (updates: Partial<Profile>) => {
+  const updateProfileMutation = useMutation<Profile, Error, ProfileUpdate>({
+    mutationFn: async (updates: ProfileUpdate) => {
       if (!user?.id) {
         throw new Error("Not authenticated");
       }
@@ -97,4 +103,3 @@ export function useProfile() {
     updateProfileError: (updateProfileMutation.error as Error | null) ?? null,
   };
 }
-
