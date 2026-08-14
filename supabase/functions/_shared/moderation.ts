@@ -22,6 +22,7 @@ export type ModerationAction = 'report' | 'block' | 'unblock';
 
 export interface ModerationRequest {
   action: ModerationAction;
+  request_id?: string | null;
   group_id: string;
   target_user_id: string;
   content_type?: ReportContentType;
@@ -32,6 +33,7 @@ export interface ModerationRequest {
 
 export type ValidModerationRequest = {
   action: ModerationAction;
+  request_id: string | null;
   group_id: string;
   target_user_id: string;
   content_type: ReportContentType | null;
@@ -59,6 +61,15 @@ export function validateModerationRequest(
   const action = input.action;
   if (action !== 'report' && action !== 'block' && action !== 'unblock') {
     return { valid: false, error: 'Unsupported moderation action' };
+  }
+
+  const requestId = input.request_id;
+  if (
+    requestId !== undefined &&
+    requestId !== null &&
+    (typeof requestId !== 'string' || !isValidUUID(requestId))
+  ) {
+    return { valid: false, error: 'Invalid request_id format. Expected UUID.' };
   }
 
   const groupId = input.group_id;
@@ -121,6 +132,7 @@ export function validateModerationRequest(
     valid: true,
     value: {
       action,
+      request_id: typeof requestId === 'string' ? requestId : null,
       group_id: groupId,
       target_user_id: targetUserId,
       content_type: contentType as ReportContentType | null,
