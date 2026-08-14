@@ -1,7 +1,7 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(11);
+SELECT plan(15);
 
 INSERT INTO auth.users (id, email)
 VALUES
@@ -202,6 +202,74 @@ SELECT is(
   (SELECT count(*)::integer FROM public.user_safety_reports),
   2,
   'blocking also persists a developer report'
+);
+
+SET LOCAL ROLE authenticated;
+SELECT set_config(
+  'request.jwt.claim.sub',
+  '11111111-1111-4111-8111-111111111111',
+  true
+);
+SELECT lives_ok(
+  $$
+    SELECT public.submit_moderation_action_v2(
+      'report',
+      '55555555-5555-4555-8555-555555555555',
+      '44444444-4444-4444-8444-444444444444',
+      '22222222-2222-4222-8222-222222222222',
+      'transaction',
+      '9001',
+      'spam',
+      'Idempotent report'
+    )
+  $$,
+  'the first idempotent report succeeds'
+);
+SELECT lives_ok(
+  $$
+    SELECT public.submit_moderation_action_v2(
+      'report',
+      '55555555-5555-4555-8555-555555555555',
+      '44444444-4444-4444-8444-444444444444',
+      '22222222-2222-4222-8222-222222222222',
+      'transaction',
+      '9001',
+      'spam',
+      'Idempotent report'
+    )
+  $$,
+  'retrying the same idempotency key succeeds'
+);
+
+RESET ROLE;
+SELECT is(
+  (SELECT count(*)::integer FROM public.user_safety_reports),
+  3,
+  'retrying an idempotent report does not create a duplicate'
+);
+
+SET LOCAL ROLE authenticated;
+SELECT set_config(
+  'request.jwt.claim.sub',
+  '11111111-1111-4111-8111-111111111111',
+  true
+);
+SELECT throws_ok(
+  $$
+    SELECT public.submit_moderation_action_v2(
+      'report',
+      '55555555-5555-4555-8555-555555555555',
+      '44444444-4444-4444-8444-444444444444',
+      '22222222-2222-4222-8222-222222222222',
+      'transaction',
+      '9001',
+      'hate_speech',
+      'Changed payload'
+    )
+  $$,
+  '22023',
+  'An idempotency key cannot be reused for a different moderation action',
+  'reusing an idempotency key with a different payload is rejected'
 );
 
 SET LOCAL ROLE authenticated;
