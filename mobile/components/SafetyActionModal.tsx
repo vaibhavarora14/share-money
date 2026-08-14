@@ -73,7 +73,7 @@ export const SafetyActionModal: React.FC<SafetyActionModalProps> = ({
         <Surface style={styles.sheet} elevation={0}>
           <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
             <Text variant="headlineSmall" style={styles.title}>
-              {isReport ? "Report content" : `Block ${target.targetName}?`}
+              {isReport ? "Report this activity" : `Block ${target.targetName} everywhere?`}
             </Text>
 
             {isReport ? (
@@ -109,8 +109,9 @@ export const SafetyActionModal: React.FC<SafetyActionModalProps> = ({
               </>
             ) : (
               <Text variant="bodyLarge" style={{ color: theme.colors.onSurfaceVariant }}>
-                Their activity will disappear from your feed immediately. SharedMoney will also
-                receive a safety report so the content can be reviewed.
+                Their activity will disappear from all of your SharedMoney feeds immediately.
+                Shared financial records and balances will remain intact. SharedMoney will also
+                receive a safety report so the triggering activity can be reviewed.
               </Text>
             )}
 

@@ -211,7 +211,7 @@ export const MembersList: React.FC<MembersListProps> = ({
                           ) : null}
                           {canBlock ? (
                             <Menu.Item
-                              title={`Block ${personName}`}
+                              title={`Block ${personName} everywhere`}
                               leadingIcon="account-cancel-outline"
                               onPress={() => {
                                 setMenuParticipantId(null);
