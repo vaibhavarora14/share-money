@@ -49,9 +49,10 @@ Deno.serve(async (req: Request) => {
     const input = validation.value;
 
     const { data, error: moderationError } = await supabase.rpc(
-      'submit_moderation_action',
+      'submit_moderation_action_v2',
       {
         p_action: input.action,
+        p_request_id: input.request_id,
         p_group_id: input.group_id,
         p_target_user_id: input.target_user_id,
         p_content_type: input.content_type,

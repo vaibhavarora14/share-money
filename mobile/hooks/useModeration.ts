@@ -1,6 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { randomUUID } from "expo-crypto";
 import { ActivityFeedResponse } from "../types";
 import { fetchWithAuth } from "../utils/api";
+import { retryModerationRequest } from "../utils/moderationRetry";
 import { filterActivityQueriesForBlockedUser } from "./moderationCache";
 
 export type ReportReason =
@@ -30,11 +32,18 @@ interface ReportInput extends SafetyTarget {
 }
 
 async function submitModerationAction(body: Record<string, unknown>) {
-  const response = await fetchWithAuth("/moderation", {
-    method: "POST",
-    body: JSON.stringify(body),
+  const request = {
+    ...body,
+    request_id: randomUUID(),
+  };
+
+  return retryModerationRequest(request, async (retryRequest) => {
+    const response = await fetchWithAuth("/moderation", {
+      method: "POST",
+      body: JSON.stringify(retryRequest),
+    });
+    return response.json();
   });
-  return response.json();
 }
 
 export function useModeration(groupId: string) {
