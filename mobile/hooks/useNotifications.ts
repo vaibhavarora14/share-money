@@ -44,6 +44,7 @@ export function useNotifications() {
 }
 
 export function useNotification(notificationId: string | null) {
+  const queryClient = useQueryClient();
   return useQuery({
     queryKey: queryKeys.notification(notificationId ?? ""),
     queryFn: async () => {
@@ -51,6 +52,9 @@ export function useNotification(notificationId: string | null) {
       return readJson<TransactionNotification>(response);
     },
     enabled: !!notificationId,
+    initialData: () => queryClient
+      .getQueryData<NotificationsResponse>(queryKeys.notifications)
+      ?.items.find((item) => item.id === notificationId),
   });
 }
 

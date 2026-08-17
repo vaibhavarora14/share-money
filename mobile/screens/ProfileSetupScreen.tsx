@@ -440,12 +440,21 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                       previous ? { ...previous, preference } : previous
                     );
                     if (enabled && !preference.push_enabled) {
-                      Alert.alert(
-                        "Notifications are off",
-                        preference.permission_status === "denied"
-                          ? "Allow notifications in your device settings, then try again."
-                          : "Push notifications aren’t available on this device."
-                      );
+                      if (preference.permission_status === "denied") {
+                        Alert.alert(
+                          "Notifications are off",
+                          "Allow notifications in your device settings, then return to ShareMoney.",
+                          [
+                            { text: "Cancel", style: "cancel" },
+                            { text: "Open Settings", onPress: () => void Linking.openSettings() },
+                          ]
+                        );
+                      } else {
+                        Alert.alert(
+                          "Notifications are unavailable",
+                          "Push notifications aren’t available on this device."
+                        );
+                      }
                     }
                   } catch (error) {
                     showErrorAlert(error, signOut, "Notifications");

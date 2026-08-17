@@ -246,11 +246,6 @@ DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron')
     AND EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_net')
-    AND EXISTS (
-      SELECT 1 FROM vault.decrypted_secrets
-      WHERE name IN ('notification_worker_function_url', 'notification_worker_secret')
-      GROUP BY TRUE HAVING COUNT(*) = 2
-    )
   THEN
     PERFORM cron.unschedule(jobid)
     FROM cron.job
@@ -260,20 +255,29 @@ BEGIN
       'transaction-notification-worker',
       '* * * * *',
       $cron$
-        SELECT net.http_post(
-          url := (
-            SELECT decrypted_secret FROM vault.decrypted_secrets
-            WHERE name = 'notification_worker_function_url'
-          ),
-          headers := jsonb_build_object(
-            'Content-Type', 'application/json',
-            'x-notification-worker-secret', (
-              SELECT decrypted_secret FROM vault.decrypted_secrets
+        WITH worker_config AS (
+          SELECT
+            MAX(decrypted_secret) FILTER (
+              WHERE name = 'notification_worker_function_url'
+            ) AS function_url,
+            MAX(decrypted_secret) FILTER (
               WHERE name = 'notification_worker_secret'
+            ) AS worker_secret
+          FROM vault.decrypted_secrets
+        )
+        SELECT CASE
+          WHEN function_url IS NOT NULL AND worker_secret IS NOT NULL THEN
+            net.http_post(
+              url := function_url,
+              headers := jsonb_build_object(
+                'Content-Type', 'application/json',
+                'x-notification-worker-secret', worker_secret
+              ),
+              body := jsonb_build_object('scheduled_at', NOW())
             )
-          ),
-          body := jsonb_build_object('scheduled_at', NOW())
-        ) AS request_id;
+          ELSE NULL
+        END AS request_id
+        FROM worker_config;
       $cron$
     );
   END IF;

@@ -80,10 +80,11 @@ export async function enablePushNotifications(): Promise<NotificationPreference>
 export async function unregisterCurrentPushToken(): Promise<void> {
   const token = await AsyncStorage.getItem(TOKEN_STORAGE_KEY);
   if (token) {
-    await fetchWithAuth("/notifications", {
+    const response = await fetchWithAuth("/notifications", {
       method: "DELETE",
       body: JSON.stringify({ token }),
-    }).catch(() => null);
+    });
+    if (!response.ok) throw new Error("Unable to unregister this device from notifications");
     await AsyncStorage.removeItem(TOKEN_STORAGE_KEY);
   }
 }
