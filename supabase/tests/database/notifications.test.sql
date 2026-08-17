@@ -1,7 +1,7 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(26);
+SELECT plan(31);
 
 SELECT has_table('public', 'notifications', 'notifications inbox exists');
 SELECT has_table('public', 'notification_preferences', 'notification preferences exist');
@@ -114,12 +114,52 @@ SELECT ok(
   'authenticated users cannot claim outbox work'
 );
 SELECT ok(
+  NOT has_function_privilege(
+    'anon',
+    'public.claim_notification_outbox(integer)',
+    'EXECUTE'
+  ),
+  'anonymous users cannot claim outbox work'
+);
+SELECT ok(
+  NOT has_function_privilege(
+    'authenticated',
+    'public.enqueue_transaction_notification()',
+    'EXECUTE'
+  ),
+  'authenticated users cannot invoke the notification enqueue trigger function'
+);
+SELECT ok(
+  NOT has_function_privilege(
+    'authenticated',
+    'public.preserve_notification_first_read()',
+    'EXECUTE'
+  ),
+  'authenticated users cannot invoke the monotonic-read trigger function'
+);
+SELECT ok(
+  NOT has_function_privilege(
+    'authenticated',
+    'public.wake_transaction_notification_worker()',
+    'EXECUTE'
+  ),
+  'authenticated users cannot invoke the worker wake trigger function'
+);
+SELECT ok(
   has_function_privilege(
     'authenticated',
     'public.get_notification_unread_summary()',
     'EXECUTE'
   ),
   'authenticated users can fetch their RLS-scoped unread summary'
+);
+SELECT ok(
+  NOT has_function_privilege(
+    'anon',
+    'public.get_notification_unread_summary()',
+    'EXECUTE'
+  ),
+  'anonymous users cannot query notification summaries'
 );
 
 SELECT col_is_unique(

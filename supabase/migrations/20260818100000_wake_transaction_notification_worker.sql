@@ -15,7 +15,8 @@ AS $$
   GROUP BY notifications.group_id
 $$;
 
-REVOKE ALL ON FUNCTION public.get_notification_unread_summary() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.get_notification_unread_summary()
+  FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.get_notification_unread_summary() TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.preserve_notification_first_read()
@@ -39,7 +40,8 @@ CREATE TRIGGER preserve_notification_first_read_trigger
   FOR EACH ROW
   EXECUTE FUNCTION public.preserve_notification_first_read();
 
-REVOKE ALL ON FUNCTION public.preserve_notification_first_read() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.preserve_notification_first_read()
+  FROM PUBLIC, anon, authenticated;
 
 -- Push tokens have device-wide uniqueness and can move between accounts.
 -- Only the authenticated Edge Function, using service authority, may mutate
@@ -100,7 +102,8 @@ CREATE TRIGGER wake_transaction_notification_worker_trigger
   FOR EACH ROW
   EXECUTE FUNCTION public.wake_transaction_notification_worker();
 
-REVOKE ALL ON FUNCTION public.wake_transaction_notification_worker() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.wake_transaction_notification_worker()
+  FROM PUBLIC, anon, authenticated;
 
 COMMENT ON FUNCTION public.wake_transaction_notification_worker() IS
   'Best-effort immediate pg_net wake-up; durable outbox cron remains the fallback.';

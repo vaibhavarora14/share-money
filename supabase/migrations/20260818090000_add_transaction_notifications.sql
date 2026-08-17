@@ -187,8 +187,13 @@ REVOKE ALL ON TABLE public.notification_preferences FROM anon, authenticated;
 REVOKE ALL ON TABLE public.push_tokens FROM anon, authenticated;
 REVOKE ALL ON TABLE public.notification_outbox FROM anon, authenticated;
 REVOKE ALL ON TABLE public.notification_deliveries FROM anon, authenticated;
-REVOKE ALL ON FUNCTION public.claim_notification_outbox(INTEGER) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.enqueue_transaction_notification() FROM PUBLIC;
+-- Supabase grants new public-schema functions to API roles through default
+-- privileges. Revoke both PUBLIC and the concrete roles so these SECURITY
+-- DEFINER/internal trigger functions cannot be called through PostgREST.
+REVOKE ALL ON FUNCTION public.claim_notification_outbox(INTEGER)
+  FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.enqueue_transaction_notification()
+  FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.claim_notification_outbox(INTEGER) TO service_role;
 
 GRANT SELECT ON TABLE public.notifications TO authenticated;
