@@ -1,15 +1,38 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type InfiniteData,
+  type QueryClient,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import React from "react";
 import { useAuth } from "../contexts/AuthContext";
 import {
-  NotificationPreference,
-  NotificationsResponse,
-  TransactionNotification,
+  type NotificationCursor,
+  type NotificationPreference,
+  type NotificationsResponse,
+  type TransactionNotification,
 } from "../types/notifications";
 import { fetchWithAuth } from "../utils/api";
+import {
+  clearNotificationReadQueue,
+  enqueueNotificationRead,
+  flushNotificationReadQueue,
+} from "../utils/notificationReadQueue";
+import {
+  flattenNotificationPages,
+  markAllNotificationsReadInCache,
+  markNotificationReadInCache,
+  setNotificationPreferenceInData,
+  type NotificationInfiniteData,
+} from "../utils/notificationState";
 import { queryKeys } from "./queryKeys";
 
 const cacheKey = (userId: string) => `notifications-cache:${userId}`;
+
+type NotificationsView = InfiniteData<NotificationsResponse, NotificationCursor | null> & NotificationsResponse;
 
 async function readJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -19,119 +42,176 @@ async function readJson<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export async function fetchNotifications(userId: string): Promise<NotificationsResponse> {
+async function fetchNotificationsPage(
+  userId: string,
+  cursor: NotificationCursor | null,
+): Promise<NotificationsResponse> {
   try {
-    const response = await fetchWithAuth("/notifications?limit=100");
-    const data = await readJson<NotificationsResponse>(response);
-    await AsyncStorage.setItem(cacheKey(userId), JSON.stringify(data)).catch(() => {});
-    return data;
+    const queueFlushed = await flushNotificationReadQueue(userId);
+    if (!queueFlushed) throw new Error("Notification reads are waiting for a connection");
+    const cursorQuery = cursor
+      ? `&cursor_created_at=${encodeURIComponent(cursor.created_at)}&cursor_id=${encodeURIComponent(cursor.id)}`
+      : "";
+    const response = await fetchWithAuth(`/notifications?limit=40${cursorQuery}`);
+    return await readJson<NotificationsResponse>(response);
   } catch (error) {
+    if (cursor) throw error;
     const cached = await AsyncStorage.getItem(cacheKey(userId)).catch(() => null);
     if (!cached) throw error;
-    return { ...(JSON.parse(cached) as NotificationsResponse), is_offline_cache: true };
+    try {
+      return {
+        ...(JSON.parse(cached) as NotificationsResponse),
+        has_more: false,
+        next_cursor: null,
+        is_offline_cache: true,
+      };
+    } catch {
+      throw error;
+    }
   }
+}
+
+export async function refreshNotificationReads(userId: string): Promise<boolean> {
+  return flushNotificationReadQueue(userId);
+}
+
+export async function clearNotificationLocalState(userId: string): Promise<void> {
+  await Promise.all([
+    AsyncStorage.removeItem(cacheKey(userId)),
+    clearNotificationReadQueue(userId),
+  ]);
+}
+
+export function setCachedNotificationPreference(
+  queryClient: QueryClient,
+  userId: string,
+  preference: NotificationPreference,
+): void {
+  queryClient.setQueryData<NotificationInfiniteData>(
+    queryKeys.notifications(userId),
+    (previous) => setNotificationPreferenceInData(previous, preference),
+  );
 }
 
 export function useNotifications() {
   const { user } = useAuth();
-  return useQuery({
-    queryKey: queryKeys.notifications,
-    queryFn: () => fetchNotifications(user!.id),
-    enabled: !!user?.id,
+  const userId = user?.id ?? null;
+  const query = useInfiniteQuery({
+    queryKey: queryKeys.notifications(userId),
+    queryFn: ({ pageParam }) => fetchNotificationsPage(userId!, pageParam),
+    initialPageParam: null as NotificationCursor | null,
+    getNextPageParam: (lastPage) => lastPage.has_more ? lastPage.next_cursor : null,
+    enabled: !!userId,
     staleTime: 30_000,
     refetchInterval: 60_000,
+    select: (data): NotificationsView => ({
+      ...data,
+      ...flattenNotificationPages(data)!,
+    }),
   });
+
+  React.useEffect(() => {
+    if (!userId || !query.data || query.data.is_offline_cache) return;
+    const snapshot = flattenNotificationPages(query.data);
+    if (snapshot) {
+      AsyncStorage.setItem(cacheKey(userId), JSON.stringify(snapshot)).catch(() => {});
+    }
+  }, [query.data, userId]);
+
+  return query;
 }
 
 export function useNotification(notificationId: string | null) {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
+  const userId = user?.id ?? null;
   return useQuery({
-    queryKey: queryKeys.notification(notificationId ?? ""),
+    queryKey: queryKeys.notification(userId, notificationId ?? ""),
     queryFn: async () => {
       const response = await fetchWithAuth(`/notifications?id=${notificationId}`);
       return readJson<TransactionNotification>(response);
     },
-    enabled: !!notificationId,
-    initialData: () => queryClient
-      .getQueryData<NotificationsResponse>(queryKeys.notifications)
-      ?.items.find((item) => item.id === notificationId),
+    enabled: !!userId && !!notificationId,
+    initialData: () => flattenNotificationPages(
+      queryClient.getQueryData<NotificationInfiniteData>(queryKeys.notifications(userId)),
+    )?.items.find((item) => item.id === notificationId),
   });
 }
 
 export function useMarkNotificationRead() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
+  const userId = user?.id ?? null;
+  const queryKey = queryKeys.notifications(userId);
   return useMutation({
     mutationFn: async (id: string) => {
-      const response = await fetchWithAuth("/notifications", {
-        method: "PATCH",
-        body: JSON.stringify({ action: "read", id }),
+      if (!userId) throw new Error("Sign in to update notifications");
+      const target = flattenNotificationPages(
+        queryClient.getQueryData<NotificationInfiniteData>(queryKey),
+      )?.items.find((item) => item.id === id);
+      await enqueueNotificationRead(userId, {
+        kind: "read",
+        id,
+        created_at: target?.created_at ?? new Date().toISOString(),
+        queued_at: new Date().toISOString(),
       });
-      return readJson<{ id: string; read_at: string }>(response);
+      return { flushed: await flushNotificationReadQueue(userId) };
     },
     onMutate: async (id) => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.notifications });
-      const previous = queryClient.getQueryData<NotificationsResponse>(queryKeys.notifications);
-      if (previous) {
-        const target = previous.items.find((item) => item.id === id);
-        const groupId = target?.group_id;
-        queryClient.setQueryData<NotificationsResponse>(queryKeys.notifications, {
-          ...previous,
-          unread_count: target && !target.read_at ? Math.max(0, previous.unread_count - 1) : previous.unread_count,
-          unread_by_group: groupId && target && !target.read_at
-            ? {
-              ...previous.unread_by_group,
-              [groupId]: Math.max(0, (previous.unread_by_group[groupId] ?? 1) - 1),
-            }
-            : previous.unread_by_group,
-          items: previous.items.map((item) =>
-            item.id === id ? { ...item, read_at: new Date().toISOString() } : item
-          ),
-        });
-      }
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<NotificationInfiniteData>(queryKey);
+      queryClient.setQueryData<NotificationInfiniteData>(
+        queryKey,
+        (current) => markNotificationReadInCache(current, id, new Date().toISOString()),
+      );
       return { previous };
     },
     onError: (_error, _id, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(queryKeys.notifications, context.previous);
-      }
+      if (context?.previous) queryClient.setQueryData(queryKey, context.previous);
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.notifications }),
+    onSuccess: ({ flushed }) => {
+      if (flushed) queryClient.invalidateQueries({ queryKey });
+    },
   });
 }
 
 export function useMarkAllNotificationsRead() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
+  const userId = user?.id ?? null;
+  const queryKey = queryKeys.notifications(userId);
   return useMutation({
-    mutationFn: async () => {
-      const response = await fetchWithAuth("/notifications", {
-        method: "PATCH",
-        body: JSON.stringify({ action: "read_all", through: new Date().toISOString() }),
+    mutationFn: async (through: string) => {
+      if (!userId) throw new Error("Sign in to update notifications");
+      await enqueueNotificationRead(userId, {
+        kind: "read_all",
+        through,
+        queued_at: through,
       });
-      return readJson<{ updated: number }>(response);
+      return { flushed: await flushNotificationReadQueue(userId) };
     },
-    onMutate: async () => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.notifications });
-      const previous = queryClient.getQueryData<NotificationsResponse>(queryKeys.notifications);
-      if (previous) {
-        const now = new Date().toISOString();
-        queryClient.setQueryData<NotificationsResponse>(queryKeys.notifications, {
-          ...previous,
-          unread_count: 0,
-          unread_by_group: {},
-          items: previous.items.map((item) => ({ ...item, read_at: item.read_at ?? now })),
-        });
-      }
+    onMutate: async (through) => {
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<NotificationInfiniteData>(queryKey);
+      queryClient.setQueryData<NotificationInfiniteData>(
+        queryKey,
+        (current) => markAllNotificationsReadInCache(current, through, through),
+      );
       return { previous };
     },
     onError: (_error, _variables, context) => {
-      if (context?.previous) queryClient.setQueryData(queryKeys.notifications, context.previous);
+      if (context?.previous) queryClient.setQueryData(queryKey, context.previous);
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.notifications }),
+    onSuccess: ({ flushed }) => {
+      if (flushed) queryClient.invalidateQueries({ queryKey });
+    },
   });
 }
 
 export function useUpdateNotificationPreference() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
+  const userId = user?.id ?? null;
   return useMutation({
     mutationFn: async (input:
       | { action: "preference"; push_enabled: boolean; permission_status: NotificationPreference["permission_status"] }
@@ -144,9 +224,7 @@ export function useUpdateNotificationPreference() {
       return readJson<NotificationPreference>(response);
     },
     onSuccess: (preference) => {
-      queryClient.setQueryData<NotificationsResponse>(queryKeys.notifications, (previous) =>
-        previous ? { ...previous, preference } : previous
-      );
+      if (userId) setCachedNotificationPreference(queryClient, userId, preference);
     },
   });
 }

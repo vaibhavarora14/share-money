@@ -17,11 +17,13 @@ import { NotificationBell } from "../components/NotificationBell";
 import { useAuth } from "../contexts/AuthContext";
 import { useBalances } from "../hooks/useBalances";
 import { useGroups } from "../hooks/useGroups";
-import { queryKeys } from "../hooks/queryKeys";
-import { useNotifications, useUpdateNotificationPreference } from "../hooks/useNotifications";
+import {
+  setCachedNotificationPreference,
+  useNotifications,
+  useUpdateNotificationPreference,
+} from "../hooks/useNotifications";
 import { enablePushNotifications } from "../services/pushNotifications";
 import { Group } from "../types";
-import { NotificationsResponse } from "../types/notifications";
 import { showErrorAlert } from "../utils/errorHandling";
 import {
   getUserFriendlyErrorMessage,
@@ -357,9 +359,9 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                     setPushError(null);
                     try {
                       const preference = await enablePushNotifications();
-                      queryClient.setQueryData<NotificationsResponse>(queryKeys.notifications, (previous) =>
-                        previous ? { ...previous, preference } : previous
-                      );
+                      if (user?.id) {
+                        setCachedNotificationPreference(queryClient, user.id, preference);
+                      }
                     } catch {
                       setPushError("We couldn’t turn on notifications. You can try again in Profile.");
                     } finally {

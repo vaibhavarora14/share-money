@@ -11,6 +11,7 @@ import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import {
+  AppState,
   Platform,
   LogBox,
   Text as RNText,
@@ -37,7 +38,11 @@ import {
 } from "./contexts/ThemePreferenceContext";
 import { UpgradeProvider, useUpgrade } from "./contexts/UpgradeContext";
 import { queryKeys } from "./hooks/queryKeys";
-import { useNotifications } from "./hooks/useNotifications";
+import {
+  clearNotificationLocalState,
+  refreshNotificationReads,
+  useNotifications,
+} from "./hooks/useNotifications";
 import { fetchActivity } from "./hooks/useActivity";
 import { fetchBalances } from "./hooks/useBalances";
 import { redeemGroupInviteLinkRPC } from "./hooks/useGroupInvitations";
@@ -71,6 +76,8 @@ import {
   getLastNotificationResponseData,
   syncEnabledPushRegistration,
   subscribeToNotificationResponses,
+  subscribeToPushTokenChanges,
+  subscribeToReceivedNotifications,
 } from "./services/pushNotifications";
 import { darkTheme, lightTheme } from "./theme";
 import { Group, GroupWithMembers } from "./types";
@@ -301,7 +308,10 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    if (!session?.user?.id || !hasAcceptedCurrentTerms) return;
+    if (!session?.user?.id || !hasAcceptedCurrentTerms) {
+      initialNotificationHandledRef.current = false;
+      return;
+    }
     const unsubscribe = subscribeToNotificationResponses(handleNotificationResponse);
     if (!initialNotificationHandledRef.current) {
       initialNotificationHandledRef.current = true;
@@ -332,6 +342,38 @@ function AppContent() {
       });
     }
   }, [session?.user?.id, notificationInbox.data?.preference]);
+
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (!userId || !hasAcceptedCurrentTerms) return;
+
+    const refreshInbox = () => {
+      void queryClientInstance.invalidateQueries({ queryKey: queryKeys.notificationRoot });
+    };
+    const unsubscribeReceived = subscribeToReceivedNotifications(refreshInbox);
+    const unsubscribeToken = notificationInbox.data?.preference.push_enabled
+      ? subscribeToPushTokenChanges(refreshInbox, (error) => {
+        logError(error, { context: "push token rotation" });
+      })
+      : () => {};
+    const appStateSubscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState !== "active") return;
+      refreshNotificationReads(userId)
+        .catch((error) => logError(error, { context: "flush notification reads on foreground" }))
+        .finally(refreshInbox);
+    });
+
+    return () => {
+      unsubscribeReceived();
+      unsubscribeToken();
+      appStateSubscription.remove();
+    };
+  }, [
+    hasAcceptedCurrentTerms,
+    notificationInbox.data?.preference.push_enabled,
+    queryClientInstance,
+    session?.user?.id,
+  ]);
 
   // Handle deep links: initial URL (cold start / web navigation) + url events.
   useEffect(() => {
@@ -512,6 +554,14 @@ function AppContent() {
   useEffect(() => {
     const hadSession = prevSessionRef.current !== null;
     const hasSession = session !== null;
+    const previousUserId = prevSessionRef.current?.user.id;
+    const currentUserId = session?.user.id;
+
+    if (previousUserId && previousUserId !== currentUserId) {
+      clearNotificationLocalState(previousUserId).catch((error) => {
+        logError(error, { context: "clear notification state on logout" });
+      });
+    }
 
     // Only reset when transitioning between logged in/out states
     if (hadSession !== hasSession) {

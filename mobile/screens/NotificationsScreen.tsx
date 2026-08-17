@@ -1,5 +1,6 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { isToday } from "date-fns";
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Platform,
   Pressable,
@@ -10,6 +11,7 @@ import {
 } from "react-native";
 import {
   Appbar,
+  ActivityIndicator,
   Avatar,
   Button,
   Divider,
@@ -17,6 +19,7 @@ import {
   Text,
   useTheme,
 } from "react-native-paper";
+import { useAuth } from "../contexts/AuthContext";
 import {
   useMarkAllNotificationsRead,
   useMarkNotificationRead,
@@ -78,7 +81,7 @@ const NotificationRow = React.memo(function NotificationRow({
     <Pressable
       onPress={() => onPress(item)}
       accessibilityRole="button"
-      accessibilityLabel={`${unread ? "Unread. " : ""}${item.title}. ${item.snapshot.group.name}. ${impact.label}`}
+      accessibilityLabel={`${unread ? "Unread" : "Read"}. ${item.snapshot.actor.name}. ${item.title}. Group ${item.snapshot.group.name}. ${impact.label}. ${formatAge(item.created_at)}`}
       style={({ pressed }) => [
         styles.row,
         { backgroundColor: unread ? theme.colors.primaryContainer : theme.colors.surface },
@@ -95,7 +98,11 @@ const NotificationRow = React.memo(function NotificationRow({
         color={theme.colors.primary}
       />
       <View style={styles.rowCopy}>
-        <Text variant="bodyMedium" numberOfLines={2} style={styles.rowTitle}>
+        <Text
+          variant="bodyMedium"
+          numberOfLines={2}
+          style={[styles.rowTitle, unread ? styles.rowTitleUnread : styles.rowTitleRead]}
+        >
           {item.title}
         </Text>
         <View style={styles.rowMeta}>
@@ -139,12 +146,31 @@ export function NotificationsScreen({
   onViewGroups,
 }: NotificationsScreenProps) {
   const theme = useTheme();
+  const { user } = useAuth();
   const dimensions = useWindowDimensions();
   const notifications = useNotifications();
   const markRead = useMarkNotificationRead();
   const markAll = useMarkAllNotificationsRead();
   const items = notifications.data?.items ?? [];
   const widePanel = Platform.OS === "web" && dimensions.width >= 768;
+  const [returningInbox, setReturningInbox] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const key = `notifications-inbox-opened:${user.id}`;
+    let active = true;
+    AsyncStorage.getItem(key)
+      .then((value) => {
+        if (active) setReturningInbox(value === "true");
+        return AsyncStorage.setItem(key, "true");
+      })
+      .catch(() => {
+        if (active) setReturningInbox(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
 
   const sections = useMemo(() => {
     const today: TransactionNotification[] = [];
@@ -175,7 +201,12 @@ export function NotificationsScreen({
           <Appbar.BackAction onPress={onBack} />
           <Appbar.Content title="Notifications" titleStyle={styles.headerTitle} />
           {notifications.data?.unread_count ? (
-            <Button compact mode="text" onPress={() => markAll.mutate()} loading={markAll.isPending}>
+            <Button
+              compact
+              mode="text"
+              onPress={() => markAll.mutate(new Date().toISOString())}
+              loading={markAll.isPending}
+            >
               Mark all read
             </Button>
           ) : null}
@@ -184,7 +215,15 @@ export function NotificationsScreen({
 
         {notifications.data?.is_offline_cache ? (
           <View style={[styles.offlineBanner, { backgroundColor: theme.colors.surfaceVariant }]}>
-            <Text variant="bodySmall">Offline — showing saved notifications</Text>
+            <Text variant="bodySmall">You’re offline—showing saved activity</Text>
+          </View>
+        ) : null}
+
+        {markRead.isError || markAll.isError ? (
+          <View style={[styles.offlineBanner, { backgroundColor: theme.colors.errorContainer }]}>
+            <Text variant="bodySmall" style={{ color: theme.colors.onErrorContainer }}>
+              Couldn’t save that read state. Try again.
+            </Text>
           </View>
         ) : null}
 
@@ -192,7 +231,7 @@ export function NotificationsScreen({
 
         {notifications.isError && !notifications.data ? (
           <View style={styles.state}>
-            <Text variant="titleMedium">Notifications aren’t available</Text>
+            <Text variant="titleMedium">Couldn’t load notifications</Text>
             <Text style={[styles.stateBody, { color: theme.colors.onSurfaceVariant }]}>
               Check your connection and try again.
             </Text>
@@ -200,14 +239,20 @@ export function NotificationsScreen({
           </View>
         ) : null}
 
-        {!notifications.isLoading && !notifications.isError && items.length === 0 ? (
+        {!notifications.isLoading && !notifications.isError && items.length === 0 && returningInbox !== null ? (
           <View style={styles.state}>
             <Avatar.Icon size={64} icon="bell-outline" style={{ backgroundColor: theme.colors.primaryContainer }} color={theme.colors.primary} />
-            <Text variant="titleLarge" style={styles.stateTitle}>No notifications yet</Text>
-            <Text style={[styles.stateBody, { color: theme.colors.onSurfaceVariant }]}>
-              When an expense affects you, you’ll find it here.
+            <Text variant="titleLarge" style={styles.stateTitle}>
+              {returningInbox ? "You’re all caught up" : "No notifications yet"}
             </Text>
-            <Button mode="contained" onPress={onViewGroups}>View groups</Button>
+            {!returningInbox ? (
+              <>
+                <Text style={[styles.stateBody, { color: theme.colors.onSurfaceVariant }]}>
+                  Changes to expenses involving you will appear here
+                </Text>
+                <Button mode="contained" onPress={onViewGroups}>View groups</Button>
+              </>
+            ) : null}
           </View>
         ) : null}
 
@@ -226,6 +271,26 @@ export function NotificationsScreen({
             contentContainerStyle={styles.listContent}
             onRefresh={() => notifications.refetch()}
             refreshing={notifications.isRefetching && !notifications.isLoading}
+            onEndReached={() => {
+              if (notifications.hasNextPage && !notifications.isFetchingNextPage) {
+                void notifications.fetchNextPage();
+              }
+            }}
+            onEndReachedThreshold={0.35}
+            ListFooterComponent={notifications.isFetchingNextPage ? (
+              <View style={styles.paginationFooter}>
+                <ActivityIndicator size="small" />
+              </View>
+            ) : notifications.isFetchNextPageError ? (
+              <View style={styles.paginationFooter}>
+                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                  Couldn’t load more
+                </Text>
+                <Button compact mode="text" onPress={() => void notifications.fetchNextPage()}>
+                  Retry
+                </Button>
+              </View>
+            ) : null}
           />
         ) : null}
       </Surface>
@@ -246,7 +311,9 @@ const styles = StyleSheet.create({
   unreadSlot: { width: 22, alignItems: "center" },
   unreadDot: { width: 8, height: 8, borderRadius: 4 },
   rowCopy: { flex: 1, marginLeft: 12 },
-  rowTitle: { fontWeight: "600" },
+  rowTitle: {},
+  rowTitleUnread: { fontWeight: "700" },
+  rowTitleRead: { fontWeight: "500" },
   rowMeta: { flexDirection: "row", alignItems: "center", marginTop: 5 },
   groupName: { flex: 1, paddingRight: 8 },
   impact: { fontWeight: "600", maxWidth: "58%", textAlign: "right" },
@@ -259,4 +326,5 @@ const styles = StyleSheet.create({
   skeletonCopy: { flex: 1, marginLeft: 14 },
   skeletonLineWide: { height: 14, borderRadius: 7, width: "78%" },
   skeletonLine: { height: 11, borderRadius: 6, width: "46%", marginTop: 10 },
+  paginationFooter: { minHeight: 64, alignItems: "center", justifyContent: "center", padding: 12 },
 });

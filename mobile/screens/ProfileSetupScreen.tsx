@@ -33,10 +33,11 @@ import {
   useThemePreference,
 } from "../contexts/ThemePreferenceContext";
 import { useProfile } from "../hooks/useProfile";
-import { queryKeys } from "../hooks/queryKeys";
-import { useNotifications } from "../hooks/useNotifications";
+import {
+  setCachedNotificationPreference,
+  useNotifications,
+} from "../hooks/useNotifications";
 import { disablePushNotifications, enablePushNotifications } from "../services/pushNotifications";
-import { NotificationsResponse } from "../types/notifications";
 import {
   CountryCode,
   formatPhoneNumber,
@@ -436,9 +437,9 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                     const preference = enabled
                       ? await enablePushNotifications()
                       : await disablePushNotifications();
-                    queryClient.setQueryData<NotificationsResponse>(queryKeys.notifications, (previous) =>
-                      previous ? { ...previous, preference } : previous
-                    );
+                    if (user?.id) {
+                      setCachedNotificationPreference(queryClient, user.id, preference);
+                    }
                     if (enabled && !preference.push_enabled) {
                       if (preference.permission_status === "denied") {
                         Alert.alert(

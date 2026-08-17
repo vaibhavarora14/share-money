@@ -57,12 +57,17 @@ export interface NotificationPreference {
   nudge_dismissed_at: string | null;
 }
 
+export interface NotificationCursor {
+  created_at: string;
+  id: string;
+}
+
 export interface NotificationsResponse {
   items: TransactionNotification[];
   unread_count: number;
   unread_by_group: Record<string, number>;
   has_more: boolean;
-  next_cursor: string | null;
+  next_cursor: NotificationCursor | null;
   preference: NotificationPreference;
   is_offline_cache?: boolean;
 }
