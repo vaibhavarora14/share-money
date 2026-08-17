@@ -184,6 +184,7 @@ module.exports = ({ config }) => {
         ],
         "expo-apple-authentication",
         "expo-font",
+        "expo-notifications",
         "expo-web-browser",
         // Only include expo-dev-client plugin for development builds
         ...(isDevelopmentBuild ? ["expo-dev-client"] : [])

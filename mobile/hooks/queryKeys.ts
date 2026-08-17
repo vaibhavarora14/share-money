@@ -12,4 +12,6 @@ export const queryKeys = {
   invitations: (groupId: string) => ["invitations", groupId] as const,
   settlements: (groupId: string) => ["settlements", groupId] as const,
   participants: (groupId: string) => ["participants", groupId] as const,
+  notifications: ["notifications"] as const,
+  notification: (notificationId: string) => ["notifications", notificationId] as const,
 };

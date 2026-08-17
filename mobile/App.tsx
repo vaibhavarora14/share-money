@@ -37,6 +37,7 @@ import {
 } from "./contexts/ThemePreferenceContext";
 import { UpgradeProvider, useUpgrade } from "./contexts/UpgradeContext";
 import { queryKeys } from "./hooks/queryKeys";
+import { useNotifications } from "./hooks/useNotifications";
 import { fetchActivity } from "./hooks/useActivity";
 import { fetchBalances } from "./hooks/useBalances";
 import { redeemGroupInviteLinkRPC } from "./hooks/useGroupInvitations";
@@ -60,10 +61,17 @@ import { AuthScreen } from "./screens/AuthScreen";
 import { GroupDetailsScreen } from "./screens/GroupDetailsScreen";
 import { GroupStatsMode, GroupStatsScreen } from "./screens/GroupStatsScreen";
 import { GroupsListScreen } from "./screens/GroupsListScreen";
+import { NotificationDetailScreen } from "./screens/NotificationDetailScreen";
+import { NotificationsScreen } from "./screens/NotificationsScreen";
 import { ProfileSetupScreen } from "./screens/ProfileSetupScreen";
 import { SplitwiseImportScreen } from "./screens/SplitwiseImportScreen";
 import { TermsAcceptanceScreen } from "./screens/TermsAcceptanceScreen";
 import { TransactionFormScreen } from "./screens/TransactionFormScreen";
+import {
+  getLastNotificationResponseData,
+  syncEnabledPushRegistration,
+  subscribeToNotificationResponses,
+} from "./services/pushNotifications";
 import { darkTheme, lightTheme } from "./theme";
 import { Group, GroupWithMembers } from "./types";
 import { getDefaultCurrency } from "./utils/currency";
@@ -131,12 +139,16 @@ function AppContent() {
     error: profileError,
     refetch: refetchProfile,
   } = useProfile();
+  const notificationInbox = useNotifications();
   const hasAcceptedCurrentTerms =
     !!profile && !needsTermsAcceptance(profile);
   const [isSignUp, setIsSignUp] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [showAddMember, setShowAddMember] = useState(false);
   const [currentRoute, setCurrentRoute] = useState<string>("groups");
+  const [selectedNotificationId, setSelectedNotificationId] = useState<string | null>(null);
+  const [notificationsReturnRoute, setNotificationsReturnRoute] = useState<"groups" | "group-details">("groups");
+  const [groupInitialListMode, setGroupInitialListMode] = useState<"transactions" | "activity">("transactions");
   const [invitationsRefreshTrigger, setInvitationsRefreshTrigger] =
     useState<number>(0);
   const [groupRefreshTrigger, setGroupRefreshTrigger] = useState<number>(0);
@@ -152,6 +164,8 @@ function AppContent() {
   const lastLoggedStateRef = React.useRef<string | null>(null);
   const stuckTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const initialUrlHandledRef = React.useRef(false);
+  const initialNotificationHandledRef = React.useRef(false);
+  const pushRegistrationSyncedUserRef = React.useRef<string | null>(null);
   const redeemingTokenRef = React.useRef<string | null>(null);
   const openingGroupDeepLinkRef = React.useRef<string | null>(null);
   const prefetchGroupData = React.useCallback(
@@ -229,7 +243,10 @@ function AppContent() {
     }
   }, []);
 
-  const openGroupDeepLink = React.useCallback(async (groupId: string) => {
+  const openGroupDeepLink = React.useCallback(async (
+    groupId: string,
+    initialMode: "transactions" | "activity" = "transactions"
+  ) => {
     if (openingGroupDeepLinkRef.current === groupId) return;
     openingGroupDeepLinkRef.current = groupId;
 
@@ -244,6 +261,7 @@ function AppContent() {
       setShowAddMember(false);
       setEditingTransaction(null);
       setStatsContext(null);
+      setGroupInitialListMode(initialMode);
       setSelectedGroup(group);
       setCurrentRoute("group-details");
     } catch (err) {
@@ -262,6 +280,58 @@ function AppContent() {
       openingGroupDeepLinkRef.current = null;
     }
   }, [queryClientInstance]);
+
+  const openNotifications = React.useCallback(() => {
+    setNotificationsReturnRoute(selectedGroup ? "group-details" : "groups");
+    setSelectedNotificationId(null);
+    setCurrentRoute("notifications");
+  }, [selectedGroup]);
+
+  const handleNotificationResponse = React.useCallback((data: Record<string, unknown>) => {
+    const notificationId = typeof data.notification_id === "string" ? data.notification_id : null;
+    setNotificationsReturnRoute("groups");
+    setSelectedGroup(null);
+    if (notificationId) {
+      setSelectedNotificationId(notificationId);
+      setCurrentRoute("notification-detail");
+    } else {
+      setSelectedNotificationId(null);
+      setCurrentRoute("notifications");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!session?.user?.id || !hasAcceptedCurrentTerms) return;
+    const unsubscribe = subscribeToNotificationResponses(handleNotificationResponse);
+    if (!initialNotificationHandledRef.current) {
+      initialNotificationHandledRef.current = true;
+      getLastNotificationResponseData()
+        .then((data) => {
+          if (data) handleNotificationResponse(data);
+        })
+        .catch((error) => logError(error, { context: "initial notification response" }));
+    }
+    return unsubscribe;
+  }, [session?.user?.id, hasAcceptedCurrentTerms, handleNotificationResponse]);
+
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (!userId) {
+      pushRegistrationSyncedUserRef.current = null;
+      return;
+    }
+    if (
+      notificationInbox.data?.preference.push_enabled &&
+      notificationInbox.data.preference.permission_status === "granted" &&
+      pushRegistrationSyncedUserRef.current !== userId
+    ) {
+      pushRegistrationSyncedUserRef.current = userId;
+      syncEnabledPushRegistration().catch((error) => {
+        pushRegistrationSyncedUserRef.current = null;
+        logError(error, { context: "sync push registration" });
+      });
+    }
+  }, [session?.user?.id, notificationInbox.data?.preference]);
 
   // Handle deep links: initial URL (cold start / web navigation) + url events.
   useEffect(() => {
@@ -508,6 +578,7 @@ function AppContent() {
       logError(err, { context: "prefetchGroupData", groupId: group.id })
     );
     setSelectedGroup(group);
+    setGroupInitialListMode("transactions");
     setCurrentRoute("group-details");
     setStatsContext(null);
     // Group details will be fetched via useGroupDetails hook
@@ -606,6 +677,40 @@ function AppContent() {
     return (
       <>
         <TermsAcceptanceScreen />
+        <StatusBar style={theme.dark ? "light" : "dark"} />
+      </>
+    );
+  }
+
+  if (currentRoute === "notifications") {
+    return (
+      <>
+        <NotificationsScreen
+          onBack={() => setCurrentRoute(notificationsReturnRoute)}
+          onOpenNotification={(notification) => {
+            setSelectedNotificationId(notification.id);
+            setCurrentRoute("notification-detail");
+          }}
+          onViewGroups={() => {
+            setSelectedGroup(null);
+            setCurrentRoute("groups");
+          }}
+        />
+        <StatusBar style={theme.dark ? "light" : "dark"} />
+      </>
+    );
+  }
+
+  if (currentRoute === "notification-detail" && selectedNotificationId) {
+    return (
+      <>
+        <NotificationDetailScreen
+          notificationId={selectedNotificationId}
+          onBack={() => setCurrentRoute("notifications")}
+          onViewGroup={(groupId, showActivity) => {
+            void openGroupDeepLink(groupId, showActivity ? "activity" : "transactions");
+          }}
+        />
         <StatusBar style={theme.dark ? "light" : "dark"} />
       </>
     );
@@ -738,6 +843,9 @@ function AppContent() {
             setStatsContext({ groupId: groupToDisplay.id, mode });
             setCurrentRoute("group-stats");
           }}
+          onNotificationsPress={openNotifications}
+          unreadNotificationCount={notificationInbox.data?.unread_count ?? 0}
+          initialListMode={groupInitialListMode}
         />
         <BottomNavBar
           currentRoute={currentRoute}
@@ -779,6 +887,7 @@ function AppContent() {
           groupsListRefetchRef.current = refetch;
         }}
         refetchTrigger={groupRefreshTrigger}
+        onNotificationsPress={openNotifications}
       />
       <InAppBanner notice={banner} onDismiss={dismissBanner} />
       <BottomNavBar
