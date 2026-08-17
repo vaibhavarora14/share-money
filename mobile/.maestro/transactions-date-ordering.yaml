@@ -1,4 +1,4 @@
-appId: com.sharemoney.app
+appId: com.vaibhavarora.sharemoney
 ---
 # Test: Transaction Date Ordering (Regression Guard)
 # Purpose: Ensure date-based ordering remains visible for known seeded entries.

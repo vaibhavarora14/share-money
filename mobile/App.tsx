@@ -17,6 +17,7 @@ import {
   Text as RNText,
   StyleSheet,
   useColorScheme,
+  useWindowDimensions,
   View,
 } from "react-native";
 import {
@@ -29,6 +30,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BottomNavBar } from "./components/BottomNavBar";
 import { ForceUpdateModal } from "./components/ForceUpdateModal";
 import { BannerNotice, InAppBanner } from "./components/InAppBanner";
+import { NotificationsPanel } from "./components/NotificationsPanel";
 import { AUTH_TIMEOUTS } from "./constants/auth";
 import { WEB_MAX_WIDTH } from "./constants/layout";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -140,6 +142,8 @@ const queryClient = new QueryClient({
 function AppContent() {
   const { session, loading, signOut, user } = useAuth();
   const theme = useTheme();
+  const dimensions = useWindowDimensions();
+  const usesDesktopNotificationPanel = Platform.OS === "web" && dimensions.width >= 768;
   const queryClientInstance = useQueryClient();
   const {
     data: profile,
@@ -158,6 +162,7 @@ function AppContent() {
   const [notificationsReturnRoute, setNotificationsReturnRoute] = useState<"groups" | "group-details">("groups");
   const [groupInitialListMode, setGroupInitialListMode] = useState<"transactions" | "activity">("transactions");
   const [highlightedTransactionId, setHighlightedTransactionId] = useState<number | null>(null);
+  const [desktopNotificationRoute, setDesktopNotificationRoute] = useState<"closed" | "list" | "detail">("closed");
   const [invitationsRefreshTrigger, setInvitationsRefreshTrigger] =
     useState<number>(0);
   const [groupRefreshTrigger, setGroupRefreshTrigger] = useState<number>(0);
@@ -296,8 +301,19 @@ function AppContent() {
   const openNotifications = React.useCallback(() => {
     setNotificationsReturnRoute(selectedGroup ? "group-details" : "groups");
     setSelectedNotificationId(null);
-    setCurrentRoute("notifications");
-  }, [selectedGroup]);
+    if (usesDesktopNotificationPanel) {
+      setDesktopNotificationRoute("list");
+    } else {
+      setCurrentRoute("notifications");
+    }
+  }, [selectedGroup, usesDesktopNotificationPanel]);
+
+  useEffect(() => {
+    if (usesDesktopNotificationPanel || desktopNotificationRoute === "closed") return;
+    const route = desktopNotificationRoute;
+    setDesktopNotificationRoute("closed");
+    setCurrentRoute(route === "detail" ? "notification-detail" : "notifications");
+  }, [desktopNotificationRoute, usesDesktopNotificationPanel]);
 
   const handleNotificationResponse = React.useCallback((data: Record<string, unknown>) => {
     const destination = resolveNotificationRoute(data);
@@ -667,6 +683,41 @@ function AppContent() {
     });
   };
 
+  const desktopNotificationPanel = usesDesktopNotificationPanel ? (
+    <NotificationsPanel
+      visible={desktopNotificationRoute !== "closed"}
+      onDismiss={() => setDesktopNotificationRoute("closed")}
+    >
+      {desktopNotificationRoute === "detail" && selectedNotificationId ? (
+        <NotificationDetailScreen
+          notificationId={selectedNotificationId}
+          onBack={() => setDesktopNotificationRoute("list")}
+          onViewGroup={(groupId, showActivity, transactionId) => {
+            setDesktopNotificationRoute("closed");
+            void openGroupDeepLink(
+              groupId,
+              showActivity ? "activity" : "transactions",
+              showActivity ? null : transactionId,
+            );
+          }}
+        />
+      ) : (
+        <NotificationsScreen
+          onBack={() => setDesktopNotificationRoute("closed")}
+          onOpenNotification={(notification) => {
+            setSelectedNotificationId(notification.id);
+            setDesktopNotificationRoute("detail");
+          }}
+          onViewGroups={() => {
+            setDesktopNotificationRoute("closed");
+            setSelectedGroup(null);
+            setCurrentRoute("groups");
+          }}
+        />
+      )}
+    </NotificationsPanel>
+  ) : null;
+
   if (loading) {
     return (
       <View
@@ -933,6 +984,7 @@ function AppContent() {
             }}
           />
         )}
+        {desktopNotificationPanel}
         <StatusBar style={theme.dark ? "light" : "dark"} />
       </>
     );
@@ -951,6 +1003,7 @@ function AppContent() {
         onNotificationsPress={openNotifications}
       />
       <InAppBanner notice={banner} onDismiss={dismissBanner} />
+      {desktopNotificationPanel}
       <BottomNavBar
         currentRoute={currentRoute}
         onGroupsPress={() => {

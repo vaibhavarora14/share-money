@@ -1,4 +1,4 @@
-appId: com.sharemoney.app
+appId: com.vaibhavarora.sharemoney
 ---
 # The email form is a progressive disclosure step, not a dead end.
 - runFlow: signout.yaml

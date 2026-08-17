@@ -2,6 +2,8 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { verifyAuth } from '../_shared/auth.ts';
 import {
   buildNotificationCursorFilter,
+  isNotificationPermissionStatus,
+  isValidExpoPushToken,
   parseNotificationCursor,
   resolveReadAt,
 } from '../_shared/notification-contract.ts';
@@ -12,10 +14,6 @@ import { isValidUUID, validateBodySize } from '../_shared/validation.ts';
 
 const DEFAULT_LIMIT = 40;
 const MAX_LIMIT = 100;
-const EXPO_PUSH_TOKEN = /^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]+\]$/;
-
-type PermissionStatus = 'not_requested' | 'granted' | 'denied' | 'unavailable';
-
 interface UnreadSummary {
   unread_count: number;
   unread_by_group: Record<string, number>;
@@ -241,8 +239,7 @@ Deno.serve(async (req: Request) => {
       if (action === 'preference') {
         const pushEnabled = payload.push_enabled;
         const permissionStatus = payload.permission_status;
-        const allowed: PermissionStatus[] = ['not_requested', 'granted', 'denied', 'unavailable'];
-        if (typeof pushEnabled !== 'boolean' || !allowed.includes(permissionStatus as PermissionStatus)) {
+        if (typeof pushEnabled !== 'boolean' || !isNotificationPermissionStatus(permissionStatus)) {
           return createErrorResponse(400, 'Invalid notification preference', 'VALIDATION_ERROR', undefined, req);
         }
         if (pushEnabled && permissionStatus !== 'granted') {
@@ -283,7 +280,7 @@ Deno.serve(async (req: Request) => {
         const token = typeof payload.token === 'string' ? payload.token.trim() : '';
         const platform = payload.platform;
         const deviceId = typeof payload.device_id === 'string' ? payload.device_id.slice(0, 255) : null;
-        if (!EXPO_PUSH_TOKEN.test(token) || (platform !== 'ios' && platform !== 'android')) {
+        if (!isValidExpoPushToken(token) || (platform !== 'ios' && platform !== 'android')) {
           return createErrorResponse(400, 'Invalid Expo push token', 'VALIDATION_ERROR', undefined, req);
         }
 
@@ -309,7 +306,7 @@ Deno.serve(async (req: Request) => {
 
     if (req.method === 'DELETE') {
       const token = typeof payload.token === 'string' ? payload.token.trim() : '';
-      if (!EXPO_PUSH_TOKEN.test(token)) {
+      if (!isValidExpoPushToken(token)) {
         return createErrorResponse(400, 'Invalid Expo push token', 'VALIDATION_ERROR', undefined, req);
       }
       const { error } = await createAdmin()

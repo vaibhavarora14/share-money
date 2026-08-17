@@ -192,7 +192,8 @@ fallback redirect only, not a canonical link base.
 
 Apply the notification migration before deploying the functions. The migration
 schedules the worker every minute when `pg_cron` and `pg_net` are available; it
-will safely skip invocation until both Vault secrets above exist. Native push
+also performs a best-effort immediate wake-up for new outbox rows and safely
+falls back to cron until both Vault secrets above exist. Native push
 notifications require an Expo development or production build rather than Expo Go.
 
 **Mobile `mobile/.env`** (Expo requires `EXPO_PUBLIC_` prefix):

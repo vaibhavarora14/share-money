@@ -98,6 +98,71 @@ Deno.test("payer changes notify split participants even when their share is unch
   assertEquals(result.map((item) => item.userId), ["u-alex", "u-priya"]);
 });
 
+Deno.test("a linked payer with no share is still a financial participant", () => {
+  const result = buildNotificationImpacts({
+    actorUserId: "u-other",
+    action: "created",
+    before: null,
+    after: {
+      ...base,
+      participants: [
+        { participantId: "p-alex", userId: "u-alex", share: 0 },
+        { participantId: "p-priya", userId: "u-priya", share: 1200 },
+      ],
+    },
+  });
+
+  assertEquals(result.map((item) => item.userId), ["u-alex", "u-priya"]);
+  assertEquals(result[0].after?.paidMinor, 120000);
+});
+
+Deno.test("split membership uses the before and after recipient union", () => {
+  const result = buildNotificationImpacts({
+    actorUserId: "u-other",
+    action: "updated",
+    before: base,
+    after: {
+      ...base,
+      participants: [
+        { participantId: "p-alex", userId: "u-alex", share: 400 },
+        { participantId: "p-new", userId: "u-new", share: 800 },
+      ],
+    },
+  });
+
+  assertEquals(result.map((item) => item.userId), ["u-alex", "u-new", "u-priya"]);
+  assertEquals(result[2].after, null);
+});
+
+Deno.test("currency changes notify participants even with unchanged numeric shares", () => {
+  const result = buildNotificationImpacts({
+    actorUserId: "u-other",
+    action: "updated",
+    before: base,
+    after: { ...base, currency: "USD" },
+  });
+
+  assertEquals(result.map((item) => item.userId), ["u-alex", "u-priya"]);
+});
+
+Deno.test("sub-cent floating point noise does not notify", () => {
+  const result = buildNotificationImpacts({
+    actorUserId: "u-other",
+    action: "updated",
+    before: base,
+    after: {
+      ...base,
+      amount: 1200.00001,
+      participants: base.participants.map((participant) => ({
+        ...participant,
+        share: participant.share + 0.00001,
+      })),
+    },
+  });
+
+  assertEquals(result, []);
+});
+
 Deno.test("deletion uses the before-state recipient union", () => {
   const result = buildNotificationImpacts({
     actorUserId: "u-priya",

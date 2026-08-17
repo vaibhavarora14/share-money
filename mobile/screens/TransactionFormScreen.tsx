@@ -512,7 +512,13 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
           titleStyle={{ fontWeight: "600" }}
         />
         {transaction && onDelete && (
-          <Appbar.Action icon="delete-outline" onPress={handleDelete} iconColor={theme.colors.error} />
+          <Appbar.Action
+            icon="delete-outline"
+            onPress={handleDelete}
+            iconColor={theme.colors.error}
+            accessibilityLabel="Delete expense"
+            testID="delete-expense-button"
+          />
         )}
       </Appbar.Header>
 

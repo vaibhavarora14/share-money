@@ -1,7 +1,7 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(23);
+SELECT plan(26);
 
 SELECT has_table('public', 'notifications', 'notifications inbox exists');
 SELECT has_table('public', 'notification_preferences', 'notification preferences exist');
@@ -55,6 +55,11 @@ SELECT has_function(
   'get_notification_unread_summary',
   'inbox has an exact grouped unread summary'
 );
+SELECT has_function(
+  'public',
+  'preserve_notification_first_read',
+  'database preserves the first read timestamp'
+);
 
 SELECT is(
   (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.notifications'::regclass),
@@ -83,6 +88,14 @@ SELECT ok(
 SELECT ok(
   NOT has_table_privilege('authenticated', 'public.notification_deliveries', 'SELECT'),
   'authenticated users cannot inspect push delivery state'
+);
+SELECT ok(
+  NOT has_table_privilege('authenticated', 'public.push_tokens', 'SELECT'),
+  'push tokens are readable only through service-owned API operations'
+);
+SELECT ok(
+  NOT has_table_privilege('authenticated', 'public.push_tokens', 'INSERT'),
+  'push token reassignment cannot bypass the service-owned API'
 );
 SELECT ok(
   has_function_privilege(

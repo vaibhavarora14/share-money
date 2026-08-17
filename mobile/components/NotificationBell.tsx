@@ -15,13 +15,19 @@ export function NotificationBell({ unreadCount, onPress }: NotificationBellProps
 
   return (
     <View style={styles.container}>
-      <Appbar.Action icon="bell-outline" onPress={onPress} accessibilityLabel={label} />
+      <Appbar.Action
+        icon="bell-outline"
+        onPress={onPress}
+        accessibilityLabel={label}
+        testID="notification-bell"
+      />
       {unreadCount > 0 ? (
         <View
           pointerEvents="none"
           style={[styles.badge, { backgroundColor: theme.colors.primary }]}
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
+          testID="notification-badge"
         >
           <Text style={[styles.badgeText, { color: theme.colors.onPrimary }]}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
         </View>

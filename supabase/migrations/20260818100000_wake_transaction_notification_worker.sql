@@ -18,6 +18,38 @@ $$;
 REVOKE ALL ON FUNCTION public.get_notification_unread_summary() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.get_notification_unread_summary() TO authenticated;
 
+CREATE OR REPLACE FUNCTION public.preserve_notification_first_read()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  IF OLD.read_at IS NOT NULL THEN
+    NEW.read_at := OLD.read_at;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS preserve_notification_first_read_trigger
+  ON public.notifications;
+
+CREATE TRIGGER preserve_notification_first_read_trigger
+  BEFORE UPDATE OF read_at ON public.notifications
+  FOR EACH ROW
+  EXECUTE FUNCTION public.preserve_notification_first_read();
+
+REVOKE ALL ON FUNCTION public.preserve_notification_first_read() FROM PUBLIC;
+
+-- Push tokens have device-wide uniqueness and can move between accounts.
+-- Only the authenticated Edge Function, using service authority, may mutate
+-- or inspect them; per-user RLS alone cannot safely perform reassignment.
+REVOKE ALL ON TABLE public.push_tokens FROM authenticated;
+DROP POLICY IF EXISTS "Users can view own push tokens" ON public.push_tokens;
+DROP POLICY IF EXISTS "Users can create own push tokens" ON public.push_tokens;
+DROP POLICY IF EXISTS "Users can update own push tokens" ON public.push_tokens;
+DROP POLICY IF EXISTS "Users can delete own push tokens" ON public.push_tokens;
+
 CREATE OR REPLACE FUNCTION public.wake_transaction_notification_worker()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -75,3 +107,6 @@ COMMENT ON FUNCTION public.wake_transaction_notification_worker() IS
 
 COMMENT ON FUNCTION public.get_notification_unread_summary() IS
   'Exact RLS-scoped unread totals grouped for inbox and group badges.';
+
+COMMENT ON FUNCTION public.preserve_notification_first_read() IS
+  'Makes notification read state monotonic by preserving the first read timestamp.';

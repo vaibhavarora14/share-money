@@ -1,0 +1,101 @@
+appId: com.vaibhavarora.sharemoney
+---
+# Two-user notification journey. Run against a freshly reset local seed so the
+# exact unread count is deterministic.
+
+- runFlow: _helpers/ensure-groups.yaml
+- tapOn: "Summer Vacation 2024"
+- waitForAnimationToEnd
+
+# One live expense remains available as the detail destination.
+- tapOn: "Add Expense"
+- tapOn:
+    id: "amount-input"
+- inputText: "88"
+- tapOn: "Description"
+- inputText: "Notification E2E Live"
+- hideKeyboard
+- tapOn: "Save"
+- waitForAnimationToEnd
+- assertVisible: "Notification E2E Live"
+
+# A second expense covers cosmetic edit (no event), financial edit, and delete.
+- tapOn: "Add Expense"
+- tapOn:
+    id: "amount-input"
+- inputText: "44"
+- tapOn: "Description"
+- inputText: "Notification E2E Lifecycle"
+- hideKeyboard
+- tapOn: "Save"
+- waitForAnimationToEnd
+- tapOn: "Notification E2E Lifecycle"
+- tapOn: "Description"
+- eraseText: 26
+- inputText: "Notification E2E Cosmetic"
+- hideKeyboard
+- tapOn: "Update"
+- waitForAnimationToEnd
+
+# Amount is material and creates one additional event.
+- tapOn: "Notification E2E Cosmetic"
+- tapOn:
+    id: "amount-input"
+- eraseText: 2
+- inputText: "99"
+- hideKeyboard
+- tapOn: "Update"
+- waitForAnimationToEnd
+
+# Delete creates the fallback Activity event.
+- tapOn: "Notification E2E Cosmetic"
+- tapOn:
+    id: "delete-expense-button"
+- waitForAnimationToEnd
+- assertNotVisible: "Notification E2E Cosmetic"
+
+# Switch to the linked participant.
+- runFlow: signout.yaml
+- runFlow:
+    when:
+      visible: "Continue with email"
+    commands:
+      - tapOn: "Continue with email"
+- tapOn: "Email"
+- inputText: "bob@test.com"
+- tapOn: "Password"
+- inputText: "testpassword123"
+- hideKeyboard
+- tapOn: "Sign In"
+- waitForAnimationToEnd
+- assertVisible: "Your Groups"
+
+# Two creates + one material update + one delete. The cosmetic edit adds none.
+- assertVisible: "Notifications, 4 unread"
+- tapOn:
+    id: "notification-bell"
+- assertVisible: "Notifications"
+- assertVisible: "Alice added Notification E2E Live"
+- assertVisible: "Alice deleted Notification E2E Cosmetic"
+
+# Deleted content retains detail and routes to Activity.
+- tapOn: "Alice deleted Notification E2E Cosmetic"
+- assertVisible: "Impact on you"
+- assertVisible: "View group activity"
+- tapOn: "Navigate back"
+
+# Live content reaches and highlights the exact transaction.
+- tapOn: "Alice added Notification E2E Live"
+- tapOn: "View in group"
+- waitForAnimationToEnd
+- assertVisible: "Notification E2E Live"
+- assertVisible:
+    text: ".*highlighted from notification.*"
+
+# Return to inbox and verify the global read reset.
+- tapOn:
+    id: "notification-bell"
+- tapOn: "Mark all read"
+- assertNotVisible: "Mark all read"
+- tapOn: "Navigate back"
+- runFlow: signout.yaml

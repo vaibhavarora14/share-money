@@ -1,5 +1,19 @@
 import { isValidUUID } from "./validation.ts";
 
+export type NotificationPermissionStatus =
+  | "not_requested"
+  | "granted"
+  | "denied"
+  | "unavailable";
+
+const EXPO_PUSH_TOKEN = /^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]+\]$/;
+const PERMISSION_STATUSES = new Set<NotificationPermissionStatus>([
+  "not_requested",
+  "granted",
+  "denied",
+  "unavailable",
+]);
+
 export interface NotificationCursor {
   created_at: string;
   id: string;
@@ -35,4 +49,15 @@ export function resolveReadAt(
   requestedReadAt: string,
 ): string {
   return existingReadAt ?? requestedReadAt;
+}
+
+export function isValidExpoPushToken(value: unknown): value is string {
+  return typeof value === "string" && EXPO_PUSH_TOKEN.test(value);
+}
+
+export function isNotificationPermissionStatus(
+  value: unknown,
+): value is NotificationPermissionStatus {
+  return typeof value === "string" &&
+    PERMISSION_STATUSES.has(value as NotificationPermissionStatus);
 }

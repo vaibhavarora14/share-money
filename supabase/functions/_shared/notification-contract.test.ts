@@ -1,6 +1,8 @@
 import { assertEquals, assertThrows } from "jsr:@std/assert@1";
 import {
   buildNotificationCursorFilter,
+  isNotificationPermissionStatus,
+  isValidExpoPushToken,
   parseNotificationCursor,
   resolveReadAt,
 } from "./notification-contract.ts";
@@ -58,4 +60,12 @@ Deno.test("read timestamps are monotonic and preserve the first read", () => {
     resolveReadAt(null, "2026-08-18T11:00:00.000Z"),
     "2026-08-18T11:00:00.000Z",
   );
+});
+
+Deno.test("push tokens and permission enums reject unsafe input", () => {
+  assertEquals(isValidExpoPushToken("ExponentPushToken[abc_123-XYZ]"), true);
+  assertEquals(isValidExpoPushToken("https://attacker.example/token"), false);
+  assertEquals(isValidExpoPushToken(123), false);
+  assertEquals(isNotificationPermissionStatus("granted"), true);
+  assertEquals(isNotificationPermissionStatus("prompt_again"), false);
 });
