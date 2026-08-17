@@ -28,12 +28,19 @@ export function NotificationDetailScreen({ notificationId, onBack, onViewGroup }
       <View style={[styles.stage, { backgroundColor: theme.colors.background }]}>
         <Surface style={[styles.panel, widePanel && styles.widePanel, { backgroundColor: theme.colors.surface }]}>
           <Appbar.Header style={{ backgroundColor: theme.colors.surface }}>
-            <Appbar.BackAction onPress={onBack} />
+            <Appbar.BackAction onPress={onBack} style={styles.minimumIconTarget} />
             <Appbar.Content title="Notification" />
           </Appbar.Header>
           <View style={styles.state}>
             <Text variant="titleMedium">{notification.isError ? "This notification is unavailable" : "Loading notification…"}</Text>
-            {notification.isError ? <Button onPress={() => notification.refetch()}>Try again</Button> : null}
+            {notification.isError ? (
+              <Button
+                onPress={() => notification.refetch()}
+                contentStyle={styles.minimumButtonTarget}
+              >
+                Try again
+              </Button>
+            ) : null}
           </View>
         </Surface>
       </View>
@@ -59,7 +66,7 @@ export function NotificationDetailScreen({ notificationId, onBack, onViewGroup }
     <View style={[styles.stage, { backgroundColor: theme.colors.background }]}>
       <Surface elevation={widePanel ? 3 : 0} style={[styles.panel, widePanel && styles.widePanel, { backgroundColor: theme.colors.surface }]}>
         <Appbar.Header style={{ backgroundColor: theme.colors.surface }}>
-          <Appbar.BackAction onPress={onBack} />
+          <Appbar.BackAction onPress={onBack} style={styles.minimumIconTarget} />
           <Appbar.Content title="Notification" titleStyle={styles.headerTitle} />
         </Appbar.Header>
         <ScrollView contentContainerStyle={styles.content}>
@@ -128,6 +135,8 @@ export function NotificationDetailScreen({ notificationId, onBack, onViewGroup }
 }
 
 const styles = StyleSheet.create({
+  minimumIconTarget: { width: 44, height: 44 },
+  minimumButtonTarget: { minHeight: 44 },
   stage: { flex: 1 },
   panel: { flex: 1 },
   widePanel: { width: 460, alignSelf: "flex-end" },

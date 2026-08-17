@@ -199,7 +199,7 @@ export function NotificationsScreen({
         ]}
       >
         <Appbar.Header style={{ backgroundColor: theme.colors.surface }}>
-          <Appbar.BackAction onPress={onBack} />
+          <Appbar.BackAction onPress={onBack} style={styles.minimumIconTarget} />
           <Appbar.Content title="Notifications" titleStyle={styles.headerTitle} />
           {notifications.data?.unread_count ? (
             <Button
@@ -207,6 +207,7 @@ export function NotificationsScreen({
               mode="text"
               onPress={() => markAll.mutate(new Date().toISOString())}
               loading={markAll.isPending}
+              contentStyle={styles.minimumButtonTarget}
             >
               Mark all read
             </Button>
@@ -236,7 +237,13 @@ export function NotificationsScreen({
             <Text style={[styles.stateBody, { color: theme.colors.onSurfaceVariant }]}>
               Check your connection and try again.
             </Text>
-            <Button mode="contained" onPress={() => notifications.refetch()}>Try again</Button>
+            <Button
+              mode="contained"
+              onPress={() => notifications.refetch()}
+              contentStyle={styles.minimumButtonTarget}
+            >
+              Try again
+            </Button>
           </View>
         ) : null}
 
@@ -251,7 +258,13 @@ export function NotificationsScreen({
                 <Text style={[styles.stateBody, { color: theme.colors.onSurfaceVariant }]}>
                   Changes to expenses involving you will appear here
                 </Text>
-                <Button mode="contained" onPress={onViewGroups}>View groups</Button>
+                <Button
+                  mode="contained"
+                  onPress={onViewGroups}
+                  contentStyle={styles.minimumButtonTarget}
+                >
+                  View groups
+                </Button>
               </>
             ) : null}
           </View>
@@ -287,7 +300,12 @@ export function NotificationsScreen({
                 <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
                   Couldn’t load more
                 </Text>
-                <Button compact mode="text" onPress={() => void notifications.fetchNextPage()}>
+                <Button
+                  compact
+                  mode="text"
+                  onPress={() => void notifications.fetchNextPage()}
+                  contentStyle={styles.minimumButtonTarget}
+                >
                   Retry
                 </Button>
               </View>
@@ -300,6 +318,8 @@ export function NotificationsScreen({
 }
 
 const styles = StyleSheet.create({
+  minimumIconTarget: { width: 44, height: 44 },
+  minimumButtonTarget: { minHeight: 44 },
   stage: { flex: 1 },
   panel: { flex: 1 },
   widePanel: { width: 460, alignSelf: "flex-end" },

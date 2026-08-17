@@ -20,6 +20,7 @@ export function NotificationBell({ unreadCount, onPress }: NotificationBellProps
         onPress={onPress}
         accessibilityLabel={label}
         testID="notification-bell"
+        style={styles.action}
       />
       {unreadCount > 0 ? (
         <View
@@ -37,6 +38,10 @@ export function NotificationBell({ unreadCount, onPress }: NotificationBellProps
 }
 
 const styles = StyleSheet.create({
+  action: {
+    width: 44,
+    height: 44,
+  },
   container: {
     width: 52,
     height: 52,
