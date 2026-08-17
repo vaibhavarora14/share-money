@@ -32,7 +32,7 @@ import { ForceUpdateModal } from "./components/ForceUpdateModal";
 import { BannerNotice, InAppBanner } from "./components/InAppBanner";
 import { NotificationsPanel } from "./components/NotificationsPanel";
 import { AUTH_TIMEOUTS } from "./constants/auth";
-import { WEB_MAX_WIDTH } from "./constants/layout";
+import { isDesktopWebViewport, WEB_MAX_WIDTH } from "./constants/layout";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import {
   ThemePreferenceProvider,
@@ -143,7 +143,7 @@ function AppContent() {
   const { session, loading, signOut, user } = useAuth();
   const theme = useTheme();
   const dimensions = useWindowDimensions();
-  const usesDesktopNotificationPanel = Platform.OS === "web" && dimensions.width >= 768;
+  const usesDesktopNotificationPanel = isDesktopWebViewport(Platform.OS, dimensions.width);
   const queryClientInstance = useQueryClient();
   const {
     data: profile,

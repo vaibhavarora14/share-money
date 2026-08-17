@@ -1,6 +1,7 @@
 import React from "react";
 import { Platform, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { Appbar, Avatar, Button, Divider, Surface, Text, useTheme } from "react-native-paper";
+import { isDesktopWebViewport } from "../constants/layout";
 import { useMarkNotificationRead, useNotification } from "../hooks/useNotifications";
 import { formatCurrency } from "../utils/currency";
 
@@ -16,7 +17,7 @@ export function NotificationDetailScreen({ notificationId, onBack, onViewGroup }
   const notification = useNotification(notificationId);
   const markRead = useMarkNotificationRead();
   const item = notification.data;
-  const widePanel = Platform.OS === "web" && dimensions.width >= 768;
+  const widePanel = isDesktopWebViewport(Platform.OS, dimensions.width);
 
   React.useEffect(() => {
     if (item && !item.read_at && !markRead.isPending) markRead.mutate(item.id);

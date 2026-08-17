@@ -25,6 +25,7 @@ import {
   useMarkNotificationRead,
   useNotifications,
 } from "../hooks/useNotifications";
+import { isDesktopWebViewport } from "../constants/layout";
 import { TransactionNotification } from "../types/notifications";
 import { formatCurrency } from "../utils/currency";
 
@@ -152,7 +153,7 @@ export function NotificationsScreen({
   const markRead = useMarkNotificationRead();
   const markAll = useMarkAllNotificationsRead();
   const items = notifications.data?.items ?? [];
-  const widePanel = Platform.OS === "web" && dimensions.width >= 768;
+  const widePanel = isDesktopWebViewport(Platform.OS, dimensions.width);
   const [returningInbox, setReturningInbox] = useState<boolean | null>(null);
 
   useEffect(() => {
