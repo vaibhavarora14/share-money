@@ -90,6 +90,7 @@ import {
 } from "./utils/inviteLinks";
 import { log, logError } from "./utils/logger";
 import { needsTermsAcceptance } from "./utils/onboardingFlow";
+import { resolveNotificationRoute } from "./utils/notificationRouting";
 
 const PENDING_INVITE_TOKEN_KEY = "pending_invite_token";
 const PENDING_GROUP_DEEP_LINK_KEY = "pending_group_deep_link";
@@ -156,6 +157,7 @@ function AppContent() {
   const [selectedNotificationId, setSelectedNotificationId] = useState<string | null>(null);
   const [notificationsReturnRoute, setNotificationsReturnRoute] = useState<"groups" | "group-details">("groups");
   const [groupInitialListMode, setGroupInitialListMode] = useState<"transactions" | "activity">("transactions");
+  const [highlightedTransactionId, setHighlightedTransactionId] = useState<number | null>(null);
   const [invitationsRefreshTrigger, setInvitationsRefreshTrigger] =
     useState<number>(0);
   const [groupRefreshTrigger, setGroupRefreshTrigger] = useState<number>(0);
@@ -252,7 +254,8 @@ function AppContent() {
 
   const openGroupDeepLink = React.useCallback(async (
     groupId: string,
-    initialMode: "transactions" | "activity" = "transactions"
+    initialMode: "transactions" | "activity" = "transactions",
+    transactionId: number | null = null,
   ) => {
     if (openingGroupDeepLinkRef.current === groupId) return;
     openingGroupDeepLinkRef.current = groupId;
@@ -269,11 +272,13 @@ function AppContent() {
       setEditingTransaction(null);
       setStatsContext(null);
       setGroupInitialListMode(initialMode);
+      setHighlightedTransactionId(initialMode === "transactions" ? transactionId : null);
       setSelectedGroup(group);
       setCurrentRoute("group-details");
     } catch (err) {
       logError(err, { context: "openGroupDeepLink", groupId });
       setSelectedGroup(null);
+      setHighlightedTransactionId(null);
       setStatsContext(null);
       setCurrentRoute("groups");
       setBanner({
@@ -295,11 +300,11 @@ function AppContent() {
   }, [selectedGroup]);
 
   const handleNotificationResponse = React.useCallback((data: Record<string, unknown>) => {
-    const notificationId = typeof data.notification_id === "string" ? data.notification_id : null;
+    const destination = resolveNotificationRoute(data);
     setNotificationsReturnRoute("groups");
     setSelectedGroup(null);
-    if (notificationId) {
-      setSelectedNotificationId(notificationId);
+    if (destination.screen === "notification-detail") {
+      setSelectedNotificationId(destination.notificationId);
       setCurrentRoute("notification-detail");
     } else {
       setSelectedNotificationId(null);
@@ -629,6 +634,7 @@ function AppContent() {
     );
     setSelectedGroup(group);
     setGroupInitialListMode("transactions");
+    setHighlightedTransactionId(null);
     setCurrentRoute("group-details");
     setStatsContext(null);
     // Group details will be fetched via useGroupDetails hook
@@ -757,8 +763,12 @@ function AppContent() {
         <NotificationDetailScreen
           notificationId={selectedNotificationId}
           onBack={() => setCurrentRoute("notifications")}
-          onViewGroup={(groupId, showActivity) => {
-            void openGroupDeepLink(groupId, showActivity ? "activity" : "transactions");
+          onViewGroup={(groupId, showActivity, transactionId) => {
+            void openGroupDeepLink(
+              groupId,
+              showActivity ? "activity" : "transactions",
+              showActivity ? null : transactionId,
+            );
           }}
         />
         <StatusBar style={theme.dark ? "light" : "dark"} />
@@ -896,6 +906,7 @@ function AppContent() {
           onNotificationsPress={openNotifications}
           unreadNotificationCount={notificationInbox.data?.unread_count ?? 0}
           initialListMode={groupInitialListMode}
+          highlightedTransactionId={highlightedTransactionId}
         />
         <BottomNavBar
           currentRoute={currentRoute}

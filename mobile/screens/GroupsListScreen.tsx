@@ -29,6 +29,7 @@ import {
   getUserFriendlyErrorMessage,
   isSessionExpiredError,
 } from "../utils/errorMessages";
+import { shouldShowNotificationPrimer } from "../utils/notificationPermission";
 import { getSeenGroupIds, markGroupSeen } from "../utils/seenGroups";
 import { CreateGroupScreen } from "./CreateGroupScreen";
 
@@ -139,7 +140,8 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
       seenGroupIds !== null &&
       !seenGroupIds.has(group.id) &&
       group.user_status !== "left";
-    const hasUnreadActivity = (notifications.data?.unread_by_group[group.id] ?? 0) > 0;
+    const unreadActivityCount = notifications.data?.unread_by_group[group.id] ?? 0;
+    const hasUnreadActivity = unreadActivityCount > 0;
 
     return (
     <Surface
@@ -154,7 +156,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
         style={styles.groupTouchable}
         onPress={() => handleGroupPress(group)}
         activeOpacity={0.7}
-        accessibilityLabel={`${group.name}${isNew ? ", new group" : ""}${hasUnreadActivity ? ", new activity for you" : ""}`}
+        accessibilityLabel={`${group.name}${isNew ? ", new group" : ""}${hasUnreadActivity ? `, ${unreadActivityCount} unread ${unreadActivityCount === 1 ? "notification" : "notifications"}` : ""}`}
       >
         <View style={styles.groupMainContent}>
           <View style={styles.groupIconContainer}>
@@ -339,10 +341,11 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {Platform.OS !== "web" &&
-          activeGroups.length > 0 &&
-          notifications.data?.preference.permission_status === "not_requested" &&
-          !notifications.data.preference.nudge_dismissed_at ? (
+          {shouldShowNotificationPrimer({
+            platform: Platform.OS,
+            activeGroupCount: activeGroups.length,
+            preference: notifications.data?.preference,
+          }) ? (
             <Surface style={[styles.permissionCard, { backgroundColor: theme.colors.primaryContainer }]} elevation={0}>
               <Text variant="titleMedium" style={styles.permissionTitle}>Know when an expense affects you</Text>
               <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>

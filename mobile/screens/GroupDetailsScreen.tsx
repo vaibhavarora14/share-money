@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Alert, BackHandler, NativeScrollEvent, NativeSyntheticEvent, Platform, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, BackHandler, LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent, Platform, ScrollView, StyleSheet, View } from "react-native";
 import {
   ActivityIndicator,
   Appbar,
@@ -77,6 +77,7 @@ interface GroupDetailsScreenProps {
   onNotificationsPress: () => void;
   unreadNotificationCount: number;
   initialListMode?: "transactions" | "activity";
+  highlightedTransactionId?: number | null;
 }
 
 export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
@@ -94,6 +95,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   onNotificationsPress,
   unreadNotificationCount,
   initialListMode = "transactions",
+  highlightedTransactionId = null,
 }) => {
   const [leaving, setLeaving] = useState<boolean>(false);
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
@@ -113,6 +115,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [activityFilterParticipantId, setActivityFilterParticipantId] = useState<string>("all");
   const [safetyAction, setSafetyAction] = useState<SafetyAction | null>(null);
   const [safetyTarget, setSafetyTarget] = useState<SafetyTarget | null>(null);
+  const mainScrollRef = React.useRef<ScrollView>(null);
+  const [transactionsSectionY, setTransactionsSectionY] = useState<number | null>(null);
+  const [highlightedRowY, setHighlightedRowY] = useState<number | null>(null);
   
   // Web-compatible confirmation dialog state
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -370,6 +375,33 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
   // API already filters by group_id, so no need for client-side filtering
   const transactions = txData;
+
+  useEffect(() => {
+    if (!highlightedTransactionId || listMode !== "transactions") return;
+    const targetLoaded = transactions.some((transaction) => transaction.id === highlightedTransactionId);
+    if (!targetLoaded && txHasNextPage && !txIsFetchingNextPage) {
+      void fetchNextTransactionsPage();
+    }
+  }, [
+    fetchNextTransactionsPage,
+    highlightedTransactionId,
+    listMode,
+    transactions,
+    txHasNextPage,
+    txIsFetchingNextPage,
+  ]);
+
+  useEffect(() => {
+    if (transactionsSectionY === null || highlightedRowY === null) return;
+    mainScrollRef.current?.scrollTo({
+      y: Math.max(0, transactionsSectionY + highlightedRowY - 88),
+      animated: false,
+    });
+  }, [highlightedRowY, transactionsSectionY]);
+
+  const handleTransactionsSectionLayout = React.useCallback((event: LayoutChangeEvent) => {
+    setTransactionsSectionY(event.nativeEvent.layout.y);
+  }, []);
 
   const handleLoadMoreTransactions = React.useCallback(() => {
     if (!txHasNextPage || txIsFetchingNextPage) return;
@@ -857,6 +889,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       )}
 
       <ScrollView
+        ref={mainScrollRef}
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -946,16 +979,20 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             </View>
 
             {listMode === "transactions" ? (
-              <TransactionsSection
-                items={transactions}
-                loading={txLoading}
-                hasNextPage={!!txHasNextPage}
-                isFetchingNextPage={txIsFetchingNextPage}
-                onLoadMore={handleLoadMoreTransactions}
-                onEdit={isActiveMember ? onEditTransaction : () => {}}
-                members={group.members || []}
-                participants={participants}
-              />
+              <View onLayout={handleTransactionsSectionLayout}>
+                <TransactionsSection
+                  items={transactions}
+                  loading={txLoading}
+                  hasNextPage={!!txHasNextPage}
+                  isFetchingNextPage={txIsFetchingNextPage}
+                  onLoadMore={handleLoadMoreTransactions}
+                  onEdit={isActiveMember ? onEditTransaction : () => {}}
+                  members={group.members || []}
+                  participants={participants}
+                  highlightedTransactionId={highlightedTransactionId}
+                  onHighlightedLayout={setHighlightedRowY}
+                />
+              </View>
             ) : (
               <View style={[styles.sectionContent, styles.activitySection]}>
 

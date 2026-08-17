@@ -7,7 +7,7 @@ import { formatCurrency } from "../utils/currency";
 interface NotificationDetailScreenProps {
   notificationId: string;
   onBack: () => void;
-  onViewGroup: (groupId: string, showActivity: boolean) => void;
+  onViewGroup: (groupId: string, showActivity: boolean, transactionId: number | null) => void;
 }
 
 export function NotificationDetailScreen({ notificationId, onBack, onViewGroup }: NotificationDetailScreenProps) {
@@ -52,6 +52,7 @@ export function NotificationDetailScreen({ notificationId, onBack, onViewGroup }
     : decreased
       ? theme.colors.tertiary
       : theme.colors.onSurface;
+  const canHighlightTransaction = !transaction.deleted && item.transaction_id !== null;
 
   return (
     <View style={[styles.stage, { backgroundColor: theme.colors.background }]}>
@@ -104,8 +105,20 @@ export function NotificationDetailScreen({ notificationId, onBack, onViewGroup }
           <Text variant="bodyLarge" style={styles.value}>{group.name}</Text>
         </ScrollView>
         <View style={styles.footer}>
-          <Button mode="contained" onPress={() => onViewGroup(group.id, transaction.deleted)} contentStyle={styles.buttonContent}>
-            {transaction.deleted ? "View group activity" : "View in group"}
+          <Button
+            mode="contained"
+            onPress={() => onViewGroup(
+              group.id,
+              transaction.deleted,
+              canHighlightTransaction ? transaction.id : null,
+            )}
+            contentStyle={styles.buttonContent}
+          >
+            {transaction.deleted
+              ? "View group activity"
+              : canHighlightTransaction
+                ? "View in group"
+                : "View group"}
           </Button>
         </View>
       </Surface>
