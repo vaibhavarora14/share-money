@@ -1,5 +1,12 @@
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { verifyAuth } from '../_shared/auth.ts';
+import {
+  buildNotificationCursorFilter,
+  parseNotificationCursor,
+  resolveReadAt,
+} from '../_shared/notification-contract.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
+import { SUPABASE_SERVICE_ROLE_KEY, SUPABASE_URL } from '../_shared/env.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
 import { isValidUUID, validateBodySize } from '../_shared/validation.ts';
 
@@ -8,6 +15,16 @@ const MAX_LIMIT = 100;
 const EXPO_PUSH_TOKEN = /^(ExponentPushToken|ExpoPushToken)\[[A-Za-z0-9_-]+\]$/;
 
 type PermissionStatus = 'not_requested' | 'granted' | 'denied' | 'unavailable';
+
+interface UnreadSummary {
+  unread_count: number;
+  unread_by_group: Record<string, number>;
+}
+
+interface UnreadSummaryRow {
+  group_id: string | null;
+  unread_count: number | string;
+}
 
 function parseLimit(value: string | null): number {
   const parsed = Number.parseInt(value ?? '', 10);
@@ -22,6 +39,31 @@ function parseJson(body: string | null): Record<string, unknown> {
     throw new Error('Invalid JSON object');
   }
   return parsed as Record<string, unknown>;
+}
+
+function createAdmin(): SupabaseClient {
+  if (!SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error('Missing required environment variable: SUPABASE_SERVICE_ROLE_KEY');
+  }
+  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+}
+
+async function fetchUnreadSummary(
+  supabase: SupabaseClient,
+): Promise<UnreadSummary> {
+  const { data, error } = await supabase.rpc('get_notification_unread_summary');
+  if (error) throw error;
+
+  const unreadByGroup: Record<string, number> = {};
+  let unreadCount = 0;
+  for (const row of (data ?? []) as UnreadSummaryRow[]) {
+    const count = Number(row.unread_count) || 0;
+    unreadCount += count;
+    if (row.group_id) unreadByGroup[row.group_id] = count;
+  }
+  return { unread_count: unreadCount, unread_by_group: unreadByGroup };
 }
 
 Deno.serve(async (req: Request) => {
@@ -56,9 +98,20 @@ Deno.serve(async (req: Request) => {
       }
 
       const limit = parseLimit(url.searchParams.get('limit'));
-      const before = url.searchParams.get('before');
-      if (before && Number.isNaN(Date.parse(before))) {
-        return createErrorResponse(400, 'Invalid before cursor', 'VALIDATION_ERROR', undefined, req);
+      let cursor;
+      try {
+        cursor = parseNotificationCursor(
+          url.searchParams.get('cursor_created_at'),
+          url.searchParams.get('cursor_id'),
+        );
+      } catch (error) {
+        return createErrorResponse(
+          400,
+          error instanceof Error ? error.message : 'Invalid notification cursor',
+          'VALIDATION_ERROR',
+          undefined,
+          req,
+        );
       }
 
       let listQuery = supabase
@@ -68,15 +121,11 @@ Deno.serve(async (req: Request) => {
         .order('created_at', { ascending: false })
         .order('id', { ascending: false })
         .limit(limit + 1);
-      if (before) listQuery = listQuery.lt('created_at', before);
+      if (cursor) listQuery = listQuery.or(buildNotificationCursorFilter(cursor));
 
-      const [listResult, unreadResult, preferenceResult] = await Promise.all([
+      const [listResult, unreadSummary, preferenceResult] = await Promise.all([
         listQuery,
-        supabase
-          .from('notifications')
-          .select('id, group_id', { count: 'exact' })
-          .eq('recipient_user_id', user.id)
-          .is('read_at', null),
+        fetchUnreadSummary(supabase),
         supabase
           .from('notification_preferences')
           .select('push_enabled, permission_status, permission_prompted_at, nudge_dismissed_at')
@@ -85,23 +134,18 @@ Deno.serve(async (req: Request) => {
       ]);
 
       if (listResult.error) return handleError(listResult.error, 'fetching notifications', req);
-      if (unreadResult.error) return handleError(unreadResult.error, 'counting unread notifications', req);
       if (preferenceResult.error) return handleError(preferenceResult.error, 'fetching notification preference', req);
 
-      const unreadByGroup: Record<string, number> = {};
-      for (const row of unreadResult.data ?? []) {
-        if (!row.group_id) continue;
-        unreadByGroup[row.group_id] = (unreadByGroup[row.group_id] ?? 0) + 1;
-      }
       const rows = listResult.data ?? [];
       const items = rows.slice(0, limit);
 
       return createSuccessResponse({
         items,
-        unread_count: unreadResult.count ?? rows.filter((row: { read_at: string | null }) => !row.read_at).length,
-        unread_by_group: unreadByGroup,
+        ...unreadSummary,
         has_more: rows.length > limit,
-        next_cursor: rows.length > limit ? items[items.length - 1]?.created_at ?? null : null,
+        next_cursor: rows.length > limit && items.length > 0
+          ? { created_at: items[items.length - 1].created_at, id: items[items.length - 1].id }
+          : null,
         preference: preferenceResult.data ?? {
           push_enabled: false,
           permission_status: 'not_requested',
@@ -127,16 +171,42 @@ Deno.serve(async (req: Request) => {
         if (!isValidUUID(id)) {
           return createErrorResponse(400, 'Invalid notification id', 'VALIDATION_ERROR', undefined, req);
         }
-        const { data, error } = await supabase
+        const { data: existing, error: existingError } = await supabase
           .from('notifications')
-          .update({ read_at: now })
+          .select('id, read_at')
           .eq('id', id)
           .eq('recipient_user_id', user.id)
-          .select('id, read_at')
           .maybeSingle();
-        if (error) return handleError(error, 'marking notification read', req);
-        if (!data) return createErrorResponse(404, 'Notification not found', 'NOT_FOUND', undefined, req);
-        return createSuccessResponse(data, 200, 0, req);
+        if (existingError) return handleError(existingError, 'fetching notification read state', req);
+        if (!existing) return createErrorResponse(404, 'Notification not found', 'NOT_FOUND', undefined, req);
+
+        let readAt = resolveReadAt(existing.read_at, now);
+        if (!existing.read_at) {
+          const { data: updated, error } = await supabase
+            .from('notifications')
+            .update({ read_at: readAt })
+            .eq('id', id)
+            .eq('recipient_user_id', user.id)
+            .is('read_at', null)
+            .select('read_at')
+            .maybeSingle();
+          if (error) return handleError(error, 'marking notification read', req);
+          if (updated?.read_at) {
+            readAt = updated.read_at;
+          } else {
+            const { data: raced, error: raceError } = await supabase
+              .from('notifications')
+              .select('read_at')
+              .eq('id', id)
+              .eq('recipient_user_id', user.id)
+              .single();
+            if (raceError) return handleError(raceError, 'resolving notification read state', req);
+            readAt = resolveReadAt(raced.read_at, readAt);
+          }
+        }
+
+        const summary = await fetchUnreadSummary(supabase);
+        return createSuccessResponse({ id, read_at: readAt, ...summary }, 200, 0, req);
       }
 
       if (action === 'read_all') {
@@ -153,7 +223,13 @@ Deno.serve(async (req: Request) => {
           .lte('created_at', through)
           .select('id');
         if (error) return handleError(error, 'marking all notifications read', req);
-        return createSuccessResponse({ updated: data?.length ?? 0, read_at: now, through }, 200, 0, req);
+        const summary = await fetchUnreadSummary(supabase);
+        return createSuccessResponse({
+          updated: data?.length ?? 0,
+          read_at: now,
+          through,
+          ...summary,
+        }, 200, 0, req);
       }
 
       return createErrorResponse(400, 'Unsupported notification action', 'VALIDATION_ERROR', undefined, req);
@@ -211,7 +287,7 @@ Deno.serve(async (req: Request) => {
           return createErrorResponse(400, 'Invalid Expo push token', 'VALIDATION_ERROR', undefined, req);
         }
 
-        const { data, error } = await supabase
+        const { data, error } = await createAdmin()
           .from('push_tokens')
           .upsert({
             user_id: user.id,
@@ -236,9 +312,9 @@ Deno.serve(async (req: Request) => {
       if (!EXPO_PUSH_TOKEN.test(token)) {
         return createErrorResponse(400, 'Invalid Expo push token', 'VALIDATION_ERROR', undefined, req);
       }
-      const { error } = await supabase
+      const { error } = await createAdmin()
         .from('push_tokens')
-        .delete()
+        .update({ active: false, last_seen_at: new Date().toISOString() })
         .eq('user_id', user.id)
         .eq('expo_push_token', token);
       if (error) return handleError(error, 'removing push token', req);

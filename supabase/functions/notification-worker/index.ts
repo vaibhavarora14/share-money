@@ -3,6 +3,7 @@ import { SUPABASE_SERVICE_ROLE_KEY, SUPABASE_URL } from '../_shared/env.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { log } from '../_shared/logger.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
+import { composeNotificationPush } from '../_shared/notification-push.ts';
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 const EXPO_RECEIPTS_URL = 'https://exp.host/--/api/v2/push/getReceipts';
@@ -138,29 +139,13 @@ async function sendPush(
   token: PushTokenRow,
   unreadCount: number,
 ): Promise<ExpoResult> {
-  const isDigest = unreadCount > 1;
+  const content = composeNotificationPush(notification, unreadCount);
   const response = await fetch(EXPO_PUSH_URL, {
     method: 'POST',
     headers: expoHeaders(),
     body: JSON.stringify({
       to: token.expo_push_token,
-      sound: 'default',
-      title: isDigest ? 'ShareMoney' : notification.title,
-      body: isDigest
-        ? `${unreadCount > 99 ? '99+' : unreadCount} new notifications`
-        : notification.body,
-      badge: Math.min(unreadCount, 99),
-      channelId: 'transactions',
-      collapseId: `notifications-${notification.recipient_user_id}`,
-      tag: `notifications-${notification.recipient_user_id}`,
-      data: isDigest
-        ? { route: 'notifications' }
-        : {
-          route: 'notification-detail',
-          notification_id: notification.id,
-          group_id: notification.group_id,
-          transaction_id: notification.transaction_id,
-        },
+      ...content,
     }),
   });
 
@@ -259,12 +244,31 @@ async function processOutboxRow(admin: SupabaseClient, row: OutboxRow): Promise<
 }
 
 async function checkReceipts(admin: SupabaseClient): Promise<number> {
+  const now = new Date();
+  const readyBefore = new Date(now.getTime() - 15 * 60 * 1000).toISOString();
+  const expiredBefore = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+
+  const { error: expiredError } = await admin
+    .from('notification_deliveries')
+    .update({
+      status: 'failed',
+      error_code: 'RECEIPT_EXPIRED',
+      error_message: 'Expo receipt was unavailable before the 24-hour expiry window',
+      receipt_checked_at: now.toISOString(),
+    })
+    .eq('status', 'ticketed')
+    .is('receipt_checked_at', null)
+    .lt('created_at', expiredBefore);
+  if (expiredError) throw expiredError;
+
   const { data: deliveries, error } = await admin
     .from('notification_deliveries')
     .select('id, expo_ticket_id, push_token_id')
     .eq('status', 'ticketed')
     .is('receipt_checked_at', null)
     .not('expo_ticket_id', 'is', null)
+    .gte('created_at', expiredBefore)
+    .lte('created_at', readyBefore)
     .order('created_at')
     .limit(300);
   if (error) throw error;
