@@ -1,7 +1,7 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(31);
+SELECT plan(38);
 
 SELECT has_table('public', 'notifications', 'notifications inbox exists');
 SELECT has_table('public', 'notification_preferences', 'notification preferences exist');
@@ -77,6 +77,46 @@ SELECT is(
   'outbox uses row-level security'
 );
 
+SELECT lives_ok(
+  $$
+    INSERT INTO public.notifications (
+      recipient_user_id,
+      actor_user_id,
+      group_id,
+      source_history_id,
+      event_type,
+      title,
+      body,
+      snapshot
+    )
+    SELECT
+      '22222222-2222-2222-2222-222222222222'::UUID,
+      '11111111-1111-1111-1111-111111111111'::UUID,
+      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::UUID,
+      id,
+      'transaction_created',
+      'Notification trigger contract',
+      'Summer Vacation 2024',
+      '{}'::JSONB
+    FROM public.transaction_history
+    ORDER BY changed_at
+    LIMIT 1
+  $$,
+  'notification insertion survives the best-effort worker wake trigger'
+);
+
+SELECT is(
+  (
+    SELECT COUNT(*)::INTEGER
+    FROM public.notification_outbox AS outbox
+    JOIN public.notifications AS notification
+      ON notification.id = outbox.notification_id
+    WHERE notification.title = 'Notification trigger contract'
+  ),
+  1,
+  'notification insertion always creates durable outbox work'
+);
+
 SELECT ok(
   has_table_privilege('authenticated', 'public.notifications', 'SELECT'),
   'authenticated users can select inbox rows through RLS'
@@ -96,6 +136,26 @@ SELECT ok(
 SELECT ok(
   NOT has_table_privilege('authenticated', 'public.push_tokens', 'INSERT'),
   'push token reassignment cannot bypass the service-owned API'
+);
+SELECT ok(
+  has_table_privilege('service_role', 'public.notifications', 'INSERT'),
+  'service role can fan out inbox rows'
+);
+SELECT ok(
+  has_table_privilege('service_role', 'public.push_tokens', 'UPDATE'),
+  'service role can manage device token ownership'
+);
+SELECT ok(
+  has_table_privilege('service_role', 'public.notification_outbox', 'UPDATE'),
+  'service role can advance durable outbox work'
+);
+SELECT ok(
+  has_table_privilege('service_role', 'public.notification_deliveries', 'INSERT'),
+  'service role can persist Expo delivery tickets'
+);
+SELECT ok(
+  has_table_privilege('service_role', 'public.user_blocks', 'SELECT'),
+  'service role can apply notification block visibility'
 );
 SELECT ok(
   has_function_privilege(

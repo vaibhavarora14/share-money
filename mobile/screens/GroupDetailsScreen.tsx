@@ -1090,6 +1090,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
       {!showMembers && isActiveMember && (
         <FAB
+          testID="add-expense-button"
           icon="plus"
           style={[
             styles.fab,

@@ -153,6 +153,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
       elevation={1}
     >
       <TouchableOpacity
+        testID={`group-card-${group.id}`}
         style={styles.groupTouchable}
         onPress={() => handleGroupPress(group)}
         activeOpacity={0.7}

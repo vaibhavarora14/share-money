@@ -87,10 +87,11 @@ BEGIN
     END
     FROM worker_config
   $request$;
+  RETURN NEW;
 EXCEPTION
   WHEN OTHERS THEN
     RAISE WARNING 'Notification worker wake-up failed; cron will retry: %', SQLERRM;
-  RETURN NEW;
+    RETURN NEW;
 END;
 $$;
 

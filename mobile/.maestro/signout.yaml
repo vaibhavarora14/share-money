@@ -19,9 +19,11 @@ appId: com.vaibhavarora.sharemoney
 # Log out when authenticated
 - runFlow:
     when:
-      visible: "Profile"
+      visible:
+        id: "profile-tab"
     commands:
-      - tapOn: "Profile"
+      - tapOn:
+          id: "profile-tab"
       - waitForAnimationToEnd
       - tapOn:
           id: logout-button

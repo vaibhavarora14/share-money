@@ -4,58 +4,79 @@ appId: com.vaibhavarora.sharemoney
 # exact unread count is deterministic.
 
 - runFlow: _helpers/ensure-groups.yaml
-- tapOn: "Summer Vacation 2024"
+- waitForAnimationToEnd
+- tapOn:
+    id: "group-card-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    retryTapIfNoChange: true
 - waitForAnimationToEnd
 
 # One live expense remains available as the detail destination.
-- tapOn: "Add Expense"
+- tapOn:
+    id: "add-expense-button"
 - tapOn:
     id: "amount-input"
 - inputText: "88"
-- tapOn: "Description"
+- tapOn:
+    id: "description-input"
 - inputText: "Notification E2E Live"
+- pressKey: Enter
 - hideKeyboard
-- tapOn: "Save"
+- tapOn:
+    id: "save-expense-button"
 - waitForAnimationToEnd
-- assertVisible: "Notification E2E Live"
+- assertVisible: "Notification E2E Live.*"
 
 # A second expense covers cosmetic edit (no event), financial edit, and delete.
-- tapOn: "Add Expense"
+- tapOn:
+    id: "add-expense-button"
 - tapOn:
     id: "amount-input"
 - inputText: "44"
-- tapOn: "Description"
+- tapOn:
+    id: "description-input"
 - inputText: "Notification E2E Lifecycle"
+- pressKey: Enter
 - hideKeyboard
-- tapOn: "Save"
+- tapOn:
+    id: "save-expense-button"
 - waitForAnimationToEnd
-- tapOn: "Notification E2E Lifecycle"
-- tapOn: "Description"
+- tapOn: "Notification E2E Lifecycle.*"
+- tapOn:
+    id: "description-input"
 - eraseText: 26
 - inputText: "Notification E2E Cosmetic"
+- pressKey: Enter
 - hideKeyboard
-- tapOn: "Update"
+- tapOn:
+    id: "save-expense-button"
 - waitForAnimationToEnd
 
 # Amount is material and creates one additional event.
-- tapOn: "Notification E2E Cosmetic"
+- tapOn: "Notification E2E Cosmetic.*"
 - tapOn:
     id: "amount-input"
 - eraseText: 2
 - inputText: "99"
+- tapOn:
+    id: "description-input"
+- pressKey: Enter
 - hideKeyboard
-- tapOn: "Update"
+- tapOn:
+    id: "save-expense-button"
 - waitForAnimationToEnd
 
 # Delete creates the fallback Activity event.
-- tapOn: "Notification E2E Cosmetic"
+- tapOn: "Notification E2E Cosmetic.*"
 - tapOn:
     id: "delete-expense-button"
 - waitForAnimationToEnd
-- assertNotVisible: "Notification E2E Cosmetic"
+- assertNotVisible: "Notification E2E Cosmetic.*"
 
 # Switch to the linked participant.
 - runFlow: signout.yaml
+- extendedWaitUntil:
+    visible: "Continue with email"
+    timeout: 10000
 - runFlow:
     when:
       visible: "Continue with email"
@@ -75,20 +96,20 @@ appId: com.vaibhavarora.sharemoney
 - tapOn:
     id: "notification-bell"
 - assertVisible: "Notifications"
-- assertVisible: "Alice added Notification E2E Live"
-- assertVisible: "Alice deleted Notification E2E Cosmetic"
+- assertVisible: ".*Alice added Notification E2E Live.*"
+- assertVisible: ".*Alice deleted Notification E2E Cosmetic.*"
 
 # Deleted content retains detail and routes to Activity.
-- tapOn: "Alice deleted Notification E2E Cosmetic"
+- tapOn: ".*Alice deleted Notification E2E Cosmetic.*"
 - assertVisible: "Impact on you"
 - assertVisible: "View group activity"
-- tapOn: "Navigate back"
+- tapOn: "Back"
 
 # Live content reaches and highlights the exact transaction.
-- tapOn: "Alice added Notification E2E Live"
+- tapOn: ".*Alice added Notification E2E Live.*"
 - tapOn: "View in group"
 - waitForAnimationToEnd
-- assertVisible: "Notification E2E Live"
+- assertVisible: "Notification E2E Live.*"
 - assertVisible:
     text: ".*highlighted from notification.*"
 
@@ -97,5 +118,5 @@ appId: com.vaibhavarora.sharemoney
     id: "notification-bell"
 - tapOn: "Mark all read"
 - assertNotVisible: "Mark all read"
-- tapOn: "Navigate back"
+- tapOn: "Back"
 - runFlow: signout.yaml

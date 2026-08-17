@@ -47,6 +47,12 @@ appId: com.vaibhavarora.sharemoney
 # Login if auth screen is visible
 - runFlow:
     when:
+      visible: "Continue with email"
+    commands:
+      - tapOn: "Continue with email"
+      - waitForAnimationToEnd
+- runFlow:
+    when:
       visible: "Welcome Back"
     commands:
       - tapOn: "Email"

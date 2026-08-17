@@ -200,6 +200,14 @@ GRANT SELECT ON TABLE public.notifications TO authenticated;
 GRANT UPDATE (read_at) ON TABLE public.notifications TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON TABLE public.notification_preferences TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.push_tokens TO authenticated;
+GRANT ALL ON TABLE
+  public.notifications,
+  public.notification_preferences,
+  public.push_tokens,
+  public.notification_outbox,
+  public.notification_deliveries
+TO service_role;
+GRANT SELECT ON TABLE public.user_blocks TO service_role;
 
 CREATE POLICY "Recipients can view own notifications"
   ON public.notifications FOR SELECT TO authenticated
