@@ -15,7 +15,6 @@ import {
   useTheme
 } from "react-native-paper";
 import { ActivityFeed } from "../components/ActivityFeed";
-import { NotificationBell } from "../components/NotificationBell";
 import { GroupDashboard } from "../components/GroupDashboard";
 import { InvitationsList } from "../components/InvitationsList";
 import { MembersList } from "../components/MembersList";
@@ -74,8 +73,6 @@ interface GroupDetailsScreenProps {
   refreshTrigger?: number; // When this changes, refresh invitations
   groupRefreshTrigger?: number; // When this changes, refresh group data
   onStatsPress?: (mode: GroupStatsMode) => void;
-  onNotificationsPress: () => void;
-  unreadNotificationCount: number;
   initialListMode?: "transactions" | "activity";
   highlightedTransactionId?: number | null;
 }
@@ -92,8 +89,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   refreshTrigger,
   groupRefreshTrigger,
   onStatsPress,
-  onNotificationsPress,
-  unreadNotificationCount,
   initialListMode = "transactions",
   highlightedTransactionId = null,
 }) => {
@@ -818,15 +813,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           title={showMembers ? "People" : group.name}
           titleStyle={{ fontWeight: "bold" }}
         />
-        {!showMembers ? (
-          <NotificationBell
-            unreadCount={unreadNotificationCount}
-            onPress={onNotificationsPress}
-          />
-        ) : null}
-        
-
-
         {/* Group options (active members only) */}
         {isActiveMember && (
           <Menu

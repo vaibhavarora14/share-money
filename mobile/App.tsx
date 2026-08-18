@@ -159,7 +159,6 @@ function AppContent() {
   const [showAddMember, setShowAddMember] = useState(false);
   const [currentRoute, setCurrentRoute] = useState<string>("groups");
   const [selectedNotificationId, setSelectedNotificationId] = useState<string | null>(null);
-  const [notificationsReturnRoute, setNotificationsReturnRoute] = useState<"groups" | "group-details">("groups");
   const [groupInitialListMode, setGroupInitialListMode] = useState<"transactions" | "activity">("transactions");
   const [highlightedTransactionId, setHighlightedTransactionId] = useState<number | null>(null);
   const [desktopNotificationRoute, setDesktopNotificationRoute] = useState<"closed" | "list" | "detail">("closed");
@@ -299,14 +298,13 @@ function AppContent() {
   }, [queryClientInstance]);
 
   const openNotifications = React.useCallback(() => {
-    setNotificationsReturnRoute(selectedGroup ? "group-details" : "groups");
     setSelectedNotificationId(null);
     if (usesDesktopNotificationPanel) {
       setDesktopNotificationRoute("list");
     } else {
       setCurrentRoute("notifications");
     }
-  }, [selectedGroup, usesDesktopNotificationPanel]);
+  }, [usesDesktopNotificationPanel]);
 
   useEffect(() => {
     if (usesDesktopNotificationPanel || desktopNotificationRoute === "closed") return;
@@ -317,7 +315,6 @@ function AppContent() {
 
   const handleNotificationResponse = React.useCallback((data: Record<string, unknown>) => {
     const destination = resolveNotificationRoute(data);
-    setNotificationsReturnRoute("groups");
     setSelectedGroup(null);
     if (destination.screen === "notification-detail") {
       setSelectedNotificationId(destination.notificationId);
@@ -793,7 +790,7 @@ function AppContent() {
     return (
       <>
         <NotificationsScreen
-          onBack={() => setCurrentRoute(notificationsReturnRoute)}
+          onBack={() => setCurrentRoute("groups")}
           onOpenNotification={(notification) => {
             setSelectedNotificationId(notification.id);
             setCurrentRoute("notification-detail");
@@ -954,8 +951,6 @@ function AppContent() {
             setStatsContext({ groupId: groupToDisplay.id, mode });
             setCurrentRoute("group-stats");
           }}
-          onNotificationsPress={openNotifications}
-          unreadNotificationCount={notificationInbox.data?.unread_count ?? 0}
           initialListMode={groupInitialListMode}
           highlightedTransactionId={highlightedTransactionId}
         />
