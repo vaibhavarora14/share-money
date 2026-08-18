@@ -21,6 +21,7 @@ expo-env.d.ts
 # Credentials (NEVER commit these!)
 credentials.json
 credentials/
+google-services.json
 *.cer
 
 # Metro
