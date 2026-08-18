@@ -258,7 +258,7 @@ Set these in Supabase Dashboard > Project Settings > Edge Functions > Environmen
 
 **Transaction notification Edge Function configuration:**
 
-- `POSTHOG_PROJECT_TOKEN` - Public project token used to evaluate the `transaction-notifications` flag.
+- `POSTHOG_PROJECT_TOKEN` - Public token for the dedicated PostHog `SharedMoney Production` project, used to evaluate the `transaction-notifications` flag.
 - `POSTHOG_HOST` - PostHog flags API host, normally `https://us.i.posthog.com`.
 
 The notification API, transaction fan-out, and push worker all fail closed when

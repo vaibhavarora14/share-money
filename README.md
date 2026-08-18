@@ -197,8 +197,10 @@ schedules the worker every minute when `pg_cron` and `pg_net` are available; it
 also performs a best-effort immediate wake-up for new outbox rows and safely
 falls back to cron until both Vault secrets above exist. Native push
 notifications require an Expo development or production build rather than Expo Go.
-The `transaction-notifications` PostHog flag controls inbox access, transaction
-fan-out, and push delivery. Missing or unavailable flag configuration fails closed.
+The `transaction-notifications` PostHog flag in the dedicated `SharedMoney`
+organization and `SharedMoney Production` project controls inbox access,
+transaction fan-out, and push delivery. Missing or unavailable flag
+configuration fails closed.
 
 **Mobile `mobile/.env`** (Expo requires `EXPO_PUBLIC_` prefix):
 
