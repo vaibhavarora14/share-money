@@ -9,14 +9,19 @@ const {
 } = require("./androidPushConfig.cjs");
 
 const ANDROID_PACKAGE = "com.vaibhavarora.sharemoney";
+const FIREBASE_PROJECT_ID = "sharedmoney-504507";
 
-function writeGoogleServicesFile(directory, packageName = ANDROID_PACKAGE) {
+function writeGoogleServicesFile(
+  directory,
+  packageName = ANDROID_PACKAGE,
+  projectId = FIREBASE_PROJECT_ID,
+) {
   const filePath = path.join(directory, "google-services.json");
   fs.writeFileSync(
     filePath,
     JSON.stringify({
       project_info: {
-        project_id: "sharedmoney-test",
+        project_id: projectId,
       },
       client: [
         {
@@ -68,6 +73,24 @@ test("rejects Firebase configuration for another Android application", () => {
         projectRoot: directory,
       }),
     /com\.vaibhavarora\.sharemoney/,
+  );
+});
+
+test("rejects Firebase configuration from another project", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "sharemoney-firebase-"));
+  const filePath = writeGoogleServicesFile(
+    directory,
+    ANDROID_PACKAGE,
+    "indian-finance-app",
+  );
+
+  assert.throws(
+    () =>
+      resolveAndroidPushConfig({
+        env: { GOOGLE_SERVICES_JSON: filePath },
+        projectRoot: directory,
+      }),
+    /sharedmoney-504507/,
   );
 });
 

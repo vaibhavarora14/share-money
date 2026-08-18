@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const ANDROID_PACKAGE = "com.vaibhavarora.sharemoney";
+const FIREBASE_PROJECT_ID = "sharedmoney-504507";
 
 function readAndValidateGoogleServicesFile(filePath) {
   let config;
@@ -22,8 +23,10 @@ function readAndValidateGoogleServicesFile(filePath) {
       `GOOGLE_SERVICES_JSON must contain an Android client for ${ANDROID_PACKAGE}`,
     );
   }
-  if (!config.project_info?.project_id) {
-    throw new Error("GOOGLE_SERVICES_JSON is missing project_info.project_id");
+  if (config.project_info?.project_id !== FIREBASE_PROJECT_ID) {
+    throw new Error(
+      `GOOGLE_SERVICES_JSON must belong to Firebase project ${FIREBASE_PROJECT_ID}`,
+    );
   }
   if (!matchingClient.client_info?.mobilesdk_app_id) {
     throw new Error("GOOGLE_SERVICES_JSON is missing client_info.mobilesdk_app_id");
@@ -59,5 +62,6 @@ function resolveAndroidPushConfig({
 
 module.exports = {
   ANDROID_PACKAGE,
+  FIREBASE_PROJECT_ID,
   resolveAndroidPushConfig,
 };
