@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "appId": "6755923591",
+  "locale": "en-US",
+  "builds": [
+    {
+      "version": "2.18.0",
+      "build": "72",
+      "action": "already-verified",
+      "notes": "• Sign in with the feature-flagged tester account and confirm Notifications appears.\n• Add or update an involved transaction and verify its group and share.\n• Open it and verify “View in group” briefly highlights the transaction.\n• Generate multiple notifications and verify the unread count opens the panel.\n• Verify notification UI remains hidden for non-enabled accounts."
+    },
+    {
+      "version": "2.17.1",
+      "build": "71",
+      "action": "save",
+      "notes": "• Complete the one-time Terms onboarding.\n• Report inappropriate content and confirm submission succeeds.\n• Block an abusive user and confirm the action succeeds.\n• Verify blocked activity disappears immediately."
+    },
+    {
+      "version": "2.17.0",
+      "build": "70",
+      "action": "save",
+      "notes": "• Sign in with Google, Apple, and email.\n• Complete the one-time post-login safety setup.\n• Confirm it shows the community rules, Terms of Use, and Privacy Policy.\n• Report objectionable activity and block an abusive member.\n• Verify blocked content is filtered from activity."
+    },
+    {
+      "version": "2.16.0",
+      "build": "69",
+      "action": "save",
+      "notes": "• Open Support from Profile.\n• Choose an account request topic.\n• Choose a data request topic and confirm it remains selected."
+    },
+    {
+      "version": "2.15.2",
+      "build": "68",
+      "action": "save",
+      "notes": "• Add a new person to a group.\n• Reuse a person from another group.\n• Invite a person to link an account.\n• Remove a person who has not linked an account."
+    },
+    {
+      "version": "2.15.1",
+      "build": "67",
+      "action": "save",
+      "notes": "• Reuse a person from another group.\n• Remove a person without an account or email."
+    },
+    {
+      "version": "2.13.16",
+      "build": "65",
+      "action": "save",
+      "notes": "• Choose a sign-in method and complete sign-in.\n• Join a group.\n• Add an expense.\n• Settle up."
+    },
+    {
+      "version": "2.13.16",
+      "build": "63",
+      "action": "save",
+      "notes": "• Choose a sign-in method and complete sign-in.\n• Join a group.\n• Add an expense.\n• Settle up."
+    },
+    {
+      "version": "2.13.15",
+      "build": "62",
+      "action": "save",
+      "notes": "• Sign in with Apple on an iPad.\n• Confirm no beta-only messaging appears.\n• Delete an account from Profile."
+    },
+    {
+      "version": "2.13.14",
+      "build": "61",
+      "action": "save",
+      "notes": "• Start account deletion from Profile.\n• Confirm deletion through email.\n• Sign in again if needed."
+    },
+    {
+      "version": "2.13.3",
+      "build": "50",
+      "action": "save",
+      "notes": "• Confirm SharedMoney branding appears throughout the app.\n• Sign in and open a legacy link.\n• Send and accept a group invitation.\n• Create an expense and complete a settlement.\n• Confirm iOS assets load without the build 49 bundle-path error."
+    },
+    {
+      "version": "2.12.2",
+      "build": "45",
+      "action": "save",
+      "notes": "• Sign in with Apple and Google on iOS.\n• Sign in with email and password.\n• Test the group expense flows.\n• Delete an account from Profile."
+    }
+  ]
+}

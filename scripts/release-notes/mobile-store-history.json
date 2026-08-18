@@ -1,0 +1,298 @@
+{
+  "schemaVersion": 1,
+  "stores": [
+    {
+      "platform": "android",
+      "appId": "com.vaibhavarora.sharemoney",
+      "channel": "Play internal",
+      "locale": "en-US",
+      "verificationMethod": "A fresh Google Play Developer API or Play Console release read must return the exact saved text.",
+      "releases": [
+        {
+          "version": "2.18.0",
+          "builds": [
+            "72"
+          ],
+          "notes": null,
+          "storeStatus": "blocked",
+          "observedAt": "2026-08-18T15:25:47+05:30",
+          "blocker": "EAS confirms a successful internal-track submission, but the signed-in Play Console accounts do not expose this package and the available service credential returns 403. Access required: invite the human account and service-account email to the Play developer account that owns com.vaibhavarora.sharemoney, grant app access to this package with View app information (read-only) and Release apps to testing tracks, and enable the Google Play Developer API for the service account's Cloud project. Until then, release notes cannot be read or changed.",
+          "storeUrl": "https://play.google.com/console/",
+          "sourceUrl": "https://expo.dev/accounts/varora1406/projects/share-money/submissions/0f552919-f319-40f5-8b48-111f3428ae41"
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "appId": "6755923591",
+      "channel": "TestFlight",
+      "locale": "en-US",
+      "verificationMethod": "A fresh App Store Connect build-detail read must return the exact saved What to Test text.",
+      "releases": [
+        {
+          "version": "2.18.0",
+          "builds": [
+            "72"
+          ],
+          "notes": "• Sign in with the feature-flagged tester account and confirm Notifications appears.\n• Add or update an involved transaction and verify its group and share.\n• Open it and verify “View in group” briefly highlights the transaction.\n• Generate multiple notifications and verify the unread count opens the panel.\n• Verify notification UI remains hidden for non-enabled accounts.",
+          "storeStatus": "verified",
+          "verifiedAt": "2026-08-18T16:31:56+05:30",
+          "storeUrl": "https://appstoreconnect.apple.com/teams/79c754e7-bf1d-488d-af46-225a13d01491/apps/6755923591/testflight/ios/b0dc7c2f-7a33-4ae6-96ab-4bef01e25a18"
+        },
+        {
+          "version": "2.17.1",
+          "builds": [
+            "71"
+          ],
+          "notes": "• Complete the one-time Terms onboarding.\n• Report inappropriate content and confirm submission succeeds.\n• Block an abusive user and confirm the action succeeds.\n• Verify blocked activity disappears immediately.",
+          "storeStatus": "verified",
+          "verifiedAt": "2026-08-18T16:55:24+05:30",
+          "storeUrl": "https://appstoreconnect.apple.com/teams/79c754e7-bf1d-488d-af46-225a13d01491/apps/6755923591/testflight/ios/7bc7600f-3a0f-4396-a539-301e60927218"
+        },
+        {
+          "version": "2.17.0",
+          "builds": [
+            "70"
+          ],
+          "notes": "• Sign in with Google, Apple, and email.\n• Complete the one-time post-login safety setup.\n• Confirm it shows the community rules, Terms of Use, and Privacy Policy.\n• Report objectionable activity and block an abusive member.\n• Verify blocked content is filtered from activity.",
+          "storeStatus": "verified",
+          "verifiedAt": "2026-08-18T16:55:24+05:30",
+          "storeUrl": "https://appstoreconnect.apple.com/teams/79c754e7-bf1d-488d-af46-225a13d01491/apps/6755923591/testflight/ios/8e069e58-6375-45aa-aafa-382747fbd07b"
+        },
+        {
+          "version": "2.16.0",
+          "builds": [
+            "69"
+          ],
+          "notes": "• Open Support from Profile.\n• Choose an account request topic.\n• Choose a data request topic and confirm it remains selected.",
+          "storeStatus": "verified",
+          "verifiedAt": "2026-08-18T16:55:24+05:30",
+          "storeUrl": "https://appstoreconnect.apple.com/teams/79c754e7-bf1d-488d-af46-225a13d01491/apps/6755923591/testflight/ios/5d6e6ec2-eea3-435e-bbd0-373cd87b91fe"
+        },
+        {
+          "version": "2.15.2",
+          "builds": [
+            "68"
+          ],
+          "notes": "• Add a new person to a group.\n• Reuse a person from another group.\n• Invite a person to link an account.\n• Remove a person who has not linked an account.",
+          "storeStatus": "verified",
+          "verifiedAt": "2026-08-18T16:55:24+05:30",
+          "storeUrl": "https://appstoreconnect.apple.com/teams/79c754e7-bf1d-488d-af46-225a13d01491/apps/6755923591/testflight/ios/d1ce5678-f508-4510-9ac1-e4d273cecb22"
+        },
+        {
+          "version": "2.15.1",
+          "builds": [
+            "67"
+          ],
+          "notes": "• Reuse a person from another group.\n• Remove a person without an account or email.",
+          "storeStatus": "verified",
+          "verifiedAt": "2026-08-18T16:55:24+05:30",
+          "storeUrl": "https://appstoreconnect.apple.com/teams/79c754e7-bf1d-488d-af46-225a13d01491/apps/6755923591/testflight/ios/01decaa4-43e9-41ba-bc4e-fd4095c013d6"
+        },
+        {
+          "version": "2.13.16",
+          "builds": [
+            "65"
+          ],
+          "notes": "• Choose a sign-in method and complete sign-in.\n• Join a group.\n• Add an expense.\n• Settle up.",
+          "storeStatus": "verified",
+          "verifiedAt": "2026-08-18T16:55:24+05:30",
+          "storeUrl": "https://appstoreconnect.apple.com/teams/79c754e7-bf1d-488d-af46-225a13d01491/apps/6755923591/testflight/ios/c36d1abb-4436-4699-ad2f-c4d19d049172"
+        },
+        {
+          "version": "2.13.16",
+          "builds": [
+            "63"
+          ],
+          "notes": "• Choose a sign-in method and complete sign-in.\n• Join a group.\n• Add an expense.\n• Settle up.",
+          "storeStatus": "verified",
+          "verifiedAt": "2026-08-18T16:55:24+05:30",
+          "storeUrl": "https://appstoreconnect.apple.com/teams/79c754e7-bf1d-488d-af46-225a13d01491/apps/6755923591/testflight/ios/59b22437-4077-479b-ab15-b760b26639e5"
+        },
+        {
+          "version": "2.13.15",
+          "builds": [
+            "62"
+          ],
+          "notes": "• Sign in with Apple on an iPad.\n• Confirm no beta-only messaging appears.\n• Delete an account from Profile.",
+          "storeStatus": "verified",
+          "verifiedAt": "2026-08-18T16:55:24+05:30",
+          "storeUrl": "https://appstoreconnect.apple.com/teams/79c754e7-bf1d-488d-af46-225a13d01491/apps/6755923591/testflight/ios/da9ffe19-2c14-4ba5-951a-dc1a0a43c5ad"
+        },
+        {
+          "version": "2.13.14",
+          "builds": [
+            "61"
+          ],
+          "notes": "• Start account deletion from Profile.\n• Confirm deletion through email.\n• Sign in again if needed.",
+          "storeStatus": "verified",
+          "verifiedAt": "2026-08-18T16:55:24+05:30",
+          "storeUrl": "https://appstoreconnect.apple.com/teams/79c754e7-bf1d-488d-af46-225a13d01491/apps/6755923591/testflight/ios/e1274513-5712-4b09-b018-70afc5688f54"
+        },
+        {
+          "version": "2.13.3",
+          "builds": [
+            "50"
+          ],
+          "notes": "• Confirm SharedMoney branding appears throughout the app.\n• Sign in and open a legacy link.\n• Send and accept a group invitation.\n• Create an expense and complete a settlement.\n• Confirm iOS assets load without the build 49 bundle-path error.",
+          "storeStatus": "verified",
+          "verifiedAt": "2026-08-18T16:55:24+05:30",
+          "storeUrl": "https://appstoreconnect.apple.com/teams/79c754e7-bf1d-488d-af46-225a13d01491/apps/6755923591/testflight/ios/e1a7458a-83e8-4dcf-ad36-58bbbb7114ed"
+        },
+        {
+          "version": "2.13.3",
+          "builds": [
+            "49"
+          ],
+          "notes": null,
+          "storeStatus": "unavailable",
+          "observedAt": "2026-08-18T15:25:47+05:30",
+          "blocker": "App Store Connect renders an empty disabled What to Test field and no Save control.",
+          "storeUrl": "https://appstoreconnect.apple.com/teams/79c754e7-bf1d-488d-af46-225a13d01491/apps/6755923591/testflight/ios/6de44216-5373-4596-b420-a3e71a4d0ee3"
+        },
+        {
+          "version": "2.13.2",
+          "builds": [
+            "48"
+          ],
+          "notes": null,
+          "storeStatus": "unavailable",
+          "observedAt": "2026-08-18T15:25:47+05:30",
+          "blocker": "App Store Connect renders an empty disabled What to Test field and no Save control.",
+          "storeUrl": "https://appstoreconnect.apple.com/teams/79c754e7-bf1d-488d-af46-225a13d01491/apps/6755923591/testflight/ios/a7febdc2-a05d-4eed-b9d4-6458998c8d52"
+        },
+        {
+          "version": "2.12.2",
+          "builds": [
+            "45"
+          ],
+          "notes": "• Sign in with Apple and Google on iOS.\n• Sign in with email and password.\n• Test the group expense flows.\n• Delete an account from Profile.",
+          "storeStatus": "verified",
+          "verifiedAt": "2026-08-18T16:55:24+05:30",
+          "storeUrl": "https://appstoreconnect.apple.com/teams/79c754e7-bf1d-488d-af46-225a13d01491/apps/6755923591/testflight/ios/fbf3b07a-0642-40c5-be01-9ee001f1b3f8"
+        },
+        {
+          "version": "2.12.0",
+          "builds": [
+            "42"
+          ],
+          "notes": null,
+          "storeStatus": "unavailable",
+          "observedAt": "2026-08-18T15:25:47+05:30",
+          "blocker": "App Store Connect renders an empty disabled What to Test field and no Save control.",
+          "storeUrl": "https://appstoreconnect.apple.com/teams/79c754e7-bf1d-488d-af46-225a13d01491/apps/6755923591/testflight/ios/b1a41a7c-f881-46a8-9b3a-6628c9f8ac5c"
+        },
+        {
+          "version": "2.10.1",
+          "builds": [
+            "40"
+          ],
+          "notes": null,
+          "storeStatus": "unavailable",
+          "observedAt": "2026-08-18T15:25:47+05:30",
+          "blocker": "App Store Connect renders an empty disabled What to Test field and no Save control.",
+          "storeUrl": "https://appstoreconnect.apple.com/teams/79c754e7-bf1d-488d-af46-225a13d01491/apps/6755923591/testflight/ios/959e7456-d055-4bfb-a557-5454235437d2"
+        },
+        {
+          "version": "2.8.1",
+          "builds": [
+            "36"
+          ],
+          "notes": null,
+          "storeStatus": "unavailable",
+          "observedAt": "2026-08-18T15:25:47+05:30",
+          "blocker": "App Store Connect renders an empty disabled What to Test field and no Save control.",
+          "storeUrl": "https://appstoreconnect.apple.com/teams/79c754e7-bf1d-488d-af46-225a13d01491/apps/6755923591/testflight/ios/348807d3-5537-43ff-8db2-d45964e24b09"
+        },
+        {
+          "version": "2.5.0",
+          "builds": [
+            "25"
+          ],
+          "notes": "added infinite transactions feed, improving speed and complete visibility on all transactions",
+          "storeStatus": "unavailable",
+          "observedAt": "2026-08-18T15:25:47+05:30",
+          "blocker": "App Store Connect renders the observed What to Test text in a disabled field and no Save control.",
+          "storeUrl": "https://appstoreconnect.apple.com/teams/79c754e7-bf1d-488d-af46-225a13d01491/apps/6755923591/testflight/ios/3d3222ad-204e-49f0-93d4-f03764096933"
+        },
+        {
+          "version": "2.4.0",
+          "builds": [
+            "21"
+          ],
+          "notes": "New Features: - Activity feed: see all transaction changes in your groups - Improved transaction history tracking - Better error handling and reliability Improvements: - Performance optimizations for faster loading - Enhanced UI/UX for a smoother experience - Bug fixes and stability improvements Technical Updates: - Updated dependencies for better security and performance - Improved app stability and reliability",
+          "storeStatus": "unavailable",
+          "observedAt": "2026-08-18T15:25:47+05:30",
+          "blocker": "App Store Connect renders the observed What to Test text in a disabled field and no Save control.",
+          "storeUrl": "https://appstoreconnect.apple.com/teams/79c754e7-bf1d-488d-af46-225a13d01491/apps/6755923591/testflight/ios/82123ca3-85a5-44de-aed9-97aa93a85c06"
+        },
+        {
+          "version": "2.2.1",
+          "builds": [
+            "18"
+          ],
+          "notes": "improved group members invitation list, shows only pending invitations now",
+          "storeStatus": "unavailable",
+          "observedAt": "2026-08-18T15:25:47+05:30",
+          "blocker": "App Store Connect renders the observed What to Test text in a disabled field and no Save control.",
+          "storeUrl": "https://appstoreconnect.apple.com/teams/79c754e7-bf1d-488d-af46-225a13d01491/apps/6755923591/testflight/ios/93485390-46b7-4427-a5d0-5e8fc0fda4dc"
+        },
+        {
+          "version": "2.0.0",
+          "builds": [
+            "15"
+          ],
+          "notes": "ShareMoney 2.0 is here! A major update for a better expense-sharing experience Important Note This is a major update. Users on older versions (v1.x) will need to update to continue adding new transactions and settlements.",
+          "storeStatus": "unavailable",
+          "observedAt": "2026-08-18T15:25:47+05:30",
+          "blocker": "App Store Connect renders the observed What to Test text in a disabled field and no Save control.",
+          "storeUrl": "https://appstoreconnect.apple.com/teams/79c754e7-bf1d-488d-af46-225a13d01491/apps/6755923591/testflight/ios/f18d2672-6110-41e4-bc46-677baa4f21f6"
+        },
+        {
+          "version": "1.4.0",
+          "builds": [
+            "14"
+          ],
+          "notes": "App got snappier, faster",
+          "storeStatus": "unavailable",
+          "observedAt": "2026-08-18T15:25:47+05:30",
+          "blocker": "App Store Connect renders the observed What to Test text in a disabled field and no Save control.",
+          "storeUrl": "https://appstoreconnect.apple.com/teams/79c754e7-bf1d-488d-af46-225a13d01491/apps/6755923591/testflight/ios/97f3b28e-7da4-4a85-8e0e-d8a7bbee48fb"
+        },
+        {
+          "version": "1.3.6",
+          "builds": [
+            "13"
+          ],
+          "notes": null,
+          "storeStatus": "unavailable",
+          "observedAt": "2026-08-18T15:25:47+05:30",
+          "blocker": "App Store Connect renders an empty disabled What to Test field and no Save control.",
+          "storeUrl": "https://appstoreconnect.apple.com/teams/79c754e7-bf1d-488d-af46-225a13d01491/apps/6755923591/testflight/ios/14a65255-dee2-438d-8823-6bd0cebf6f22"
+        },
+        {
+          "version": "1.3.3",
+          "builds": [
+            "10"
+          ],
+          "notes": "basic user flow",
+          "storeStatus": "unavailable",
+          "observedAt": "2026-08-18T15:25:47+05:30",
+          "blocker": "App Store Connect renders the observed What to Test text in a disabled field and no Save control.",
+          "storeUrl": "https://appstoreconnect.apple.com/teams/79c754e7-bf1d-488d-af46-225a13d01491/apps/6755923591/testflight/ios/a67e77d7-d9cf-4043-b3b5-a121d7c56745"
+        },
+        {
+          "version": "1.2.1",
+          "builds": [
+            "6"
+          ],
+          "notes": null,
+          "storeStatus": "unavailable",
+          "observedAt": "2026-08-18T15:25:47+05:30",
+          "blocker": "App Store Connect renders an empty disabled What to Test field and no Save control.",
+          "storeUrl": "https://appstoreconnect.apple.com/teams/79c754e7-bf1d-488d-af46-225a13d01491/apps/6755923591/testflight/ios/4e9bcd04-fd74-4b25-aac1-35d35ab31b35"
+        }
+      ]
+    }
+  ]
+}
