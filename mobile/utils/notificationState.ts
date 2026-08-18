@@ -44,6 +44,17 @@ export function flattenNotificationPages(
   };
 }
 
+export function restoreOfflineNotificationCache(
+  cached: NotificationsResponse,
+): NotificationsResponse {
+  return {
+    ...cached,
+    has_more: false,
+    next_cursor: null,
+    is_offline_cache: true,
+  };
+}
+
 function updateEveryPage(
   data: NotificationInfiniteData | undefined,
   update: (page: NotificationsResponse) => NotificationsResponse,

@@ -4,6 +4,7 @@ import {
   compactNotificationReadQueue,
   flattenNotificationPages,
   markNotificationReadInCache,
+  restoreOfflineNotificationCache,
   type NotificationInfiniteData,
 } from "./notificationState.ts";
 
@@ -84,4 +85,18 @@ Deno.test("later mark-all compacts prior covered reads but preserves later work"
     "2026-08-18T11:00:00.000Z",
     "future",
   ]);
+});
+
+Deno.test("offline cache preserves the last server-confirmed feature gate", () => {
+  const cached = page([
+    item("00000000-0000-4000-8000-000000000001", "group", "2026-08-18T10:00:00.000Z"),
+  ], true);
+  cached.feature_enabled = true;
+
+  const restored = restoreOfflineNotificationCache(cached);
+
+  assertEquals(restored.feature_enabled, true);
+  assertEquals(restored.has_more, false);
+  assertEquals(restored.next_cursor, null);
+  assertEquals(restored.is_offline_cache, true);
 });

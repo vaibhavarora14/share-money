@@ -1,4 +1,4 @@
-import { assertEquals } from "jsr:@std/assert";
+import { assertEquals } from "jsr:@std/assert@1";
 import { startTransactionHighlightTimer } from "./transactionHighlight.ts";
 
 Deno.test("transaction highlight clears after a one-second glimpse", () => {

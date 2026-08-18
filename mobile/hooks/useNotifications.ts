@@ -25,6 +25,7 @@ import {
   flattenNotificationPages,
   markAllNotificationsReadInCache,
   markNotificationReadInCache,
+  restoreOfflineNotificationCache,
   setNotificationPreferenceInData,
   type NotificationInfiniteData,
 } from "../utils/notificationState";
@@ -59,13 +60,9 @@ async function fetchNotificationsPage(
     const cached = await AsyncStorage.getItem(cacheKey(userId)).catch(() => null);
     if (!cached) throw error;
     try {
-      return {
-        ...(JSON.parse(cached) as NotificationsResponse),
-        feature_enabled: false,
-        has_more: false,
-        next_cursor: null,
-        is_offline_cache: true,
-      };
+      return restoreOfflineNotificationCache(
+        JSON.parse(cached) as NotificationsResponse,
+      );
     } catch {
       throw error;
     }
