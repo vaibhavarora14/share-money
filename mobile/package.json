@@ -1,6 +1,6 @@
 {
   "name": "mobile",
-  "version": "2.13.16",
+  "version": "2.18.1",
   "main": "index.js",
   "scripts": {
     "start": "expo start",
@@ -16,6 +16,9 @@
     "version:major": "node scripts/version.js major",
     "version:build": "node scripts/version.js build",
     "version:show": "node scripts/version.js show",
+    "test:android-push-config": "node --test config/androidPushConfig.test.cjs",
+    "verify:android-push-config": "node scripts/verify-android-push-config.cjs",
+    "eas-build-pre-install": "npm run verify:android-push-config",
     "verify:canonical-links": "node scripts/verify-canonical-links.mjs",
     "android:release": "eas submit --platform android --profile internal",
     "deploy:web": "npx expo export -p web && eas deploy --prod --non-interactive",
