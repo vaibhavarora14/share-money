@@ -166,6 +166,10 @@ SharedMoney/
 | `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET` | Google Web OAuth client secret for local Supabase Auth | `GOCSPX-...` |
 | `APP_URL` | App URL used in reminder email links | `https://sharedmoney.app/app` |
 | `REMINDER_CRON_SECRET` | Shared secret required to invoke monthly reminders | random secret |
+| `NOTIFICATION_WORKER_SECRET` | Shared secret required to invoke the push notification worker | random secret |
+| `POSTHOG_PROJECT_TOKEN` | Public PostHog project token used for server-authoritative notification flag evaluation | `phc_...` |
+| `POSTHOG_HOST` | PostHog ingestion host used by the flags API | `https://us.i.posthog.com` |
+| `EXPO_ACCESS_TOKEN` | Optional Expo access token for enhanced push security | Expo access token |
 | `RESEND_API_KEY` | Resend API key for reminder emails | `re_...` |
 | `REMINDER_FROM_EMAIL` | Verified sender for reminder emails | `SharedMoney <reminders@sharedmoney.app>` |
 | `REMINDER_LOGO_URL` | Optional hosted logo URL for reminder emails; falls back to `${APP_URL}/icon.png` | `https://yourdomain.com/icon.png` |
@@ -180,6 +184,23 @@ fallback redirect only, not a canonical link base.
 | ------ | ------- |
 | `monthly_reminders_function_url` | Full deployed function URL, e.g. `https://<project-ref>.supabase.co/functions/v1/monthly-reminders` |
 | `monthly_reminders_cron_secret` | Same value as `REMINDER_CRON_SECRET` |
+
+**Supabase Vault secrets for transaction notifications:**
+
+| Secret | Purpose |
+| ------ | ------- |
+| `notification_worker_function_url` | Full deployed function URL, e.g. `https://<project-ref>.supabase.co/functions/v1/notification-worker` |
+| `notification_worker_secret` | Same value as the Edge Function `NOTIFICATION_WORKER_SECRET` |
+
+Apply the notification migration before deploying the functions. The migration
+schedules the worker every minute when `pg_cron` and `pg_net` are available; it
+also performs a best-effort immediate wake-up for new outbox rows and safely
+falls back to cron until both Vault secrets above exist. Native push
+notifications require an Expo development or production build rather than Expo Go.
+The `transaction-notifications` PostHog flag in the dedicated `SharedMoney`
+organization and `SharedMoney Production` project controls inbox access,
+transaction fan-out, and push delivery. Missing or unavailable flag
+configuration fails closed.
 
 **Mobile `mobile/.env`** (Expo requires `EXPO_PUBLIC_` prefix):
 

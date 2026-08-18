@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -19,6 +20,7 @@ import {
   Portal,
   SegmentedButtons,
   Surface,
+  Switch,
   Text,
   TextInput,
   useTheme,
@@ -32,6 +34,11 @@ import {
 } from "../contexts/ThemePreferenceContext";
 import { useProfile } from "../hooks/useProfile";
 import {
+  setCachedNotificationPreference,
+  useNotifications,
+} from "../hooks/useNotifications";
+import { disablePushNotifications, enablePushNotifications } from "../services/pushNotifications";
+import {
   CountryCode,
   formatPhoneNumber,
   getCountryByCode,
@@ -39,6 +46,7 @@ import {
   parsePhoneNumber,
 } from "../utils/countryCodes";
 import { showErrorAlert } from "../utils/errorHandling";
+import { isTransactionNotificationsEnabled } from "../utils/featureFlags";
 import {
   buildSupportEmailUrl,
   SUPPORT_EMAIL,
@@ -64,11 +72,16 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [supportSheetVisible, setSupportSheetVisible] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [notificationWorking, setNotificationWorking] = useState(false);
   const theme = useTheme();
+  const queryClient = useQueryClient();
   const { resolvedTheme, setThemePreference, themePreference } =
     useThemePreference();
   const insets = useSafeAreaInsets();
   const { data: profile, updateProfile } = useProfile();
+  const notifications = useNotifications();
+  const notificationsEnabled =
+    isTransactionNotificationsEnabled(notifications.data);
   const { signOut, user } = useAuth();
 
   useEffect(() => {
@@ -405,6 +418,78 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
               />
             </View>
 
+            {notificationsEnabled ? (
+              <View
+                style={[
+                  styles.notificationSetting,
+                  { borderTopColor: theme.colors.outlineVariant },
+                ]}
+              >
+                <View style={styles.notificationSettingCopy}>
+                  <Text
+                    variant="titleSmall"
+                    style={{ color: theme.colors.onSurface, fontWeight: "700" }}
+                  >
+                    Push notifications
+                  </Text>
+                  <Text
+                    variant="bodySmall"
+                    style={{ color: theme.colors.onSurfaceVariant }}
+                  >
+                    {Platform.OS === "web"
+                      ? "Available in the iOS and Android apps"
+                      : notifications.data?.preference.permission_status === "denied"
+                        ? "Permission is off. Your device settings may be required."
+                        : "Expense changes that affect you"}
+                  </Text>
+                </View>
+                <Switch
+                  value={notifications.data?.preference.push_enabled ?? false}
+                  disabled={Platform.OS === "web" || notificationWorking}
+                  onValueChange={async (enabled) => {
+                    setNotificationWorking(true);
+                    try {
+                      const preference = enabled
+                        ? await enablePushNotifications()
+                        : await disablePushNotifications();
+                      if (user?.id) {
+                        setCachedNotificationPreference(
+                          queryClient,
+                          user.id,
+                          preference
+                        );
+                      }
+                      if (enabled && !preference.push_enabled) {
+                        if (preference.permission_status === "denied") {
+                          Alert.alert(
+                            "Notifications are off",
+                            "Allow notifications in your device settings, then return to ShareMoney.",
+                            [
+                              { text: "Cancel", style: "cancel" },
+                              {
+                                text: "Open Settings",
+                                onPress: () => void Linking.openSettings(),
+                              },
+                            ]
+                          );
+                        } else {
+                          Alert.alert(
+                            "Notifications are unavailable",
+                            "Push notifications aren’t available on this device."
+                          );
+                        }
+                      }
+                    } catch (error) {
+                      showErrorAlert(error, signOut, "Notifications");
+                    } finally {
+                      setNotificationWorking(false);
+                    }
+                  }}
+                  accessibilityLabel="Push notifications"
+                />
+              </View>
+            ) : null}
+
             <Button
               mode="contained"
               onPress={handleComplete}
@@ -666,6 +751,20 @@ const styles = StyleSheet.create({
   appearanceTitle: {
     fontWeight: "700",
     marginBottom: 2,
+  },
+  notificationSetting: {
+    minHeight: 72,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: 16,
+    marginBottom: 16,
+  },
+  notificationSettingCopy: {
+    flex: 1,
+    paddingRight: 16,
+    gap: 3,
   },
   themeButtons: {
     width: "100%",

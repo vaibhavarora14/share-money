@@ -114,6 +114,8 @@ The workflow deploys all functions in `supabase/functions/`:
 - `groups` - Group management
 - `invitations` - Group invitations
 - `monthly-reminders` - Scheduled pending balance email reminders
+- `notifications` - Authenticated notification inbox, reads, preferences, and device tokens
+- `notification-worker` - Service-only Expo push outbox and receipt processor
 - `settlements` - Settlement management
 - `transactions` - Transaction management
 

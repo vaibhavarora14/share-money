@@ -219,6 +219,26 @@ BEGIN
     );
   END IF;
 
+  -- Seeded accounts are automation fixtures, so keep them past onboarding.
+  -- Production signups still start with incomplete profiles and no terms
+  -- acceptance through public.handle_new_user().
+  INSERT INTO public.profiles (
+    id,
+    full_name,
+    profile_completed,
+    terms_accepted_at,
+    terms_version
+  ) VALUES
+    (alice_id, 'Alice', TRUE, NOW(), '2026-08-11'),
+    (bob_id, 'Bob', TRUE, NOW(), '2026-08-11'),
+    (charlie_id, 'Charlie', TRUE, NOW(), '2026-08-11'),
+    (diana_id, 'Diana', TRUE, NOW(), '2026-08-11')
+  ON CONFLICT (id) DO UPDATE SET
+    full_name = EXCLUDED.full_name,
+    profile_completed = EXCLUDED.profile_completed,
+    terms_accepted_at = EXCLUDED.terms_accepted_at,
+    terms_version = EXCLUDED.terms_version;
+
   -- ============================================================================
   -- CREATE TEST GROUPS
   -- ============================================================================

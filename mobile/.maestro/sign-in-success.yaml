@@ -1,4 +1,4 @@
-appId: com.sharemoney.app
+appId: com.vaibhavarora.sharemoney
 ---
 # Test: Sign In Success
 # This test verifies that the method chooser reveals the email sign-in form

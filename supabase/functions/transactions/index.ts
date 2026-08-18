@@ -3,6 +3,10 @@ import { formatCurrency } from '../_shared/currency.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { log } from '../_shared/logger.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
+import {
+  loadExpenseSnapshot,
+  safelyCreateTransactionNotifications,
+} from '../_shared/transaction-notifications.ts';
 import { isValidUUID, validateBodySize, validateTransactionData } from '../_shared/validation.ts';
 
 /**
@@ -352,6 +356,7 @@ Deno.serve(async (req: Request) => {
 
     // Handle POST - Create new transaction
     if (httpMethod === 'POST') {
+      const operationStartedAt = new Date().toISOString();
       let transactionData: Partial<Transaction>;
       try {
         transactionData = body ? JSON.parse(body) : {};
@@ -412,7 +417,7 @@ Deno.serve(async (req: Request) => {
               return createErrorResponse(400, 'Failed to validate participants', 'VALIDATION_ERROR', undefined, req);
             }
 
-            const foundParticipantIds = new Set((participants || []).map(p => p.id));
+            const foundParticipantIds = new Set((participants || []).map((p: { id: string }) => p.id));
             const invalidParticipantIds = uniqueParticipantIds.filter(id => !foundParticipantIds.has(id));
             
             if (invalidParticipantIds.length > 0) {
@@ -530,11 +535,21 @@ Deno.serve(async (req: Request) => {
         }
       }
 
+      const notificationSnapshot = await loadExpenseSnapshot(supabase, transaction.id);
+      await safelyCreateTransactionNotifications({
+        actorUserId: user.id,
+        action: 'created',
+        before: null,
+        after: notificationSnapshot,
+        operationStartedAt,
+      });
+
       return createSuccessResponse(responseTransaction, 201, 0, req);
     }
 
     // Handle PUT - Update existing transaction
     if (httpMethod === 'PUT') {
+      const operationStartedAt = new Date().toISOString();
       let transactionData: Partial<Transaction>;
       try {
         transactionData = body ? JSON.parse(body) : {};
@@ -545,6 +560,8 @@ Deno.serve(async (req: Request) => {
       if (!transactionData.id) {
         return createErrorResponse(400, 'Missing transaction id', 'VALIDATION_ERROR', undefined, req);
       }
+
+      const notificationBefore = await loadExpenseSnapshot(supabase, transactionData.id);
 
       const validation = validateTransactionData(transactionData);
       if (!validation.valid) {
@@ -613,7 +630,7 @@ Deno.serve(async (req: Request) => {
               return createErrorResponse(400, 'Failed to validate participants', 'VALIDATION_ERROR', undefined, req);
             }
 
-            const foundParticipantIds = new Set((participants || []).map(p => p.id));
+            const foundParticipantIds = new Set((participants || []).map((p: { id: string }) => p.id));
             const invalidParticipantIds = uniqueParticipantIds.filter(id => !foundParticipantIds.has(id));
             
             if (invalidParticipantIds.length > 0) {
@@ -693,7 +710,9 @@ Deno.serve(async (req: Request) => {
 
         if (!splitsFetchError && existingSplits && existingSplits.length > 0) {
           const newAmount = transactionData.amount;
-          const participantIds = existingSplits.map(s => s.participant_id).filter((id): id is string => !!id);
+          const participantIds = existingSplits
+            .map((s: { participant_id: string | null }) => s.participant_id)
+            .filter((id: string | null): id is string => !!id);
           const newSplits = calculateEqualSplits(newAmount, participantIds);
           newSplits.forEach(split => {
             split.transaction_id = transaction.id;
@@ -752,15 +771,25 @@ Deno.serve(async (req: Request) => {
       // Populate split_among_participant_ids from splits for backward compatibility in response
       if (responseTransaction.splits && Array.isArray(responseTransaction.splits)) {
         responseTransaction.split_among_participant_ids = responseTransaction.splits
-          .map(s => s.participant_id)
-          .filter((id): id is string => !!id);
+          .map((s: TransactionSplit) => s.participant_id)
+          .filter((id: string | null): id is string => !!id);
       }
+
+      const notificationAfter = await loadExpenseSnapshot(supabase, transaction.id);
+      await safelyCreateTransactionNotifications({
+        actorUserId: user.id,
+        action: 'updated',
+        before: notificationBefore,
+        after: notificationAfter,
+        operationStartedAt,
+      });
 
       return createSuccessResponse(responseTransaction, 200, 0, req);
     }
 
     // Handle DELETE - Delete transaction
     if (httpMethod === 'DELETE') {
+      const operationStartedAt = new Date().toISOString();
       const transactionId = url.searchParams.get('id');
       
       if (!transactionId) {
@@ -799,6 +828,8 @@ Deno.serve(async (req: Request) => {
         return createErrorResponse(403, 'Forbidden: You can only delete transactions you own or transactions in groups you belong to', 'PERMISSION_DENIED', undefined, req);
       }
 
+      const notificationBefore = await loadExpenseSnapshot(supabase, id);
+
       const { data: deletedData, error: deleteError } = await supabase
         .from('transactions')
         .delete()
@@ -812,6 +843,14 @@ Deno.serve(async (req: Request) => {
       if (!deletedData || deletedData.length === 0) {
         return createErrorResponse(403, 'Transaction could not be deleted. You may not have permission.', 'PERMISSION_DENIED', undefined, req);
       }
+
+      await safelyCreateTransactionNotifications({
+        actorUserId: user.id,
+        action: 'deleted',
+        before: notificationBefore,
+        after: null,
+        operationStartedAt,
+      });
 
       return createSuccessResponse({ success: true, message: 'Transaction deleted successfully' }, 200, 0, req);
     }
