@@ -161,6 +161,7 @@ async function processOutboxRow(admin: SupabaseClient, row: OutboxRow): Promise<
     .from('notifications')
     .select('id, recipient_user_id, title, body, group_id, transaction_id, snapshot')
     .eq('id', row.notification_id)
+    .is('superseded_at', null)
     .maybeSingle();
   if (notificationError) throw notificationError;
   if (!notification) {
@@ -183,7 +184,8 @@ async function processOutboxRow(admin: SupabaseClient, row: OutboxRow): Promise<
       .from('notifications')
       .select('id', { count: 'exact', head: true })
       .eq('recipient_user_id', notification.recipient_user_id)
-      .is('read_at', null),
+      .is('read_at', null)
+      .is('superseded_at', null),
   ]);
   if (preferenceResult.error) throw preferenceResult.error;
   if (tokensResult.error) throw tokensResult.error;

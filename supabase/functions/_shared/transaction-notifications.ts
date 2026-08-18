@@ -235,6 +235,7 @@ export async function createTransactionNotifications(input: FanoutInput): Promis
         actor_user_id: input.actorUserId,
         group_id: canonical.groupId,
         transaction_id: input.action === 'deleted' ? null : canonical.id,
+        transaction_reference_id: canonical.id,
         source_history_id: historyId,
         event_type: eventType,
         title: buildTitle(actorName, input.action, canonical.description),

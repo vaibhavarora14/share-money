@@ -41,6 +41,7 @@ export interface TransactionNotification {
   actor_user_id: string | null;
   group_id: string | null;
   transaction_id: number | null;
+  transaction_reference_id?: number;
   source_history_id: string;
   event_type: NotificationEventType;
   title: string;
@@ -48,6 +49,8 @@ export interface TransactionNotification {
   snapshot: TransactionNotificationSnapshot;
   read_at: string | null;
   created_at: string;
+  superseded_at?: string | null;
+  superseded_by_id?: string | null;
 }
 
 export interface NotificationPreference {

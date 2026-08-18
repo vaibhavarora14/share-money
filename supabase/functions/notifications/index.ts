@@ -84,10 +84,17 @@ Deno.serve(async (req: Request) => {
           return createErrorResponse(400, 'Invalid notification id', 'VALIDATION_ERROR', undefined, req);
         }
 
+        const { data: activeNotificationId, error: resolveError } = await supabase
+          .rpc('get_active_notification_id', { p_notification_id: notificationId });
+        if (resolveError) return handleError(resolveError, 'resolving active notification', req);
+        if (!activeNotificationId) {
+          return createErrorResponse(404, 'Notification not found', 'NOT_FOUND', undefined, req);
+        }
+
         const { data, error } = await supabase
           .from('notifications')
           .select('*')
-          .eq('id', notificationId)
+          .eq('id', activeNotificationId)
           .eq('recipient_user_id', user.id)
           .maybeSingle();
         if (error) return handleError(error, 'fetching notification detail', req);
@@ -116,6 +123,7 @@ Deno.serve(async (req: Request) => {
         .from('notifications')
         .select('*')
         .eq('recipient_user_id', user.id)
+        .is('superseded_at', null)
         .order('created_at', { ascending: false })
         .order('id', { ascending: false })
         .limit(limit + 1);
@@ -218,6 +226,7 @@ Deno.serve(async (req: Request) => {
           .update({ read_at: now })
           .eq('recipient_user_id', user.id)
           .is('read_at', null)
+          .is('superseded_at', null)
           .lte('created_at', through)
           .select('id');
         if (error) return handleError(error, 'marking all notifications read', req);

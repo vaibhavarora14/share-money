@@ -1,13 +1,32 @@
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(38);
+SELECT plan(56);
 
 SELECT has_table('public', 'notifications', 'notifications inbox exists');
 SELECT has_table('public', 'notification_preferences', 'notification preferences exist');
 SELECT has_table('public', 'push_tokens', 'push token registry exists');
 SELECT has_table('public', 'notification_outbox', 'durable notification outbox exists');
 SELECT has_table('public', 'notification_deliveries', 'push delivery audit exists');
+
+SELECT has_column(
+  'public',
+  'notifications',
+  'transaction_reference_id',
+  'notifications retain a stable transaction identity after deletion'
+);
+SELECT has_column(
+  'public',
+  'notifications',
+  'superseded_at',
+  'redundant notifications retain their supersession timestamp'
+);
+SELECT has_column(
+  'public',
+  'notifications',
+  'superseded_by_id',
+  'redundant notifications link to their replacement'
+);
 
 SELECT has_index(
   'public',
@@ -20,6 +39,22 @@ SELECT has_index(
   'notifications',
   'idx_notifications_recipient_group_unread',
   'group unread counts are indexed'
+);
+SELECT has_index(
+  'public',
+  'notifications',
+  'idx_notifications_recipient_active_created',
+  'active inbox chronology is indexed separately from retained history'
+);
+SELECT ok(
+  (
+    SELECT index_definition.indexdef LIKE 'CREATE UNIQUE INDEX%'
+    FROM pg_indexes AS index_definition
+    WHERE index_definition.schemaname = 'public'
+      AND index_definition.tablename = 'notifications'
+      AND index_definition.indexname = 'idx_notifications_recipient_transaction_active'
+  ),
+  'the database enforces one active notification per recipient and transaction'
 );
 SELECT has_index(
   'public',
@@ -60,6 +95,17 @@ SELECT has_function(
   'preserve_notification_first_read',
   'database preserves the first read timestamp'
 );
+SELECT has_function(
+  'public',
+  'supersede_previous_transaction_notifications',
+  'new transaction events supersede older inbox notifications'
+);
+SELECT has_function(
+  'public',
+  'get_active_notification_id',
+  ARRAY['uuid'],
+  'stale push links resolve to the latest actionable notification'
+);
 
 SELECT is(
   (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.notifications'::regclass),
@@ -97,7 +143,7 @@ SELECT lives_ok(
       'transaction_created',
       'Notification trigger contract',
       'Summer Vacation 2024',
-      '{}'::JSONB
+      '{"transaction":{"id":900000}}'::JSONB
     FROM public.transaction_history
     ORDER BY changed_at
     LIMIT 1
@@ -206,12 +252,28 @@ SELECT ok(
   'authenticated users cannot invoke the worker wake trigger function'
 );
 SELECT ok(
+  NOT has_function_privilege(
+    'authenticated',
+    'public.supersede_previous_transaction_notifications()',
+    'EXECUTE'
+  ),
+  'authenticated users cannot invoke the notification supersession trigger function'
+);
+SELECT ok(
   has_function_privilege(
     'authenticated',
     'public.get_notification_unread_summary()',
     'EXECUTE'
   ),
   'authenticated users can fetch their RLS-scoped unread summary'
+);
+SELECT ok(
+  has_function_privilege(
+    'authenticated',
+    'public.get_active_notification_id(uuid)',
+    'EXECUTE'
+  ),
+  'authenticated users can resolve their own stale notification links'
 );
 SELECT ok(
   NOT has_function_privilege(
@@ -227,6 +289,219 @@ SELECT col_is_unique(
   'push_tokens',
   'expo_push_token',
   'a physical Expo token has one current owner'
+);
+
+DO $$
+BEGIN
+  PERFORM set_config(
+    'request.jwt.claim.sub',
+    '33333333-3333-3333-3333-333333333333',
+    TRUE
+  );
+END;
+$$;
+
+CREATE TEMP TABLE notification_summary_baseline AS
+SELECT COALESCE(SUM(unread_count), 0)::BIGINT AS unread_count
+FROM public.get_notification_unread_summary();
+
+INSERT INTO public.transaction_history (
+  id,
+  transaction_id,
+  activity_type,
+  group_id,
+  action,
+  changed_by,
+  changes,
+  snapshot
+) VALUES
+  (
+    '90000000-0000-0000-0000-000000000001'::UUID,
+    NULL,
+    'transaction',
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::UUID,
+    'created',
+    '11111111-1111-1111-1111-111111111111'::UUID,
+    '{}'::JSONB,
+    '{"id":900001}'::JSONB
+  ),
+  (
+    '90000000-0000-0000-0000-000000000002'::UUID,
+    NULL,
+    'transaction',
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::UUID,
+    'updated',
+    '11111111-1111-1111-1111-111111111111'::UUID,
+    '{}'::JSONB,
+    '{"id":900001}'::JSONB
+  ),
+  (
+    '90000000-0000-0000-0000-000000000003'::UUID,
+    NULL,
+    'transaction',
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::UUID,
+    'created',
+    '11111111-1111-1111-1111-111111111111'::UUID,
+    '{}'::JSONB,
+    '{"id":900001}'::JSONB
+  );
+
+INSERT INTO public.notifications (
+  recipient_user_id,
+  actor_user_id,
+  group_id,
+  source_history_id,
+  event_type,
+  title,
+  body,
+  snapshot,
+  created_at
+) VALUES
+  (
+    '33333333-3333-3333-3333-333333333333'::UUID,
+    '11111111-1111-1111-1111-111111111111'::UUID,
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::UUID,
+    '90000000-0000-0000-0000-000000000001'::UUID,
+    'transaction_created',
+    'Supersession original',
+    'Summer Vacation 2024',
+    '{"transaction":{"id":900001}}'::JSONB,
+    '2026-08-18T01:00:00Z'::TIMESTAMPTZ
+  ),
+  (
+    '33333333-3333-3333-3333-333333333333'::UUID,
+    '11111111-1111-1111-1111-111111111111'::UUID,
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::UUID,
+    '90000000-0000-0000-0000-000000000002'::UUID,
+    'transaction_updated',
+    'Supersession update',
+    'Summer Vacation 2024',
+    '{"transaction":{"id":900001}}'::JSONB,
+    '2026-08-18T01:01:00Z'::TIMESTAMPTZ
+  ),
+  (
+    '33333333-3333-3333-3333-333333333333'::UUID,
+    '11111111-1111-1111-1111-111111111111'::UUID,
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::UUID,
+    '90000000-0000-0000-0000-000000000003'::UUID,
+    'transaction_created',
+    'Supersession delayed original',
+    'Summer Vacation 2024',
+    '{"transaction":{"id":900001}}'::JSONB,
+    '2026-08-18T00:59:00Z'::TIMESTAMPTZ
+  );
+
+SELECT is(
+  (
+    SELECT COUNT(*)::INTEGER
+    FROM public.notifications
+    WHERE recipient_user_id = '33333333-3333-3333-3333-333333333333'::UUID
+      AND transaction_reference_id = 900001
+  ),
+  3,
+  'supersession preserves every immutable notification record'
+);
+
+SELECT is(
+  (
+    SELECT COUNT(*)::INTEGER
+    FROM public.notifications
+    WHERE recipient_user_id = '33333333-3333-3333-3333-333333333333'::UUID
+      AND transaction_reference_id = 900001
+      AND superseded_at IS NULL
+  ),
+  1,
+  'only the newest notification remains actionable in the inbox'
+);
+
+SELECT is(
+  (
+    SELECT title
+    FROM public.notifications
+    WHERE recipient_user_id = '33333333-3333-3333-3333-333333333333'::UUID
+      AND transaction_reference_id = 900001
+      AND superseded_at IS NULL
+  ),
+  'Supersession update',
+  'the latest event is the active notification'
+);
+
+SELECT is(
+  (
+    SELECT superseded_by_id
+    FROM public.notifications
+    WHERE title = 'Supersession original'
+  ),
+  (
+    SELECT id
+    FROM public.notifications
+    WHERE title = 'Supersession update'
+  ),
+  'the older notification links directly to its replacement'
+);
+
+SELECT is(
+  (
+    SELECT superseded_by_id
+    FROM public.notifications
+    WHERE title = 'Supersession delayed original'
+  ),
+  (
+    SELECT id
+    FROM public.notifications
+    WHERE title = 'Supersession update'
+  ),
+  'a delayed older event cannot replace a newer active notification'
+);
+
+SELECT is(
+  (
+    SELECT outbox.status
+    FROM public.notification_outbox AS outbox
+    JOIN public.notifications AS notification
+      ON notification.id = outbox.notification_id
+    WHERE notification.title = 'Supersession original'
+  ),
+  'skipped',
+  'pending push work is cancelled when its notification is superseded'
+);
+
+SELECT is(
+  (
+    SELECT outbox.status
+    FROM public.notification_outbox AS outbox
+    JOIN public.notifications AS notification
+      ON notification.id = outbox.notification_id
+    WHERE notification.title = 'Supersession delayed original'
+  ),
+  'skipped',
+  'delayed superseded events never retain pending push work'
+);
+
+SELECT is(
+  (
+    SELECT public.get_active_notification_id(id)
+    FROM public.notifications
+    WHERE title = 'Supersession original'
+  ),
+  (
+    SELECT id
+    FROM public.notifications
+    WHERE title = 'Supersession update'
+  ),
+  'an old notification link resolves to the newest actionable event'
+);
+
+SELECT is(
+  (
+    SELECT COALESCE(SUM(unread_count), 0)::BIGINT
+    FROM public.get_notification_unread_summary()
+  ) - (
+    SELECT unread_count
+    FROM notification_summary_baseline
+  ),
+  1::BIGINT,
+  'superseded notifications do not inflate unread or group-dot counts'
 );
 
 SELECT * FROM finish();
