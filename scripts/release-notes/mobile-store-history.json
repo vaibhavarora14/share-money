@@ -9,15 +9,25 @@
       "verificationMethod": "A fresh Google Play Developer API or Play Console release read must return the exact saved text.",
       "releases": [
         {
+          "version": "2.18.1",
+          "builds": [
+            "73"
+          ],
+          "notes": "• Receive notifications after allowing Android notification access.\n• Get reliable expense activity notifications.",
+          "storeStatus": "verified",
+          "verifiedAt": "2026-08-18T19:14:56+05:30",
+          "storeUrl": "https://play.google.com/console/u/1/developers/6745265774722656852/app/4974696703491943344/tracks/4700640425437558082/releases/28/details"
+        },
+        {
           "version": "2.18.0",
           "builds": [
             "72"
           ],
           "notes": null,
-          "storeStatus": "blocked",
-          "observedAt": "2026-08-18T15:25:47+05:30",
-          "blocker": "EAS confirms a successful internal-track submission, but the signed-in Play Console accounts do not expose this package and the available service credential returns 403. Access required: invite the human account and service-account email to the Play developer account that owns com.vaibhavarora.sharemoney, grant app access to this package with View app information (read-only) and Release apps to testing tracks, and enable the Google Play Developer API for the service account's Cloud project. Until then, release notes cannot be read or changed.",
-          "storeUrl": "https://play.google.com/console/",
+          "storeStatus": "unavailable",
+          "observedAt": "2026-08-18T19:14:56+05:30",
+          "blocker": "Google Play Console shows version code 72 as a deactivated app bundle inside internal release 2.18.1. Release notes belong to the release, and no separate editable or readable release-note field is available for the deactivated bundle.",
+          "storeUrl": "https://play.google.com/console/u/1/developers/6745265774722656852/app/4974696703491943344/tracks/4700640425437558082/releases/28/details",
           "sourceUrl": "https://expo.dev/accounts/varora1406/projects/share-money/submissions/0f552919-f319-40f5-8b48-111f3428ae41"
         }
       ]

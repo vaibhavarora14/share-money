@@ -36,6 +36,10 @@ const expectedLockedIosBuilds = [
   "6",
 ];
 
+const expectedPlayNotes =
+  "• Receive notifications after allowing Android notification access.\n" +
+  "• Get reliable expense activity notifications.";
+
 const assertPointerNotes = (notes, [minimum, maximum]) => {
   const bullets = notes.split("\n");
   assert.ok(bullets.length >= minimum && bullets.length <= maximum);
@@ -129,4 +133,27 @@ test("TestFlight cleanup plan is exact, pointer-based, and complete", async () =
       .map(({ builds }) => builds[0]),
     expectedLockedIosBuilds,
   );
+});
+
+test("Play history records the verified release and deactivated historical bundle", async () => {
+  const history = JSON.parse(await readFile(historyUrl, "utf8"));
+  const androidHistory = history.stores.find(
+    ({ platform }) => platform === "android",
+  );
+  const verifiedRelease = androidHistory.releases.find(
+    ({ builds }) => builds.length === 1 && builds[0] === "73",
+  );
+  const deactivatedBundle = androidHistory.releases.find(
+    ({ builds }) => builds.length === 1 && builds[0] === "72",
+  );
+
+  assert.equal(androidHistory.channel, "Play internal");
+  assert.ok(verifiedRelease);
+  assert.equal(verifiedRelease.version, "2.18.1");
+  assert.equal(verifiedRelease.storeStatus, "verified");
+  assert.equal(verifiedRelease.notes, expectedPlayNotes);
+  assert.ok(deactivatedBundle);
+  assert.equal(deactivatedBundle.version, "2.18.0");
+  assert.equal(deactivatedBundle.storeStatus, "unavailable");
+  assert.match(deactivatedBundle.blocker, /deactivated app bundle/);
 });
