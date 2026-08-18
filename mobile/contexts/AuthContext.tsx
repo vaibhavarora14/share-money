@@ -15,6 +15,7 @@ import React, {
 } from "react";
 import { Platform } from "react-native";
 import { AUTH_TIMEOUTS } from "../constants/auth";
+import { unregisterCurrentPushToken } from "../services/pushNotifications";
 import { supabase } from "../supabase";
 import { getConfiguredWebAppPath } from "../utils/inviteLinks";
 import { log, logError } from "../utils/logger";
@@ -631,6 +632,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
    */
   const signOut = useCallback(async () => {
     try {
+      await unregisterCurrentPushToken().catch((error) => {
+        logError(error, { context: "signOut.unregisterPushToken" });
+      });
       const { error } = await supabase.auth.signOut();
       if (error) {
         logError(error, { context: "signOut" });

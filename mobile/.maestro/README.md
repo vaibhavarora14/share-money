@@ -27,6 +27,7 @@ npm run test:e2e
 ```bash
 maestro test .maestro/sign-in-success.yaml
 maestro test .maestro/group-details.yaml
+maestro test .maestro/notifications-e2e.yaml
 ```
 
 ## Test Data
@@ -39,3 +40,6 @@ Make sure your database is seeded before running tests:
 ```bash
 npx supabase db reset --local
 ```
+
+`notifications-e2e.yaml` expects that fresh reset because it asserts an exact
+two-user unread count across create, cosmetic update, financial update, and delete.

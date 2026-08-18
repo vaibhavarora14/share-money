@@ -1,4 +1,4 @@
-appId: com.sharemoney.app
+appId: com.vaibhavarora.sharemoney
 ---
 # Transaction E2E Smoke: open group -> add expense -> verify -> return
 # Covers: create-transaction path and post-save list refresh on seeded data.

@@ -189,7 +189,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                                 >
                                   {onReport ? (
                                     <Menu.Item
-                                      title="Report content"
+                                      title="Report this activity"
                                       leadingIcon="flag-outline"
                                       onPress={() => {
                                         setMenuActivityId(null);
@@ -199,7 +199,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                                   ) : null}
                                   {onBlock ? (
                                     <Menu.Item
-                                      title={`Block ${userDisplayName}`}
+                                      title={`Block ${userDisplayName} everywhere`}
                                       leadingIcon="account-cancel-outline"
                                       onPress={() => {
                                         setMenuActivityId(null);

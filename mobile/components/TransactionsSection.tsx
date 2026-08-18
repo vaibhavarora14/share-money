@@ -15,6 +15,8 @@ interface TransactionsSectionProps {
   onEdit: (t: Transaction) => void;
   members: any[]; // Using any[] temporarily if GroupMember import has issues, but ideally GroupMember[]
   participants?: Participant[];
+  highlightedTransactionId?: number | null;
+  onHighlightedLayout?: (y: number) => void;
 }
 
 export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
@@ -26,6 +28,8 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
   onEdit,
   members = [],
   participants = [],
+  highlightedTransactionId = null,
+  onHighlightedLayout,
 }) => {
   const theme = useTheme();
   const { session } = useAuth();
@@ -88,6 +92,7 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
       ) : items.length > 0 ? (
         <View style={styles.list}>
           {items.map((transaction) => {
+            const isHighlighted = transaction.id === highlightedTransactionId;
             const currency = transaction.currency || getDefaultCurrency();
             const categoryIcon = getCategoryIcon(transaction.category || "");
             const date = new Date(transaction.date);
@@ -109,11 +114,23 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
             return (
               <Surface
                 key={transaction.id}
-                style={styles.card}
+                onLayout={isHighlighted
+                  ? (event) => onHighlightedLayout?.(event.nativeEvent.layout.y)
+                  : undefined}
+                style={[
+                  styles.card,
+                  isHighlighted && {
+                    backgroundColor: theme.colors.primaryContainer,
+                    borderColor: theme.colors.primary,
+                    borderWidth: 2,
+                  },
+                ]}
                 elevation={0} // Flat, transparent background for list item feel
               >
                 <Pressable
                   onPress={() => onEdit(transaction)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${transaction.description || "Untitled"}, ${formatCurrency(transaction.amount, currency)}${isHighlighted ? ", highlighted from notification" : ""}`}
                   style={({ pressed }) => [
                     styles.pressable,
                     pressed && { backgroundColor: theme.colors.surfaceVariant }

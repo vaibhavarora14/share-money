@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Alert, BackHandler, NativeScrollEvent, NativeSyntheticEvent, Platform, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, BackHandler, LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent, Platform, ScrollView, StyleSheet, View } from "react-native";
 import {
   ActivityIndicator,
   Appbar,
@@ -58,6 +58,7 @@ import {
   getUserFriendlyErrorMessage,
   isSessionExpiredError,
 } from "../utils/errorMessages";
+import { startTransactionHighlightTimer } from "../utils/transactionHighlight";
 import { GroupStatsMode } from "./GroupStatsScreen";
 import { SettlementFormScreen } from "./SettlementFormScreen";
 
@@ -73,6 +74,8 @@ interface GroupDetailsScreenProps {
   refreshTrigger?: number; // When this changes, refresh invitations
   groupRefreshTrigger?: number; // When this changes, refresh group data
   onStatsPress?: (mode: GroupStatsMode) => void;
+  initialListMode?: "transactions" | "activity";
+  highlightedTransactionId?: number | null;
 }
 
 export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
@@ -87,6 +90,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   refreshTrigger,
   groupRefreshTrigger,
   onStatsPress,
+  initialListMode = "transactions",
+  highlightedTransactionId = null,
 }) => {
   const [leaving, setLeaving] = useState<boolean>(false);
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
@@ -99,13 +104,19 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   );
   const [showMembers, setShowMembers] = useState<boolean>(false);
   const [listMode, setListMode] = useState<"transactions" | "activity">(
-    "transactions"
+    initialListMode
   );
   const [showActivityFilters, setShowActivityFilters] = useState(false);
   const [activityFilterType, setActivityFilterType] = useState<"all" | "expenses" | "settlements">("all");
   const [activityFilterParticipantId, setActivityFilterParticipantId] = useState<string>("all");
   const [safetyAction, setSafetyAction] = useState<SafetyAction | null>(null);
   const [safetyTarget, setSafetyTarget] = useState<SafetyTarget | null>(null);
+  const mainScrollRef = React.useRef<ScrollView>(null);
+  const [transactionsSectionY, setTransactionsSectionY] = useState<number | null>(null);
+  const [highlightedRowY, setHighlightedRowY] = useState<number | null>(null);
+  const [visibleHighlightedTransactionId, setVisibleHighlightedTransactionId] = useState<number | null>(
+    highlightedTransactionId,
+  );
   
   // Web-compatible confirmation dialog state
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -363,6 +374,53 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
   // API already filters by group_id, so no need for client-side filtering
   const transactions = txData;
+
+  useEffect(() => {
+    if (!highlightedTransactionId || listMode !== "transactions") return;
+    const targetLoaded = transactions.some((transaction) => transaction.id === highlightedTransactionId);
+    if (!targetLoaded && txHasNextPage && !txIsFetchingNextPage) {
+      void fetchNextTransactionsPage();
+    }
+  }, [
+    fetchNextTransactionsPage,
+    highlightedTransactionId,
+    listMode,
+    transactions,
+    txHasNextPage,
+    txIsFetchingNextPage,
+  ]);
+
+  useEffect(() => {
+    setVisibleHighlightedTransactionId(highlightedTransactionId);
+    setHighlightedRowY(null);
+  }, [highlightedTransactionId]);
+
+  useEffect(() => {
+    if (transactionsSectionY === null || highlightedRowY === null) return;
+    mainScrollRef.current?.scrollTo({
+      y: Math.max(0, transactionsSectionY + highlightedRowY - 88),
+      animated: false,
+    });
+  }, [highlightedRowY, transactionsSectionY]);
+
+  useEffect(() => {
+    if (
+      visibleHighlightedTransactionId === null ||
+      transactionsSectionY === null ||
+      highlightedRowY === null
+    ) {
+      return;
+    }
+
+    return startTransactionHighlightTimer(() => {
+      setVisibleHighlightedTransactionId(null);
+      setHighlightedRowY(null);
+    });
+  }, [highlightedRowY, transactionsSectionY, visibleHighlightedTransactionId]);
+
+  const handleTransactionsSectionLayout = React.useCallback((event: LayoutChangeEvent) => {
+    setTransactionsSectionY(event.nativeEvent.layout.y);
+  }, []);
 
   const handleLoadMoreTransactions = React.useCallback(() => {
     if (!txHasNextPage || txIsFetchingNextPage) return;
@@ -779,9 +837,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           title={showMembers ? "People" : group.name}
           titleStyle={{ fontWeight: "bold" }}
         />
-        
-
-
         {/* Group options (active members only) */}
         {isActiveMember && (
           <Menu
@@ -844,6 +899,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       )}
 
       <ScrollView
+        ref={mainScrollRef}
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -933,16 +989,20 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             </View>
 
             {listMode === "transactions" ? (
-              <TransactionsSection
-                items={transactions}
-                loading={txLoading}
-                hasNextPage={!!txHasNextPage}
-                isFetchingNextPage={txIsFetchingNextPage}
-                onLoadMore={handleLoadMoreTransactions}
-                onEdit={isActiveMember ? onEditTransaction : () => {}}
-                members={group.members || []}
-                participants={participants}
-              />
+              <View onLayout={handleTransactionsSectionLayout}>
+                <TransactionsSection
+                  items={transactions}
+                  loading={txLoading}
+                  hasNextPage={!!txHasNextPage}
+                  isFetchingNextPage={txIsFetchingNextPage}
+                  onLoadMore={handleLoadMoreTransactions}
+                  onEdit={isActiveMember ? onEditTransaction : () => {}}
+                  members={group.members || []}
+                  participants={participants}
+                  highlightedTransactionId={visibleHighlightedTransactionId}
+                  onHighlightedLayout={setHighlightedRowY}
+                />
+              </View>
             ) : (
               <View style={[styles.sectionContent, styles.activitySection]}>
 
@@ -1040,6 +1100,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
       {!showMembers && isActiveMember && (
         <FAB
+          testID="add-expense-button"
           icon="plus"
           style={[
             styles.fab,
