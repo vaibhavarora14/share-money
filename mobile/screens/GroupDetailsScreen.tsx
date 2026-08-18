@@ -58,6 +58,7 @@ import {
   getUserFriendlyErrorMessage,
   isSessionExpiredError,
 } from "../utils/errorMessages";
+import { startTransactionHighlightTimer } from "../utils/transactionHighlight";
 import { GroupStatsMode } from "./GroupStatsScreen";
 import { SettlementFormScreen } from "./SettlementFormScreen";
 
@@ -113,6 +114,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const mainScrollRef = React.useRef<ScrollView>(null);
   const [transactionsSectionY, setTransactionsSectionY] = useState<number | null>(null);
   const [highlightedRowY, setHighlightedRowY] = useState<number | null>(null);
+  const [visibleHighlightedTransactionId, setVisibleHighlightedTransactionId] = useState<number | null>(
+    highlightedTransactionId,
+  );
   
   // Web-compatible confirmation dialog state
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -387,12 +391,32 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   ]);
 
   useEffect(() => {
+    setVisibleHighlightedTransactionId(highlightedTransactionId);
+    setHighlightedRowY(null);
+  }, [highlightedTransactionId]);
+
+  useEffect(() => {
     if (transactionsSectionY === null || highlightedRowY === null) return;
     mainScrollRef.current?.scrollTo({
       y: Math.max(0, transactionsSectionY + highlightedRowY - 88),
       animated: false,
     });
   }, [highlightedRowY, transactionsSectionY]);
+
+  useEffect(() => {
+    if (
+      visibleHighlightedTransactionId === null ||
+      transactionsSectionY === null ||
+      highlightedRowY === null
+    ) {
+      return;
+    }
+
+    return startTransactionHighlightTimer(() => {
+      setVisibleHighlightedTransactionId(null);
+      setHighlightedRowY(null);
+    });
+  }, [highlightedRowY, transactionsSectionY, visibleHighlightedTransactionId]);
 
   const handleTransactionsSectionLayout = React.useCallback((event: LayoutChangeEvent) => {
     setTransactionsSectionY(event.nativeEvent.layout.y);
@@ -975,7 +999,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                   onEdit={isActiveMember ? onEditTransaction : () => {}}
                   members={group.members || []}
                   participants={participants}
-                  highlightedTransactionId={highlightedTransactionId}
+                  highlightedTransactionId={visibleHighlightedTransactionId}
                   onHighlightedLayout={setHighlightedRowY}
                 />
               </View>
