@@ -31,6 +31,7 @@ import {
 } from "../utils/errorMessages";
 import { isTransactionNotificationsEnabled } from "../utils/featureFlags";
 import { shouldShowNotificationPrimer } from "../utils/notificationPermission";
+import { logError } from "../utils/logger";
 import { getSeenGroupIds, markGroupSeen } from "../utils/seenGroups";
 import { CreateGroupScreen } from "./CreateGroupScreen";
 
@@ -373,7 +374,12 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                       if (user?.id) {
                         setCachedNotificationPreference(queryClient, user.id, preference);
                       }
-                    } catch {
+                    } catch (error) {
+                      logError(error, {
+                        context: "enable push notifications",
+                        platform: Platform.OS,
+                        surface: "groups primer",
+                      });
                       setPushError("We couldn’t turn on notifications. You can try again in Profile.");
                     } finally {
                       setEnablingPush(false);

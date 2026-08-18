@@ -22,10 +22,12 @@
       }
     },
     "production": {
+      "environment": "production",
       "channel": "production",
       "env": {
         "EAS_BUILD": "true",
-        "EXPO_PUBLIC_APP_URL": "https://sharedmoney.app/app"
+        "EXPO_PUBLIC_APP_URL": "https://sharedmoney.app/app",
+        "REQUIRE_ANDROID_PUSH_CONFIG": "true"
       }
     }
   },
