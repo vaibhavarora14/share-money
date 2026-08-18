@@ -9,6 +9,7 @@ import {
 } from '../_shared/notification-contract.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { SUPABASE_SERVICE_ROLE_KEY, SUPABASE_URL } from '../_shared/env.ts';
+import { transactionNotificationsEnabled } from '../_shared/posthog-feature-flags.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
 import { isValidUUID, validateBodySize } from '../_shared/validation.ts';
 
@@ -76,6 +77,27 @@ Deno.serve(async (req: Request) => {
 
     const { user, supabase } = await verifyAuth(req);
     const url = new URL(req.url);
+    const featureEnabled = await transactionNotificationsEnabled(user.id, user.email);
+
+    if (!featureEnabled) {
+      if (req.method === 'GET' && !url.searchParams.get('id')) {
+        return createSuccessResponse({
+          feature_enabled: false,
+          items: [],
+          unread_count: 0,
+          unread_by_group: {},
+          has_more: false,
+          next_cursor: null,
+          preference: {
+            push_enabled: false,
+            permission_status: 'not_requested',
+            permission_prompted_at: null,
+            nudge_dismissed_at: null,
+          },
+        }, 200, 0, req);
+      }
+      return createErrorResponse(404, 'Notifications are unavailable', 'NOT_FOUND', undefined, req);
+    }
 
     if (req.method === 'GET') {
       const notificationId = url.searchParams.get('id');
@@ -146,6 +168,7 @@ Deno.serve(async (req: Request) => {
       const items = rows.slice(0, limit);
 
       return createSuccessResponse({
+        feature_enabled: true,
         items,
         ...unreadSummary,
         has_more: rows.length > limit,

@@ -84,6 +84,7 @@ import {
 import { darkTheme, lightTheme } from "./theme";
 import { Group, GroupWithMembers } from "./types";
 import { getDefaultCurrency } from "./utils/currency";
+import { isTransactionNotificationsEnabled } from "./utils/featureFlags";
 import {
   extractGroupDeepLinkId,
   extractInviteToken,
@@ -152,6 +153,10 @@ function AppContent() {
     refetch: refetchProfile,
   } = useProfile();
   const notificationInbox = useNotifications();
+  const notificationFeatureResolved =
+    notificationInbox.data?.feature_enabled !== undefined;
+  const notificationFeatureEnabled =
+    isTransactionNotificationsEnabled(notificationInbox.data);
   const hasAcceptedCurrentTerms =
     !!profile && !needsTermsAcceptance(profile);
   const [isSignUp, setIsSignUp] = useState(false);
@@ -298,13 +303,14 @@ function AppContent() {
   }, [queryClientInstance]);
 
   const openNotifications = React.useCallback(() => {
+    if (!notificationFeatureEnabled) return;
     setSelectedNotificationId(null);
     if (usesDesktopNotificationPanel) {
       setDesktopNotificationRoute("list");
     } else {
       setCurrentRoute("notifications");
     }
-  }, [usesDesktopNotificationPanel]);
+  }, [notificationFeatureEnabled, usesDesktopNotificationPanel]);
 
   useEffect(() => {
     if (usesDesktopNotificationPanel || desktopNotificationRoute === "closed") return;
@@ -314,6 +320,7 @@ function AppContent() {
   }, [desktopNotificationRoute, usesDesktopNotificationPanel]);
 
   const handleNotificationResponse = React.useCallback((data: Record<string, unknown>) => {
+    if (!notificationFeatureEnabled) return;
     const destination = resolveNotificationRoute(data);
     setSelectedGroup(null);
     if (destination.screen === "notification-detail") {
@@ -323,10 +330,10 @@ function AppContent() {
       setSelectedNotificationId(null);
       setCurrentRoute("notifications");
     }
-  }, []);
+  }, [notificationFeatureEnabled]);
 
   useEffect(() => {
-    if (!session?.user?.id || !hasAcceptedCurrentTerms) {
+    if (!session?.user?.id || !hasAcceptedCurrentTerms || !notificationFeatureResolved) {
       initialNotificationHandledRef.current = false;
       return;
     }
@@ -340,11 +347,16 @@ function AppContent() {
         .catch((error) => logError(error, { context: "initial notification response" }));
     }
     return unsubscribe;
-  }, [session?.user?.id, hasAcceptedCurrentTerms, handleNotificationResponse]);
+  }, [
+    session?.user?.id,
+    hasAcceptedCurrentTerms,
+    notificationFeatureResolved,
+    handleNotificationResponse,
+  ]);
 
   useEffect(() => {
     const userId = session?.user?.id;
-    if (!userId) {
+    if (!userId || !notificationFeatureEnabled) {
       pushRegistrationSyncedUserRef.current = null;
       return;
     }
@@ -359,11 +371,15 @@ function AppContent() {
         logError(error, { context: "sync push registration" });
       });
     }
-  }, [session?.user?.id, notificationInbox.data?.preference]);
+  }, [
+    session?.user?.id,
+    notificationFeatureEnabled,
+    notificationInbox.data?.preference,
+  ]);
 
   useEffect(() => {
     const userId = session?.user?.id;
-    if (!userId || !hasAcceptedCurrentTerms) return;
+    if (!userId || !hasAcceptedCurrentTerms || !notificationFeatureEnabled) return;
 
     const refreshInbox = () => {
       void queryClientInstance.invalidateQueries({ queryKey: queryKeys.notificationRoot });
@@ -388,9 +404,26 @@ function AppContent() {
     };
   }, [
     hasAcceptedCurrentTerms,
+    notificationFeatureEnabled,
     notificationInbox.data?.preference.push_enabled,
     queryClientInstance,
     session?.user?.id,
+  ]);
+
+  useEffect(() => {
+    if (!notificationFeatureResolved || notificationFeatureEnabled) return;
+    if (currentRoute === "notifications" || currentRoute === "notification-detail") {
+      setCurrentRoute("groups");
+      setSelectedNotificationId(null);
+    }
+    if (desktopNotificationRoute !== "closed") {
+      setDesktopNotificationRoute("closed");
+    }
+  }, [
+    currentRoute,
+    desktopNotificationRoute,
+    notificationFeatureEnabled,
+    notificationFeatureResolved,
   ]);
 
   // Handle deep links: initial URL (cold start / web navigation) + url events.
@@ -680,7 +713,7 @@ function AppContent() {
     });
   };
 
-  const desktopNotificationPanel = usesDesktopNotificationPanel ? (
+  const desktopNotificationPanel = usesDesktopNotificationPanel && notificationFeatureEnabled ? (
     <NotificationsPanel
       visible={desktopNotificationRoute !== "closed"}
       onDismiss={() => setDesktopNotificationRoute("closed")}
@@ -786,7 +819,7 @@ function AppContent() {
     );
   }
 
-  if (currentRoute === "notifications") {
+  if (currentRoute === "notifications" && notificationFeatureEnabled) {
     return (
       <>
         <NotificationsScreen
@@ -805,7 +838,11 @@ function AppContent() {
     );
   }
 
-  if (currentRoute === "notification-detail" && selectedNotificationId) {
+  if (
+    currentRoute === "notification-detail" &&
+    selectedNotificationId &&
+    notificationFeatureEnabled
+  ) {
     return (
       <>
         <NotificationDetailScreen

@@ -256,6 +256,14 @@ Set these in Supabase Dashboard > Project Settings > Edge Functions > Environmen
 - `REMINDER_FROM_EMAIL` - Verified Resend sender, e.g. `SharedMoney <reminders@sharedmoney.app>`
 - `REMINDER_LOGO_URL` - Optional hosted logo URL for reminder emails; falls back to `${APP_URL}/icon.png`
 
+**Transaction notification Edge Function configuration:**
+
+- `POSTHOG_PROJECT_TOKEN` - Public project token used to evaluate the `transaction-notifications` flag.
+- `POSTHOG_HOST` - PostHog flags API host, normally `https://us.i.posthog.com`.
+
+The notification API, transaction fan-out, and push worker all fail closed when
+the flag is disabled or cannot be evaluated.
+
 Set these in Supabase Vault before the monthly Cron job runs:
 
 - `monthly_reminders_function_url` - Full deployed function URL, e.g. `https://<project-ref>.supabase.co/functions/v1/monthly-reminders`

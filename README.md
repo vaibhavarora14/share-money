@@ -167,6 +167,8 @@ SharedMoney/
 | `APP_URL` | App URL used in reminder email links | `https://sharedmoney.app/app` |
 | `REMINDER_CRON_SECRET` | Shared secret required to invoke monthly reminders | random secret |
 | `NOTIFICATION_WORKER_SECRET` | Shared secret required to invoke the push notification worker | random secret |
+| `POSTHOG_PROJECT_TOKEN` | Public PostHog project token used for server-authoritative notification flag evaluation | `phc_...` |
+| `POSTHOG_HOST` | PostHog ingestion host used by the flags API | `https://us.i.posthog.com` |
 | `EXPO_ACCESS_TOKEN` | Optional Expo access token for enhanced push security | Expo access token |
 | `RESEND_API_KEY` | Resend API key for reminder emails | `re_...` |
 | `REMINDER_FROM_EMAIL` | Verified sender for reminder emails | `SharedMoney <reminders@sharedmoney.app>` |
@@ -195,6 +197,8 @@ schedules the worker every minute when `pg_cron` and `pg_net` are available; it
 also performs a best-effort immediate wake-up for new outbox rows and safely
 falls back to cron until both Vault secrets above exist. Native push
 notifications require an Expo development or production build rather than Expo Go.
+The `transaction-notifications` PostHog flag controls inbox access, transaction
+fan-out, and push delivery. Missing or unavailable flag configuration fails closed.
 
 **Mobile `mobile/.env`** (Expo requires `EXPO_PUBLIC_` prefix):
 

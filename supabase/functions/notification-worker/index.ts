@@ -4,6 +4,7 @@ import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { log } from '../_shared/logger.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
 import { composeNotificationPush } from '../_shared/notification-push.ts';
+import { transactionNotificationsEnabled } from '../_shared/posthog-feature-flags.ts';
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 const EXPO_RECEIPTS_URL = 'https://exp.host/--/api/v2/push/getReceipts';
@@ -166,6 +167,17 @@ async function processOutboxRow(admin: SupabaseClient, row: OutboxRow): Promise<
   if (notificationError) throw notificationError;
   if (!notification) {
     await markOutbox(admin, row, 'skipped', 'Notification no longer exists');
+    return 'skipped';
+  }
+
+  const { data: recipientResult } = await admin.auth.admin.getUserById(
+    notification.recipient_user_id,
+  );
+  if (!await transactionNotificationsEnabled(
+    notification.recipient_user_id,
+    recipientResult.user?.email,
+  )) {
+    await markOutbox(admin, row, 'skipped', 'Transaction notifications feature flag disabled');
     return 'skipped';
   }
 

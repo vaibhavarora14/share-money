@@ -29,6 +29,7 @@ import {
   getUserFriendlyErrorMessage,
   isSessionExpiredError,
 } from "../utils/errorMessages";
+import { isTransactionNotificationsEnabled } from "../utils/featureFlags";
 import { shouldShowNotificationPrimer } from "../utils/notificationPermission";
 import { getSeenGroupIds, markGroupSeen } from "../utils/seenGroups";
 import { CreateGroupScreen } from "./CreateGroupScreen";
@@ -59,6 +60,8 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   const queryClient = useQueryClient();
   const { signOut, user } = useAuth();
   const notifications = useNotifications();
+  const notificationsEnabled =
+    isTransactionNotificationsEnabled(notifications.data);
   const preferenceMutation = useUpdateNotificationPreference();
   const [pushError, setPushError] = useState<string | null>(null);
   const [enablingPush, setEnablingPush] = useState(false);
@@ -140,7 +143,9 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
       seenGroupIds !== null &&
       !seenGroupIds.has(group.id) &&
       group.user_status !== "left";
-    const unreadActivityCount = notifications.data?.unread_by_group[group.id] ?? 0;
+    const unreadActivityCount = notificationsEnabled
+      ? notifications.data?.unread_by_group[group.id] ?? 0
+      : 0;
     const hasUnreadActivity = unreadActivityCount > 0;
 
     return (
@@ -316,10 +321,12 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
           title="Your Groups"
           titleStyle={{ fontWeight: "bold" }}
         />
-        <NotificationBell
-          unreadCount={notifications.data?.unread_count ?? 0}
-          onPress={onNotificationsPress}
-        />
+        {notificationsEnabled ? (
+          <NotificationBell
+            unreadCount={notifications.data?.unread_count ?? 0}
+            onPress={onNotificationsPress}
+          />
+        ) : null}
       </Appbar.Header>
 
       {isInitialLoading && (
@@ -342,7 +349,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {shouldShowNotificationPrimer({
+          {notificationsEnabled && shouldShowNotificationPrimer({
             platform: Platform.OS,
             activeGroupCount: activeGroups.length,
             preference: notifications.data?.preference,

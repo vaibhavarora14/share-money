@@ -61,6 +61,7 @@ async function fetchNotificationsPage(
     try {
       return {
         ...(JSON.parse(cached) as NotificationsResponse),
+        feature_enabled: false,
         has_more: false,
         next_cursor: null,
         is_offline_cache: true,

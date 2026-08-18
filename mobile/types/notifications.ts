@@ -66,6 +66,7 @@ export interface NotificationCursor {
 }
 
 export interface NotificationsResponse {
+  feature_enabled?: boolean;
   items: TransactionNotification[];
   unread_count: number;
   unread_by_group: Record<string, number>;

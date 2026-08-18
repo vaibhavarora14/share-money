@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { formatCurrency } from './currency.ts';
 import { SUPABASE_SERVICE_ROLE_KEY, SUPABASE_URL } from './env.ts';
 import { log } from './logger.ts';
+import { transactionNotificationsEnabled } from './posthog-feature-flags.ts';
 import {
   buildNotificationImpacts,
   type ExpenseSnapshot,
@@ -223,9 +224,19 @@ export async function createTransactionNotifications(input: FanoutInput): Promis
     (blockedResult.data ?? []).map((row: { blocker_id: string }) => row.blocker_id),
   );
   const eventType = `transaction_${input.action}`;
+  const visibleImpacts = impacts.filter((impact) => !blockedRecipients.has(impact.userId));
+  const enabledRecipientIds = new Set(
+    (await Promise.all(visibleImpacts.map(async (impact) => {
+      const { data, error } = await admin.auth.admin.getUserById(impact.userId);
+      if (error || !data.user) return null;
+      return await transactionNotificationsEnabled(impact.userId, data.user.email)
+        ? impact.userId
+        : null;
+    }))).filter((userId): userId is string => userId !== null),
+  );
 
-  const rows = impacts
-    .filter((impact) => !blockedRecipients.has(impact.userId))
+  const rows = visibleImpacts
+    .filter((impact) => enabledRecipientIds.has(impact.userId))
     .map((impact) => {
       const currentPosition = impact.after ?? impact.before;
       const beforeShare = shareFrom(impact.before);
