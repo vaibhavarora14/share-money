@@ -7,6 +7,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { resolveAndroidPushConfig } = require('./config/androidPushConfig.cjs');
 
 // Read version from version.json
 const versionPath = path.join(__dirname, 'version.json');
@@ -44,6 +45,11 @@ try {
 }
 
 module.exports = ({ config }) => {
+  const androidPushConfig = resolveAndroidPushConfig({
+    env: process.env,
+    projectRoot: __dirname,
+  });
+
   // Only include expo-dev-client in development builds. EAS sets
   // EAS_BUILD_PROFILE for production too, so check the profile value.
   const isDevelopmentBuild =
@@ -114,6 +120,7 @@ module.exports = ({ config }) => {
       },
       android: {
         package: "com.vaibhavarora.sharemoney",
+        ...androidPushConfig,
         scheme: appSchemes,
         versionCode: versionConfig.buildNumber,
         adaptiveIcon: {
