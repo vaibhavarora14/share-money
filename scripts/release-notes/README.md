@@ -20,6 +20,10 @@ Historical releases that the store no longer allows editing stay in the ledger
 as `unavailable`, with the observed text and a factual blocker. Never attach
 their text to a newer editable release or claim that it was changed.
 
+Google Play notes belong to a release rather than to each app bundle. Record a
+deactivated bundle separately as `unavailable` when the console exposes no
+independent note field for it; do not copy the current release's notes onto it.
+
 Run the audit validation with:
 
 ```bash
