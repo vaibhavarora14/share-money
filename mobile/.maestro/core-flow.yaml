@@ -1,4 +1,4 @@
-appId: com.sharemoney.app
+appId: com.vaibhavarora.sharemoney
 ---
 # Core Smoke Flow: list -> details -> activity -> details -> list
 # Covers: login bootstrap, group opening, segmented tabs, and top-level return path.

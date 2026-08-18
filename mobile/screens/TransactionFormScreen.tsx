@@ -4,6 +4,7 @@ import {
     Alert,
     BackHandler,
     FlatList,
+    Keyboard,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -512,7 +513,13 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
           titleStyle={{ fontWeight: "600" }}
         />
         {transaction && onDelete && (
-          <Appbar.Action icon="delete-outline" onPress={handleDelete} iconColor={theme.colors.error} />
+          <Appbar.Action
+            icon="delete-outline"
+            onPress={handleDelete}
+            iconColor={theme.colors.error}
+            accessibilityLabel="Delete expense"
+            testID="delete-expense-button"
+          />
         )}
       </Appbar.Header>
 
@@ -584,6 +591,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
           <Card style={styles.card} mode="outlined">
             <Card.Content>
               <TextInput
+                testID="description-input"
                 label="Description"
                 value={description}
                 onChangeText={(text) => {
@@ -596,6 +604,8 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                 style={styles.flatInput}
                 left={<TextInput.Icon icon="pencil-outline" />}
                 placeholder="What was this for?"
+                returnKeyType="done"
+                onSubmitEditing={Keyboard.dismiss}
               />
               {descriptionError && (
                 <Text variant="bodySmall" style={{ color: theme.colors.error, marginLeft: 12 }}>
@@ -827,6 +837,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
           elevation={2}
         >
           <Button
+            testID="save-expense-button"
             mode="contained"
             onPress={handleSave}
             disabled={isSaveDisabled}

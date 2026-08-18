@@ -102,6 +102,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
           onGroupsPress
         )}
         <TouchableRipple
+          testID="profile-tab"
           onPress={onProfilePress}
           style={styles.tab}
           borderless

@@ -11,11 +11,13 @@ import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import {
+  AppState,
   Platform,
   LogBox,
   Text as RNText,
   StyleSheet,
   useColorScheme,
+  useWindowDimensions,
   View,
 } from "react-native";
 import {
@@ -28,8 +30,9 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BottomNavBar } from "./components/BottomNavBar";
 import { ForceUpdateModal } from "./components/ForceUpdateModal";
 import { BannerNotice, InAppBanner } from "./components/InAppBanner";
+import { NotificationsPanel } from "./components/NotificationsPanel";
 import { AUTH_TIMEOUTS } from "./constants/auth";
-import { WEB_MAX_WIDTH } from "./constants/layout";
+import { isDesktopWebViewport, WEB_MAX_WIDTH } from "./constants/layout";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import {
   ThemePreferenceProvider,
@@ -37,6 +40,11 @@ import {
 } from "./contexts/ThemePreferenceContext";
 import { UpgradeProvider, useUpgrade } from "./contexts/UpgradeContext";
 import { queryKeys } from "./hooks/queryKeys";
+import {
+  clearNotificationLocalState,
+  refreshNotificationReads,
+  useNotifications,
+} from "./hooks/useNotifications";
 import { fetchActivity } from "./hooks/useActivity";
 import { fetchBalances } from "./hooks/useBalances";
 import { redeemGroupInviteLinkRPC } from "./hooks/useGroupInvitations";
@@ -60,13 +68,23 @@ import { AuthScreen } from "./screens/AuthScreen";
 import { GroupDetailsScreen } from "./screens/GroupDetailsScreen";
 import { GroupStatsMode, GroupStatsScreen } from "./screens/GroupStatsScreen";
 import { GroupsListScreen } from "./screens/GroupsListScreen";
+import { NotificationDetailScreen } from "./screens/NotificationDetailScreen";
+import { NotificationsScreen } from "./screens/NotificationsScreen";
 import { ProfileSetupScreen } from "./screens/ProfileSetupScreen";
 import { SplitwiseImportScreen } from "./screens/SplitwiseImportScreen";
 import { TermsAcceptanceScreen } from "./screens/TermsAcceptanceScreen";
 import { TransactionFormScreen } from "./screens/TransactionFormScreen";
+import {
+  getLastNotificationResponseData,
+  syncEnabledPushRegistration,
+  subscribeToNotificationResponses,
+  subscribeToPushTokenChanges,
+  subscribeToReceivedNotifications,
+} from "./services/pushNotifications";
 import { darkTheme, lightTheme } from "./theme";
 import { Group, GroupWithMembers } from "./types";
 import { getDefaultCurrency } from "./utils/currency";
+import { isTransactionNotificationsEnabled } from "./utils/featureFlags";
 import {
   extractGroupDeepLinkId,
   extractInviteToken,
@@ -75,6 +93,7 @@ import {
 } from "./utils/inviteLinks";
 import { log, logError } from "./utils/logger";
 import { needsTermsAcceptance } from "./utils/onboardingFlow";
+import { resolveNotificationRoute } from "./utils/notificationRouting";
 
 const PENDING_INVITE_TOKEN_KEY = "pending_invite_token";
 const PENDING_GROUP_DEEP_LINK_KEY = "pending_group_deep_link";
@@ -124,6 +143,8 @@ const queryClient = new QueryClient({
 function AppContent() {
   const { session, loading, signOut, user } = useAuth();
   const theme = useTheme();
+  const dimensions = useWindowDimensions();
+  const usesDesktopNotificationPanel = isDesktopWebViewport(Platform.OS, dimensions.width);
   const queryClientInstance = useQueryClient();
   const {
     data: profile,
@@ -131,12 +152,21 @@ function AppContent() {
     error: profileError,
     refetch: refetchProfile,
   } = useProfile();
+  const notificationInbox = useNotifications();
+  const notificationFeatureResolved =
+    notificationInbox.data?.feature_enabled !== undefined;
+  const notificationFeatureEnabled =
+    isTransactionNotificationsEnabled(notificationInbox.data);
   const hasAcceptedCurrentTerms =
     !!profile && !needsTermsAcceptance(profile);
   const [isSignUp, setIsSignUp] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [showAddMember, setShowAddMember] = useState(false);
   const [currentRoute, setCurrentRoute] = useState<string>("groups");
+  const [selectedNotificationId, setSelectedNotificationId] = useState<string | null>(null);
+  const [groupInitialListMode, setGroupInitialListMode] = useState<"transactions" | "activity">("transactions");
+  const [highlightedTransactionId, setHighlightedTransactionId] = useState<number | null>(null);
+  const [desktopNotificationRoute, setDesktopNotificationRoute] = useState<"closed" | "list" | "detail">("closed");
   const [invitationsRefreshTrigger, setInvitationsRefreshTrigger] =
     useState<number>(0);
   const [groupRefreshTrigger, setGroupRefreshTrigger] = useState<number>(0);
@@ -152,6 +182,8 @@ function AppContent() {
   const lastLoggedStateRef = React.useRef<string | null>(null);
   const stuckTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const initialUrlHandledRef = React.useRef(false);
+  const initialNotificationHandledRef = React.useRef(false);
+  const pushRegistrationSyncedUserRef = React.useRef<string | null>(null);
   const redeemingTokenRef = React.useRef<string | null>(null);
   const openingGroupDeepLinkRef = React.useRef<string | null>(null);
   const prefetchGroupData = React.useCallback(
@@ -229,7 +261,11 @@ function AppContent() {
     }
   }, []);
 
-  const openGroupDeepLink = React.useCallback(async (groupId: string) => {
+  const openGroupDeepLink = React.useCallback(async (
+    groupId: string,
+    initialMode: "transactions" | "activity" = "transactions",
+    transactionId: number | null = null,
+  ) => {
     if (openingGroupDeepLinkRef.current === groupId) return;
     openingGroupDeepLinkRef.current = groupId;
 
@@ -244,11 +280,14 @@ function AppContent() {
       setShowAddMember(false);
       setEditingTransaction(null);
       setStatsContext(null);
+      setGroupInitialListMode(initialMode);
+      setHighlightedTransactionId(initialMode === "transactions" ? transactionId : null);
       setSelectedGroup(group);
       setCurrentRoute("group-details");
     } catch (err) {
       logError(err, { context: "openGroupDeepLink", groupId });
       setSelectedGroup(null);
+      setHighlightedTransactionId(null);
       setStatsContext(null);
       setCurrentRoute("groups");
       setBanner({
@@ -262,6 +301,130 @@ function AppContent() {
       openingGroupDeepLinkRef.current = null;
     }
   }, [queryClientInstance]);
+
+  const openNotifications = React.useCallback(() => {
+    if (!notificationFeatureEnabled) return;
+    setSelectedNotificationId(null);
+    if (usesDesktopNotificationPanel) {
+      setDesktopNotificationRoute("list");
+    } else {
+      setCurrentRoute("notifications");
+    }
+  }, [notificationFeatureEnabled, usesDesktopNotificationPanel]);
+
+  useEffect(() => {
+    if (usesDesktopNotificationPanel || desktopNotificationRoute === "closed") return;
+    const route = desktopNotificationRoute;
+    setDesktopNotificationRoute("closed");
+    setCurrentRoute(route === "detail" ? "notification-detail" : "notifications");
+  }, [desktopNotificationRoute, usesDesktopNotificationPanel]);
+
+  const handleNotificationResponse = React.useCallback((data: Record<string, unknown>) => {
+    if (!notificationFeatureEnabled) return;
+    const destination = resolveNotificationRoute(data);
+    setSelectedGroup(null);
+    if (destination.screen === "notification-detail") {
+      setSelectedNotificationId(destination.notificationId);
+      setCurrentRoute("notification-detail");
+    } else {
+      setSelectedNotificationId(null);
+      setCurrentRoute("notifications");
+    }
+  }, [notificationFeatureEnabled]);
+
+  useEffect(() => {
+    if (!session?.user?.id || !hasAcceptedCurrentTerms || !notificationFeatureResolved) {
+      initialNotificationHandledRef.current = false;
+      return;
+    }
+    const unsubscribe = subscribeToNotificationResponses(handleNotificationResponse);
+    if (!initialNotificationHandledRef.current) {
+      initialNotificationHandledRef.current = true;
+      getLastNotificationResponseData()
+        .then((data) => {
+          if (data) handleNotificationResponse(data);
+        })
+        .catch((error) => logError(error, { context: "initial notification response" }));
+    }
+    return unsubscribe;
+  }, [
+    session?.user?.id,
+    hasAcceptedCurrentTerms,
+    notificationFeatureResolved,
+    handleNotificationResponse,
+  ]);
+
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (!userId || !notificationFeatureEnabled) {
+      pushRegistrationSyncedUserRef.current = null;
+      return;
+    }
+    if (
+      notificationInbox.data?.preference.push_enabled &&
+      notificationInbox.data.preference.permission_status === "granted" &&
+      pushRegistrationSyncedUserRef.current !== userId
+    ) {
+      pushRegistrationSyncedUserRef.current = userId;
+      syncEnabledPushRegistration().catch((error) => {
+        pushRegistrationSyncedUserRef.current = null;
+        logError(error, { context: "sync push registration" });
+      });
+    }
+  }, [
+    session?.user?.id,
+    notificationFeatureEnabled,
+    notificationInbox.data?.preference,
+  ]);
+
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (!userId || !hasAcceptedCurrentTerms || !notificationFeatureEnabled) return;
+
+    const refreshInbox = () => {
+      void queryClientInstance.invalidateQueries({ queryKey: queryKeys.notificationRoot });
+    };
+    const unsubscribeReceived = subscribeToReceivedNotifications(refreshInbox);
+    const unsubscribeToken = notificationInbox.data?.preference.push_enabled
+      ? subscribeToPushTokenChanges(refreshInbox, (error) => {
+        logError(error, { context: "push token rotation" });
+      })
+      : () => {};
+    const appStateSubscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState !== "active") return;
+      refreshNotificationReads(userId)
+        .catch((error) => logError(error, { context: "flush notification reads on foreground" }))
+        .finally(refreshInbox);
+    });
+
+    return () => {
+      unsubscribeReceived();
+      unsubscribeToken();
+      appStateSubscription.remove();
+    };
+  }, [
+    hasAcceptedCurrentTerms,
+    notificationFeatureEnabled,
+    notificationInbox.data?.preference.push_enabled,
+    queryClientInstance,
+    session?.user?.id,
+  ]);
+
+  useEffect(() => {
+    if (!notificationFeatureResolved || notificationFeatureEnabled) return;
+    if (currentRoute === "notifications" || currentRoute === "notification-detail") {
+      setCurrentRoute("groups");
+      setSelectedNotificationId(null);
+    }
+    if (desktopNotificationRoute !== "closed") {
+      setDesktopNotificationRoute("closed");
+    }
+  }, [
+    currentRoute,
+    desktopNotificationRoute,
+    notificationFeatureEnabled,
+    notificationFeatureResolved,
+  ]);
 
   // Handle deep links: initial URL (cold start / web navigation) + url events.
   useEffect(() => {
@@ -442,6 +605,14 @@ function AppContent() {
   useEffect(() => {
     const hadSession = prevSessionRef.current !== null;
     const hasSession = session !== null;
+    const previousUserId = prevSessionRef.current?.user.id;
+    const currentUserId = session?.user.id;
+
+    if (previousUserId && previousUserId !== currentUserId) {
+      clearNotificationLocalState(previousUserId).catch((error) => {
+        logError(error, { context: "clear notification state on logout" });
+      });
+    }
 
     // Only reset when transitioning between logged in/out states
     if (hadSession !== hasSession) {
@@ -508,6 +679,8 @@ function AppContent() {
       logError(err, { context: "prefetchGroupData", groupId: group.id })
     );
     setSelectedGroup(group);
+    setGroupInitialListMode("transactions");
+    setHighlightedTransactionId(null);
     setCurrentRoute("group-details");
     setStatsContext(null);
     // Group details will be fetched via useGroupDetails hook
@@ -539,6 +712,41 @@ function AppContent() {
       group_id: selectedGroup.id,
     });
   };
+
+  const desktopNotificationPanel = usesDesktopNotificationPanel && notificationFeatureEnabled ? (
+    <NotificationsPanel
+      visible={desktopNotificationRoute !== "closed"}
+      onDismiss={() => setDesktopNotificationRoute("closed")}
+    >
+      {desktopNotificationRoute === "detail" && selectedNotificationId ? (
+        <NotificationDetailScreen
+          notificationId={selectedNotificationId}
+          onBack={() => setDesktopNotificationRoute("list")}
+          onViewGroup={(groupId, showActivity, transactionId) => {
+            setDesktopNotificationRoute("closed");
+            void openGroupDeepLink(
+              groupId,
+              showActivity ? "activity" : "transactions",
+              showActivity ? null : transactionId,
+            );
+          }}
+        />
+      ) : (
+        <NotificationsScreen
+          onBack={() => setDesktopNotificationRoute("closed")}
+          onOpenNotification={(notification) => {
+            setSelectedNotificationId(notification.id);
+            setDesktopNotificationRoute("detail");
+          }}
+          onViewGroups={() => {
+            setDesktopNotificationRoute("closed");
+            setSelectedGroup(null);
+            setCurrentRoute("groups");
+          }}
+        />
+      )}
+    </NotificationsPanel>
+  ) : null;
 
   if (loading) {
     return (
@@ -606,6 +814,48 @@ function AppContent() {
     return (
       <>
         <TermsAcceptanceScreen />
+        <StatusBar style={theme.dark ? "light" : "dark"} />
+      </>
+    );
+  }
+
+  if (currentRoute === "notifications" && notificationFeatureEnabled) {
+    return (
+      <>
+        <NotificationsScreen
+          onBack={() => setCurrentRoute("groups")}
+          onOpenNotification={(notification) => {
+            setSelectedNotificationId(notification.id);
+            setCurrentRoute("notification-detail");
+          }}
+          onViewGroups={() => {
+            setSelectedGroup(null);
+            setCurrentRoute("groups");
+          }}
+        />
+        <StatusBar style={theme.dark ? "light" : "dark"} />
+      </>
+    );
+  }
+
+  if (
+    currentRoute === "notification-detail" &&
+    selectedNotificationId &&
+    notificationFeatureEnabled
+  ) {
+    return (
+      <>
+        <NotificationDetailScreen
+          notificationId={selectedNotificationId}
+          onBack={() => setCurrentRoute("notifications")}
+          onViewGroup={(groupId, showActivity, transactionId) => {
+            void openGroupDeepLink(
+              groupId,
+              showActivity ? "activity" : "transactions",
+              showActivity ? null : transactionId,
+            );
+          }}
+        />
         <StatusBar style={theme.dark ? "light" : "dark"} />
       </>
     );
@@ -738,6 +988,8 @@ function AppContent() {
             setStatsContext({ groupId: groupToDisplay.id, mode });
             setCurrentRoute("group-stats");
           }}
+          initialListMode={groupInitialListMode}
+          highlightedTransactionId={highlightedTransactionId}
         />
         <BottomNavBar
           currentRoute={currentRoute}
@@ -764,6 +1016,7 @@ function AppContent() {
             }}
           />
         )}
+        {desktopNotificationPanel}
         <StatusBar style={theme.dark ? "light" : "dark"} />
       </>
     );
@@ -779,8 +1032,10 @@ function AppContent() {
           groupsListRefetchRef.current = refetch;
         }}
         refetchTrigger={groupRefreshTrigger}
+        onNotificationsPress={openNotifications}
       />
       <InAppBanner notice={banner} onDismiss={dismissBanner} />
+      {desktopNotificationPanel}
       <BottomNavBar
         currentRoute={currentRoute}
         onGroupsPress={() => {

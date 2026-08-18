@@ -1,4 +1,4 @@
-appId: com.sharemoney.app
+appId: com.vaibhavarora.sharemoney
 ---
 # Test: Transactions Refresh After Mutation
 # Purpose: Ensure list refresh and stats navigation still work after creating a transaction.

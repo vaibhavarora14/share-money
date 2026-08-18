@@ -1,5 +1,6 @@
+import { useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import { Platform, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import {
   ActivityIndicator,
   Appbar,
@@ -12,15 +13,24 @@ import {
   useTheme,
 } from "react-native-paper";
 import { GroupBalanceBadge } from "../components/GroupBalanceBadge";
+import { NotificationBell } from "../components/NotificationBell";
 import { useAuth } from "../contexts/AuthContext";
 import { useBalances } from "../hooks/useBalances";
 import { useGroups } from "../hooks/useGroups";
+import {
+  setCachedNotificationPreference,
+  useNotifications,
+  useUpdateNotificationPreference,
+} from "../hooks/useNotifications";
+import { enablePushNotifications } from "../services/pushNotifications";
 import { Group } from "../types";
 import { showErrorAlert } from "../utils/errorHandling";
 import {
   getUserFriendlyErrorMessage,
   isSessionExpiredError,
 } from "../utils/errorMessages";
+import { isTransactionNotificationsEnabled } from "../utils/featureFlags";
+import { shouldShowNotificationPrimer } from "../utils/notificationPermission";
 import { getSeenGroupIds, markGroupSeen } from "../utils/seenGroups";
 import { CreateGroupScreen } from "./CreateGroupScreen";
 
@@ -33,6 +43,7 @@ interface GroupsListScreenProps {
   onLogout?: () => void;
   onRefetchReady?: (refetch: () => Promise<any>) => void;
   refetchTrigger?: number; // Added to trigger refetch from parent
+  onNotificationsPress: () => void;
 }
 
 export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
@@ -40,12 +51,20 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   onCreateGroup,
   onRefetchReady,
   refetchTrigger,
+  onNotificationsPress,
 }) => {
   const [showCreateGroup, setShowCreateGroup] = useState<boolean>(false);
   const [formerGroupsExpanded, setFormerGroupsExpanded] = useState<boolean>(false);
   const [seenGroupIds, setSeenGroupIds] = useState<Set<string> | null>(null);
   const theme = useTheme();
+  const queryClient = useQueryClient();
   const { signOut, user } = useAuth();
+  const notifications = useNotifications();
+  const notificationsEnabled =
+    isTransactionNotificationsEnabled(notifications.data);
+  const preferenceMutation = useUpdateNotificationPreference();
+  const [pushError, setPushError] = useState<string | null>(null);
+  const [enablingPush, setEnablingPush] = useState(false);
   const { data: groups, isLoading: loading, error, refetch } = useGroups();
   const {
     data: balancesData,
@@ -124,6 +143,10 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
       seenGroupIds !== null &&
       !seenGroupIds.has(group.id) &&
       group.user_status !== "left";
+    const unreadActivityCount = notificationsEnabled
+      ? notifications.data?.unread_by_group[group.id] ?? 0
+      : 0;
+    const hasUnreadActivity = unreadActivityCount > 0;
 
     return (
     <Surface
@@ -135,9 +158,11 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
       elevation={1}
     >
       <TouchableOpacity
+        testID={`group-card-${group.id}`}
         style={styles.groupTouchable}
         onPress={() => handleGroupPress(group)}
         activeOpacity={0.7}
+        accessibilityLabel={`${group.name}${isNew ? ", new group" : ""}${hasUnreadActivity ? `, ${unreadActivityCount} unread ${unreadActivityCount === 1 ? "notification" : "notifications"}` : ""}`}
       >
         <View style={styles.groupMainContent}>
           <View style={styles.groupIconContainer}>
@@ -188,6 +213,13 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                   </Text>
                 </View>
               )}
+              {hasUnreadActivity ? (
+                <View
+                  style={[styles.activityDot, { backgroundColor: theme.colors.primary }]}
+                  testID={`notification-dot-${group.id}`}
+                  accessibilityElementsHidden
+                />
+              ) : null}
             </View>
             <View style={styles.groupMetadata}>
               {group.user_status === 'left' && (
@@ -289,6 +321,12 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
           title="Your Groups"
           titleStyle={{ fontWeight: "bold" }}
         />
+        {notificationsEnabled ? (
+          <NotificationBell
+            unreadCount={notifications.data?.unread_count ?? 0}
+            onPress={onNotificationsPress}
+          />
+        ) : null}
       </Appbar.Header>
 
       {isInitialLoading && (
@@ -311,6 +349,48 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
+          {notificationsEnabled && shouldShowNotificationPrimer({
+            platform: Platform.OS,
+            activeGroupCount: activeGroups.length,
+            preference: notifications.data?.preference,
+          }) ? (
+            <Surface style={[styles.permissionCard, { backgroundColor: theme.colors.primaryContainer }]} elevation={0}>
+              <Text variant="titleMedium" style={styles.permissionTitle}>Know when an expense affects you</Text>
+              <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                Get a notification when someone adds, changes, or removes an expense involving you.
+              </Text>
+              {pushError ? <Text variant="bodySmall" style={{ color: theme.colors.error, marginTop: 8 }}>{pushError}</Text> : null}
+              <View style={styles.permissionActions}>
+                <Button
+                  mode="contained"
+                  loading={enablingPush}
+                  disabled={enablingPush}
+                  onPress={async () => {
+                    setEnablingPush(true);
+                    setPushError(null);
+                    try {
+                      const preference = await enablePushNotifications();
+                      if (user?.id) {
+                        setCachedNotificationPreference(queryClient, user.id, preference);
+                      }
+                    } catch {
+                      setPushError("We couldn’t turn on notifications. You can try again in Profile.");
+                    } finally {
+                      setEnablingPush(false);
+                    }
+                  }}
+                >
+                  Turn on notifications
+                </Button>
+                <Button
+                  mode="text"
+                  onPress={() => preferenceMutation.mutate({ action: "dismiss_nudge" })}
+                >
+                  Not now
+                </Button>
+              </View>
+            </Surface>
+          ) : null}
           {groups.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Surface style={styles.emptySurface} elevation={0}>
@@ -466,6 +546,28 @@ const styles = StyleSheet.create({
   newBadgeText: {
     fontWeight: "700",
     letterSpacing: 0.5,
+  },
+  activityDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginLeft: 3,
+  },
+  permissionCard: {
+    borderRadius: 12,
+    padding: 18,
+    marginBottom: 16,
+  },
+  permissionTitle: {
+    fontWeight: "700",
+    marginBottom: 6,
+  },
+  permissionActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 16,
   },
   fab: {
     position: "absolute",
