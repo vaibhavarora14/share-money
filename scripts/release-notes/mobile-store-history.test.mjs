@@ -20,6 +20,22 @@ const expectedEditableIosBuilds = [
   "45",
 ];
 
+const expectedLockedIosBuilds = [
+  "49",
+  "48",
+  "42",
+  "40",
+  "36",
+  "25",
+  "21",
+  "18",
+  "15",
+  "14",
+  "13",
+  "10",
+  "6",
+];
+
 const assertPointerNotes = (notes, [minimum, maximum]) => {
   const bullets = notes.split("\n");
   assert.ok(bullets.length >= minimum && bullets.length <= maximum);
@@ -83,6 +99,8 @@ test("mobile store history is complete, unique, and truthful", async () => {
 
 test("TestFlight cleanup plan is exact, pointer-based, and complete", async () => {
   const plan = JSON.parse(await readFile(testflightPlanUrl, "utf8"));
+  const history = JSON.parse(await readFile(historyUrl, "utf8"));
+  const iosHistory = history.stores.find(({ platform }) => platform === "ios");
   assert.equal(plan.schemaVersion, 1);
   assert.equal(plan.appId, "6755923591");
   assert.equal(plan.locale, "en-US");
@@ -96,5 +114,19 @@ test("TestFlight cleanup plan is exact, pointer-based, and complete", async () =
     assert.ok(release.version);
     assert.ok(["already-verified", "save"].includes(release.action));
     assertPointerNotes(release.notes, [2, 5]);
+
+    const storedRelease = iosHistory.releases.find(
+      ({ builds }) => builds.length === 1 && builds[0] === release.build,
+    );
+    assert.ok(storedRelease, `missing TestFlight history for build ${release.build}`);
+    assert.equal(storedRelease.storeStatus, "verified");
+    assert.equal(storedRelease.notes, release.notes);
   }
+
+  assert.deepEqual(
+    iosHistory.releases
+      .filter(({ storeStatus }) => storeStatus === "unavailable")
+      .map(({ builds }) => builds[0]),
+    expectedLockedIosBuilds,
+  );
 });
