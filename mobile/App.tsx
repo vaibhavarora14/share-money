@@ -326,6 +326,7 @@ function AppContent() {
   const handleNotificationResponse = React.useCallback((data: Record<string, unknown>) => {
     if (!notificationFeatureEnabled) return;
     const destination = resolveNotificationRoute(data);
+    if (!destination) return;
     setSelectedGroup(null);
     if (destination.screen === "notification-detail") {
       setSelectedNotificationId(destination.notificationId);
