@@ -11,5 +11,11 @@ export const WEB_MAX_WIDTH = 600;
 /** Desktop-only notification panel; tablet and narrow web stay full-route. */
 export const WEB_DESKTOP_BREAKPOINT = 1024;
 
+/** Auth switches to its full-width, two-pane web layout at this width. */
+export const WEB_AUTH_DESKTOP_BREAKPOINT = 960;
+
 export const isDesktopWebViewport = (platform: string, width: number) =>
   platform === "web" && width >= WEB_DESKTOP_BREAKPOINT;
+
+export const isAuthDesktopWebViewport = (platform: string, width: number) =>
+  platform === "web" && width >= WEB_AUTH_DESKTOP_BREAKPOINT;
