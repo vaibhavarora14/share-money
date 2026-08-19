@@ -32,7 +32,11 @@ import { ForceUpdateModal } from "./components/ForceUpdateModal";
 import { BannerNotice, InAppBanner } from "./components/InAppBanner";
 import { NotificationsPanel } from "./components/NotificationsPanel";
 import { AUTH_TIMEOUTS } from "./constants/auth";
-import { isDesktopWebViewport, WEB_MAX_WIDTH } from "./constants/layout";
+import {
+  isAuthDesktopWebViewport,
+  isDesktopWebViewport,
+  WEB_MAX_WIDTH,
+} from "./constants/layout";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import {
   ThemePreferenceProvider,
@@ -1191,13 +1195,17 @@ function ThemedAppShell() {
 function AppFrame() {
   const { loading, session } = useAuth();
   const theme = useTheme();
+  const { width } = useWindowDimensions();
   const isAuthFrame = !loading && !session;
+  const usesDesktopAuthLayout =
+    isAuthFrame && isAuthDesktopWebViewport(Platform.OS, width);
 
   return (
     <View
       style={[
         styles.appWrapper,
         isAuthFrame && styles.authAppWrapper,
+        usesDesktopAuthLayout && styles.desktopAuthAppWrapper,
         {
           backgroundColor: isAuthFrame
             ? theme.colors.background
@@ -1260,6 +1268,9 @@ const styles = StyleSheet.create({
       shadowOpacity: 0,
       elevation: 0,
     }),
+  },
+  desktopAuthAppWrapper: {
+    maxWidth: "100%",
   },
   centerContainer: {
     flex: 1,

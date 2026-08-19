@@ -19,6 +19,7 @@ import {
   useTheme,
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { isAuthDesktopWebViewport } from "../constants/layout";
 import { useAuth } from "../contexts/AuthContext";
 
 type AuthStep = "methods" | "email";
@@ -45,7 +46,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const { signIn, signUp, signInWithGoogle, signInWithApple } = useAuth();
   const theme = useTheme();
   const { width } = useWindowDimensions();
-  const isDesktopWeb = Platform.OS === "web" && width >= 960;
+  const isDesktopWeb = isAuthDesktopWebViewport(Platform.OS, width);
   const socialLoading = googleLoading || appleLoading;
   const formDisabled = loading || socialLoading;
   const emailInvalid = Boolean(formError && formError.toLowerCase().includes("email"));
