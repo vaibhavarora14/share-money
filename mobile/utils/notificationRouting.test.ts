@@ -12,12 +12,16 @@ Deno.test("versioned detailed push opens the referenced inbox detail", () => {
   });
 });
 
-Deno.test("digest and invalid payloads safely open the inbox", () => {
+Deno.test("digest payloads open the inbox", () => {
   assertEquals(resolveNotificationRoute({ schema_version: 1, route: "notifications" }), {
     screen: "notifications",
   });
+});
+
+Deno.test("Android relaunch placeholders and invalid payloads are ignored", () => {
+  assertEquals(resolveNotificationRoute({ anim_not_finish: false }), null);
   assertEquals(resolveNotificationRoute({
     route: "notification-detail",
     notification_id: "not-an-id",
-  }), { screen: "notifications" });
+  }), null);
 });
