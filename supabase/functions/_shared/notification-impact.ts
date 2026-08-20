@@ -74,14 +74,12 @@ function positionsDiffer(
   before: FinancialPosition | null,
   after: FinancialPosition | null,
 ): boolean {
-  if (!before || !after) return before !== after;
-  return before.participantId !== after.participantId ||
-    before.currency !== after.currency ||
-    before.isPayer !== after.isPayer ||
-    before.shareMinor !== after.shareMinor ||
-    before.paidMinor !== after.paidMinor ||
-    before.netMinor !== after.netMinor ||
-    before.payerParticipantId !== after.payerParticipantId;
+  if (!before && !after) return false;
+  if (!before || !after) return (before?.netMinor ?? 0) !== (after?.netMinor ?? 0);
+  if (before.currency !== after.currency) {
+    return before.netMinor !== 0 || after.netMinor !== 0;
+  }
+  return before.netMinor !== after.netMinor;
 }
 
 export function buildNotificationImpacts({
@@ -112,6 +110,6 @@ export function buildNotificationImpacts({
       after: afterPositions.get(userId) ?? null,
     }))
     .filter(({ before: oldPosition, after: newPosition }) =>
-      action !== "updated" || positionsDiffer(oldPosition, newPosition)
+      positionsDiffer(oldPosition, newPosition)
     );
 }

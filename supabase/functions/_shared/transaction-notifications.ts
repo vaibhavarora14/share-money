@@ -119,24 +119,39 @@ export async function loadExpenseSnapshot(
 }
 
 function shareFrom(position: FinancialPosition | null): number | null {
-  return position ? position.shareMinor / 100 : null;
+  return position ? position.netMinor / 100 : null;
+}
+
+function buildSignedMoneyChange(
+  before: FinancialPosition | null,
+  after: FinancialPosition | null,
+): string {
+  const beforeMinor = before?.netMinor ?? 0;
+  const afterMinor = after?.netMinor ?? 0;
+  const crossCurrency = before?.currency && after?.currency && before.currency !== after.currency;
+  const currency = after?.currency ?? before?.currency ?? "USD";
+  const amountMinor = crossCurrency ? afterMinor : afterMinor - beforeMinor;
+  const formatted = formatCurrency(Math.abs(amountMinor) / 100, currency);
+
+  if (amountMinor > 0) return `+${formatted}`;
+  if (amountMinor < 0) return `−${formatted}`;
+  return formatted;
+}
+
+function buildBody(
+  action: NotificationAction,
+  actorName: string,
+  description: string,
+  before: FinancialPosition | null,
+  after: FinancialPosition | null,
+): string {
+  const verb = action === 'created' ? 'added' : action === 'updated' ? 'updated' : 'deleted';
+  return `${actorName} ${verb} ${description} · ${buildSignedMoneyChange(before, after)}`;
 }
 
 function buildTitle(actorName: string, action: NotificationAction, description: string): string {
   const verb = action === 'created' ? 'added' : action === 'updated' ? 'updated' : 'deleted';
   return `${actorName} ${verb} ${description}`.slice(0, 240);
-}
-
-function buildBody(
-  action: NotificationAction,
-  groupName: string,
-  currency: string,
-  position: FinancialPosition | null,
-): string {
-  if (action === 'deleted') return `${groupName} · Removed`;
-  return position
-    ? `${groupName} · Your share ${formatCurrency(position.shareMinor / 100, currency)}`
-    : groupName;
 }
 
 async function ensureHistorySource(
@@ -238,7 +253,6 @@ export async function createTransactionNotifications(input: FanoutInput): Promis
   const rows = visibleImpacts
     .filter((impact) => enabledRecipientIds.has(impact.userId))
     .map((impact) => {
-      const currentPosition = impact.after ?? impact.before;
       const beforeShare = shareFrom(impact.before);
       const afterShare = shareFrom(impact.after);
       return {
@@ -250,7 +264,7 @@ export async function createTransactionNotifications(input: FanoutInput): Promis
         source_history_id: historyId,
         event_type: eventType,
         title: buildTitle(actorName, input.action, canonical.description),
-        body: buildBody(input.action, canonical.groupName, canonical.currency, currentPosition),
+        body: buildBody(input.action, actorName, canonical.description, impact.before, impact.after),
         snapshot: {
           version: 1,
           action: input.action,

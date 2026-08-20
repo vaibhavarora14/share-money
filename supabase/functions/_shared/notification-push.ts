@@ -1,6 +1,11 @@
 export interface PushNotificationSource {
   id: string;
   recipient_user_id: string;
+  snapshot: {
+    group?: {
+      name?: string;
+    };
+  };
   title: string;
   body: string;
   group_id: string | null;
@@ -24,14 +29,15 @@ export function composeNotificationPush(
 ): NotificationPushContent {
   const normalizedCount = Math.max(1, Math.floor(unreadCount));
   const isDigest = normalizedCount > 1;
+  const groupName = notification.snapshot?.group?.name?.trim() || notification.title;
   const replacementKey = `sharedmoney-unread-${notification.recipient_user_id}`;
   const displayCount = normalizedCount > 99 ? "99+" : String(normalizedCount);
 
   return {
     sound: "default",
-    title: isDigest ? "ShareMoney" : notification.title,
+    title: isDigest ? "ShareMoney" : groupName,
     body: isDigest
-      ? `${displayCount} new notifications · Open SharedMoney to review them`
+      ? `${displayCount} money changes · Open SharedMoney to review`
       : notification.body,
     badge: Math.min(normalizedCount, 99),
     channelId: "expense_activity",

@@ -3,12 +3,61 @@ import { Platform, ScrollView, StyleSheet, useWindowDimensions, View } from "rea
 import { Appbar, Avatar, Button, Divider, Surface, Text, useTheme } from "react-native-paper";
 import { isDesktopWebViewport } from "../constants/layout";
 import { useMarkNotificationRead, useNotification } from "../hooks/useNotifications";
+import { NotificationPosition } from "../types/notifications";
 import { formatCurrency } from "../utils/currency";
 
 interface NotificationDetailScreenProps {
   notificationId: string;
   onBack: () => void;
   onViewGroup: (groupId: string, showActivity: boolean, transactionId: number | null) => void;
+}
+
+function resolveNetMinor(position: NotificationPosition | null | undefined): number | null {
+  if (!position) return null;
+  if (typeof position.netMinor === "number" && Number.isFinite(position.netMinor)) {
+    return position.netMinor;
+  }
+  if (
+    typeof position.paidMinor === "number" &&
+    Number.isFinite(position.paidMinor) &&
+    typeof position.shareMinor === "number" &&
+    Number.isFinite(position.shareMinor)
+  ) {
+    return position.paidMinor - position.shareMinor;
+  }
+  return null;
+}
+
+function formatSignedImpact(
+  before: NotificationPosition | null,
+  after: NotificationPosition | null,
+  transactionCurrency: string,
+): { amount: string; direction: "positive" | "negative" | "none" } {
+  const beforeMinor = resolveNetMinor(before) ?? 0;
+  const afterMinor = resolveNetMinor(after) ?? 0;
+  const crossCurrency = before?.currency && after?.currency && before.currency !== after.currency;
+  const currency = after?.currency || before?.currency || transactionCurrency;
+  const deltaMinor = crossCurrency ? afterMinor : afterMinor - beforeMinor;
+
+  if (deltaMinor > 0) {
+    return { amount: `+${formatCurrency(Math.abs(deltaMinor) / 100, currency)}`, direction: "positive" };
+  }
+  if (deltaMinor < 0) {
+    return { amount: `−${formatCurrency(Math.abs(deltaMinor) / 100, currency)}`, direction: "negative" };
+  }
+  return { amount: formatCurrency(0, currency), direction: "none" };
+}
+
+function describePosition(
+  position: NotificationPosition | null,
+  fallbackCurrency: string,
+): { label: string; amount: string } {
+  const netMinor = resolveNetMinor(position);
+  const currency = position?.currency || fallbackCurrency;
+  const amount = formatCurrency(Math.abs(netMinor ?? 0) / 100, currency);
+  if ((netMinor ?? 0) > 0) return { label: "You’re owed", amount };
+  if ((netMinor ?? 0) < 0) return { label: "You owe", amount };
+  return { label: "Settled", amount: formatCurrency(0, currency) };
 }
 
 export function NotificationDetailScreen({ notificationId, onBack, onViewGroup }: NotificationDetailScreenProps) {
@@ -49,29 +98,37 @@ export function NotificationDetailScreen({ notificationId, onBack, onViewGroup }
 
   const { actor, group, transaction, impact, action } = item.snapshot;
   const initial = actor.name.trim().charAt(0).toUpperCase() || "?";
-  const before = impact.before_share;
-  const after = impact.after_share;
-  const increased = action === "created"
-    ? (after ?? 0) > 0
-    : before !== null && after !== null && after > before;
-  const decreased = before !== null && after !== null && after < before;
-  const impactColor = increased || action === "deleted"
-    ? theme.colors.secondary
-    : decreased
-      ? theme.colors.tertiary
-      : theme.colors.onSurface;
+  const impactAmount = formatSignedImpact(impact.before, impact.after, transaction.currency);
+  const beforePosition = describePosition(impact.before, transaction.currency);
+  const afterPosition = describePosition(impact.after, transaction.currency);
+  const crossCurrency = impact.before?.currency && impact.after?.currency &&
+    impact.before.currency !== impact.after.currency;
   const canHighlightTransaction = !transaction.deleted && item.transaction_id !== null;
+
+  const impactColor = impactAmount.direction === "positive"
+    ? theme.colors.tertiary
+    : impactAmount.direction === "negative"
+      ? theme.colors.secondary
+      : theme.colors.onSurface;
 
   return (
     <View style={[styles.stage, { backgroundColor: theme.colors.background }]}>
-      <Surface elevation={widePanel ? 3 : 0} style={[styles.panel, widePanel && styles.widePanel, { backgroundColor: theme.colors.surface }]}>
+      <Surface
+        elevation={widePanel ? 3 : 0}
+        style={[styles.panel, widePanel && styles.widePanel, { backgroundColor: theme.colors.surface }]}
+      >
         <Appbar.Header style={{ backgroundColor: theme.colors.surface }}>
           <Appbar.BackAction onPress={onBack} style={styles.minimumIconTarget} />
           <Appbar.Content title="Notification" titleStyle={styles.headerTitle} />
         </Appbar.Header>
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.actorRow}>
-            <Avatar.Text size={50} label={initial} style={{ backgroundColor: theme.colors.primaryContainer }} color={theme.colors.primary} />
+            <Avatar.Text
+              size={50}
+              label={initial}
+              style={{ backgroundColor: theme.colors.primaryContainer }}
+              color={theme.colors.primary}
+            />
             <View style={styles.actorCopy}>
               <Text variant="titleMedium">{actor.name}</Text>
               <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
@@ -80,29 +137,39 @@ export function NotificationDetailScreen({ notificationId, onBack, onViewGroup }
             </View>
           </View>
 
-          <Text variant="titleLarge" style={styles.summary}>{item.title} in {group.name}.</Text>
+          <Text variant="titleLarge" style={styles.summary}>
+            {item.title}
+          </Text>
           <Divider style={styles.divider} />
 
-          <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>Impact on you</Text>
-          <View style={styles.impactRow}>
-            <Text variant="bodyLarge">Your share</Text>
-            {action === "deleted" ? (
-              <Text variant="titleMedium" style={{ color: theme.colors.secondary }}>Removed</Text>
-            ) : (
-              <View style={styles.impactValues}>
-                <Text variant="titleMedium" style={[styles.impactAmount, { color: impactColor }]}>
-                  {before !== null && after !== null && before !== after
-                    ? `${formatCurrency(before, transaction.currency)} → ${formatCurrency(after, transaction.currency)}`
-                    : formatCurrency(after ?? before ?? 0, transaction.currency)}
-                </Text>
-                {impact.share_delta ? (
-                  <Text variant="bodyMedium" style={{ color: impactColor }}>
-                    {impact.share_delta > 0 ? "+" : "−"}{formatCurrency(Math.abs(impact.share_delta), transaction.currency)}
-                  </Text>
-                ) : null}
-              </View>
-            )}
-          </View>
+          <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+            Impact on you
+          </Text>
+          <Text variant="titleLarge" style={[styles.impactAmount, { color: impactColor }]}>
+            {impactAmount.amount}
+          </Text>
+          <Divider style={styles.divider} />
+
+          <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>Before</Text>
+          <Text variant="bodyLarge" style={styles.value}>
+            {beforePosition.label}: {beforePosition.amount}
+            {impact.before?.currency ? ` (${impact.before.currency})` : ""}
+          </Text>
+
+          <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant, marginTop: 8 }}>After</Text>
+          <Text variant="bodyLarge" style={styles.value}>
+            {action === "deleted"
+              ? "Transaction removed"
+              : `${afterPosition.label}: ${afterPosition.amount}${
+                impact.after?.currency ? ` (${impact.after.currency})` : ""
+              }`}
+          </Text>
+
+          {crossCurrency && action !== "deleted" ? (
+            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 8 }}>
+              Cross-currency position changed from one currency to another, so impact is shown in each currency.
+            </Text>
+          ) : null}
           <Divider style={styles.divider} />
 
           <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>Transaction</Text>
@@ -117,16 +184,14 @@ export function NotificationDetailScreen({ notificationId, onBack, onViewGroup }
             mode="contained"
             onPress={() => onViewGroup(
               group.id,
-              transaction.deleted,
+              action === "deleted" || transaction.deleted,
               canHighlightTransaction ? transaction.id : null,
             )}
             contentStyle={styles.buttonContent}
           >
-            {transaction.deleted
+            {action === "deleted" || transaction.deleted
               ? "View group activity"
-              : canHighlightTransaction
-                ? "View in group"
-                : "View group"}
+              : "View in group"}
           </Button>
         </View>
       </Surface>
@@ -145,10 +210,8 @@ const styles = StyleSheet.create({
   actorRow: { flexDirection: "row", alignItems: "center" },
   actorCopy: { marginLeft: 14 },
   summary: { marginTop: 38, lineHeight: 31 },
-  divider: { marginVertical: 28 },
-  impactRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginTop: 16 },
-  impactValues: { alignItems: "flex-end", flex: 1, marginLeft: 20 },
-  impactAmount: { fontWeight: "700", textAlign: "right" },
+  divider: { marginVertical: 20 },
+  impactAmount: { marginTop: 8 },
   value: { marginTop: 10, fontWeight: "600" },
   footer: { padding: 18, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#DCE3EC" },
   buttonContent: { minHeight: 48 },
