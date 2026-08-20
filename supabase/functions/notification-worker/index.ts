@@ -18,11 +18,15 @@ interface OutboxRow {
 interface NotificationRow {
   id: string;
   recipient_user_id: string;
+  snapshot: {
+    group?: {
+      name?: string;
+    };
+  };
   title: string;
   body: string;
   group_id: string | null;
   transaction_id: number | null;
-  snapshot: Record<string, unknown>;
 }
 
 interface PushTokenRow {
