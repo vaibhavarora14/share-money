@@ -1,5 +1,4 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { isToday } from "date-fns";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Platform,
@@ -35,20 +34,71 @@ interface NotificationsScreenProps {
   onViewGroups: () => void;
 }
 
-function trailingImpact(notification: TransactionNotification): { label: string; positive: boolean | null } {
-  const { action, impact, transaction } = notification.snapshot;
-  if (action === "deleted") return { label: "Removed", positive: false };
-  const after = impact.after_share;
-  if (after === null) return { label: "", positive: null };
-  if (action === "updated" && impact.before_share !== null && impact.before_share !== after) {
+interface GroupSection {
+  key: string;
+  groupId: string;
+  title: string;
+  unreadCount: number;
+  totalCount: number;
+  data: TransactionNotification[];
+  allItems: TransactionNotification[];
+}
+
+const GROUP_PREVIEW_LIMIT = 3;
+
+function resolveNetMinor(value: {
+  netMinor?: number;
+  paidMinor?: number;
+  shareMinor?: number;
+} | null | undefined): number | null {
+  if (!value) return null;
+  if (typeof value.netMinor === "number" && Number.isFinite(value.netMinor)) {
+    return value.netMinor;
+  }
+  if (
+    typeof value.paidMinor === "number" &&
+    Number.isFinite(value.paidMinor) &&
+    typeof value.shareMinor === "number" &&
+    Number.isFinite(value.shareMinor)
+  ) {
+    return value.paidMinor - value.shareMinor;
+  }
+  return null;
+}
+
+function balanceSummary(notification: TransactionNotification): {
+  label: string;
+  direction: "positive" | "negative" | "none";
+} {
+  const before = resolveNetMinor(notification.snapshot.impact.before);
+  const after = resolveNetMinor(notification.snapshot.impact.after);
+  const crossCurrency =
+    !!notification.snapshot.impact.before?.currency &&
+    !!notification.snapshot.impact.after?.currency &&
+    notification.snapshot.impact.before?.currency !== notification.snapshot.impact.after?.currency;
+
+  const currency = notification.snapshot.impact.after?.currency ??
+    notification.snapshot.impact.before?.currency ??
+    notification.snapshot.transaction.currency;
+  const deltaMinor = crossCurrency ? (after ?? 0) : (after ?? 0) - (before ?? 0);
+
+  if (deltaMinor > 0) {
     return {
-      label: `${formatCurrency(impact.before_share, transaction.currency)} → ${formatCurrency(after, transaction.currency)}`,
-      positive: after < impact.before_share,
+      label: `+${formatCurrency(Math.abs(deltaMinor) / 100, currency)}`,
+      direction: "positive",
     };
   }
+
+  if (deltaMinor < 0) {
+    return {
+      label: `−${formatCurrency(Math.abs(deltaMinor) / 100, currency)}`,
+      direction: "negative",
+    };
+  }
+
   return {
-    label: `Your share ${formatCurrency(after, transaction.currency)}`,
-    positive: action === "created" && after > 0 ? false : null,
+    label: formatCurrency(0, currency),
+    direction: "none",
   };
 }
 
@@ -69,12 +119,13 @@ const NotificationRow = React.memo(function NotificationRow({
   onPress: (item: TransactionNotification) => void;
 }) {
   const theme = useTheme();
-  const impact = trailingImpact(item);
+  const impact = balanceSummary(item);
   const unread = !item.read_at;
   const actorInitial = item.snapshot.actor.name.trim().charAt(0).toUpperCase() || "?";
-  const impactColor = impact.positive === true
+  const rowLabel = `${item.title} · ${formatAge(item.created_at)}`;
+  const impactColor = impact.direction === "positive"
     ? theme.colors.tertiary
-    : impact.positive === false
+    : impact.direction === "negative"
       ? theme.colors.secondary
       : theme.colors.onSurfaceVariant;
 
@@ -82,7 +133,13 @@ const NotificationRow = React.memo(function NotificationRow({
     <Pressable
       onPress={() => onPress(item)}
       accessibilityRole="button"
-      accessibilityLabel={`${unread ? "Unread" : "Read"}. ${item.snapshot.actor.name}. ${item.title}. Group ${item.snapshot.group.name}. ${impact.label}. ${formatAge(item.created_at)}`}
+      accessibilityLabel={`${unread ? "Unread" : "Read"}. ${rowLabel}. ${impact.label}. ${
+        impact.direction === "positive"
+          ? "Positive balance change"
+          : impact.direction === "negative"
+            ? "Negative balance change"
+            : "No balance change"
+      }`}
       style={({ pressed }) => [
         styles.row,
         { backgroundColor: unread ? theme.colors.primaryContainer : theme.colors.surface },
@@ -101,24 +158,19 @@ const NotificationRow = React.memo(function NotificationRow({
       <View style={styles.rowCopy}>
         <Text
           variant="bodyMedium"
-          numberOfLines={2}
+          numberOfLines={1}
           style={[styles.rowTitle, unread ? styles.rowTitleUnread : styles.rowTitleRead]}
         >
-          {item.title}
+          {rowLabel}
         </Text>
-        <View style={styles.rowMeta}>
-          <Text variant="bodySmall" numberOfLines={1} style={[styles.groupName, { color: theme.colors.onSurfaceVariant }]}>
-            {item.snapshot.group.name}
-          </Text>
-          {impact.label ? (
-            <Text variant="bodySmall" numberOfLines={1} style={[styles.impact, { color: impactColor }]}>
-              {impact.label}
-            </Text>
-          ) : null}
-        </View>
       </View>
-      <Text variant="bodySmall" style={[styles.time, { color: theme.colors.onSurfaceVariant }]}>
-        {formatAge(item.created_at)}
+      <Text
+        variant="bodyMedium"
+        numberOfLines={1}
+        style={[styles.impactAmount, { color: impactColor }]}
+        accessibilityLabel={`${impact.direction} balance amount`}
+      >
+        {impact.label}
       </Text>
     </Pressable>
   );
@@ -155,6 +207,7 @@ export function NotificationsScreen({
   const items = notifications.data?.items ?? [];
   const widePanel = isDesktopWebViewport(Platform.OS, dimensions.width);
   const [returningInbox, setReturningInbox] = useState<boolean | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!user?.id) return;
@@ -173,20 +226,75 @@ export function NotificationsScreen({
     };
   }, [user?.id]);
 
-  const sections = useMemo(() => {
-    const today: TransactionNotification[] = [];
-    const earlier: TransactionNotification[] = [];
-    for (const item of items) (isToday(new Date(item.created_at)) ? today : earlier).push(item);
-    return [
-      ...(today.length ? [{ title: "Today", data: today }] : []),
-      ...(earlier.length ? [{ title: "Earlier", data: earlier }] : []),
-    ];
-  }, [items]);
+  const groupedSections = useMemo(() => {
+    const unreadByGroup = notifications.data?.unread_by_group ?? {};
+    const grouped = new Map<string, {
+      title: string;
+      groupId: string;
+      items: TransactionNotification[];
+    }>();
+
+    for (const item of items) {
+      const groupId = item.group_id ?? item.snapshot.group.id;
+      const key = groupId ?? `unknown-${item.snapshot.group.name ?? item.snapshot.group.id}`;
+      const section = grouped.get(key) ?? {
+        title: item.snapshot.group.name,
+        groupId: key,
+        items: [],
+      };
+
+      section.items.push(item);
+      grouped.set(key, section);
+    }
+
+      return Array.from(grouped.values())
+      .map(({ title, groupId, items: groupItems }) => {
+        const sorted = [...groupItems].sort((a, b) => {
+          const age = Date.parse(b.created_at) - Date.parse(a.created_at);
+          if (age !== 0) return age;
+          return b.id.localeCompare(a.id);
+        });
+        return {
+          key: groupId,
+          title,
+          groupId,
+          unreadCount: unreadByGroup[groupId] ?? 0,
+          totalCount: sorted.length,
+          data: sorted,
+          allItems: sorted,
+        };
+      })
+      .sort((a, b) => {
+        const aLatest = a.data[0]?.created_at ?? "";
+        const bLatest = b.data[0]?.created_at ?? "";
+        const latestDelta = Date.parse(bLatest) - Date.parse(aLatest);
+        if (latestDelta !== 0) return latestDelta;
+        return b.groupId.localeCompare(a.groupId);
+      });
+  }, [items, notifications.data?.unread_by_group]);
+
+  const sections: GroupSection[] = useMemo(() => {
+    return groupedSections.map((section) => {
+      const isExpanded = expandedGroups.has(section.groupId);
+      return {
+        ...section,
+        data: isExpanded ? section.allItems : section.allItems.slice(0, GROUP_PREVIEW_LIMIT),
+      };
+    });
+  }, [expandedGroups, groupedSections]);
 
   const handleOpen = React.useCallback((item: TransactionNotification) => {
     if (!item.read_at) markRead.mutate(item.id);
     onOpenNotification(item);
   }, [markRead, onOpenNotification]);
+
+  const handleViewMore = React.useCallback((groupId: string) => {
+    setExpandedGroups((previous) => {
+      const next = new Set(previous);
+      next.add(groupId);
+      return next;
+    });
+  }, []);
 
   return (
     <View style={[styles.stage, { backgroundColor: theme.colors.background }]}>
@@ -249,7 +357,12 @@ export function NotificationsScreen({
 
         {!notifications.isLoading && !notifications.isError && items.length === 0 && returningInbox !== null ? (
           <View style={styles.state}>
-            <Avatar.Icon size={64} icon="bell-outline" style={{ backgroundColor: theme.colors.primaryContainer }} color={theme.colors.primary} />
+            <Avatar.Icon
+              size={64}
+              icon="bell-outline"
+              style={{ backgroundColor: theme.colors.primaryContainer }}
+              color={theme.colors.primary}
+            />
             <Text variant="titleLarge" style={styles.stateTitle}>
               {returningInbox ? "You’re all caught up" : "No notifications yet"}
             </Text>
@@ -277,9 +390,36 @@ export function NotificationsScreen({
             renderItem={({ item }) => <NotificationRow item={item} onPress={handleOpen} />}
             renderSectionHeader={({ section }) => (
               <View style={[styles.sectionHeader, { backgroundColor: theme.colors.surface }]}>
-                <Text variant="titleSmall">{section.title}</Text>
+                <View style={styles.sectionHeaderTop}>
+                  <Text
+                    variant="titleSmall"
+                    numberOfLines={2}
+                    style={styles.sectionTitle}
+                  >
+                    {section.title}
+                  </Text>
+                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                    {section.unreadCount ? `${section.unreadCount} new` : ""}
+                  </Text>
+                </View>
               </View>
             )}
+            renderSectionFooter={({ section }) => {
+              const hiddenCount = section.totalCount - section.data.length;
+              if (hiddenCount <= 0) return null;
+              return (
+                <Pressable
+                  onPress={() => handleViewMore(section.groupId)}
+                  accessibilityRole="button"
+                  style={[styles.footerButton, { backgroundColor: theme.colors.surface }]}
+                  accessibilityLabel={`View ${hiddenCount} more notifications in ${section.title}`}
+                >
+                  <Text variant="bodySmall" style={[styles.footerButtonText, { color: theme.colors.primary }]}>
+                    View {hiddenCount} more
+                  </Text>
+                </Pressable>
+              );
+            }}
             ItemSeparatorComponent={Divider}
             stickySectionHeadersEnabled
             contentContainerStyle={styles.listContent}
@@ -327,25 +467,74 @@ const styles = StyleSheet.create({
   offlineBanner: { paddingHorizontal: 16, paddingVertical: 8 },
   listContent: { paddingBottom: 32 },
   sectionHeader: { paddingHorizontal: 20, paddingVertical: 10 },
-  row: { minHeight: 92, flexDirection: "row", alignItems: "center", paddingVertical: 14, paddingRight: 14 },
+  sectionHeaderTop: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  sectionTitle: { flex: 1, minWidth: 0 },
+  row: {
+    minHeight: 92,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingRight: 14,
+  },
   pressed: { opacity: 0.72 },
   unreadSlot: { width: 22, alignItems: "center" },
   unreadDot: { width: 8, height: 8, borderRadius: 4 },
-  rowCopy: { flex: 1, marginLeft: 12 },
+  rowCopy: { flex: 1, marginLeft: 12, minWidth: 0 },
   rowTitle: {},
   rowTitleUnread: { fontWeight: "700" },
-  rowTitleRead: { fontWeight: "500" },
-  rowMeta: { flexDirection: "row", alignItems: "center", marginTop: 5 },
-  groupName: { flex: 1, paddingRight: 8 },
-  impact: { fontWeight: "600", maxWidth: "58%", textAlign: "right" },
-  time: { alignSelf: "flex-start", marginLeft: 8 },
-  state: { flex: 1, minHeight: 420, alignItems: "center", justifyContent: "center", padding: 32 },
-  stateTitle: { fontWeight: "700", marginTop: 18 },
-  stateBody: { textAlign: "center", marginTop: 8, marginBottom: 24, maxWidth: 300 },
-  skeletonRow: { height: 92, flexDirection: "row", alignItems: "center", paddingHorizontal: 22 },
+  rowTitleRead: { fontWeight: "400" },
+  impactAmount: {
+    width: 100,
+    textAlign: "right",
+    textAlignVertical: "center",
+    fontWeight: "600",
+  },
+  footerButton: {
+    minHeight: 48,
+    justifyContent: "center",
+    alignItems: "flex-start",
+    paddingHorizontal: 20,
+  },
+  footerButtonText: { fontWeight: "600" },
+  state: {
+    padding: 28,
+    alignItems: "center",
+    gap: 12,
+  },
+  stateTitle: {
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  stateBody: {
+    textAlign: "center",
+  },
+  skeletonRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 22,
+    marginTop: 10,
+    paddingBottom: 16,
+  },
   skeletonAvatar: { width: 46, height: 46, borderRadius: 23 },
-  skeletonCopy: { flex: 1, marginLeft: 14 },
-  skeletonLineWide: { height: 14, borderRadius: 7, width: "78%" },
-  skeletonLine: { height: 11, borderRadius: 6, width: "46%", marginTop: 10 },
-  paginationFooter: { minHeight: 64, alignItems: "center", justifyContent: "center", padding: 12 },
+  skeletonCopy: { flex: 1, marginLeft: 12, gap: 8 },
+  skeletonLineWide: {
+    width: "75%",
+    height: 14,
+    borderRadius: 7,
+  },
+  skeletonLine: {
+    width: "45%",
+    height: 12,
+    borderRadius: 6,
+  },
+  paginationFooter: {
+    padding: 16,
+    alignItems: "center",
+    gap: 10,
+  },
 });

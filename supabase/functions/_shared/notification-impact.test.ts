@@ -39,6 +39,24 @@ Deno.test("creation notifies linked financial participants except the actor", ()
   assertEquals(result[0].after?.netMinor, -60000);
 });
 
+Deno.test("creation does not notify when recipient net position does not change", () => {
+  const result = buildNotificationImpacts({
+    actorUserId: "u-other",
+    action: "created",
+    before: null,
+    after: {
+      ...base,
+      participants: [
+        { participantId: "p-alex", userId: "u-alex", share: 1200 },
+        { participantId: "p-priya", userId: "u-priya", share: 0 },
+      ],
+      payerParticipantId: "p-alex",
+    },
+  });
+
+  assertEquals(result, []);
+});
+
 Deno.test("unlinked participants never become recipients", () => {
   const result = buildNotificationImpacts({
     actorUserId: "u-alex",
@@ -173,6 +191,24 @@ Deno.test("deletion uses the before-state recipient union", () => {
 
   assertEquals(result.map((item) => item.userId), ["u-alex"]);
   assertEquals(result[0].after, null);
+});
+
+Deno.test("deletion with zero net position does not notify", () => {
+  const result = buildNotificationImpacts({
+    actorUserId: "u-priya",
+    action: "deleted",
+    before: {
+      ...base,
+      participants: [
+        { participantId: "p-alex", userId: "u-alex", share: 1200 },
+        { participantId: "p-priya", userId: "u-priya", share: 0 },
+      ],
+      payerParticipantId: "p-alex",
+    },
+    after: null,
+  });
+
+  assertEquals(result, []);
 });
 
 Deno.test("income transactions are outside notification scope", () => {
