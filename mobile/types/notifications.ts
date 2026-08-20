@@ -9,7 +9,7 @@ export interface NotificationPosition {
   isPayer: boolean;
   shareMinor: number;
   paidMinor: number;
-  netMinor: number;
+  netMinor?: number;
   payerParticipantId: string | null;
 }
 
