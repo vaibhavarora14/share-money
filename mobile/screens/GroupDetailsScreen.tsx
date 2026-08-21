@@ -58,7 +58,10 @@ import {
   getUserFriendlyErrorMessage,
   isSessionExpiredError,
 } from "../utils/errorMessages";
-import { startTransactionHighlightTimer } from "../utils/transactionHighlight";
+import {
+  shouldConsumeTransactionHighlight,
+  startTransactionHighlightTimer,
+} from "../utils/transactionHighlight";
 import { GroupStatsMode } from "./GroupStatsScreen";
 import { SettlementFormScreen } from "./SettlementFormScreen";
 
@@ -76,6 +79,7 @@ interface GroupDetailsScreenProps {
   onStatsPress?: (mode: GroupStatsMode) => void;
   initialListMode?: "transactions" | "activity";
   highlightedTransactionId?: number | null;
+  onHighlightedTransactionShown?: (transactionId: number) => void;
 }
 
 export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
@@ -92,6 +96,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   onStatsPress,
   initialListMode = "transactions",
   highlightedTransactionId = null,
+  onHighlightedTransactionShown,
 }) => {
   const [leaving, setLeaving] = useState<boolean>(false);
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
@@ -117,6 +122,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [visibleHighlightedTransactionId, setVisibleHighlightedTransactionId] = useState<number | null>(
     highlightedTransactionId,
   );
+  const highlightConsumedRef = React.useRef(false);
   
   // Web-compatible confirmation dialog state
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -391,17 +397,37 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   ]);
 
   useEffect(() => {
+    if (highlightedTransactionId === null) return;
+    highlightConsumedRef.current = false;
     setVisibleHighlightedTransactionId(highlightedTransactionId);
     setHighlightedRowY(null);
   }, [highlightedTransactionId]);
 
   useEffect(() => {
     if (transactionsSectionY === null || highlightedRowY === null) return;
+    if (!shouldConsumeTransactionHighlight(
+      highlightedTransactionId,
+      visibleHighlightedTransactionId,
+      highlightedRowY,
+      transactionsSectionY,
+      highlightConsumedRef.current,
+    )) {
+      return;
+    }
+
     mainScrollRef.current?.scrollTo({
       y: Math.max(0, transactionsSectionY + highlightedRowY - 88),
       animated: false,
     });
-  }, [highlightedRowY, transactionsSectionY]);
+    highlightConsumedRef.current = true;
+    onHighlightedTransactionShown?.(visibleHighlightedTransactionId!);
+  }, [
+    highlightedRowY,
+    highlightedTransactionId,
+    onHighlightedTransactionShown,
+    transactionsSectionY,
+    visibleHighlightedTransactionId,
+  ]);
 
   useEffect(() => {
     if (
