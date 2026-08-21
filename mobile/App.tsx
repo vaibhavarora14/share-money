@@ -739,6 +739,7 @@ function AppContent() {
       ) : (
         <NotificationsScreen
           onBack={() => setDesktopNotificationRoute("closed")}
+          isActive={desktopNotificationRoute === "list"}
           onOpenNotification={(notification) => {
             setSelectedNotificationId(notification.id);
             setDesktopNotificationRoute("detail");
