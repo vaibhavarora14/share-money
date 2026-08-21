@@ -29,7 +29,10 @@ import {
 import { isDesktopWebViewport } from "../constants/layout";
 import { TransactionNotification } from "../types/notifications";
 import { formatCurrency } from "../utils/currency";
-import { unreadNotificationIdsFromViewTokens } from "../utils/notificationVisibility";
+import {
+  NOTIFICATION_VIEWABILITY_CONFIG,
+  unreadNotificationIdsFromViewTokens,
+} from "../utils/notificationVisibility";
 
 interface NotificationsScreenProps {
   onBack: () => void;
@@ -215,17 +218,10 @@ export function NotificationsScreen({
   const [returningInbox, setReturningInbox] = useState<boolean | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const requestedReadIds = React.useRef(new Set<string>());
-  const isActiveRef = React.useRef(isActive);
   const markVisibleRowsRef = React.useRef<(ids: string[]) => void>(() => {});
-  const viewabilityConfig = React.useRef({
-    itemVisiblePercentThreshold: 60,
-    minimumViewTime: 500,
-    waitForInteraction: false,
-  }).current;
 
-  isActiveRef.current = isActive;
   markVisibleRowsRef.current = (ids) => {
-    if (!isActiveRef.current) return;
+    if (!isActive) return;
     const newIds = ids.filter((id) => !requestedReadIds.current.has(id));
     if (newIds.length === 0) return;
     newIds.forEach((id) => requestedReadIds.current.add(id));
@@ -462,7 +458,7 @@ export function NotificationsScreen({
               }
             }}
             onEndReachedThreshold={0.35}
-            viewabilityConfig={viewabilityConfig}
+            viewabilityConfig={NOTIFICATION_VIEWABILITY_CONFIG}
             onViewableItemsChanged={onViewableItemsChanged}
             ListFooterComponent={notifications.isFetchingNextPage ? (
               <View style={styles.paginationFooter}>

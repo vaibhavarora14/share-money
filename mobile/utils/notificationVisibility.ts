@@ -5,7 +5,15 @@ interface NotificationViewToken {
   item: unknown;
 }
 
-function isTransactionNotification(value: unknown): value is TransactionNotification {
+export const NOTIFICATION_VIEWABILITY_CONFIG = {
+  itemVisiblePercentThreshold: 60,
+  minimumViewTime: 500,
+  waitForInteraction: false,
+} as const;
+
+function isTransactionNotification(
+  value: unknown,
+): value is TransactionNotification {
   return !!value &&
     typeof value === "object" &&
     typeof (value as { id?: unknown }).id === "string" &&
@@ -17,7 +25,10 @@ export function unreadNotificationIdsFromViewTokens(
 ): string[] {
   const ids = new Set<string>();
   for (const token of tokens) {
-    if (!token.isViewable || !isTransactionNotification(token.item) || token.item.read_at) continue;
+    if (
+      !token.isViewable || !isTransactionNotification(token.item) ||
+      token.item.read_at
+    ) continue;
     ids.add(token.item.id);
   }
   return Array.from(ids);
