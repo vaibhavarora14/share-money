@@ -19,12 +19,14 @@ import { fetchWithAuth } from "../utils/api";
 import {
   clearNotificationReadQueue,
   enqueueNotificationRead,
+  enqueueNotificationReads,
   flushNotificationReadQueue,
 } from "../utils/notificationReadQueue";
 import {
   flattenNotificationPages,
   markAllNotificationsReadInCache,
   markNotificationReadInCache,
+  markNotificationsReadInCache,
   restoreOfflineNotificationCache,
   setNotificationPreferenceInData,
   type NotificationInfiniteData,
@@ -165,6 +167,45 @@ export function useMarkNotificationRead() {
       return { previous };
     },
     onError: (_error, _id, context) => {
+      if (context?.previous) queryClient.setQueryData(queryKey, context.previous);
+    },
+    onSuccess: ({ flushed }) => {
+      if (flushed) queryClient.invalidateQueries({ queryKey });
+    },
+  });
+}
+
+export function useMarkNotificationsRead() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const userId = user?.id ?? null;
+  const queryKey = queryKeys.notifications(userId);
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      if (!userId) throw new Error("Sign in to update notifications");
+      const now = new Date().toISOString();
+      const cachedItems = flattenNotificationPages(
+        queryClient.getQueryData<NotificationInfiniteData>(queryKey),
+      )?.items ?? [];
+      const createdAtById = new Map(cachedItems.map((item) => [item.id, item.created_at]));
+      await enqueueNotificationReads(userId, ids.map((id) => ({
+        kind: "read" as const,
+        id,
+        created_at: createdAtById.get(id) ?? now,
+        queued_at: now,
+      })));
+      return { flushed: await flushNotificationReadQueue(userId) };
+    },
+    onMutate: async (ids) => {
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<NotificationInfiniteData>(queryKey);
+      queryClient.setQueryData<NotificationInfiniteData>(
+        queryKey,
+        (current) => markNotificationsReadInCache(current, ids, new Date().toISOString()),
+      );
+      return { previous };
+    },
+    onError: (_error, _ids, context) => {
       if (context?.previous) queryClient.setQueryData(queryKey, context.previous);
     },
     onSuccess: ({ flushed }) => {

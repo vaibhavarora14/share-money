@@ -22,6 +22,29 @@ export type NotificationReadOperation =
     queued_at: string;
   };
 
+export type NotificationReadBatch =
+  | { kind: "read_many"; ids: string[]; consumed: number }
+  | { kind: "read_all"; through: string; consumed: 1 };
+
+const MAX_NOTIFICATION_READ_BATCH = 100;
+
+export function nextNotificationReadBatch(
+  queue: NotificationReadOperation[],
+): NotificationReadBatch | null {
+  const first = queue[0];
+  if (!first) return null;
+  if (first.kind === "read_all") {
+    return { kind: "read_all", through: first.through, consumed: 1 };
+  }
+
+  const ids: string[] = [];
+  for (const operation of queue) {
+    if (operation.kind !== "read" || ids.length === MAX_NOTIFICATION_READ_BATCH) break;
+    ids.push(operation.id);
+  }
+  return { kind: "read_many", ids, consumed: ids.length };
+}
+
 export function flattenNotificationPages(
   data: NotificationInfiniteData | undefined,
 ): NotificationsResponse | undefined {
@@ -68,23 +91,37 @@ export function markNotificationReadInCache(
   id: string,
   readAt: string,
 ): NotificationInfiniteData | undefined {
+  return markNotificationsReadInCache(data, [id], readAt);
+}
+
+export function markNotificationsReadInCache(
+  data: NotificationInfiniteData | undefined,
+  ids: string[],
+  readAt: string,
+): NotificationInfiniteData | undefined {
   const flattened = flattenNotificationPages(data);
-  const target = flattened?.items.find((item) => item.id === id);
-  if (!target || target.read_at) return data;
-  const groupId = target.group_id;
+  const requestedIds = new Set(ids);
+  const targets = flattened?.items.filter((item) => requestedIds.has(item.id) && !item.read_at) ?? [];
+  if (targets.length === 0) return data;
+
   const unreadByGroup = { ...(flattened?.unread_by_group ?? {}) };
-  if (groupId) {
-    const next = Math.max(0, (unreadByGroup[groupId] ?? 1) - 1);
+  const readsByGroup = new Map<string, number>();
+  for (const target of targets) {
+    if (!target.group_id) continue;
+    readsByGroup.set(target.group_id, (readsByGroup.get(target.group_id) ?? 0) + 1);
+  }
+  for (const [groupId, readCount] of readsByGroup) {
+    const next = Math.max(0, (unreadByGroup[groupId] ?? readCount) - readCount);
     if (next === 0) delete unreadByGroup[groupId];
     else unreadByGroup[groupId] = next;
   }
 
   return updateEveryPage(data, (page) => ({
     ...page,
-    unread_count: Math.max(0, page.unread_count - 1),
+    unread_count: Math.max(0, page.unread_count - targets.length),
     unread_by_group: unreadByGroup,
     items: page.items.map((item) =>
-      item.id === id ? { ...item, read_at: item.read_at ?? readAt } : item
+      requestedIds.has(item.id) ? { ...item, read_at: item.read_at ?? readAt } : item
     ),
   }));
 }
