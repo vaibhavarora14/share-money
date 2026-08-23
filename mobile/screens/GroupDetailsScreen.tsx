@@ -59,6 +59,7 @@ import {
   isSessionExpiredError,
 } from "../utils/errorMessages";
 import {
+  shouldClearTransactionHighlightOnScroll,
   shouldConsumeTransactionHighlight,
   startTransactionHighlightTimer,
 } from "../utils/transactionHighlight";
@@ -452,6 +453,31 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     if (!txHasNextPage || txIsFetchingNextPage) return;
     void fetchNextTransactionsPage();
   }, [txHasNextPage, txIsFetchingNextPage, fetchNextTransactionsPage]);
+
+  const clearVisibleTransactionHighlight = React.useCallback((transactionId: number) => {
+    if (visibleHighlightedTransactionId !== transactionId) return;
+
+    setVisibleHighlightedTransactionId(null);
+    setHighlightedRowY(null);
+
+    if (!highlightConsumedRef.current) {
+      highlightConsumedRef.current = true;
+      onHighlightedTransactionShown?.(transactionId);
+    }
+  }, [onHighlightedTransactionShown, visibleHighlightedTransactionId]);
+
+  const handleMainScrollBeginDrag = React.useCallback(() => {
+    if (
+      visibleHighlightedTransactionId === null ||
+      !shouldClearTransactionHighlightOnScroll(
+        visibleHighlightedTransactionId,
+        highlightedRowY,
+      )
+    ) {
+      return;
+    }
+    clearVisibleTransactionHighlight(visibleHighlightedTransactionId);
+  }, [clearVisibleTransactionHighlight, highlightedRowY, visibleHighlightedTransactionId]);
 
   const handleMainScroll = React.useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (listMode !== "transactions" || !txHasNextPage || txIsFetchingNextPage) return;
@@ -930,6 +956,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         onScroll={handleMainScroll}
+        onScrollBeginDrag={handleMainScrollBeginDrag}
         scrollEventThrottle={16}
       >
         {showMembers ? (
@@ -1027,6 +1054,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                   participants={participants}
                   highlightedTransactionId={visibleHighlightedTransactionId}
                   onHighlightedLayout={setHighlightedRowY}
+                  onHighlightedInteraction={clearVisibleTransactionHighlight}
                 />
               </View>
             ) : (
