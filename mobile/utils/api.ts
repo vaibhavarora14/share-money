@@ -1,6 +1,10 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "../supabase";
 import { ApiErrorResponse } from "../types/api";
+import {
+  handleUnauthorizedResponse,
+  type UnauthorizedPolicy,
+} from "./authenticatedFetchPolicy";
+import { formatNetworkErrorMessage } from "./networkErrors";
 
 const TOKEN_REFRESH_BUFFER_SECONDS = 60;
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -89,7 +93,8 @@ import { APP_VERSION } from "../constants/version";
 
 export async function fetchWithAuth(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  unauthorizedPolicy: UnauthorizedPolicy = "sign-out-local",
 ): Promise<Response> {
   if (!API_URL) {
     throw new Error(
@@ -128,76 +133,21 @@ export async function fetchWithAuth(
       });
     }
 
-    // Provide helpful error message based on error type
-    let userMessage = "Network request failed";
-    
-    if (errorMessage.includes("Network request failed") || errorName === "TypeError") {
-      // This is the generic React Native fetch error
-      // Check if it's likely an Android emulator localhost issue
-      if (API_URL.includes("localhost") || API_URL.includes("127.0.0.1")) {
-        userMessage = "Cannot connect to server. For Android emulator, use 10.0.2.2 instead of localhost in EXPO_PUBLIC_API_URL";
-      } else if (API_URL.includes("10.0.0.2")) {
-        // Common typo - should be 10.0.2.2 not 10.0.0.2
-        userMessage = "Cannot connect to server. IP address typo detected: use 10.0.2.2 (not 10.0.0.2) for Android emulator in EXPO_PUBLIC_API_URL";
-      } else if (API_URL.includes("10.0.2.") && !API_URL.includes("10.0.2.2")) {
-        userMessage = `Cannot connect to server. For Android emulator, use exactly 10.0.2.2 (found: ${API_URL.match(/10\.0\.2\.\d+/)?.[0] || 'unknown'})`;
-      } else {
-        userMessage = "Cannot connect to server. Please check:\n- Supabase is running (supabase start)\n- Edge Functions server is running (npm run dev:server)\n- Correct API URL in mobile/.env (use 10.0.2.2:54321 for Android emulator)\n- Network connection";
-      }
-    } else if (
-      errorMessage.includes("timeout") ||
-      errorName === "TimeoutError" ||
-      errorName === "AbortError"
-    ) {
-      userMessage = "Request timed out. The server may be slow or unreachable.";
-    } else if (errorMessage.includes("Failed to connect") || errorMessage.includes("ECONNREFUSED")) {
-      userMessage = "Connection refused. Is the server running?";
-    }
-
-    throw new Error(userMessage);
+    throw new Error(
+      formatNetworkErrorMessage({
+        apiUrl: API_URL,
+        errorName,
+        errorMessage,
+        isDevelopment: __DEV__,
+      }),
+    );
   }
 
   if (response.status === 401) {
-    let errorData: ApiErrorResponse | null = null;
-    try {
-      const responseText = await response.text();
-      if (responseText) {
-        try {
-          errorData = JSON.parse(responseText) as ApiErrorResponse;
-        } catch {
-          // Not JSON
-        }
-      }
-    } catch {
-      // Ignore
-    }
-
-    const errorDetails = errorData?.error || errorData?.details || "";
-    if (
-      errorDetails.includes("session_not_found") ||
-      errorDetails.includes("Session from session_id")
-    ) {
-      try {
-        const keys = await AsyncStorage.getAllKeys();
-        const authKeys = keys.filter(
-          (key: string) => key.includes("supabase") || key.includes("auth")
-        );
-        if (authKeys.length > 0) {
-          await AsyncStorage.multiRemove(authKeys);
-        }
-      } catch (storageError) {
-        console.error("Error clearing AsyncStorage:", storageError);
-      }
-    }
-
-    // Sign out the user when session expires
-    try {
-      await supabase.auth.signOut();
-    } catch (signOutError) {
-      console.error("Error signing out on session expiration:", signOutError);
-    }
-
-    throw new Error("Unauthorized");
+    return handleUnauthorizedResponse(
+      unauthorizedPolicy,
+      (options) => supabase.auth.signOut(options),
+    );
   }
 
   // Handle 426 Upgrade Required - app version is too old
@@ -259,4 +209,3 @@ export async function fetchWithAuth(
 
   return response;
 }
-
