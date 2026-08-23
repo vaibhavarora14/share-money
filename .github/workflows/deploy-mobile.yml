@@ -137,12 +137,13 @@ jobs:
         working-directory: mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
           EXPO_PUBLIC_API_URL: ${{ secrets.EXPO_PUBLIC_API_URL }}
         run: |
           set -euo pipefail
-          for var in EXPO_TOKEN EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_ANON_KEY EXPO_PUBLIC_API_URL; do
+          for var in EXPO_TOKEN SENTRY_AUTH_TOKEN EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_ANON_KEY EXPO_PUBLIC_API_URL; do
             if [ -z "${!var}" ]; then
               echo "❌ $var is not set in the Production environment"
               exit 1
@@ -192,6 +193,7 @@ jobs:
         working-directory: mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: |
           set -euo pipefail
           PLATFORM="${{ matrix.platform }}"
@@ -248,15 +250,15 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "build=${BUILD}" >> "$GITHUB_OUTPUT"
           mkdir -p build-meta
-          if [ -f "$FILE" ]; then
+          if [ -s "$FILE" ] && node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "$FILE" >/dev/null 2>&1; then
             cp "$FILE" "build-meta/${PLATFORM}.json"
-            node <<NODE
+            PLATFORM="$PLATFORM" FILE="$FILE" node <<'NODE'
           const fs = require('fs');
-          const data = JSON.parse(fs.readFileSync('$FILE', 'utf8'));
+          const data = JSON.parse(fs.readFileSync(process.env.FILE, 'utf8'));
           const builds = Array.isArray(data) ? data : [data];
           const b = builds[0] || {};
           const status = (b.status || 'unknown').toLowerCase();
-          const platform = (b.platform || '$PLATFORM').toLowerCase();
+          const platform = (b.platform || process.env.PLATFORM).toLowerCase();
           const url = b.artifacts?.buildUrl || b.artifacts?.applicationArchiveUrl || '';
           fs.writeFileSync('build-meta/' + platform + '-status.txt', status);
           if (platform === 'android' && url) {
@@ -269,6 +271,7 @@ jobs:
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary.replace(/\\n/g, '\n'));
           NODE
           else
+            echo "No valid EAS build metadata for ${PLATFORM}"
             echo "missing" > "build-meta/${PLATFORM}-status.txt"
           fi
 
