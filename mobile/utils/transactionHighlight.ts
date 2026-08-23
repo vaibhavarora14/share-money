@@ -16,3 +16,17 @@ export function startTransactionHighlightTimer(
 ): () => void {
   return schedule(onClear, TRANSACTION_HIGHLIGHT_DURATION_MS);
 }
+
+export function shouldConsumeTransactionHighlight(
+  requestedTransactionId: number | null,
+  visibleTransactionId: number | null,
+  highlightedRowY: number | null,
+  transactionsSectionY: number | null,
+  alreadyConsumed: boolean,
+): boolean {
+  return !alreadyConsumed &&
+    requestedTransactionId !== null &&
+    requestedTransactionId === visibleTransactionId &&
+    highlightedRowY !== null &&
+    transactionsSectionY !== null;
+}

@@ -316,6 +316,12 @@ function AppContent() {
     }
   }, [notificationFeatureEnabled, usesDesktopNotificationPanel]);
 
+  const handleTransactionHighlightShown = React.useCallback((transactionId: number) => {
+    setHighlightedTransactionId((current) =>
+      current === transactionId ? null : current
+    );
+  }, []);
+
   useEffect(() => {
     if (usesDesktopNotificationPanel || desktopNotificationRoute === "closed") return;
     const route = desktopNotificationRoute;
@@ -739,6 +745,7 @@ function AppContent() {
       ) : (
         <NotificationsScreen
           onBack={() => setDesktopNotificationRoute("closed")}
+          isActive={desktopNotificationRoute === "list"}
           onOpenNotification={(notification) => {
             setSelectedNotificationId(notification.id);
             setDesktopNotificationRoute("detail");
@@ -995,6 +1002,7 @@ function AppContent() {
           }}
           initialListMode={groupInitialListMode}
           highlightedTransactionId={highlightedTransactionId}
+          onHighlightedTransactionShown={handleTransactionHighlightShown}
         />
         <BottomNavBar
           currentRoute={currentRoute}
