@@ -59,9 +59,12 @@ import {
   isSessionExpiredError,
 } from "../utils/errorMessages";
 import {
+  createTransactionHighlightTimer,
+  getCachedTransactionHighlightRowY,
   shouldClearTransactionHighlightOnScroll,
   shouldConsumeTransactionHighlight,
-  startTransactionHighlightTimer,
+  type TransactionHighlightTimer,
+  type TransactionHighlightRowLayout,
 } from "../utils/transactionHighlight";
 import { GroupStatsMode } from "./GroupStatsScreen";
 import { SettlementFormScreen } from "./SettlementFormScreen";
@@ -124,6 +127,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     highlightedTransactionId,
   );
   const highlightConsumedRef = React.useRef(false);
+  const highlightTimerRef = React.useRef<TransactionHighlightTimer | null>(null);
+  const highlightedRowLayoutRef = React.useRef<TransactionHighlightRowLayout | null>(null);
   
   // Web-compatible confirmation dialog state
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -399,10 +404,24 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
   useEffect(() => {
     if (highlightedTransactionId === null) return;
+    highlightTimerRef.current?.cancel();
+    highlightTimerRef.current = createTransactionHighlightTimer(() => {
+      setVisibleHighlightedTransactionId((currentTransactionId) =>
+        currentTransactionId === highlightedTransactionId ? null : currentTransactionId
+      );
+      setHighlightedRowY(null);
+    });
     highlightConsumedRef.current = false;
     setVisibleHighlightedTransactionId(highlightedTransactionId);
-    setHighlightedRowY(null);
+    setHighlightedRowY(getCachedTransactionHighlightRowY(
+      highlightedTransactionId,
+      highlightedRowLayoutRef.current,
+    ));
   }, [highlightedTransactionId]);
+
+  useEffect(() => () => {
+    highlightTimerRef.current?.cancel();
+  }, []);
 
   useEffect(() => {
     if (transactionsSectionY === null || highlightedRowY === null) return;
@@ -422,6 +441,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     });
     highlightConsumedRef.current = true;
     onHighlightedTransactionShown?.(visibleHighlightedTransactionId!);
+    highlightTimerRef.current?.start();
   }, [
     highlightedRowY,
     highlightedTransactionId,
@@ -430,24 +450,19 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     visibleHighlightedTransactionId,
   ]);
 
-  useEffect(() => {
-    if (
-      visibleHighlightedTransactionId === null ||
-      transactionsSectionY === null ||
-      highlightedRowY === null
-    ) {
-      return;
-    }
-
-    return startTransactionHighlightTimer(() => {
-      setVisibleHighlightedTransactionId(null);
-      setHighlightedRowY(null);
-    });
-  }, [highlightedRowY, transactionsSectionY, visibleHighlightedTransactionId]);
-
   const handleTransactionsSectionLayout = React.useCallback((event: LayoutChangeEvent) => {
     setTransactionsSectionY(event.nativeEvent.layout.y);
   }, []);
+
+  const handleHighlightedRowLayout = React.useCallback((y: number) => {
+    if (visibleHighlightedTransactionId === null) return;
+
+    highlightedRowLayoutRef.current = {
+      transactionId: visibleHighlightedTransactionId,
+      y,
+    };
+    setHighlightedRowY(y);
+  }, [visibleHighlightedTransactionId]);
 
   const handleLoadMoreTransactions = React.useCallback(() => {
     if (!txHasNextPage || txIsFetchingNextPage) return;
@@ -457,6 +472,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const clearVisibleTransactionHighlight = React.useCallback((transactionId: number) => {
     if (visibleHighlightedTransactionId !== transactionId) return;
 
+    highlightTimerRef.current?.cancel();
     setVisibleHighlightedTransactionId(null);
     setHighlightedRowY(null);
 
@@ -469,15 +485,12 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const handleMainScrollBeginDrag = React.useCallback(() => {
     if (
       visibleHighlightedTransactionId === null ||
-      !shouldClearTransactionHighlightOnScroll(
-        visibleHighlightedTransactionId,
-        highlightedRowY,
-      )
+      !shouldClearTransactionHighlightOnScroll(visibleHighlightedTransactionId)
     ) {
       return;
     }
     clearVisibleTransactionHighlight(visibleHighlightedTransactionId);
-  }, [clearVisibleTransactionHighlight, highlightedRowY, visibleHighlightedTransactionId]);
+  }, [clearVisibleTransactionHighlight, visibleHighlightedTransactionId]);
 
   const handleMainScroll = React.useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (listMode !== "transactions" || !txHasNextPage || txIsFetchingNextPage) return;
@@ -1053,7 +1066,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                   members={group.members || []}
                   participants={participants}
                   highlightedTransactionId={visibleHighlightedTransactionId}
-                  onHighlightedLayout={setHighlightedRowY}
+                  onHighlightedLayout={handleHighlightedRowLayout}
                   onHighlightedInteraction={clearVisibleTransactionHighlight}
                 />
               </View>

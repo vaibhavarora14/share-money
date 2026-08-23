@@ -5,6 +5,16 @@ type HighlightScheduler = (
   delayMs: number,
 ) => () => void;
 
+export interface TransactionHighlightTimer {
+  start: () => void;
+  cancel: () => void;
+}
+
+export interface TransactionHighlightRowLayout {
+  transactionId: number;
+  y: number;
+}
+
 const defaultScheduler: HighlightScheduler = (callback, delayMs) => {
   const timeout = setTimeout(callback, delayMs);
   return () => clearTimeout(timeout);
@@ -15,6 +25,36 @@ export function startTransactionHighlightTimer(
   schedule: HighlightScheduler = defaultScheduler,
 ): () => void {
   return schedule(onClear, TRANSACTION_HIGHLIGHT_DURATION_MS);
+}
+
+export function createTransactionHighlightTimer(
+  onClear: () => void,
+  schedule: HighlightScheduler = defaultScheduler,
+): TransactionHighlightTimer {
+  let started = false;
+  let cancelScheduled: (() => void) | null = null;
+
+  return {
+    start: () => {
+      if (started) return;
+
+      started = true;
+      cancelScheduled = startTransactionHighlightTimer(onClear, schedule);
+    },
+    cancel: () => {
+      cancelScheduled?.();
+      cancelScheduled = null;
+    },
+  };
+}
+
+export function getCachedTransactionHighlightRowY(
+  requestedTransactionId: number,
+  cachedLayout: TransactionHighlightRowLayout | null,
+): number | null {
+  return cachedLayout?.transactionId === requestedTransactionId
+    ? cachedLayout.y
+    : null;
 }
 
 export function shouldConsumeTransactionHighlight(
@@ -33,9 +73,8 @@ export function shouldConsumeTransactionHighlight(
 
 export function shouldClearTransactionHighlightOnScroll(
   visibleTransactionId: number | null,
-  highlightedRowY: number | null,
 ): boolean {
-  return visibleTransactionId !== null && highlightedRowY !== null;
+  return visibleTransactionId !== null;
 }
 
 export function openTransactionWithHighlightConsumption(

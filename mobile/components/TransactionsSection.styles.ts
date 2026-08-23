@@ -13,6 +13,11 @@ export const styles = StyleSheet.create({
     backgroundColor: 'transparent', // Let list blend or use surface
     overflow: 'hidden',
   },
+  highlightOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 20,
+    borderWidth: 2,
+  },
   pressable: {
     paddingHorizontal: 16,
     paddingVertical: 12,
