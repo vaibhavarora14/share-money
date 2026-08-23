@@ -5,6 +5,10 @@ import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import type { NotificationPreference } from "../types/notifications";
 import { fetchWithAuth } from "../utils/api";
+import {
+  cleanupPushRegistration,
+  type PushTokenCleanupResult,
+} from "../utils/pushTokenCleanup";
 
 const TOKEN_STORAGE_KEY = "registered-expo-push-token";
 const CHANNEL_ID = "expense_activity";
@@ -78,15 +82,21 @@ export async function enablePushNotifications(): Promise<NotificationPreference>
   return updatePreference(true, "granted");
 }
 
-export async function unregisterCurrentPushToken(): Promise<void> {
-  const token = await AsyncStorage.getItem(TOKEN_STORAGE_KEY);
-  if (!token) return;
-  const response = await fetchWithAuth("/notifications", {
-    method: "DELETE",
-    body: JSON.stringify({ token }),
+export async function unregisterCurrentPushToken(): Promise<PushTokenCleanupResult> {
+  return cleanupPushRegistration({
+    getStoredToken: () => AsyncStorage.getItem(TOKEN_STORAGE_KEY),
+    unregisterServer: async (token) => {
+      const response = await fetchWithAuth("/notifications", {
+        method: "DELETE",
+        body: JSON.stringify({ token }),
+      }, "throw");
+      if (!response.ok) {
+        throw new Error("Unable to unregister this device from notifications");
+      }
+    },
+    unregisterNative: () => Notifications.unregisterForNotificationsAsync(),
+    clearStoredToken: () => AsyncStorage.removeItem(TOKEN_STORAGE_KEY),
   });
-  if (!response.ok) throw new Error("Unable to unregister this device from notifications");
-  await AsyncStorage.removeItem(TOKEN_STORAGE_KEY);
 }
 
 export async function disablePushNotifications(): Promise<NotificationPreference> {

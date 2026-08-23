@@ -1,5 +1,6 @@
 import type { NotificationPreference } from "../types/notifications";
 import { fetchWithAuth } from "../utils/api";
+import type { PushTokenCleanupResult } from "../utils/pushTokenCleanup";
 
 async function setUnavailablePreference(): Promise<NotificationPreference> {
   const response = await fetchWithAuth("/notifications", {
@@ -16,7 +17,9 @@ async function setUnavailablePreference(): Promise<NotificationPreference> {
 
 export const enablePushNotifications = setUnavailablePreference;
 export const disablePushNotifications = setUnavailablePreference;
-export async function unregisterCurrentPushToken(): Promise<void> {}
+export async function unregisterCurrentPushToken(): Promise<PushTokenCleanupResult> {
+  return { status: "no-token", failureStages: [] };
+}
 export async function syncEnabledPushRegistration(): Promise<void> {}
 export function subscribeToNotificationResponses(
   _onResponse: (data: Record<string, unknown>) => void,
