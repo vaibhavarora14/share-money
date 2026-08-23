@@ -8,6 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 const { resolveAndroidPushConfig } = require('./config/androidPushConfig.cjs');
+const { validateSentryBuildEnvironment } = require('./config/sentryBuildConfig.cjs');
 
 // Read version from version.json
 const versionPath = path.join(__dirname, 'version.json');
@@ -45,6 +46,8 @@ try {
 }
 
 module.exports = ({ config }) => {
+  validateSentryBuildEnvironment(process.env);
+
   const androidPushConfig = resolveAndroidPushConfig({
     env: process.env,
     projectRoot: __dirname,
@@ -159,6 +162,7 @@ module.exports = ({ config }) => {
           }
         : {}),
       extra: {
+        buildProfile: process.env.EAS_BUILD_PROFILE || "development",
         eas: {
           projectId: "afddb7db-3d7d-46da-a1b5-0d6e4b4374ce"
         }
@@ -174,6 +178,13 @@ module.exports = ({ config }) => {
       },
       plugins: [
         './plugins/withStripAssociatedDomains',
+        [
+          "@sentry/react-native/expo",
+          {
+            "organization": "sharemoney",
+            "project": "react-native"
+          }
+        ],
         [
           "expo-build-properties",
           {

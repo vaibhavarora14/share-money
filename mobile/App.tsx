@@ -7,6 +7,8 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import * as Linking from "expo-linking";
+import Constants from "expo-constants";
+import * as Device from "expo-device";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
@@ -98,6 +100,25 @@ import {
 import { log, logError } from "./utils/logger";
 import { needsTermsAcceptance } from "./utils/onboardingFlow";
 import { resolveNotificationRoute } from "./utils/notificationRouting";
+import {
+  getSentryRuntimeTags,
+  isSentryDiagnosticUrl,
+} from "./utils/sentryDiagnostics";
+
+const SENTRY_DIAGNOSTICS_ENABLED =
+  process.env.EXPO_PUBLIC_ENABLE_SENTRY_DIAGNOSTICS === "true";
+
+function captureSentrySourceMapDiagnostic(): void {
+  try {
+    throw new Error("SharedMoney internal Sentry source-map diagnostic");
+  } catch (error) {
+    Sentry.captureException(error, {
+      tags: {
+        diagnostic: "source_map",
+      },
+    });
+  }
+}
 
 const PENDING_INVITE_TOKEN_KEY = "pending_invite_token";
 const PENDING_GROUP_DEEP_LINK_KEY = "pending_group_deep_link";
@@ -440,6 +461,11 @@ function AppContent() {
   // Handle deep links: initial URL (cold start / web navigation) + url events.
   useEffect(() => {
     const handleUrl = async (url: string | null) => {
+      if (isSentryDiagnosticUrl(url, SENTRY_DIAGNOSTICS_ENABLED)) {
+        captureSentrySourceMapDiagnostic();
+        return;
+      }
+
       const token = extractInviteToken(url);
       if (token) {
         if (session?.user?.id && hasAcceptedCurrentTerms) {
@@ -1133,11 +1159,8 @@ if (!process.env.EXPO_PUBLIC_SENTRY_DSN) {
       // Cast through `any` to avoid TypeScript issues with the
       // experimental mobile replay API typings.
       Sentry.mobileReplayIntegration({
-        // NOTE: These are left as false initially while we test internally.
-        // Before broad production rollout, consider enabling them or
-        // masking specific sensitive screens/inputs.
-        maskAllText: false,
-        maskAllImages: false,
+        maskAllText: true,
+        maskAllImages: true,
       }) as any,
     ],
 
@@ -1150,6 +1173,21 @@ if (!process.env.EXPO_PUBLIC_SENTRY_DSN) {
       process.env.EXPO_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE ?? "1.0"
     ),
   });
+
+  const buildNumber =
+    Platform.OS === "ios"
+      ? Constants.expoConfig?.ios?.buildNumber
+      : Constants.expoConfig?.android?.versionCode?.toString();
+
+  Sentry.setTags(
+    getSentryRuntimeTags({
+      isDevice: Device.isDevice,
+      buildProfile: Constants.expoConfig?.extra?.buildProfile,
+      release: Constants.expoConfig?.version,
+      buildNumber,
+      platform: Platform.OS,
+    }),
+  );
 }
 
 export default function App() {

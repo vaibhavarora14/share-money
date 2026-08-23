@@ -6,7 +6,7 @@ import {
 
 Deno.test("transaction highlight clears after a one-second glimpse", () => {
   let scheduledDelay = 0;
-  let scheduledCallback: (() => void) | null = null;
+  const scheduled = { callback: null as (() => void) | null };
   let cleared = false;
 
   const cancel = startTransactionHighlightTimer(
@@ -14,10 +14,10 @@ Deno.test("transaction highlight clears after a one-second glimpse", () => {
       cleared = true;
     },
     (callback, delayMs) => {
-      scheduledCallback = callback;
+      scheduled.callback = callback;
       scheduledDelay = delayMs;
       return () => {
-        scheduledCallback = null;
+        scheduled.callback = null;
       };
     },
   );
@@ -25,11 +25,11 @@ Deno.test("transaction highlight clears after a one-second glimpse", () => {
   assertEquals(scheduledDelay, 1_000);
   assertEquals(cleared, false);
 
-  scheduledCallback?.();
+  scheduled.callback?.();
   assertEquals(cleared, true);
 
   cancel();
-  assertEquals(scheduledCallback, null);
+  assertEquals(scheduled.callback, null);
 });
 
 Deno.test("transaction highlight is consumed only after its row is laid out", () => {

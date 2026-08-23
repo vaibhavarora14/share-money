@@ -19,6 +19,7 @@ build/
 releases/
 *.apk
 *.aab
+*.ipa
 
 # OS files
 .DS_Store

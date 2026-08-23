@@ -29,6 +29,14 @@
         "EXPO_PUBLIC_APP_URL": "https://sharedmoney.app/app",
         "REQUIRE_ANDROID_PUSH_CONFIG": "true"
       }
+    },
+    "verification": {
+      "extends": "production",
+      "distribution": "internal",
+      "channel": "verification",
+      "env": {
+        "EXPO_PUBLIC_ENABLE_SENTRY_DIAGNOSTICS": "true"
+      }
     }
   },
   "submit": {
