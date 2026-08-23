@@ -30,3 +30,22 @@ export function shouldConsumeTransactionHighlight(
     highlightedRowY !== null &&
     transactionsSectionY !== null;
 }
+
+export function shouldClearTransactionHighlightOnScroll(
+  visibleTransactionId: number | null,
+  highlightedRowY: number | null,
+): boolean {
+  return visibleTransactionId !== null && highlightedRowY !== null;
+}
+
+export function openTransactionWithHighlightConsumption(
+  highlightedTransactionId: number | null,
+  onConsumeHighlight: ((transactionId: number) => void) | undefined,
+  onOpenTransaction: () => void,
+): void {
+  if (highlightedTransactionId !== null) {
+    onConsumeHighlight?.(highlightedTransactionId);
+  }
+
+  onOpenTransaction();
+}
