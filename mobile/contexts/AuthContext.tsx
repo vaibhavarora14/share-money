@@ -19,6 +19,7 @@ import { unregisterCurrentPushToken } from "../services/pushNotifications";
 import { supabase } from "../supabase";
 import { getConfiguredWebAppPath } from "../utils/inviteLinks";
 import { log, logError } from "../utils/logger";
+import { performLocalLogout } from "../utils/logoutFlow";
 
 // Complete the auth session when browser closes
 WebBrowser.maybeCompleteAuthSession();
@@ -341,7 +342,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           errorType: "exception",
         });
         // Log out on exception - can't get session means auth is broken
-        supabase.auth.signOut();
+        supabase.auth.signOut({ scope: "local" });
         updateAuthState(null);
       });
 
@@ -354,7 +355,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           { context: "getSession" },
           "warn"
         );
-        supabase.auth.signOut();
+        supabase.auth.signOut({ scope: "local" });
         updateAuthState(null);
       }
     }, AUTH_TIMEOUTS.SESSION_FETCH_TIMEOUT);
@@ -631,30 +632,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
    * Clears the session state and signs out from Supabase
    */
   const signOut = useCallback(async () => {
-    try {
-      await unregisterCurrentPushToken().catch((error) => {
-        logError(error, { context: "signOut.unregisterPushToken" });
-      });
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        logError(error, { context: "signOut" });
-      }
-      // Update state immediately - the auth state change listener will also fire
-      // but we update immediately to ensure UI responds quickly, especially on web
-      updateAuthState(null);
-      
-      // On web, ensure we wait a bit for the auth state change to propagate
-      // This helps ensure the session is fully cleared
-      if (Platform.OS === "web") {
-        // Small delay to ensure auth state change listener processes the signOut
-        await new Promise(resolve => setTimeout(resolve, 100));
-        // Force another state update after delay to ensure UI reflects logout
-        updateAuthState(null);
-      }
-    } catch (error) {
-      logError(error, { context: "signOut", errorType: "exception" });
-      // Even if signOut fails, clear local state
-      updateAuthState(null);
+    const result = await performLocalLogout({
+      cleanupPushToken: unregisterCurrentPushToken,
+      signOut: (options) => supabase.auth.signOut(options),
+      clearAuthState: () => updateAuthState(null),
+    });
+
+    const cleanupFailures = result.cleanupResult?.failureStages ?? [];
+    if (cleanupFailures.length > 0 || result.failureStages.length > 0) {
+      log(
+        "Local logout completed with fallback cleanup",
+        {
+          cleanupStatus: result.cleanupResult?.status,
+          cleanupFailures,
+          logoutFailures: result.failureStages,
+        },
+        "warn",
+      );
     }
   }, [updateAuthState]);
 
