@@ -49,16 +49,51 @@ test("uses the configured EAS file after validating the SharedMoney package", ()
   assert.deepEqual(config, { googleServicesFile: filePath });
 });
 
-test("rejects a production build when Firebase client configuration is missing", () => {
+test("rejects a remote Android build when Firebase client configuration is missing", () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "sharemoney-firebase-"));
 
   assert.throws(
     () =>
       resolveAndroidPushConfig({
-        env: { REQUIRE_ANDROID_PUSH_CONFIG: "true" },
+        env: {
+          REQUIRE_ANDROID_PUSH_CONFIG: "true",
+          EAS_BUILD_RUNNER: "eas-build",
+          EAS_BUILD_PLATFORM: "android",
+        },
         projectRoot: directory,
       }),
     /GOOGLE_SERVICES_JSON/,
+  );
+});
+
+test("allows local EAS config resolution when the Firebase file is a remote-only secret", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "sharemoney-firebase-"));
+
+  assert.deepEqual(
+    resolveAndroidPushConfig({
+      env: {
+        REQUIRE_ANDROID_PUSH_CONFIG: "true",
+        EAS_BUILD_PROFILE: "production",
+      },
+      projectRoot: directory,
+    }),
+    {},
+  );
+});
+
+test("does not require Android Firebase configuration for a remote iOS build", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "sharemoney-firebase-"));
+
+  assert.deepEqual(
+    resolveAndroidPushConfig({
+      env: {
+        REQUIRE_ANDROID_PUSH_CONFIG: "true",
+        EAS_BUILD_RUNNER: "eas-build",
+        EAS_BUILD_PLATFORM: "ios",
+      },
+      projectRoot: directory,
+    }),
+    {},
   );
 });
 
