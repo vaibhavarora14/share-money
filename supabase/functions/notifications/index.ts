@@ -5,6 +5,7 @@ import {
   isNotificationPermissionStatus,
   isValidExpoPushToken,
   parseNotificationCursor,
+  parseNotificationReadIds,
   resolveReadAt,
 } from '../_shared/notification-contract.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
@@ -236,6 +237,37 @@ Deno.serve(async (req: Request) => {
 
         const summary = await fetchUnreadSummary(supabase);
         return createSuccessResponse({ id, read_at: readAt, ...summary }, 200, 0, req);
+      }
+
+      if (action === 'read_many') {
+        let ids: string[];
+        try {
+          ids = parseNotificationReadIds(payload.ids);
+        } catch (error) {
+          return createErrorResponse(
+            400,
+            error instanceof Error ? error.message : 'Invalid notification ids',
+            'VALIDATION_ERROR',
+            undefined,
+            req,
+          );
+        }
+
+        const { data, error } = await supabase
+          .from('notifications')
+          .update({ read_at: now })
+          .in('id', ids)
+          .eq('recipient_user_id', user.id)
+          .is('read_at', null)
+          .is('superseded_at', null)
+          .select('id');
+        if (error) return handleError(error, 'marking notifications read', req);
+        const summary = await fetchUnreadSummary(supabase);
+        return createSuccessResponse({
+          updated: data?.length ?? 0,
+          read_at: now,
+          ...summary,
+        }, 200, 0, req);
       }
 
       if (action === 'read_all') {

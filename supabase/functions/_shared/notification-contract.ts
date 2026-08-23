@@ -19,6 +19,27 @@ export interface NotificationCursor {
   id: string;
 }
 
+const MAX_NOTIFICATION_READ_IDS = 100;
+
+export function parseNotificationReadIds(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length < 1 || value.length > MAX_NOTIFICATION_READ_IDS) {
+    throw new Error(`Notification ids must contain between 1 and ${MAX_NOTIFICATION_READ_IDS} items`);
+  }
+
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const id of value) {
+    if (typeof id !== "string" || !isValidUUID(id)) {
+      throw new Error("Invalid notification id");
+    }
+    if (!seen.has(id)) {
+      seen.add(id);
+      ids.push(id);
+    }
+  }
+  return ids;
+}
+
 export function parseNotificationCursor(
   createdAt: string | null,
   id: string | null,
