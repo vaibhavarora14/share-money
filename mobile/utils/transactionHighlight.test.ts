@@ -1,5 +1,7 @@
 import { assertEquals } from "jsr:@std/assert@1";
 import {
+  openTransactionWithHighlightConsumption,
+  shouldClearTransactionHighlightOnScroll,
   shouldConsumeTransactionHighlight,
   startTransactionHighlightTimer,
 } from "./transactionHighlight.ts";
@@ -37,4 +39,58 @@ Deno.test("transaction highlight is consumed only after its row is laid out", ()
   assertEquals(shouldConsumeTransactionHighlight(42, 42, 20, 100, false), true);
   assertEquals(shouldConsumeTransactionHighlight(42, 42, 20, 100, true), false);
   assertEquals(shouldConsumeTransactionHighlight(42, 7, 20, 100, false), false);
+});
+
+Deno.test("scroll clears a highlight only after the target row is laid out", () => {
+  assertEquals(shouldClearTransactionHighlightOnScroll(42, null), false);
+  assertEquals(shouldClearTransactionHighlightOnScroll(null, 120), false);
+  assertEquals(shouldClearTransactionHighlightOnScroll(42, 120), true);
+});
+
+Deno.test("opening the highlighted transaction consumes it before navigation", () => {
+  let requestedTransactionId: number | null = 42;
+  let route = "group";
+  const events: string[] = [];
+
+  openTransactionWithHighlightConsumption(
+    42,
+    (transactionId) => {
+      events.push("consume");
+      if (requestedTransactionId === transactionId) {
+        requestedTransactionId = null;
+      }
+    },
+    () => {
+      events.push("open");
+      route = "transaction";
+    },
+  );
+
+  assertEquals(events, ["consume", "open"]);
+  assertEquals(route, "transaction");
+  assertEquals(requestedTransactionId, null);
+  const remountedVisibleTransactionId = requestedTransactionId;
+  assertEquals(
+    remountedVisibleTransactionId,
+    null,
+    "the highlight must not replay after the group remounts",
+  );
+});
+
+Deno.test("opening any transaction consumes the active highlight before navigation", () => {
+  let consumedTransactionId: number | null = null;
+  let opened = false;
+
+  openTransactionWithHighlightConsumption(
+    42,
+    (transactionId) => {
+      consumedTransactionId = transactionId;
+    },
+    () => {
+      opened = true;
+    },
+  );
+
+  assertEquals(consumedTransactionId, 42);
+  assertEquals(opened, true);
 });
