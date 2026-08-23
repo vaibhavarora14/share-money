@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { fetchWithAuth } from "./api";
 import {
   compactNotificationReadQueue,
+  nextNotificationReadBatch,
   type NotificationReadOperation,
 } from "./notificationState";
 
@@ -45,21 +46,35 @@ export async function enqueueNotificationRead(
   });
 }
 
+export async function enqueueNotificationReads(
+  userId: string,
+  operations: NotificationReadOperation[],
+): Promise<void> {
+  if (operations.length === 0) return;
+  await withQueueLock(userId, async () => {
+    const queue = await readQueue(userId);
+    const compacted = operations.reduce(compactNotificationReadQueue, queue);
+    await writeQueue(userId, compacted);
+  });
+}
+
 export async function flushNotificationReadQueue(userId: string): Promise<boolean> {
   return withQueueLock(userId, async () => {
     const queue = await readQueue(userId);
     let completed = 0;
-    for (const operation of queue) {
-      const body = operation.kind === "read"
-        ? { action: "read", id: operation.id }
-        : { action: "read_all", through: operation.through };
+    while (completed < queue.length) {
+      const batch = nextNotificationReadBatch(queue.slice(completed));
+      if (!batch) break;
+      const body = batch.kind === "read_many"
+        ? { action: "read_many", ids: batch.ids }
+        : { action: "read_all", through: batch.through };
       try {
         const response = await fetchWithAuth("/notifications", {
           method: "PATCH",
           body: JSON.stringify(body),
         });
         if (!response.ok) break;
-        completed += 1;
+        completed += batch.consumed;
       } catch {
         break;
       }

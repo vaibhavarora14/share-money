@@ -7,6 +7,7 @@ import {
   StyleSheet,
   useWindowDimensions,
   View,
+  type ViewToken,
 } from "react-native";
 import {
   Appbar,
@@ -22,16 +23,22 @@ import { useAuth } from "../contexts/AuthContext";
 import {
   useMarkAllNotificationsRead,
   useMarkNotificationRead,
+  useMarkNotificationsRead,
   useNotifications,
 } from "../hooks/useNotifications";
 import { isDesktopWebViewport } from "../constants/layout";
 import { TransactionNotification } from "../types/notifications";
 import { formatCurrency } from "../utils/currency";
+import {
+  NOTIFICATION_VIEWABILITY_CONFIG,
+  unreadNotificationIdsFromViewTokens,
+} from "../utils/notificationVisibility";
 
 interface NotificationsScreenProps {
   onBack: () => void;
   onOpenNotification: (notification: TransactionNotification) => void;
   onViewGroups: () => void;
+  isActive?: boolean;
 }
 
 interface GroupSection {
@@ -197,17 +204,37 @@ export function NotificationsScreen({
   onBack,
   onOpenNotification,
   onViewGroups,
+  isActive = true,
 }: NotificationsScreenProps) {
   const theme = useTheme();
   const { user } = useAuth();
   const dimensions = useWindowDimensions();
   const notifications = useNotifications();
   const markRead = useMarkNotificationRead();
+  const markViewed = useMarkNotificationsRead();
   const markAll = useMarkAllNotificationsRead();
   const items = notifications.data?.items ?? [];
   const widePanel = isDesktopWebViewport(Platform.OS, dimensions.width);
   const [returningInbox, setReturningInbox] = useState<boolean | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const requestedReadIds = React.useRef(new Set<string>());
+  const markVisibleRowsRef = React.useRef<(ids: string[]) => void>(() => {});
+
+  markVisibleRowsRef.current = (ids) => {
+    if (!isActive) return;
+    const newIds = ids.filter((id) => !requestedReadIds.current.has(id));
+    if (newIds.length === 0) return;
+    newIds.forEach((id) => requestedReadIds.current.add(id));
+    markViewed.mutate(newIds, {
+      onError: () => newIds.forEach((id) => requestedReadIds.current.delete(id)),
+    });
+  };
+
+  const onViewableItemsChanged = React.useRef(
+    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+      markVisibleRowsRef.current(unreadNotificationIdsFromViewTokens(viewableItems));
+    },
+  ).current;
 
   useEffect(() => {
     if (!user?.id) return;
@@ -329,7 +356,7 @@ export function NotificationsScreen({
           </View>
         ) : null}
 
-        {markRead.isError || markAll.isError ? (
+        {markRead.isError || markViewed.isError || markAll.isError ? (
           <View style={[styles.offlineBanner, { backgroundColor: theme.colors.errorContainer }]}>
             <Text variant="bodySmall" style={{ color: theme.colors.onErrorContainer }}>
               Couldn’t save that read state. Try again.
@@ -431,6 +458,8 @@ export function NotificationsScreen({
               }
             }}
             onEndReachedThreshold={0.35}
+            viewabilityConfig={NOTIFICATION_VIEWABILITY_CONFIG}
+            onViewableItemsChanged={onViewableItemsChanged}
             ListFooterComponent={notifications.isFetchingNextPage ? (
               <View style={styles.paginationFooter}>
                 <ActivityIndicator size="small" />

@@ -1,5 +1,8 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { startTransactionHighlightTimer } from "./transactionHighlight.ts";
+import {
+  shouldConsumeTransactionHighlight,
+  startTransactionHighlightTimer,
+} from "./transactionHighlight.ts";
 
 Deno.test("transaction highlight clears after a one-second glimpse", () => {
   let scheduledDelay = 0;
@@ -27,4 +30,11 @@ Deno.test("transaction highlight clears after a one-second glimpse", () => {
 
   cancel();
   assertEquals(scheduledCallback, null);
+});
+
+Deno.test("transaction highlight is consumed only after its row is laid out", () => {
+  assertEquals(shouldConsumeTransactionHighlight(42, 42, null, 100, false), false);
+  assertEquals(shouldConsumeTransactionHighlight(42, 42, 20, 100, false), true);
+  assertEquals(shouldConsumeTransactionHighlight(42, 42, 20, 100, true), false);
+  assertEquals(shouldConsumeTransactionHighlight(42, 7, 20, 100, false), false);
 });

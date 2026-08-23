@@ -3,6 +3,7 @@ import {
   buildNotificationCursorFilter,
   isNotificationPermissionStatus,
   isValidExpoPushToken,
+  parseNotificationReadIds,
   parseNotificationCursor,
   resolveReadAt,
 } from "./notification-contract.ts";
@@ -68,4 +69,19 @@ Deno.test("push tokens and permission enums reject unsafe input", () => {
   assertEquals(isValidExpoPushToken(123), false);
   assertEquals(isNotificationPermissionStatus("granted"), true);
   assertEquals(isNotificationPermissionStatus("prompt_again"), false);
+});
+
+Deno.test("notification read batches deduplicate valid ids", () => {
+  const secondId = "21c6be2b-3b34-4f3f-b398-f73c76b04e89";
+  assertEquals(parseNotificationReadIds([ID, secondId, ID]), [ID, secondId]);
+});
+
+Deno.test("notification read batches reject empty, invalid, and oversized input", () => {
+  assertThrows(() => parseNotificationReadIds([]), Error, "between 1 and 100");
+  assertThrows(() => parseNotificationReadIds(["not-a-uuid"]), Error, "Invalid notification id");
+  assertThrows(
+    () => parseNotificationReadIds(Array.from({ length: 101 }, () => ID)),
+    Error,
+    "between 1 and 100",
+  );
 });

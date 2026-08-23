@@ -4,6 +4,8 @@ import {
   compactNotificationReadQueue,
   flattenNotificationPages,
   markNotificationReadInCache,
+  markNotificationsReadInCache,
+  nextNotificationReadBatch,
   restoreOfflineNotificationCache,
   type NotificationInfiniteData,
 } from "./notificationState.ts";
@@ -72,6 +74,30 @@ Deno.test("optimistic read updates every page summary exactly once", () => {
   assertEquals(markNotificationReadInCache(updated, one.id, "2026-08-18T12:00:00.000Z"), updated);
 });
 
+Deno.test("optimistic batch read updates unique unread rows and group summaries exactly once", () => {
+  const one = item("00000000-0000-4000-8000-000000000001", "group", "2026-08-18T10:00:00.000Z");
+  const two = item("00000000-0000-4000-8000-000000000002", "group", "2026-08-18T09:00:00.000Z");
+  const other = item("00000000-0000-4000-8000-000000000003", "other", "2026-08-18T08:00:00.000Z");
+  const firstPage = page([one, two, other], false);
+  firstPage.unread_count = 3;
+  firstPage.unread_by_group = { group: 2, other: 1 };
+  const data: NotificationInfiniteData = { pages: [firstPage], pageParams: [null] };
+
+  const updated = markNotificationsReadInCache(
+    data,
+    [one.id, two.id, one.id],
+    "2026-08-18T11:00:00.000Z",
+  )!;
+
+  assertEquals(updated.pages[0].unread_count, 1);
+  assertEquals(updated.pages[0].unread_by_group, { other: 1 });
+  assertEquals(updated.pages[0].items.map((notification) => notification.read_at), [
+    "2026-08-18T11:00:00.000Z",
+    "2026-08-18T11:00:00.000Z",
+    null,
+  ]);
+});
+
 Deno.test("later mark-all compacts prior covered reads but preserves later work", () => {
   const queue = compactNotificationReadQueue([
     { kind: "read", id: "old", created_at: "2026-08-18T09:00:00.000Z", queued_at: "2026-08-18T10:01:00.000Z" },
@@ -85,6 +111,38 @@ Deno.test("later mark-all compacts prior covered reads but preserves later work"
     "2026-08-18T11:00:00.000Z",
     "future",
   ]);
+});
+
+Deno.test("read queue flushes consecutive notification reads in bounded batches", () => {
+  const queue = Array.from({ length: 101 }, (_, index) => ({
+    kind: "read" as const,
+    id: `notification-${index}`,
+    created_at: `2026-08-18T10:${String(index % 60).padStart(2, "0")}:00.000Z`,
+    queued_at: "2026-08-18T11:00:00.000Z",
+  }));
+
+  assertEquals(nextNotificationReadBatch(queue), {
+    kind: "read_many",
+    ids: queue.slice(0, 100).map(({ id }) => id),
+    consumed: 100,
+  });
+});
+
+Deno.test("read queue preserves mark-all ordering", () => {
+  assertEquals(nextNotificationReadBatch([{
+    kind: "read_all",
+    through: "2026-08-18T11:00:00.000Z",
+    queued_at: "2026-08-18T11:00:00.000Z",
+  }, {
+    kind: "read",
+    id: "later",
+    created_at: "2026-08-18T12:00:00.000Z",
+    queued_at: "2026-08-18T12:01:00.000Z",
+  }]), {
+    kind: "read_all",
+    through: "2026-08-18T11:00:00.000Z",
+    consumed: 1,
+  });
 });
 
 Deno.test("offline cache preserves the last server-confirmed feature gate", () => {
