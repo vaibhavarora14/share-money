@@ -20,6 +20,13 @@ import { supabase } from "../supabase";
 import { getConfiguredWebAppPath } from "../utils/inviteLinks";
 import { log, logError } from "../utils/logger";
 import { performLocalLogout } from "../utils/logoutFlow";
+import {
+  classifySocialAuthFailure,
+  getSocialAuthUserMessage,
+  type SocialAuthProvider,
+  type SocialAuthStage,
+} from "../utils/socialAuth";
+import { recordSocialAuthFailure } from "../utils/socialAuthTelemetry";
 
 // Complete the auth session when browser closes
 WebBrowser.maybeCompleteAuthSession();
@@ -109,65 +116,32 @@ function mapAuthError(
   return error;
 }
 
-function mapGoogleOAuthError(error: Error): Error {
-  const message = error.message || "";
+function handleSocialAuthFailure(
+  provider: SocialAuthProvider,
+  stage: SocialAuthStage,
+  error: unknown,
+  attemptId: string,
+  cancelled = false,
+): { error: Error | null } {
+  const candidate =
+    error && typeof error === "object"
+      ? (error as { code?: unknown; message?: unknown })
+      : null;
+  const failure = classifySocialAuthFailure({
+    provider,
+    stage,
+    code: typeof candidate?.code === "string" ? candidate.code : undefined,
+    message:
+      typeof candidate?.message === "string"
+        ? candidate.message
+        : String(error ?? "Unknown social authentication error"),
+    cancelled,
+  });
 
-  if (
-    message.includes("Unsupported provider") ||
-    message.includes("provider is not enabled")
-  ) {
-    return new Error(
-      "Google sign-in is not enabled for this Supabase environment. For local Android testing, add [auth.external.google] to supabase/config.toml, use OAuth credentials from the sharedmoney-504507 Google Cloud project, set SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID and SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET in supabase/.env, then restart Supabase."
-    );
-  }
+  if (failure.kind === "cancelled") return { error: null };
 
-  if (
-    message.includes("OAuth") ||
-    message.includes("provider") ||
-    message.includes("client")
-  ) {
-    return new Error(
-      `${message}\n\nFor local Android testing, make sure the sharedmoney-504507 Google Cloud project allows http://127.0.0.1:54321/auth/v1/callback and your local Supabase Google client ID/secret are set.`
-    );
-  }
-
-  return error;
-}
-
-function mapAppleAuthError(error: Error & { code?: string }): Error {
-  const message = error.message || "";
-
-  if (error.code === "ERR_REQUEST_CANCELED") {
-    return new Error("Authentication was cancelled");
-  }
-
-  if (message.includes("unknown reason")) {
-    return new Error(
-      "Apple sign-in could not be completed. Please try again."
-    );
-  }
-
-  if (
-    message.includes("Unsupported provider") ||
-    message.includes("provider is not enabled")
-  ) {
-    return new Error(
-      "Apple sign-in is not enabled for this Supabase environment. Enable the Apple provider in Supabase Auth and add com.vaibhavarora.sharemoney as an allowed client ID."
-    );
-  }
-
-  if (
-    message.includes("OAuth") ||
-    message.includes("provider") ||
-    message.includes("client") ||
-    message.includes("nonce")
-  ) {
-    return new Error(
-      `${message}\n\nMake sure the Apple provider is enabled in Supabase Auth and the iOS bundle ID is configured for Sign in with Apple.`
-    );
-  }
-
-  return error;
+  recordSocialAuthFailure(failure, attemptId);
+  return { error: new Error(getSocialAuthUserMessage(failure)) };
 }
 
 function createAppleNonce(byteCount = 32): string {
@@ -440,6 +414,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
    * @returns Promise resolving to an object with error property (null if successful)
    */
   const signInWithGoogle = useCallback(async () => {
+    const attemptId = Crypto.randomUUID();
+    let stage: SocialAuthStage = "provider_request";
+
     try {
       // For Expo Go, we MUST use the Expo proxy service.
       const isExpoGo = Constants.appOwnership === "expo";
@@ -473,11 +450,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       });
 
       if (urlError) {
-        return { error: mapGoogleOAuthError(urlError) };
+        return handleSocialAuthFailure(
+          "google",
+          stage,
+          urlError,
+          attemptId,
+        );
       }
 
       if (!data?.url) {
-        return { error: new Error("Failed to get OAuth URL") };
+        return handleSocialAuthFailure(
+          "google",
+          stage,
+          new Error("Failed to get OAuth URL"),
+          attemptId,
+        );
       }
 
       if (isWeb) {
@@ -486,60 +473,88 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       }
 
       // Open browser for authentication (native platforms only)
+      stage = "browser_session";
       const result = await WebBrowser.openAuthSessionAsync(
         data.url,
         redirectTo
       );
 
       if (result.type === "success") {
+        stage = "callback_parse";
         // TypeScript doesn't narrow the type properly, but url exists on success
         const url = (result as { type: "success"; url: string }).url;
         const tokens = extractOAuthTokensFromUrl(url);
 
         if (!tokens) {
-          return {
-            error: new Error(
-              "Missing access_token or refresh_token in callback URL"
-            ),
-          };
+          return handleSocialAuthFailure(
+            "google",
+            stage,
+            new Error("OAuth callback tokens were missing"),
+            attemptId,
+          );
         }
 
         // Set session directly from tokens
-        const { data, error: sessionError } = await supabase.auth.setSession({
+        stage = "token_exchange";
+        const { error: sessionError } = await supabase.auth.setSession({
           access_token: tokens.access_token,
           refresh_token: tokens.refresh_token,
         });
 
         if (sessionError) {
-          return { error: mapGoogleOAuthError(sessionError) };
+          return handleSocialAuthFailure(
+            "google",
+            stage,
+            sessionError,
+            attemptId,
+          );
         }
 
         // Verify session was created
+        stage = "session_verification";
         const {
           data: { session: verifySession },
           error: verifyError,
         } = await supabase.auth.getSession();
 
         if (verifyError || !verifySession) {
-          return {
-            error: new Error("Session was not created after setting tokens"),
-          };
+          return handleSocialAuthFailure(
+            "google",
+            stage,
+            verifyError ||
+              new Error("Session was not created after setting tokens"),
+            attemptId,
+          );
         }
 
         return { error: null };
       }
 
-      if (result.type === "cancel") {
-        return { error: new Error("Authentication was cancelled") };
+      if (result.type === "cancel" || result.type === "dismiss") {
+        return handleSocialAuthFailure(
+          "google",
+          stage,
+          new Error("Authentication was cancelled"),
+          attemptId,
+          true,
+        );
       }
 
-      return { error: new Error("Authentication was cancelled or failed") };
+      return handleSocialAuthFailure(
+        "google",
+        stage,
+        Object.assign(new Error("Browser authentication did not complete"), {
+          code: `WEB_BROWSER_${result.type.toUpperCase()}`,
+        }),
+        attemptId,
+      );
     } catch (error) {
-      logError(error, { context: "signInWithGoogle" });
-      return {
-        error:
-          error instanceof Error ? error : new Error("Unknown error occurred"),
-      };
+      return handleSocialAuthFailure(
+        "google",
+        stage,
+        error,
+        attemptId,
+      );
     }
   }, []);
 
@@ -549,6 +564,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
    * @returns Promise resolving to an object with error property (null if successful)
    */
   const signInWithApple = useCallback(async () => {
+    const attemptId = Crypto.randomUUID();
+    let stage: SocialAuthStage = "availability_check";
+
     try {
       if (Platform.OS !== "ios") {
         return { error: new Error("Apple sign-in is only available on iOS") };
@@ -567,6 +585,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         rawNonce
       );
 
+      stage = "native_request";
       const credential = await AppleAuthentication.signInAsync({
         requestedScopes: [
           AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
@@ -576,9 +595,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       });
 
       if (!credential.identityToken) {
-        return { error: new Error("Apple did not return an identity token") };
+        return handleSocialAuthFailure(
+          "apple",
+          stage,
+          new Error("Apple did not return an identity token"),
+          attemptId,
+        );
       }
 
+      stage = "token_exchange";
       const { error: sessionError } = await supabase.auth.signInWithIdToken({
         provider: "apple",
         token: credential.identityToken,
@@ -586,11 +611,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       });
 
       if (sessionError) {
-        return { error: mapAppleAuthError(sessionError) };
+        return handleSocialAuthFailure(
+          "apple",
+          stage,
+          sessionError,
+          attemptId,
+        );
       }
 
       const fullName = formatAppleFullName(credential.fullName);
       if (fullName) {
+        stage = "profile_update";
         const { error: metadataError } = await supabase.auth.updateUser({
           data: {
             full_name: fullName,
@@ -600,30 +631,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         });
 
         if (metadataError) {
-          logError(metadataError, { context: "signInWithApple.updateUser" });
+          handleSocialAuthFailure(
+            "apple",
+            stage,
+            metadataError,
+            attemptId,
+          );
         }
       }
 
+      stage = "session_verification";
       const {
         data: { session: verifySession },
         error: verifyError,
       } = await supabase.auth.getSession();
 
       if (verifyError || !verifySession) {
-        return {
-          error: new Error("Session was not created after Apple sign-in"),
-        };
+        return handleSocialAuthFailure(
+          "apple",
+          stage,
+          verifyError ||
+            new Error("Session was not created after Apple sign-in"),
+          attemptId,
+        );
       }
 
       return { error: null };
     } catch (error) {
-      logError(error, { context: "signInWithApple" });
-      return {
-        error:
-          error instanceof Error
-            ? mapAppleAuthError(error)
-            : new Error("Unknown error occurred"),
-      };
+      return handleSocialAuthFailure(
+        "apple",
+        stage,
+        error,
+        attemptId,
+      );
     }
   }, []);
 
