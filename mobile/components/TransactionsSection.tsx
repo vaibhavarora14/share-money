@@ -120,16 +120,23 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
                 onLayout={isHighlighted
                   ? (event) => onHighlightedLayout?.(event.nativeEvent.layout.y)
                   : undefined}
-                style={[
-                  styles.card,
-                  isHighlighted && {
-                    backgroundColor: theme.colors.primaryContainer,
-                    borderColor: theme.colors.primary,
-                    borderWidth: 2,
-                  },
-                ]}
+                style={styles.card}
                 elevation={0} // Flat, transparent background for list item feel
               >
+                <View
+                  pointerEvents="none"
+                  style={[
+                    styles.highlightOverlay,
+                    {
+                      backgroundColor: isHighlighted
+                        ? theme.colors.primaryContainer
+                        : "transparent",
+                      borderColor: isHighlighted
+                        ? theme.colors.primary
+                        : "transparent",
+                    },
+                  ]}
+                />
                 <Pressable
                   onPress={() => openTransactionWithHighlightConsumption(
                     highlightedTransactionId,
