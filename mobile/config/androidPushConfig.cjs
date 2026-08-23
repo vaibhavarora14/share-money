@@ -43,9 +43,15 @@ function resolveAndroidPushConfig({
   const configuredPath = env.GOOGLE_SERVICES_JSON?.trim();
   const localPath = path.join(projectRoot, "google-services.json");
   const filePath = configuredPath || (fs.existsSync(localPath) ? localPath : null);
+  const isRemoteAndroidBuild =
+    env.EAS_BUILD_RUNNER === "eas-build" &&
+    env.EAS_BUILD_PLATFORM === "android";
 
   if (!filePath) {
-    if (env.REQUIRE_ANDROID_PUSH_CONFIG === "true") {
+    if (
+      env.REQUIRE_ANDROID_PUSH_CONFIG === "true" &&
+      isRemoteAndroidBuild
+    ) {
       throw new Error(
         "Android push configuration is required. Set GOOGLE_SERVICES_JSON to the SharedMoney google-services.json file.",
       );
