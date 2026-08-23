@@ -4,6 +4,7 @@ import { ActivityIndicator, Icon, Surface, Text, useTheme } from "react-native-p
 import { useAuth } from "../contexts/AuthContext";
 import { Participant, Transaction } from "../types";
 import { formatCurrency, getDefaultCurrency } from "../utils/currency";
+import { openTransactionWithHighlightConsumption } from "../utils/transactionHighlight";
 import { styles } from "./TransactionsSection.styles";
 
 interface TransactionsSectionProps {
@@ -17,6 +18,7 @@ interface TransactionsSectionProps {
   participants?: Participant[];
   highlightedTransactionId?: number | null;
   onHighlightedLayout?: (y: number) => void;
+  onHighlightedInteraction?: (transactionId: number) => void;
 }
 
 export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
@@ -30,6 +32,7 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
   participants = [],
   highlightedTransactionId = null,
   onHighlightedLayout,
+  onHighlightedInteraction,
 }) => {
   const theme = useTheme();
   const { session } = useAuth();
@@ -128,7 +131,11 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
                 elevation={0} // Flat, transparent background for list item feel
               >
                 <Pressable
-                  onPress={() => onEdit(transaction)}
+                  onPress={() => openTransactionWithHighlightConsumption(
+                    highlightedTransactionId,
+                    onHighlightedInteraction,
+                    () => onEdit(transaction),
+                  )}
                   accessibilityRole="button"
                   accessibilityLabel={`${transaction.description || "Untitled"}, ${formatCurrency(transaction.amount, currency)}${isHighlighted ? ", highlighted from notification" : ""}`}
                   style={({ pressed }) => [
