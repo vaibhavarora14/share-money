@@ -304,6 +304,9 @@ if [ "$TARGET_PLATFORM" = "ios" ] && [ "$BUILD_MODE" = "local" ]; then
 fi
 
 if [ "$TARGET_PLATFORM" = "android" ] && [ "$BUILD_MODE" = "local" ]; then
+    echo "🔐 Verifying Android Firebase client configuration..."
+    EAS_BUILD_PLATFORM=android REQUIRE_ANDROID_PUSH_CONFIG=true npm run verify:android-push-config
+
     # Run local build
     eas build --local --platform android --profile production
 
