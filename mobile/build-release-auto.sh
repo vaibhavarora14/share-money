@@ -304,6 +304,12 @@ if [ "$TARGET_PLATFORM" = "ios" ] && [ "$BUILD_MODE" = "local" ]; then
 fi
 
 if [ "$TARGET_PLATFORM" = "android" ] && [ "$BUILD_MODE" = "local" ]; then
+    ANDROID_FIREBASE_CONFIG="${GOOGLE_SERVICES_JSON:-$PWD/google-services.json}"
+    if [[ "$ANDROID_FIREBASE_CONFIG" != /* ]]; then
+        ANDROID_FIREBASE_CONFIG="$PWD/$ANDROID_FIREBASE_CONFIG"
+    fi
+    export GOOGLE_SERVICES_JSON="$ANDROID_FIREBASE_CONFIG"
+
     echo "🔐 Verifying Android Firebase client configuration..."
     EAS_BUILD_PLATFORM=android REQUIRE_ANDROID_PUSH_CONFIG=true npm run verify:android-push-config
 

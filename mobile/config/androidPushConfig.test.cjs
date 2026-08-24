@@ -139,3 +139,15 @@ test("allows local development without Firebase configuration", () => {
     {},
   );
 });
+
+for (const releaseScript of ["build-release.sh", "build-release-auto.sh"]) {
+  test(`${releaseScript} passes the verified Firebase file into the local EAS builder`, () => {
+    const script = fs.readFileSync(
+      path.join(__dirname, "..", releaseScript),
+      "utf8",
+    );
+
+    assert.match(script, /export GOOGLE_SERVICES_JSON/);
+    assert.match(script, /eas build --local --platform android/);
+  });
+}
