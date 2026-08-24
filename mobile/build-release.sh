@@ -83,6 +83,9 @@ echo ""
 mkdir -p ../releases
 
 if [ "$BUILD_MODE" = "local" ]; then
+    echo "🔐 Verifying Android Firebase client configuration..."
+    EAS_BUILD_PLATFORM=android REQUIRE_ANDROID_PUSH_CONFIG=true npm run verify:android-push-config
+
     # Run the local build
     eas build --local --platform android --profile production
 

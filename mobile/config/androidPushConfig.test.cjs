@@ -66,18 +66,20 @@ test("rejects a remote Android build when Firebase client configuration is missi
   );
 });
 
-test("allows local EAS config resolution when the Firebase file is a remote-only secret", () => {
+test("rejects a local Android build when Firebase client configuration is missing", () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "sharemoney-firebase-"));
 
-  assert.deepEqual(
-    resolveAndroidPushConfig({
-      env: {
-        REQUIRE_ANDROID_PUSH_CONFIG: "true",
-        EAS_BUILD_PROFILE: "production",
-      },
-      projectRoot: directory,
-    }),
-    {},
+  assert.throws(
+    () =>
+      resolveAndroidPushConfig({
+        env: {
+          REQUIRE_ANDROID_PUSH_CONFIG: "true",
+          EAS_BUILD_PROFILE: "production",
+          EAS_BUILD_PLATFORM: "android",
+        },
+        projectRoot: directory,
+      }),
+    /GOOGLE_SERVICES_JSON/,
   );
 });
 
