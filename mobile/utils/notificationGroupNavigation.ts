@@ -13,7 +13,7 @@ interface OpenNotificationGroupOptions {
   navigate: (group: Group) => void;
   refresh: () => Promise<void>;
   onRefreshError: (error: unknown) => void;
-  onSettled: () => void;
+  onSettled?: () => void;
 }
 
 export function resolveNotificationGroup(
