@@ -99,6 +99,10 @@ import {
 } from "./utils/inviteLinks";
 import { log, logError } from "./utils/logger";
 import { needsTermsAcceptance } from "./utils/onboardingFlow";
+import {
+  NotificationGroupReference,
+  openNotificationGroupImmediately,
+} from "./utils/notificationGroupNavigation";
 import { resolveNotificationRoute } from "./utils/notificationRouting";
 import {
   getSentryRuntimeTags,
@@ -211,6 +215,7 @@ function AppContent() {
   const pushRegistrationSyncedUserRef = React.useRef<string | null>(null);
   const redeemingTokenRef = React.useRef<string | null>(null);
   const openingGroupDeepLinkRef = React.useRef<string | null>(null);
+  const openingNotificationGroupRef = React.useRef(false);
   const prefetchGroupData = React.useCallback(
     async (groupId: string) => {
       await Promise.all([
@@ -325,6 +330,50 @@ function AppContent() {
       );
       openingGroupDeepLinkRef.current = null;
     }
+  }, [queryClientInstance]);
+
+  const openNotificationGroup = React.useCallback((
+    groupReference: NotificationGroupReference,
+    initialMode: "transactions" | "activity",
+    transactionId: number | null,
+  ): boolean => {
+    const isAlreadyOpening = openingNotificationGroupRef.current;
+    if (!isAlreadyOpening) openingNotificationGroupRef.current = true;
+
+    const started = openNotificationGroupImmediately({
+      reference: groupReference,
+      cachedDetails: queryClientInstance.getQueryData<GroupWithMembers>(
+        queryKeys.group(groupReference.id),
+      ),
+      cachedGroups: queryClientInstance.getQueryData<Group[]>(queryKeys.groups),
+      isAlreadyOpening,
+      navigate: (group) => {
+        setBanner(null);
+        setShowAddMember(false);
+        setEditingTransaction(null);
+        setStatsContext(null);
+        setGroupInitialListMode(initialMode);
+        setHighlightedTransactionId(initialMode === "transactions" ? transactionId : null);
+        setSelectedGroup(group);
+        setCurrentRoute("group-details");
+      },
+      refresh: async () => {
+        await queryClientInstance.fetchQuery({
+          queryKey: queryKeys.group(groupReference.id),
+          queryFn: () => fetchGroupDetails(groupReference.id),
+          staleTime: 0,
+        });
+      },
+      onRefreshError: (error) => {
+        logError(error, {
+          context: "refresh notification group",
+          groupId: groupReference.id,
+        });
+      },
+    });
+
+    if (started) openingNotificationGroupRef.current = false;
+    return started;
   }, [queryClientInstance]);
 
   const openNotifications = React.useCallback(() => {
@@ -759,10 +808,10 @@ function AppContent() {
         <NotificationDetailScreen
           notificationId={selectedNotificationId}
           onBack={() => setDesktopNotificationRoute("list")}
-          onViewGroup={(groupId, showActivity, transactionId) => {
+          onViewGroup={(group, showActivity, transactionId) => {
             setDesktopNotificationRoute("closed");
-            void openGroupDeepLink(
-              groupId,
+            return openNotificationGroup(
+              group,
               showActivity ? "activity" : "transactions",
               showActivity ? null : transactionId,
             );
@@ -886,9 +935,9 @@ function AppContent() {
         <NotificationDetailScreen
           notificationId={selectedNotificationId}
           onBack={() => setCurrentRoute("notifications")}
-          onViewGroup={(groupId, showActivity, transactionId) => {
-            void openGroupDeepLink(
-              groupId,
+          onViewGroup={(group, showActivity, transactionId) => {
+            return openNotificationGroup(
+              group,
               showActivity ? "activity" : "transactions",
               showActivity ? null : transactionId,
             );

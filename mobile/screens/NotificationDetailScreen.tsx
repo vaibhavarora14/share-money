@@ -5,11 +5,16 @@ import { isDesktopWebViewport } from "../constants/layout";
 import { useMarkNotificationRead, useNotification } from "../hooks/useNotifications";
 import { NotificationPosition } from "../types/notifications";
 import { formatCurrency } from "../utils/currency";
+import { NotificationGroupReference } from "../utils/notificationGroupNavigation";
 
 interface NotificationDetailScreenProps {
   notificationId: string;
   onBack: () => void;
-  onViewGroup: (groupId: string, showActivity: boolean, transactionId: number | null) => void;
+  onViewGroup: (
+    group: NotificationGroupReference,
+    showActivity: boolean,
+    transactionId: number | null,
+  ) => boolean | void;
 }
 
 function resolveNetMinor(position: NotificationPosition | null | undefined): number | null {
@@ -65,6 +70,8 @@ export function NotificationDetailScreen({ notificationId, onBack, onViewGroup }
   const dimensions = useWindowDimensions();
   const notification = useNotification(notificationId);
   const markRead = useMarkNotificationRead();
+  const openingGroupRef = React.useRef(false);
+  const [isOpeningGroup, setIsOpeningGroup] = React.useState(false);
   const item = notification.data;
   const widePanel = isDesktopWebViewport(Platform.OS, dimensions.width);
 
@@ -110,6 +117,23 @@ export function NotificationDetailScreen({ notificationId, onBack, onViewGroup }
     : impactAmount.direction === "negative"
       ? theme.colors.secondary
       : theme.colors.onSurface;
+
+  const handleViewGroup = () => {
+    if (openingGroupRef.current) return;
+
+    openingGroupRef.current = true;
+    setIsOpeningGroup(true);
+    const started = onViewGroup(
+      group,
+      action === "deleted" || transaction.deleted,
+      canHighlightTransaction ? transaction.id : null,
+    );
+
+    if (started === false) {
+      openingGroupRef.current = false;
+      setIsOpeningGroup(false);
+    }
+  };
 
   return (
     <View style={[styles.stage, { backgroundColor: theme.colors.background }]}>
@@ -182,11 +206,9 @@ export function NotificationDetailScreen({ notificationId, onBack, onViewGroup }
         <View style={styles.footer}>
           <Button
             mode="contained"
-            onPress={() => onViewGroup(
-              group.id,
-              action === "deleted" || transaction.deleted,
-              canHighlightTransaction ? transaction.id : null,
-            )}
+            onPress={handleViewGroup}
+            loading={isOpeningGroup}
+            disabled={isOpeningGroup}
             contentStyle={styles.buttonContent}
           >
             {action === "deleted" || transaction.deleted
