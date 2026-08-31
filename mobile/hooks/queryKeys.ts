@@ -6,6 +6,8 @@ export const queryKeys = {
   userProfiles: (userIds: string[]) => ["userProfiles", ...userIds.sort()] as const,
   transactions: (groupId: string) => ["transactions", groupId] as const,
   transactionsFeed: (groupId: string) => ["transactions", groupId, "feed"] as const,
+  lastGroupTransactionCurrency: (groupId: string) =>
+    ["transactions", groupId, "latest-currency"] as const,
   groupStats: (groupId: string) => ["groupStats", groupId] as const,
   balances: (groupId: string) => ["balances", groupId] as const,
   activity: (groupId: string) => ["activity", groupId] as const,

@@ -42,7 +42,10 @@ import {
   useSettlements,
   useUpdateSettlement,
 } from "../hooks/useSettlements";
-import { useTransactions } from "../hooks/useTransactions";
+import {
+  useGroupLastTransactionCurrency,
+  useTransactions,
+} from "../hooks/useTransactions";
 import {
   Balance,
   ActivityItem,
@@ -177,6 +180,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     fetchNextPage: fetchNextTransactionsPage,
     refetch: refetchTx,
   } = useTransactions(initialGroup.id);
+  // Keep this group's latest-entered currency cached while the screen is open.
+  useGroupLastTransactionCurrency(initialGroup.id);
   const {
     data: invitations = [] as GroupInvitation[],
     isLoading: invitationsLoading,
