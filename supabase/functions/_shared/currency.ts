@@ -15,6 +15,7 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
   'CNY': '¥',
   'AUD': 'A$',
   'CAD': 'C$',
+  'THB': '฿',
 };
 
 /**

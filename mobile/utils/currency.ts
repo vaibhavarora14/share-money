@@ -14,6 +14,7 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
   'CNY': '¥',
   'AUD': 'A$',
   'CAD': 'C$',
+  'THB': '฿',
 };
 
 /**
@@ -30,6 +31,7 @@ export const CURRENCIES: Currency[] = [
   { code: 'CNY', symbol: '¥', name: 'Chinese Yuan' },
   { code: 'AUD', symbol: 'A$', name: 'Australian Dollar' },
   { code: 'CAD', symbol: 'C$', name: 'Canadian Dollar' },
+  { code: 'THB', symbol: '฿', name: 'Thai Baht' },
 ];
 
 /**

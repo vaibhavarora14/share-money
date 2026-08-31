@@ -10,7 +10,7 @@ import {
 } from "../../utils/calculators";
 import { PlatformCta } from "../landing/PlatformCta";
 
-const currencies = ["USD", "INR", "EUR", "GBP"];
+const currencies = ["USD", "INR", "EUR", "GBP", "THB"];
 
 function formatMoney(amountMinor: number, currency: string) {
   return new Intl.NumberFormat(undefined, {
