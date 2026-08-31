@@ -62,7 +62,9 @@ import {
 import { fetchGroupDetails, useGroupDetails } from "./hooks/useGroups";
 import { useProfile } from "./hooks/useProfile";
 import {
+  fetchLatestGroupTransactionCurrency,
   fetchTransactionsPage,
+  getGroupFormDefaultCurrency,
   TransactionsCursor,
   TransactionsPageResponse,
   useCreateTransaction,
@@ -200,6 +202,8 @@ function AppContent() {
     useState<number>(0);
   const [groupRefreshTrigger, setGroupRefreshTrigger] = useState<number>(0);
   const [editingTransaction, setEditingTransaction] = useState<any>(null);
+  const [transactionFormDefaultCurrency, setTransactionFormDefaultCurrency] =
+    useState(() => getDefaultCurrency());
   const [banner, setBanner] = useState<BannerNotice | null>(null);
   const dismissBanner = React.useCallback(() => setBanner(null), []);
   const [statsContext, setStatsContext] = useState<{
@@ -230,6 +234,10 @@ function AppContent() {
           initialPageParam: null as TransactionsCursor | null,
           getNextPageParam: (lastPage: TransactionsPageResponse) =>
             lastPage.has_more ? lastPage.next_cursor : null,
+        }),
+        queryClientInstance.prefetchQuery({
+          queryKey: queryKeys.lastGroupTransactionCurrency(groupId),
+          queryFn: () => fetchLatestGroupTransactionCurrency(groupId),
         }),
         queryClientInstance.prefetchQuery({
           queryKey: queryKeys.balances(groupId),
@@ -987,7 +995,7 @@ function AppContent() {
             setEditingTransaction(null);
           }}
           onDelete={editingTransaction ? handleDeleteTransaction : undefined}
-          defaultCurrency={getDefaultCurrency()}
+          defaultCurrency={transactionFormDefaultCurrency}
           groupId={selectedGroup.id}
         />
         <StatusBar style={theme.dark ? "light" : "dark"} />
@@ -1061,6 +1069,13 @@ function AppContent() {
           }}
           onAddTransaction={() => {
             setEditingTransaction(null);
+            if (groupToDisplay.id) {
+              setTransactionFormDefaultCurrency(
+                getGroupFormDefaultCurrency(queryClientInstance, groupToDisplay.id)
+              );
+            } else {
+              setTransactionFormDefaultCurrency(getDefaultCurrency());
+            }
             setCurrentRoute("transaction-form");
           }}
           onEditTransaction={(transaction) => {
