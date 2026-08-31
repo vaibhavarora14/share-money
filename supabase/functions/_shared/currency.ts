@@ -2,26 +2,21 @@
  * Currency formatting utilities
  */
 
-/**
- * Currency symbol mapping
- */
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  'USD': '$',
-  'INR': '₹',
-  'EUR': '€',
-  'GBP': '£',
-  'JPY': '¥',
-  'KRW': '₩',
-  'CNY': '¥',
-  'AUD': 'A$',
-  'CAD': 'C$',
-  'THB': '฿',
-};
+import { CURRENCY_SYMBOLS, ZERO_DECIMAL_CURRENCIES } from './isoCurrencies.ts';
 
 /**
  * Default currency code
  */
 const DEFAULT_CURRENCY = 'USD';
+
+function getCurrencySymbol(currencyCode: string): string {
+  const normalized = currencyCode.toUpperCase();
+  return CURRENCY_SYMBOLS[normalized] || normalized;
+}
+
+function getCurrencyDecimals(currencyCode: string): number {
+  return ZERO_DECIMAL_CURRENCIES.has(currencyCode.toUpperCase()) ? 0 : 2;
+}
 
 /**
  * Formats currency amount for display
@@ -31,14 +26,12 @@ const DEFAULT_CURRENCY = 'USD';
  */
 export function formatCurrency(amount: number | string, currencyCode: string = DEFAULT_CURRENCY): string {
   const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+  const symbol = getCurrencySymbol(currencyCode);
+  const decimals = getCurrencyDecimals(currencyCode);
   if (isNaN(num)) {
-    const symbol = CURRENCY_SYMBOLS[currencyCode.toUpperCase()] || '$';
-    return `${symbol}0.00`;
+    return `${symbol}${decimals === 0 ? '0' : '0.00'}`;
   }
-  
-  const symbol = CURRENCY_SYMBOLS[currencyCode.toUpperCase()] || CURRENCY_SYMBOLS[DEFAULT_CURRENCY] || '$';
-  // For currencies like JPY that don't use decimals
-  const decimals = ['JPY', 'KRW'].includes(currencyCode.toUpperCase()) ? 0 : 2;
+
   const formattedAmount = Math.abs(num).toLocaleString('en-US', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,

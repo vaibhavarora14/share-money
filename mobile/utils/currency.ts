@@ -1,38 +1,11 @@
-import { Currency } from "../types";
+import {
+  CURRENCIES,
+  CURRENCY_SYMBOLS,
+  ZERO_DECIMAL_CURRENCIES,
+  filterCurrencies,
+} from "./isoCurrencies";
 
-/**
- * Currency symbol mapping
- * Aligned with backend CURRENCY_SYMBOLS for consistency
- */
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  'USD': '$',
-  'INR': '₹',
-  'EUR': '€',
-  'GBP': '£',
-  'JPY': '¥',
-  'KRW': '₩',
-  'CNY': '¥',
-  'AUD': 'A$',
-  'CAD': 'C$',
-  'THB': '฿',
-};
-
-/**
- * Common currencies with their symbols and names
- * Used for currency picker UI
- */
-export const CURRENCIES: Currency[] = [
-  { code: 'INR', symbol: '₹', name: 'Indian Rupee' },
-  { code: 'USD', symbol: '$', name: 'US Dollar' },
-  { code: 'EUR', symbol: '€', name: 'Euro' },
-  { code: 'GBP', symbol: '£', name: 'British Pound' },
-  { code: 'JPY', symbol: '¥', name: 'Japanese Yen' },
-  { code: 'KRW', symbol: '₩', name: 'South Korean Won' },
-  { code: 'CNY', symbol: '¥', name: 'Chinese Yuan' },
-  { code: 'AUD', symbol: 'A$', name: 'Australian Dollar' },
-  { code: 'CAD', symbol: 'C$', name: 'Canadian Dollar' },
-  { code: 'THB', symbol: '฿', name: 'Thai Baht' },
-];
+export { CURRENCIES, filterCurrencies };
 
 /**
  * Gets the default currency code from environment variable
@@ -45,38 +18,38 @@ export function getDefaultCurrency(): string {
 
 /**
  * Gets the currency symbol for a given currency code
- * Uses case-insensitive lookup and falls back to the INR symbol if currency is not found
+ * Uses case-insensitive lookup and falls back to the currency code if unknown
  * @param currencyCode - Currency code (e.g., 'USD', 'INR'). Defaults to default currency
  * @returns Currency symbol string (e.g., '$', '₹')
  */
 export function getCurrencySymbol(currencyCode: string = getDefaultCurrency()): string {
   const normalizedCode = currencyCode.toUpperCase();
-  return CURRENCY_SYMBOLS[normalizedCode] || CURRENCY_SYMBOLS['INR'] || '₹';
+  return CURRENCY_SYMBOLS[normalizedCode] || normalizedCode;
+}
+
+function getCurrencyDecimals(currencyCode: string): number {
+  return ZERO_DECIMAL_CURRENCIES.has(currencyCode.toUpperCase()) ? 0 : 2;
 }
 
 /**
  * Formats currency amount for display with thousands separators
  * Uses en-US locale for comma formatting (e.g., 1000 -> 1,000.00)
- * Handles currencies without decimals (JPY, KRW) and negative amounts
+ * Handles currencies without decimals (JPY, KRW, VND, ...) and negative amounts
  * @param amount - Amount to format (number)
  * @param currencyCode - Currency code (e.g., 'USD', 'INR'). Defaults to default currency
  * @returns Formatted currency string (e.g., "$1,000.00" or "₹1,000.00")
  */
 export function formatCurrency(amount: number, currencyCode: string = getDefaultCurrency()): string {
-  let normalizedCode = currencyCode.toUpperCase();
-  // Validate currency code
-  if (!CURRENCY_SYMBOLS[normalizedCode]) {
-    normalizedCode = getDefaultCurrency();
-  }
+  const normalizedCode = currencyCode.toUpperCase();
   const symbol = getCurrencySymbol(normalizedCode);
-  // For currencies like JPY that don't use decimals
-  const decimals = ['JPY', 'KRW'].includes(normalizedCode) ? 0 : 2;
+  const decimals = getCurrencyDecimals(normalizedCode);
   const formattedAmount = Math.abs(amount).toLocaleString('en-US', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   });
   return `${symbol}${formattedAmount}`;
 }
+
 export const formatTotals = (
   totals: Map<string, number>,
   defaultCurrency: string = getDefaultCurrency()

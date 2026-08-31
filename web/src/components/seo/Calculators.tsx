@@ -8,9 +8,10 @@ import {
   type BillSplitParticipant,
   type SettlementParticipant,
 } from "../../utils/calculators";
+import { CURRENCY_CODES } from "../../utils/isoCurrencies";
 import { PlatformCta } from "../landing/PlatformCta";
 
-const currencies = ["USD", "INR", "EUR", "GBP", "THB"];
+const currencies = [...CURRENCY_CODES];
 
 function formatMoney(amountMinor: number, currency: string) {
   return new Intl.NumberFormat(undefined, {
