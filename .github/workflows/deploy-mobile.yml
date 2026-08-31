@@ -118,7 +118,7 @@ jobs:
       - name: 🏗 Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: mobile/package-lock.json
 
@@ -247,8 +247,8 @@ jobs:
           set -euo pipefail
           PLATFORM="${{ matrix.platform }}"
           FILE="eas-build-output-${PLATFORM}.json"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "build=${BUILD}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION:-unknown}" >> "$GITHUB_OUTPUT"
+          echo "build=${BUILD:-unknown}" >> "$GITHUB_OUTPUT"
           mkdir -p build-meta
           if [ -s "$FILE" ] && node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "$FILE" >/dev/null 2>&1; then
             cp "$FILE" "build-meta/${PLATFORM}.json"
