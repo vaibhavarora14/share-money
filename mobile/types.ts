@@ -102,7 +102,7 @@ export interface GroupWithMembers extends Group {
   invitations?: GroupInvitation[];
 }
 
-export type CurrencyCode = 'INR' | 'USD' | 'EUR' | 'GBP' | 'JPY' | 'KRW' | 'CNY' | 'AUD' | 'CAD';
+export type CurrencyCode = string;
 
 export interface Balance {
   user_id: string;

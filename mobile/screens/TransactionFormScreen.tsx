@@ -22,6 +22,7 @@ import {
     Chip,
     Divider,
     IconButton,
+    Searchbar,
     Surface,
     Text,
     TextInput,
@@ -37,7 +38,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useParticipants } from "../hooks/useParticipants";
 import { Participant, Transaction } from "../types";
 import {
-    CURRENCIES,
+    filterCurrencies,
     formatCurrency,
     getCurrencySymbol,
     getDefaultCurrency,
@@ -103,6 +104,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   const [useCustomCategoryInput, setUseCustomCategoryInput] = useState(false);
   const [currency, setCurrency] = useState<string>(effectiveDefaultCurrency);
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
+  const [currencySearch, setCurrencySearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -428,6 +430,17 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   };
 
   const isSaveDisabled = loading || (isGroupExpense && splitAmong.length === 0);
+
+  const filteredCurrencies = useMemo(
+    () => filterCurrencies(currencySearch),
+    [currencySearch]
+  );
+
+  useEffect(() => {
+    if (!showCurrencyPicker) {
+      setCurrencySearch("");
+    }
+  }, [showCurrencyPicker]);
 
   const handleHardwareBack = useCallback(() => {
     if (showCurrencyPicker) {
@@ -1090,10 +1103,25 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
               <Text variant="titleLarge">Select Currency</Text>
               <IconButton icon="close" onPress={() => setShowCurrencyPicker(false)} />
             </View>
+            <Searchbar
+              placeholder="Search currencies"
+              value={currencySearch}
+              onChangeText={setCurrencySearch}
+              style={styles.currencySearch}
+              inputStyle={styles.currencySearchInput}
+              autoCorrect={false}
+              autoCapitalize="none"
+            />
             <FlatList
-              data={CURRENCIES}
+              data={filteredCurrencies}
               keyExtractor={(item) => item.code}
               style={styles.pickerList}
+              keyboardShouldPersistTaps="handled"
+              ListEmptyComponent={
+                <Text variant="bodyMedium" style={styles.currencyEmpty}>
+                  No currencies match that search.
+                </Text>
+              }
               renderItem={({ item }) => {
                 const isSelected = currency === item.code;
                 return (
@@ -1107,9 +1135,14 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                       setShowCurrencyPicker(false);
                     }}
                   >
-                    <Text variant="bodyLarge">
-                      {item.code} ({item.symbol})
-                    </Text>
+                    <View style={styles.currencyPickerCopy}>
+                      <Text variant="bodyLarge">
+                        {item.code} ({item.symbol})
+                      </Text>
+                      <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                        {item.name}
+                      </Text>
+                    </View>
                     {isSelected && (
                       <IconButton icon="check" size={20} iconColor={theme.colors.primary} />
                     )}
@@ -1303,7 +1336,24 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: "60%",
+    maxHeight: "80%",
+  },
+  currencySearch: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+  },
+  currencySearchInput: {
+    fontSize: 16,
+  },
+  currencyPickerCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  currencyEmpty: {
+    paddingHorizontal: 16,
+    paddingVertical: 24,
+    textAlign: "center",
+    opacity: 0.7,
   },
   pickerHeader: {
     flexDirection: "row",
