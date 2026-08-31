@@ -595,6 +595,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
               onPress={() => setShowCurrencyPicker(true)}
               style={styles.currencyChip}
               disabled={loading}
+              testID="currency-chip"
             >
               {currency}
             </Chip>

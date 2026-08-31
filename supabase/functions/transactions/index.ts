@@ -14,6 +14,7 @@ import { isValidUUID, validateBodySize, validateTransactionData } from '../_shar
  * 
  * Handles CRUD operations for transactions:
  * - GET /transactions?group_id=xxx - Fetch transactions (optionally filtered by group)
+ * - GET /transactions?group_id=xxx&sort=created_at&limit=1 - Latest transaction entered in a group
  * - POST /transactions - Create new transaction
  * - PUT /transactions - Update existing transaction
  * - DELETE /transactions?id=xxx - Delete transaction
@@ -71,6 +72,10 @@ interface TransactionCursor {
 
 const TRANSACTION_PAGE_DEFAULT_LIMIT = 30;
 const TRANSACTION_PAGE_MAX_LIMIT = 100;
+
+function resolveTransactionListSort(sort: string | null): 'date' | 'created_at' {
+  return sort === 'created_at' ? 'created_at' : 'date';
+}
 
 /**
  * Calculates equal split amounts for a given total amount.
@@ -171,6 +176,7 @@ Deno.serve(async (req: Request) => {
       );
       const cursorDate = url.searchParams.get('cursor_date');
       const cursorId = parsePositiveInt(url.searchParams.get('cursor_id'));
+      const listSort = resolveTransactionListSort(url.searchParams.get('sort'));
       
       if (groupId && !isValidUUID(groupId)) {
         return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR', undefined, req);
@@ -178,6 +184,14 @@ Deno.serve(async (req: Request) => {
 
       if ((cursorDate && !cursorId) || (!cursorDate && cursorId)) {
         return createErrorResponse(400, 'Both cursor_date and cursor_id are required when paginating.', 'VALIDATION_ERROR', undefined, req);
+      }
+
+      if (listSort === 'created_at' && (cursorDate || cursorId)) {
+        return createErrorResponse(400, 'sort=created_at does not support cursor pagination.', 'VALIDATION_ERROR', undefined, req);
+      }
+
+      if (listSort === 'created_at' && !groupId) {
+        return createErrorResponse(400, 'sort=created_at requires group_id.', 'VALIDATION_ERROR', undefined, req);
       }
       
       let participantData: { id: string; type: string } | null = null;
@@ -224,6 +238,12 @@ Deno.serve(async (req: Request) => {
           );
         }
 
+        if (listSort === 'created_at') {
+          return query
+            .order('created_at', { ascending: false })
+            .order('id', { ascending: false });
+        }
+
         return query
           .order('date', { ascending: false })
           .order('id', { ascending: false });
@@ -237,8 +257,9 @@ Deno.serve(async (req: Request) => {
       let rollingCursorDate = cursorDate;
       let rollingCursorId = cursorId;
       let safetyIterations = 0;
+      const maxFetchIterations = listSort === 'created_at' ? 1 : 20;
 
-      while (fetchedTransactions.length < limit + 1 && !sourceExhausted && safetyIterations < 20) {
+      while (fetchedTransactions.length < limit + 1 && !sourceExhausted && safetyIterations < maxFetchIterations) {
         safetyIterations += 1;
         const { data: transactionsData, error } = await buildTransactionsQuery(rollingCursorDate, rollingCursorId)
           .limit(limit + 1);
@@ -279,12 +300,13 @@ Deno.serve(async (req: Request) => {
       const transactions = fetchedTransactions.slice(0, limit);
       const lastVisibleTransaction = transactions[transactions.length - 1];
       const moreInSource = fetchedTransactions.length > limit || !sourceExhausted;
-      const nextCursor: TransactionCursor | null = moreInSource && lastVisibleTransaction
-        ? {
-          date: lastVisibleTransaction.date,
-          id: lastVisibleTransaction.id,
-        }
-        : null;
+      const nextCursor: TransactionCursor | null =
+        listSort === 'created_at' || !moreInSource || !lastVisibleTransaction
+          ? null
+          : {
+            date: lastVisibleTransaction.date,
+            id: lastVisibleTransaction.id,
+          };
       // Former-participant filtering can drop an entire page; never signal has_more without a cursor.
       const hasMore = nextCursor !== null;
 

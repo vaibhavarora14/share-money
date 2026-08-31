@@ -1,8 +1,13 @@
 import type { InfiniteData, QueryClient } from "@tanstack/react-query";
-import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
 import { Transaction } from "../types";
 import { fetchWithAuth } from "../utils/api";
+import { getDefaultCurrency } from "../utils/currency";
+import {
+  normalizeGroupCurrency,
+  resolveGroupDefaultCurrency,
+} from "../utils/groupCurrency";
 import { queryKeys } from "./queryKeys";
 
 export interface TransactionsCursor {
@@ -16,10 +21,13 @@ export interface TransactionsPageResponse {
   next_cursor: TransactionsCursor | null;
 }
 
+export type TransactionListSort = "date" | "created_at";
+
 interface FetchTransactionsPageArgs {
   groupId?: string | null;
   cursor?: TransactionsCursor | null;
   limit?: number;
+  sort?: TransactionListSort;
 }
 
 const TRANSACTIONS_PAGE_SIZE = 30;
@@ -28,12 +36,16 @@ export async function fetchTransactionsPage({
   groupId,
   cursor,
   limit = TRANSACTIONS_PAGE_SIZE,
+  sort = "date",
 }: FetchTransactionsPageArgs): Promise<TransactionsPageResponse> {
   const params = new URLSearchParams();
   if (groupId) {
     params.set("group_id", groupId);
   }
   params.set("limit", String(limit));
+  if (sort !== "date") {
+    params.set("sort", sort);
+  }
   if (cursor) {
     params.set("cursor_date", cursor.date);
     params.set("cursor_id", String(cursor.id));
@@ -62,6 +74,50 @@ export async function fetchTransactions(groupId?: string | null): Promise<Transa
   return firstPage.items;
 }
 
+export async function fetchLatestGroupTransaction(
+  groupId: string
+): Promise<Transaction | null> {
+  const page = await fetchTransactionsPage({
+    groupId,
+    limit: 1,
+    sort: "created_at",
+  });
+  return page.items[0] ?? null;
+}
+
+export async function fetchLatestGroupTransactionCurrency(
+  groupId: string
+): Promise<string | null> {
+  const transaction = await fetchLatestGroupTransaction(groupId);
+  return normalizeGroupCurrency(transaction?.currency) ?? null;
+}
+
+function getCachedGroupFeedTransactions(
+  queryClient: QueryClient,
+  groupId: string
+): Transaction[] {
+  const feed = queryClient.getQueryData<InfiniteData<TransactionsPageResponse>>(
+    queryKeys.transactionsFeed(groupId)
+  );
+  return feed?.pages?.flatMap((page) =>
+    Array.isArray(page?.items) ? page.items : []
+  ) ?? [];
+}
+
+export function getGroupFormDefaultCurrency(
+  queryClient: QueryClient,
+  groupId: string
+): string {
+  return resolveGroupDefaultCurrency({
+    groupId,
+    latestCurrency: queryClient.getQueryData<string | null>(
+      queryKeys.lastGroupTransactionCurrency(groupId)
+    ),
+    feedTransactions: getCachedGroupFeedTransactions(queryClient, groupId),
+    fallbackCurrency: getDefaultCurrency(),
+  });
+}
+
 function mapInfiniteTransactions(
   data: InfiniteData<TransactionsPageResponse> | undefined,
   mapper: (tx: Transaction) => Transaction | null
@@ -82,10 +138,24 @@ function invalidateTransactionAdjacents(queryClient: QueryClient, groupId?: stri
   if (!groupId) return;
   queryClient.invalidateQueries({ queryKey: queryKeys.transactionsFeed(groupId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.transactions(groupId) });
+  queryClient.invalidateQueries({ queryKey: queryKeys.lastGroupTransactionCurrency(groupId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.groupStats(groupId) });
   queryClient.invalidateQueries({ queryKey: ["balances"] }); // Invalidate all balances (including global)
   queryClient.invalidateQueries({ queryKey: queryKeys.balances(groupId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.activity(groupId) });
+}
+
+export function useGroupLastTransactionCurrency(groupId?: string | null) {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: groupId
+      ? queryKeys.lastGroupTransactionCurrency(groupId)
+      : queryKeys.lastGroupTransactionCurrency(""),
+    queryFn: () => fetchLatestGroupTransactionCurrency(groupId as string),
+    enabled: !!user?.id && !!groupId,
+    staleTime: 30_000,
+  });
 }
 
 export function useTransactions(groupId?: string | null) {
@@ -136,7 +206,11 @@ export function useCreateTransaction(onSuccess?: () => void) {
     Transaction | null,
     Error,
     CreateTransactionInput,
-    { previous?: InfiniteData<TransactionsPageResponse>; groupId: string }
+    {
+      previous?: InfiniteData<TransactionsPageResponse>;
+      previousLatestCurrency?: string | null;
+      groupId: string;
+    }
   >({
     mutationFn: async (transactionData) => {
       const response = await fetchWithAuth("/transactions", {
@@ -155,8 +229,14 @@ export function useCreateTransaction(onSuccess?: () => void) {
       if (!groupId) return { groupId, previous: undefined };
 
       await queryClient.cancelQueries({ queryKey: queryKeys.transactionsFeed(groupId) });
+      await queryClient.cancelQueries({
+        queryKey: queryKeys.lastGroupTransactionCurrency(groupId),
+      });
       const previous = queryClient.getQueryData<InfiniteData<TransactionsPageResponse>>(
         queryKeys.transactionsFeed(groupId)
+      );
+      const previousLatestCurrency = queryClient.getQueryData<string | null>(
+        queryKeys.lastGroupTransactionCurrency(groupId)
       );
 
       const optimisticEntry: Transaction = {
@@ -186,15 +266,28 @@ export function useCreateTransaction(onSuccess?: () => void) {
         }
       );
 
-      return { previous, groupId };
+      const latestCurrency = normalizeGroupCurrency(variables.currency);
+      if (latestCurrency) {
+        queryClient.setQueryData(
+          queryKeys.lastGroupTransactionCurrency(groupId),
+          latestCurrency
+        );
+      }
+
+      return { previous, previousLatestCurrency, groupId };
     },
     onError: (_error, _variables, context) => {
-      if (context?.groupId && context.previous) {
+      if (!context?.groupId) return;
+      if (context.previous) {
         queryClient.setQueryData(
           queryKeys.transactionsFeed(context.groupId),
           context.previous
         );
       }
+      queryClient.setQueryData(
+        queryKeys.lastGroupTransactionCurrency(context.groupId),
+        context.previousLatestCurrency
+      );
     },
     onSuccess: (_data, variables, context) => {
       const groupId = variables.group_id;
