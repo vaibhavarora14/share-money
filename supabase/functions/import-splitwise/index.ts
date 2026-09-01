@@ -10,7 +10,8 @@ import { isValidDate, isValidUUID, validateBodySize } from '../_shared/validatio
  * Bulk-imports a Splitwise group export (parsed client-side) into a
  * SharedMoney group in a single request:
  * - POST /import-splitwise - Create expenses (with exact per-participant
- *   splits, unlike the equal-split /transactions endpoint) and settlements.
+ *   splits) and settlements. The /transactions endpoint also accepts exact
+ *   splits when creating or updating a single expense.
  *
  * The client parses the Splitwise CSV, maps Splitwise members to group
  * participants and sends resolved participant IDs. If any insert fails,

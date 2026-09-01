@@ -14,8 +14,8 @@ export interface Participant {
 }
 
 export interface TransactionSplit {
-  id: string;
-  transaction_id: number;
+  id?: string;
+  transaction_id?: number;
   participant_id: string; // New: participant reference
   user_id?: string | null; // Legacy: kept for backward compatibility
   email?: string | null; // Legacy: kept for backward compatibility
