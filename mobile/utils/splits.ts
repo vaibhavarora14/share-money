@@ -153,6 +153,80 @@ export function scaleSplitsToTotal(
   });
 }
 
+export const MAX_SHARE_COUNT = 99;
+
+export function sharePercent(amount: number, totalAmount: number): number {
+  if (totalAmount <= 0 || amount <= 0) return 0;
+  return Math.round((amount / totalAmount) * 100);
+}
+
+export function defaultShareMap(participantIds: string[]): Record<string, number> {
+  return Object.fromEntries(participantIds.map((id) => [id, 1]));
+}
+
+export function clampShareCount(value: number): number {
+  if (!Number.isFinite(value)) return 1;
+  return Math.min(MAX_SHARE_COUNT, Math.max(1, Math.floor(value)));
+}
+
+export function totalShareCount(
+  selectedIds: string[],
+  shares: Record<string, number>,
+): number {
+  return selectedIds.reduce((sum, id) => sum + clampShareCount(shares[id] ?? 1), 0);
+}
+
+export function calculateShareSplits(
+  totalAmount: number,
+  selectedIds: string[],
+  shares: Record<string, number>,
+): SplitShare[] {
+  const uniqueIds = [...new Set(selectedIds)];
+  if (uniqueIds.length === 0) return [];
+
+  const weights = uniqueIds.map((id) => clampShareCount(shares[id] ?? 1));
+  const shareTotal = weights.reduce((sum, weight) => sum + weight, 0);
+  if (shareTotal <= 0) return [];
+
+  const totalCents = toCents(totalAmount);
+  const unitCents = Math.floor(totalCents / shareTotal);
+  let remainderCents = totalCents - unitCents * shareTotal;
+
+  return uniqueIds.map((participantId, index) => {
+    let cents = unitCents * weights[index];
+    if (remainderCents > 0) {
+      cents += remainderCents;
+      remainderCents = 0;
+    }
+    return {
+      participant_id: participantId,
+      amount: fromCents(cents),
+    };
+  });
+}
+
+export function amountsFromShares(
+  totalAmount: number,
+  selectedIds: string[],
+  shares: Record<string, number>,
+): Record<string, string> {
+  return Object.fromEntries(
+    calculateShareSplits(totalAmount, selectedIds, shares).map((split) => [
+      split.participant_id,
+      formatAmountInput(split.amount),
+    ]),
+  );
+}
+
+export function sharesAreUnequal(
+  selectedIds: string[],
+  shares: Record<string, number>,
+): boolean {
+  if (selectedIds.length < 2) return false;
+  const first = clampShareCount(shares[selectedIds[0]] ?? 1);
+  return selectedIds.some((id) => clampShareCount(shares[id] ?? 1) !== first);
+}
+
 export function splitsFromAmountMap(
   amounts: Record<string, string>,
   selectedIds: string[],

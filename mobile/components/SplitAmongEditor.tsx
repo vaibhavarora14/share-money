@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import {
+  Pressable,
   StyleSheet,
   TextInput as RNTextInput,
   View,
@@ -7,7 +8,9 @@ import {
 import {
   Avatar,
   Button,
-  Chip,
+  Checkbox,
+  IconButton,
+  ProgressBar,
   SegmentedButtons,
   Text,
   useTheme,
@@ -15,17 +18,24 @@ import {
 import { Participant } from "../types";
 import { formatCurrency, getCurrencySymbol } from "../utils/currency";
 import {
+  calculateEqualSplits,
+  calculateShareSplits,
+  clampShareCount,
+  MAX_SHARE_COUNT,
   remainingSplitAmount,
+  roundMoney,
   sanitizeAmountInput,
+  sharePercent,
   sumSelectedAmounts,
 } from "../utils/splits";
 
-export type SplitMode = "equal" | "unequal";
+export type SplitMode = "equal" | "unequal" | "shares";
 
 interface SplitAmongEditorProps {
   participants: Participant[];
   selectedIds: string[];
   amounts: Record<string, string>;
+  shares: Record<string, number>;
   mode: SplitMode;
   totalAmount: number | null;
   currency: string;
@@ -36,6 +46,7 @@ interface SplitAmongEditorProps {
   onToggleAll: () => void;
   onModeChange: (mode: SplitMode) => void;
   onAmountChange: (participantId: string, text: string) => void;
+  onShareChange: (participantId: string, shares: number) => void;
   onSplitRemaining: () => void;
 }
 
@@ -58,6 +69,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
   participants,
   selectedIds,
   amounts,
+  shares,
   mode,
   totalAmount,
   currency,
@@ -68,29 +80,51 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
   onToggleAll,
   onModeChange,
   onAmountChange,
+  onShareChange,
   onSplitRemaining,
 }) => {
   const theme = useTheme();
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
-  const assigned = useMemo(
-    () => sumSelectedAmounts(amounts, selectedIds),
-    [amounts, selectedIds],
-  );
-  const remaining = totalAmount && totalAmount > 0
-    ? remainingSplitAmount(totalAmount, assigned)
-    : null;
   const hasTotal = totalAmount !== null && totalAmount > 0;
+  const currencySymbol = getCurrencySymbol(currency);
+
+  const assignedAmounts = useMemo(() => {
+    if (!hasTotal || selectedIds.length === 0) return {} as Record<string, number>;
+    if (mode === "equal") {
+      return Object.fromEntries(
+        calculateEqualSplits(totalAmount, selectedIds).map((split) => [
+          split.participant_id,
+          split.amount,
+        ]),
+      );
+    }
+    if (mode === "shares") {
+      return Object.fromEntries(
+        calculateShareSplits(totalAmount, selectedIds, shares).map((split) => [
+          split.participant_id,
+          split.amount,
+        ]),
+      );
+    }
+    return Object.fromEntries(
+      selectedIds.map((id) => [id, sumSelectedAmounts({ [id]: amounts[id] ?? "" }, [id])]),
+    );
+  }, [amounts, hasTotal, mode, selectedIds, shares, totalAmount]);
+
+  const assigned = useMemo(
+    () => roundAssigned(assignedAmounts, selectedIds),
+    [assignedAmounts, selectedIds],
+  );
+  const remaining = hasTotal ? remainingSplitAmount(totalAmount, assigned) : null;
   const leftover = remaining !== null && remaining > 0.01;
   const over = remaining !== null && remaining < -0.01;
   const exact = remaining !== null && !leftover && !over && selectedIds.length > 0;
-  const currencySymbol = getCurrencySymbol(currency);
-  const selectedParticipants = participants.filter((participant) => selectedSet.has(participant.id));
-
-  const remainingTone = over
+  const progress = hasTotal ? Math.min(1, assigned / totalAmount) : 0;
+  const meterColor = over
     ? theme.colors.error
     : exact
       ? theme.colors.tertiary
-      : theme.colors.onSurfaceVariant;
+      : theme.colors.primary;
 
   return (
     <View>
@@ -98,12 +132,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
         <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant }}>
           Split among
         </Text>
-        <Button
-          mode="text"
-          compact
-          onPress={onToggleAll}
-          disabled={disabled}
-        >
+        <Button mode="text" compact onPress={onToggleAll} disabled={disabled}>
           {areAllSelected ? "None" : "All"}
         </Button>
       </View>
@@ -124,169 +153,175 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
           },
         }}
         buttons={[
-          {
-            value: "equal",
-            label: "Equal",
-            icon: "scale-balance",
-            disabled,
-            testID: "split-mode-equal",
-          },
-          {
-            value: "unequal",
-            label: "By amount",
-            icon: "tune-variant",
-            disabled,
-            testID: "split-mode-unequal",
-          },
+          { value: "equal", label: "Equal", disabled, testID: "split-mode-equal" },
+          { value: "unequal", label: "Amounts", disabled, testID: "split-mode-unequal" },
+          { value: "shares", label: "Shares", disabled, testID: "split-mode-shares" },
         ]}
         style={styles.modeButtons}
       />
 
-      <View style={styles.chipWrap}>
-        {participants.map((participant) => {
-          const isSelected = selectedSet.has(participant.id);
-          const isFormer = participant.type === "former";
-          return (
-            <Chip
-              key={participant.id}
-              selected={isSelected}
-              onPress={() => onToggleMember(participant.id)}
-              style={[
-                styles.wrapChip,
-                isFormer && styles.formerChip,
-                !isSelected && { backgroundColor: theme.colors.surfaceVariant },
-              ]}
-              theme={{
-                colors: {
-                  secondaryContainer: theme.colors.primaryContainer,
-                  onSecondaryContainer: theme.colors.onPrimaryContainer,
-                },
-              }}
+      <Text variant="bodySmall" style={[styles.modeHint, { color: theme.colors.onSurfaceVariant }]}>
+        {mode === "equal"
+          ? "Same share for everyone in the split."
+          : mode === "unequal"
+            ? "Type the exact amount each person owes."
+            : "Give extra shares to anyone covering more, like a couple."}
+      </Text>
+
+      {hasTotal && selectedIds.length > 0 ? (
+        <View
+          style={[styles.meter, { backgroundColor: theme.colors.surfaceVariant }]}
+          testID="split-remaining-label"
+        >
+          <View style={styles.meterHeader}>
+            <Text variant="labelLarge" style={{ color: meterColor }}>
+              {exact
+                ? "Splits add up"
+                : leftover
+                  ? `${formatCurrency(remaining, currency)} left`
+                  : `${formatCurrency(Math.abs(remaining ?? 0), currency)} over`}
+            </Text>
+            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+              {formatCurrency(assigned, currency)} of {formatCurrency(totalAmount, currency)}
+            </Text>
+          </View>
+          <ProgressBar
+            progress={over ? 1 : progress}
+            color={meterColor}
+            style={styles.progress}
+          />
+          {mode === "unequal" && leftover ? (
+            <Button
+              mode="contained-tonal"
+              compact
+              onPress={onSplitRemaining}
               disabled={disabled}
-              showSelectedCheck={true}
-              testID={`split-among-chip-${participant.email || participant.id}`}
+              style={styles.leftoverButton}
+              testID="split-leftover-button"
             >
-              {displayName(participant)}
-              {isFormer ? " (Former)" : ""}
-            </Chip>
-          );
-        })}
-      </View>
-
-      {mode === "equal" && hasTotal && selectedIds.length > 0 ? (
-        <View style={[styles.splitPreview, { backgroundColor: theme.colors.surfaceVariant }]}>
-          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-            Each person pays:{" "}
-            <Text style={{ color: theme.colors.primary, fontWeight: "600" }}>
-              {formatCurrency(totalAmount / selectedIds.length, currency)}
-            </Text>
-          </Text>
-        </View>
-      ) : null}
-
-      {mode === "unequal" ? (
-        <View style={styles.amountList}>
-          {selectedParticipants.length === 0 ? (
-            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-              Select people, then type each share.
-            </Text>
-          ) : (
-            selectedParticipants.map((participant) => {
-              const name = displayName(participant);
-              const value = amounts[participant.id] ?? "";
-              return (
-                <View
-                  key={participant.id}
-                  style={[
-                    styles.amountRow,
-                    { borderBottomColor: theme.colors.outlineVariant },
-                  ]}
-                >
-                  <Avatar.Text
-                    size={36}
-                    label={initials(name)}
-                    style={{ backgroundColor: theme.colors.primaryContainer }}
-                    labelStyle={{ color: theme.colors.onPrimaryContainer, fontSize: 13 }}
-                  />
-                  <View style={styles.amountName}>
-                    <Text variant="bodyLarge" numberOfLines={1}>
-                      {name}
-                      {participant.type === "former" ? " (Former)" : ""}
-                    </Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.amountInputWrap,
-                      {
-                        borderColor: theme.colors.outline,
-                        backgroundColor: theme.colors.surfaceVariant,
-                      },
-                    ]}
-                  >
-                    <Text
-                      variant="bodyLarge"
-                      style={{ color: theme.colors.onSurfaceVariant }}
-                    >
-                      {currencySymbol}
-                    </Text>
-                    <RNTextInput
-                      value={value}
-                      onChangeText={(text) => {
-                        const next = sanitizeAmountInput(text);
-                        if (next === null) return;
-                        onAmountChange(participant.id, next);
-                      }}
-                      keyboardType="decimal-pad"
-                      placeholder="0.00"
-                      placeholderTextColor={theme.colors.onSurfaceVariant}
-                      editable={!disabled}
-                      style={[styles.amountInput, { color: theme.colors.onSurface }]}
-                      testID={`split-amount-input-${participant.email || participant.id}`}
-                    />
-                  </View>
-                </View>
-              );
-            })
-          )}
-
-          {hasTotal && selectedIds.length > 0 ? (
-            <View
-              style={[
-                styles.remainingCard,
-                { backgroundColor: theme.colors.surfaceVariant },
-              ]}
-              testID="split-remaining-label"
-            >
-              <View style={styles.remainingCopy}>
-                <Text variant="bodyMedium" style={{ color: remainingTone, fontWeight: "600" }}>
-                  {exact
-                    ? `Splits add up to ${formatCurrency(totalAmount, currency)}`
-                    : leftover
-                      ? `${formatCurrency(remaining, currency)} left`
-                      : `${formatCurrency(Math.abs(remaining ?? 0), currency)} over`}
-                </Text>
-                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
-                  Assigned {formatCurrency(assigned, currency)} of {formatCurrency(totalAmount, currency)}
-                </Text>
-              </View>
-              {leftover ? (
-                <Button
-                  mode="text"
-                  compact
-                  onPress={onSplitRemaining}
-                  disabled={disabled}
-                  testID="split-leftover-button"
-                >
-                  Split leftover
-                </Button>
-              ) : null}
-            </View>
+              Split leftover equally
+            </Button>
           ) : null}
         </View>
       ) : null}
+
+      <View style={styles.peopleList}>
+        {participants.map((participant) => {
+          const selected = selectedSet.has(participant.id);
+          const name = displayName(participant);
+          const personAmount = selected ? assignedAmounts[participant.id] ?? 0 : 0;
+          const percent = hasTotal && selected ? sharePercent(personAmount, totalAmount) : 0;
+          const shareCount = clampShareCount(shares[participant.id] ?? 1);
+          const subtitleRest = selected
+            ? `${participant.type === "former" ? "Former · " : ""}${
+                hasTotal ? `${percent}% · ${formatCurrency(personAmount, currency)}` : "In this split"
+              }`
+            : "Not in this split";
+
+          return (
+            <View
+              key={participant.id}
+              style={[
+                styles.personRow,
+                {
+                  borderBottomColor: theme.colors.outlineVariant,
+                  opacity: selected ? 1 : 0.55,
+                },
+              ]}
+            >
+              <Pressable
+                onPress={() => onToggleMember(participant.id)}
+                disabled={disabled}
+                style={styles.personMain}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: selected }}
+                accessibilityLabel={name}
+                testID={`split-among-chip-${participant.email || participant.id}`}
+              >
+                <View pointerEvents="none">
+                  <Checkbox
+                    status={selected ? "checked" : "unchecked"}
+                    disabled={disabled}
+                  />
+                </View>
+                <Avatar.Text
+                  size={36}
+                  label={initials(name)}
+                  style={{ backgroundColor: theme.colors.primaryContainer }}
+                  labelStyle={{ color: theme.colors.onPrimaryContainer, fontSize: 13 }}
+                />
+                <View style={styles.personCopy}>
+                  <Text variant="bodyLarge" numberOfLines={1}>
+                    {name}
+                  </Text>
+                  <Text variant="bodySmall" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant }}>
+                    {subtitleRest}
+                  </Text>
+                </View>
+              </Pressable>
+
+              {selected && mode === "unequal" ? (
+                <View
+                  style={[
+                    styles.amountInputWrap,
+                    {
+                      borderColor: theme.colors.outline,
+                      backgroundColor: theme.colors.background,
+                    },
+                  ]}
+                >
+                  <Text variant="bodyLarge" style={{ color: theme.colors.onSurfaceVariant }}>
+                    {currencySymbol}
+                  </Text>
+                  <RNTextInput
+                    value={amounts[participant.id] ?? ""}
+                    onChangeText={(text) => {
+                      const next = sanitizeAmountInput(text);
+                      if (next === null) return;
+                      onAmountChange(participant.id, next);
+                    }}
+                    keyboardType="decimal-pad"
+                    placeholder="0.00"
+                    placeholderTextColor={theme.colors.onSurfaceVariant}
+                    editable={!disabled}
+                    style={[styles.amountInput, { color: theme.colors.onSurface }]}
+                    testID={`split-amount-input-${participant.email || participant.id}`}
+                  />
+                </View>
+              ) : null}
+
+              {selected && mode === "shares" ? (
+                <View style={styles.shareStepper}>
+                  <IconButton
+                    icon="minus"
+                    size={18}
+                    disabled={disabled || shareCount <= 1}
+                    onPress={() => onShareChange(participant.id, shareCount - 1)}
+                    accessibilityLabel={`Fewer shares for ${name}`}
+                  />
+                  <Text variant="titleMedium" style={styles.shareCount}>
+                    {shareCount}
+                  </Text>
+                  <IconButton
+                    icon="plus"
+                    size={18}
+                    disabled={disabled || shareCount >= MAX_SHARE_COUNT}
+                    onPress={() => onShareChange(participant.id, shareCount + 1)}
+                    accessibilityLabel={`More shares for ${name}`}
+                  />
+                </View>
+              ) : null}
+            </View>
+          );
+        })}
+      </View>
     </View>
   );
 };
+
+function roundAssigned(amounts: Record<string, number>, selectedIds: string[]): number {
+  return roundMoney(selectedIds.reduce((sum, id) => sum + (amounts[id] ?? 0), 0));
+}
 
 const styles = StyleSheet.create({
   sectionHeaderWithAction: {
@@ -296,37 +331,49 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   modeButtons: {
+    marginBottom: 8,
+  },
+  modeHint: {
     marginBottom: 12,
   },
-  chipWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+  meter: {
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
     gap: 8,
   },
-  wrapChip: {
-    marginBottom: 4,
+  meterHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+    gap: 8,
   },
-  formerChip: {
-    opacity: 0.7,
+  progress: {
+    height: 6,
+    borderRadius: 99,
   },
-  splitPreview: {
-    marginTop: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    alignItems: "center",
+  leftoverButton: {
+    alignSelf: "flex-start",
+    marginTop: 4,
   },
-  amountList: {
-    marginTop: 8,
+  peopleList: {
+    marginTop: 4,
   },
-  amountRow: {
+  personRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 12,
+    gap: 8,
   },
-  amountName: {
+  personMain: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  personCopy: {
     flex: 1,
     minWidth: 0,
   },
@@ -336,7 +383,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 12,
     paddingHorizontal: 10,
-    minWidth: 118,
+    minWidth: 112,
     height: 44,
     gap: 4,
   },
@@ -346,20 +393,15 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textAlign: "right",
     paddingVertical: 0,
-    minWidth: 64,
+    minWidth: 56,
   },
-  remainingCard: {
-    marginTop: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 12,
+  shareStepper: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
   },
-  remainingCopy: {
-    flex: 1,
-    minWidth: 0,
+  shareCount: {
+    minWidth: 20,
+    textAlign: "center",
+    fontWeight: "700",
   },
 });

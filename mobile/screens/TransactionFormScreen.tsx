@@ -45,11 +45,15 @@ import {
 } from "../utils/currency";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 import {
+    amountsFromShares,
+    calculateShareSplits,
+    defaultShareMap,
     distributeRemaining,
     equalSplitAmountMap,
     formatAmountInput,
     isUnequalSplit,
     remainingSplitAmount,
+    sharesAreUnequal,
     splitsFromAmountMap,
     sumSelectedAmounts,
 } from "../utils/splits";
@@ -121,6 +125,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   const [splitAmong, setSplitAmong] = useState<string[]>([]);
   const [splitMode, setSplitMode] = useState<SplitMode>("equal");
   const [splitAmounts, setSplitAmounts] = useState<Record<string, string>>({});
+  const [splitShares, setSplitShares] = useState<Record<string, number>>({});
   const [showPaidByPicker, setShowPaidByPicker] = useState(false);
 
   // Error states
@@ -216,6 +221,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     setSplitAmong([]);
     setSplitMode("equal");
     setSplitAmounts({});
+    setSplitShares({});
     didDefaultSplitRef.current = false;
     setDescriptionError("");
     setAmountError("");
@@ -256,14 +262,18 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
         });
         setSplitAmong(uniqueIds);
         setSplitAmounts(amountMap);
+        setSplitShares(defaultShareMap(uniqueIds));
         setSplitMode(isUnequalSplit(tx.splits) ? "unequal" : "equal");
       } else if (Array.isArray(tx.split_among_participant_ids) && tx.split_among_participant_ids.length > 0) {
-        setSplitAmong([...new Set(tx.split_among_participant_ids)]);
+        const uniqueIds = [...new Set(tx.split_among_participant_ids)];
+        setSplitAmong(uniqueIds);
         setSplitAmounts({});
+        setSplitShares(defaultShareMap(uniqueIds));
         setSplitMode("equal");
       } else {
         setSplitAmong([]);
         setSplitAmounts({});
+        setSplitShares({});
         setSplitMode("equal");
       }
       didDefaultSplitRef.current = true;
@@ -292,6 +302,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       setSplitAmong([]);
       setSplitMode("equal");
       setSplitAmounts({});
+      setSplitShares({});
       setPaidBy("");
       didDefaultSplitRef.current = false;
     } else {
@@ -299,6 +310,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       // an empty selection is an intentional user state and should remain empty.
       if (!didDefaultSplitRef.current && splitAmong.length === 0 && allParticipantIds.length > 0) {
         setSplitAmong(allParticipantIds);
+        setSplitShares(defaultShareMap(allParticipantIds));
         didDefaultSplitRef.current = true;
       }
       
@@ -362,6 +374,11 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
         delete next[participantId];
         return next;
       });
+      setSplitShares((current) => {
+        const next = { ...current };
+        delete next[participantId];
+        return next;
+      });
     } else {
       if (splitMode === "unequal" && parsedTotalAmount) {
         const leftover = remainingSplitAmount(
@@ -373,6 +390,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
           [participantId]: leftover > 0.01 ? formatAmountInput(leftover) : "",
         }));
       }
+      setSplitShares((current) => ({ ...current, [participantId]: current[participantId] ?? 1 }));
       setSplitAmong([...uniquePrev, participantId]);
     }
     if (splitAmongError) setSplitAmongError("");
@@ -382,9 +400,11 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     if (areAllParticipantsSelected) {
       setSplitAmong([]);
       setSplitAmounts({});
+      setSplitShares({});
     } else {
       const nextIds = [...new Set(allParticipantIds)];
       setSplitAmong(nextIds);
+      setSplitShares(defaultShareMap(nextIds));
       if (splitMode === "unequal" && parsedTotalAmount) {
         setSplitAmounts(equalSplitAmountMap(parsedTotalAmount, nextIds));
       }
@@ -397,7 +417,17 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     if (mode === "unequal" && parsedTotalAmount && splitAmong.length > 0) {
       setSplitAmounts((current) => {
         const hasAny = splitAmong.some((id) => (current[id] || "").length > 0);
-        return hasAny ? current : equalSplitAmountMap(parsedTotalAmount, splitAmong);
+        if (hasAny) return current;
+        if (splitMode === "shares") {
+          return amountsFromShares(parsedTotalAmount, splitAmong, splitShares);
+        }
+        return equalSplitAmountMap(parsedTotalAmount, splitAmong);
+      });
+    }
+    if (mode === "shares" && splitAmong.length > 0) {
+      setSplitShares((current) => {
+        const missing = splitAmong.some((id) => current[id] == null);
+        return missing ? { ...defaultShareMap(splitAmong), ...current } : current;
       });
     }
     if (splitAmongError) setSplitAmongError("");
@@ -408,12 +438,28 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     if (splitAmongError) setSplitAmongError("");
   };
 
+  const handleShareChange = (participantId: string, nextShares: number) => {
+    setSplitShares((current) => ({ ...current, [participantId]: nextShares }));
+    if (splitAmongError) setSplitAmongError("");
+  };
+
   const handleSplitRemaining = () => {
     if (!parsedTotalAmount || splitAmong.length === 0) return;
     setSplitAmounts((current) =>
       distributeRemaining(current, splitAmong, parsedTotalAmount),
     );
     if (splitAmongError) setSplitAmongError("");
+  };
+
+  const customSplitsForSave = () => {
+    if (!isGroupExpense || !parsedTotalAmount) return undefined;
+    if (splitMode === "unequal") {
+      return splitsFromAmountMap(splitAmounts, splitAmong) ?? undefined;
+    }
+    if (splitMode === "shares" && sharesAreUnequal(splitAmong, splitShares)) {
+      return calculateShareSplits(parsedTotalAmount, splitAmong, splitShares);
+    }
+    return undefined;
   };
 
   const validateForm = (): boolean => {
@@ -474,6 +520,9 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
             isValid = false;
           }
         }
+      } else if (splitMode === "shares" && splitAmong.length === 0) {
+        setSplitAmongError("Please select at least one person to split the expense among");
+        isValid = false;
       }
     }
 
@@ -495,9 +544,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
         currency: currency || effectiveDefaultCurrency,
         paid_by_participant_id: isGroupExpense ? paidBy : undefined,
         split_among_participant_ids: isGroupExpense ? splitAmong : undefined,
-        splits: isGroupExpense && splitMode === "unequal"
-          ? splitsFromAmountMap(splitAmounts, splitAmong) ?? undefined
-          : undefined,
+        splits: customSplitsForSave(),
       });
     } catch (error) {
       Alert.alert("Error", getUserFriendlyErrorMessage(error));
@@ -530,9 +577,11 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       sumSelectedAmounts(splitAmounts, splitAmong),
     )) <= 0.01
   );
+  const sharesReady = splitMode !== "shares" || splitAmong.length > 0;
   const isSaveDisabled = loading
     || (isGroupExpense && splitAmong.length === 0)
-    || (isGroupExpense && !unequalSplitsReady);
+    || (isGroupExpense && !unequalSplitsReady)
+    || (isGroupExpense && !sharesReady);
 
   const filteredCurrencies = useMemo(
     () => filterCurrencies(currencySearch),
@@ -865,6 +914,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                   participants={availableParticipants}
                   selectedIds={splitAmong}
                   amounts={splitAmounts}
+                  shares={splitShares}
                   mode={splitMode}
                   totalAmount={parsedTotalAmount}
                   currency={currency}
@@ -875,6 +925,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                   onToggleAll={handleToggleAllMembers}
                   onModeChange={handleSplitModeChange}
                   onAmountChange={handleSplitAmountChange}
+                  onShareChange={handleShareChange}
                   onSplitRemaining={handleSplitRemaining}
                 />
               </Card.Content>

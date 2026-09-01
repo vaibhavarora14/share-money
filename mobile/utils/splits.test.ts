@@ -10,6 +10,9 @@ import {
   remainingSplitAmount,
   sanitizeAmountInput,
   scaleSplitsToTotal,
+  amountsFromShares,
+  calculateShareSplits,
+  sharesAreUnequal,
   splitsFromAmountMap,
   sumSelectedAmounts,
 } from "./splits.ts";
@@ -104,4 +107,19 @@ Deno.test("custom split maps omit invalid or zero amounts", () => {
     a: "15.00",
     b: "15.00",
   });
+});
+
+Deno.test("share splits weight a 2:1 couple and keep the total exact", () => {
+  const splits = calculateShareSplits(90, ["a", "b", "c"], { a: 2, b: 1, c: 1 });
+  assertEquals(splits, [
+    { participant_id: "a", amount: 45 },
+    { participant_id: "b", amount: 22.5 },
+    { participant_id: "c", amount: 22.5 },
+  ]);
+  assertEquals(amountsFromShares(90, ["a", "b"], { a: 2, b: 1 }), {
+    a: "60.00",
+    b: "30.00",
+  });
+  assertEquals(sharesAreUnequal(["a", "b"], { a: 2, b: 1 }), true);
+  assertEquals(sharesAreUnequal(["a", "b"], { a: 1, b: 1 }), false);
 });
