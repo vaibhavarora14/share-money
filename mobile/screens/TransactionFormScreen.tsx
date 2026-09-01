@@ -32,6 +32,7 @@ import {
     SafeAreaView,
     useSafeAreaInsets,
 } from "react-native-safe-area-context";
+import { SplitAmongEditor, SplitMode } from "../components/SplitAmongEditor";
 import { TransactionWebDateField } from "../components/TransactionWebDateField";
 import { WEB_MAX_WIDTH } from "../constants/layout";
 import { useAuth } from "../contexts/AuthContext";
@@ -39,11 +40,23 @@ import { useParticipants } from "../hooks/useParticipants";
 import { Participant, Transaction } from "../types";
 import {
     filterCurrencies,
-    formatCurrency,
     getCurrencySymbol,
     getDefaultCurrency,
 } from "../utils/currency";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
+import {
+    amountsFromShares,
+    calculateShareSplits,
+    defaultShareMap,
+    distributeRemaining,
+    equalSplitAmountMap,
+    formatAmountInput,
+    isUnequalSplit,
+    remainingSplitAmount,
+    sharesAreUnequal,
+    splitsFromAmountMap,
+    sumSelectedAmounts,
+} from "../utils/splits";
 
 interface TransactionFormScreenProps {
   transaction?: Transaction | null;
@@ -110,6 +123,9 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [paidBy, setPaidBy] = useState<string>("");
   const [splitAmong, setSplitAmong] = useState<string[]>([]);
+  const [splitMode, setSplitMode] = useState<SplitMode>("equal");
+  const [splitAmounts, setSplitAmounts] = useState<Record<string, string>>({});
+  const [splitShares, setSplitShares] = useState<Record<string, number>>({});
   const [showPaidByPicker, setShowPaidByPicker] = useState(false);
 
   // Error states
@@ -203,6 +219,9 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     setCurrency(effectiveDefaultCurrency);
     setPaidBy("");
     setSplitAmong([]);
+    setSplitMode("equal");
+    setSplitAmounts({});
+    setSplitShares({});
     didDefaultSplitRef.current = false;
     setDescriptionError("");
     setAmountError("");
@@ -234,11 +253,28 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
         const participantIds = tx.splits
           .map((s) => s.participant_id)
           .filter((id): id is string => !!id);
-        setSplitAmong([...new Set(participantIds)]);
+        const uniqueIds = [...new Set(participantIds)];
+        const amountMap: Record<string, string> = {};
+        tx.splits.forEach((split) => {
+          if (split.participant_id) {
+            amountMap[split.participant_id] = formatAmountInput(split.amount);
+          }
+        });
+        setSplitAmong(uniqueIds);
+        setSplitAmounts(amountMap);
+        setSplitShares(defaultShareMap(uniqueIds));
+        setSplitMode(isUnequalSplit(tx.splits) ? "unequal" : "equal");
       } else if (Array.isArray(tx.split_among_participant_ids) && tx.split_among_participant_ids.length > 0) {
-        setSplitAmong([...new Set(tx.split_among_participant_ids)]);
+        const uniqueIds = [...new Set(tx.split_among_participant_ids)];
+        setSplitAmong(uniqueIds);
+        setSplitAmounts({});
+        setSplitShares(defaultShareMap(uniqueIds));
+        setSplitMode("equal");
       } else {
         setSplitAmong([]);
+        setSplitAmounts({});
+        setSplitShares({});
+        setSplitMode("equal");
       }
       didDefaultSplitRef.current = true;
     },
@@ -264,6 +300,9 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     if (transaction) return;
     if (!isGroupExpense) {
       setSplitAmong([]);
+      setSplitMode("equal");
+      setSplitAmounts({});
+      setSplitShares({});
       setPaidBy("");
       didDefaultSplitRef.current = false;
     } else {
@@ -271,6 +310,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       // an empty selection is an intentional user state and should remain empty.
       if (!didDefaultSplitRef.current && splitAmong.length === 0 && allParticipantIds.length > 0) {
         setSplitAmong(allParticipantIds);
+        setSplitShares(defaultShareMap(allParticipantIds));
         didDefaultSplitRef.current = true;
       }
       
@@ -320,25 +360,106 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     }
   };
 
+  const parsedTotalAmount = useMemo(() => {
+    const value = parseFloat(amount);
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }, [amount]);
+
   const handleToggleSplitMember = (participantId: string) => {
-    setSplitAmong((prev) => {
-      const uniquePrev = [...new Set(prev)];
-      if (uniquePrev.includes(participantId)) {
-        return uniquePrev.filter((id) => id !== participantId);
-      } else {
-        return [...uniquePrev, participantId];
+    const uniquePrev = [...new Set(splitAmong)];
+    if (uniquePrev.includes(participantId)) {
+      setSplitAmong(uniquePrev.filter((id) => id !== participantId));
+      setSplitAmounts((current) => {
+        const next = { ...current };
+        delete next[participantId];
+        return next;
+      });
+      setSplitShares((current) => {
+        const next = { ...current };
+        delete next[participantId];
+        return next;
+      });
+    } else {
+      if (splitMode === "unequal" && parsedTotalAmount) {
+        const leftover = remainingSplitAmount(
+          parsedTotalAmount,
+          sumSelectedAmounts(splitAmounts, uniquePrev),
+        );
+        setSplitAmounts((current) => ({
+          ...current,
+          [participantId]: leftover > 0.01 ? formatAmountInput(leftover) : "",
+        }));
       }
-    });
+      setSplitShares((current) => ({ ...current, [participantId]: current[participantId] ?? 1 }));
+      setSplitAmong([...uniquePrev, participantId]);
+    }
     if (splitAmongError) setSplitAmongError("");
   };
 
   const handleToggleAllMembers = () => {
     if (areAllParticipantsSelected) {
       setSplitAmong([]);
+      setSplitAmounts({});
+      setSplitShares({});
     } else {
-      setSplitAmong([...new Set(allParticipantIds)]);
+      const nextIds = [...new Set(allParticipantIds)];
+      setSplitAmong(nextIds);
+      setSplitShares(defaultShareMap(nextIds));
+      if (splitMode === "unequal" && parsedTotalAmount) {
+        setSplitAmounts(equalSplitAmountMap(parsedTotalAmount, nextIds));
+      }
     }
     if (splitAmongError) setSplitAmongError("");
+  };
+
+  const handleSplitModeChange = (mode: SplitMode) => {
+    setSplitMode(mode);
+    if (mode === "unequal" && parsedTotalAmount && splitAmong.length > 0) {
+      setSplitAmounts((current) => {
+        const hasAny = splitAmong.some((id) => (current[id] || "").length > 0);
+        if (hasAny) return current;
+        if (splitMode === "shares") {
+          return amountsFromShares(parsedTotalAmount, splitAmong, splitShares);
+        }
+        return equalSplitAmountMap(parsedTotalAmount, splitAmong);
+      });
+    }
+    if (mode === "shares" && splitAmong.length > 0) {
+      setSplitShares((current) => {
+        const missing = splitAmong.some((id) => current[id] == null);
+        return missing ? { ...defaultShareMap(splitAmong), ...current } : current;
+      });
+    }
+    if (splitAmongError) setSplitAmongError("");
+  };
+
+  const handleSplitAmountChange = (participantId: string, text: string) => {
+    setSplitAmounts((current) => ({ ...current, [participantId]: text }));
+    if (splitAmongError) setSplitAmongError("");
+  };
+
+  const handleShareChange = (participantId: string, nextShares: number) => {
+    setSplitShares((current) => ({ ...current, [participantId]: nextShares }));
+    if (splitAmongError) setSplitAmongError("");
+  };
+
+  const handleSplitRemaining = () => {
+    if (!parsedTotalAmount || splitAmong.length === 0) return;
+    setSplitAmounts((current) =>
+      distributeRemaining(current, splitAmong, parsedTotalAmount),
+    );
+    if (splitAmongError) setSplitAmongError("");
+  };
+
+  const customSplitsForSave = () => {
+    if (!isGroupExpense || !parsedTotalAmount) return undefined;
+    if (splitMode === "unequal") {
+      return splitsFromAmountMap(splitAmounts, splitAmong) ?? undefined;
+    }
+    if (splitMode === "shares" && sharesAreUnequal(splitAmong, splitShares)) {
+      return calculateShareSplits(parsedTotalAmount, splitAmong, splitShares);
+    }
+    return undefined;
   };
 
   const validateForm = (): boolean => {
@@ -384,6 +505,24 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       if (splitAmong.length === 0) {
         setSplitAmongError("Please select at least one person to split the expense among");
         isValid = false;
+      } else if (splitMode === "unequal") {
+        const customSplits = splitsFromAmountMap(splitAmounts, splitAmong);
+        if (!customSplits) {
+          setSplitAmongError("Enter a share greater than 0 for each selected person");
+          isValid = false;
+        } else {
+          const leftover = remainingSplitAmount(
+            parseFloat(amount),
+            sumSelectedAmounts(splitAmounts, splitAmong),
+          );
+          if (Math.abs(leftover) > 0.01) {
+            setSplitAmongError("Split amounts must add up to the expense total");
+            isValid = false;
+          }
+        }
+      } else if (splitMode === "shares" && splitAmong.length === 0) {
+        setSplitAmongError("Please select at least one person to split the expense among");
+        isValid = false;
       }
     }
 
@@ -405,6 +544,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
         currency: currency || effectiveDefaultCurrency,
         paid_by_participant_id: isGroupExpense ? paidBy : undefined,
         split_among_participant_ids: isGroupExpense ? splitAmong : undefined,
+        splits: customSplitsForSave(),
       });
     } catch (error) {
       Alert.alert("Error", getUserFriendlyErrorMessage(error));
@@ -429,7 +569,19 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     void deleteTransaction();
   };
 
-  const isSaveDisabled = loading || (isGroupExpense && splitAmong.length === 0);
+  const unequalSplitsReady = splitMode !== "unequal" || (
+    !!parsedTotalAmount &&
+    !!splitsFromAmountMap(splitAmounts, splitAmong) &&
+    Math.abs(remainingSplitAmount(
+      parsedTotalAmount,
+      sumSelectedAmounts(splitAmounts, splitAmong),
+    )) <= 0.01
+  );
+  const sharesReady = splitMode !== "shares" || splitAmong.length > 0;
+  const isSaveDisabled = loading
+    || (isGroupExpense && splitAmong.length === 0)
+    || (isGroupExpense && !unequalSplitsReady)
+    || (isGroupExpense && !sharesReady);
 
   const filteredCurrencies = useMemo(
     () => filterCurrencies(currencySearch),
@@ -470,21 +622,6 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     const subscription = BackHandler.addEventListener("hardwareBackPress", handleHardwareBack);
     return () => subscription.remove();
   }, [handleHardwareBack]);
-
-  // Get participant display name
-  const getParticipantDisplayName = (participantId: string) => {
-    const p = availableParticipants.find((p) => p.id === participantId) 
-              || participants?.find((p) => p.id === participantId)
-              || participants?.find((p) => p.user_id === participantId);
-    if (!p) return null;
-    return p.full_name || p.email || `Participant`;
-  };
-
-  // Calculate split amount per person
-  const splitAmountPerPerson = useMemo(() => {
-    if (splitAmong.length === 0 || !amount || parseFloat(amount) <= 0) return null;
-    return parseFloat(amount) / splitAmong.length;
-  }, [amount, splitAmong.length]);
 
   const categoryPickerItems = useMemo(
     () => [
@@ -773,69 +910,24 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
 
                 <Divider style={styles.divider} />
 
-                {/* Split Among Section */}
-                <View style={styles.sectionHeaderWithAction}>
-                  <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant }}>
-                    Split among
-                  </Text>
-                  <Button 
-                    mode="text" 
-                    compact 
-                    onPress={handleToggleAllMembers}
-                    disabled={loading}
-                  >
-                    {areAllParticipantsSelected ? "None" : "All"}
-                  </Button>
-                </View>
-                {splitAmongError && (
-                  <Text variant="bodySmall" style={{ color: theme.colors.error, marginBottom: 8 }}>
-                    {splitAmongError}
-                  </Text>
-                )}
-
-                <View style={styles.chipWrap}>
-                  {availableParticipants.map((p) => {
-                    const isSelected = splitAmong.includes(p.id);
-                    const displayName = p.full_name || p.email?.split("@")[0] || p.email || "Unknown";
-                    const isFormer = p.type === "former";
-                    return (
-                      <Chip
-                        key={p.id}
-                        selected={isSelected}
-                        onPress={() => handleToggleSplitMember(p.id)}
-                        style={[
-                          styles.wrapChip,
-                          isFormer && styles.formerChip,
-                          !isSelected && { backgroundColor: theme.colors.surfaceVariant },
-                        ]}
-                        theme={{
-                          colors: {
-                            secondaryContainer: theme.colors.primaryContainer,
-                            onSecondaryContainer: theme.colors.onPrimaryContainer,
-                          },
-                        }}
-                        disabled={loading}
-                        showSelectedCheck={true}
-                        testID={`split-among-chip-${p.email || p.id}`}
-                      >
-                        {displayName}
-                        {isFormer && " (Former)"}
-                      </Chip>
-                    );
-                  })}
-                </View>
-
-                {/* Split amount preview */}
-                {splitAmountPerPerson && splitAmountPerPerson > 0 && (
-                  <View style={styles.splitPreview}>
-                    <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-                      Each person pays: {" "}
-                      <Text style={{ color: theme.colors.primary, fontWeight: "600" }}>
-                        {formatCurrency(splitAmountPerPerson, currency)}
-                      </Text>
-                    </Text>
-                  </View>
-                )}
+                <SplitAmongEditor
+                  participants={availableParticipants}
+                  selectedIds={splitAmong}
+                  amounts={splitAmounts}
+                  shares={splitShares}
+                  mode={splitMode}
+                  totalAmount={parsedTotalAmount}
+                  currency={currency}
+                  error={splitAmongError}
+                  disabled={loading}
+                  areAllSelected={areAllParticipantsSelected}
+                  onToggleMember={handleToggleSplitMember}
+                  onToggleAll={handleToggleAllMembers}
+                  onModeChange={handleSplitModeChange}
+                  onAmountChange={handleSplitAmountChange}
+                  onShareChange={handleShareChange}
+                  onSplitRemaining={handleSplitRemaining}
+                />
               </Card.Content>
             </Card>
           )}
@@ -1235,12 +1327,6 @@ const styles = StyleSheet.create({
   sectionHeader: {
     marginBottom: 12,
   },
-  sectionHeaderWithAction: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
 
   // Chips
   chipScrollView: {
@@ -1249,30 +1335,12 @@ const styles = StyleSheet.create({
   chip: {
     marginRight: 8,
   },
-  chipWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  wrapChip: {
-    marginBottom: 4,
-  },
   formerChip: {
     opacity: 0.7,
   },
 
   paidByButton: {
     marginBottom: 8,
-  },
-
-  // Split Preview
-  splitPreview: {
-    marginTop: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: "rgba(0,0,0,0.04)",
-    borderRadius: 12,
-    alignItems: "center",
   },
 
   // Type Row

@@ -1,5 +1,4 @@
 import { verifyAuth } from '../_shared/auth.ts';
-import { formatCurrency } from '../_shared/currency.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { log } from '../_shared/logger.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
@@ -8,6 +7,13 @@ import {
   safelyCreateTransactionNotifications,
 } from '../_shared/transaction-notifications.ts';
 import { isValidUUID, validateBodySize, validateTransactionData } from '../_shared/validation.ts';
+import {
+  buildTransactionSplitRows,
+  parseCustomSplits,
+  resolveParticipantIdsForSplits,
+  scaleSplitsToTotal,
+  type SplitShare,
+} from '../_shared/splits.ts';
 
 /**
  * Transactions Edge Function
@@ -19,7 +25,8 @@ import { isValidUUID, validateBodySize, validateTransactionData } from '../_shar
  * - PUT /transactions - Update existing transaction
  * - DELETE /transactions?id=xxx - Delete transaction
  * 
- * Supports expense splitting with automatic calculation of equal splits.
+ * Supports expense splitting with equal shares by default, or exact
+ * per-person amounts when `splits` is provided.
  * 
  * @route /functions/v1/transactions
  * @requires Authentication
@@ -37,6 +44,7 @@ interface Transaction {
   currency?: string;
   paid_by_participant_id?: string; // Participant who paid
   split_among_participant_ids?: string[]; // Array of participant IDs to split among
+  splits?: SplitShare[]; // Optional exact amounts; omit to split equally
 }
 
 interface TransactionSplit {
@@ -75,62 +83,6 @@ const TRANSACTION_PAGE_MAX_LIMIT = 100;
 
 function resolveTransactionListSort(sort: string | null): 'date' | 'created_at' {
   return sort === 'created_at' ? 'created_at' : 'date';
-}
-
-/**
- * Calculates equal split amounts for a given total amount.
- * Now uses participant_ids instead of user_ids/emails.
- */
-function calculateEqualSplits(
-  totalAmount: number,
-  participantIds: string[] // Array of participant UUIDs
-): TransactionSplit[] {
-  const uniqueParticipantIds = [...new Set(participantIds)];
-  const splitCount = uniqueParticipantIds.length;
-
-  if (splitCount === 0) {
-    return [];
-  }
-
-  const baseAmount = Math.floor((totalAmount * 100) / splitCount) / 100;
-  const baseSum = baseAmount * splitCount;
-  const remainder = Math.round((totalAmount - baseSum) * 100) / 100;
-
-  const splits: TransactionSplit[] = uniqueParticipantIds.map((participantId, index) => {
-    const amount = index === 0
-      ? Math.round((baseAmount + remainder) * 100) / 100
-      : baseAmount;
-    
-    return {
-      transaction_id: 0,
-      participant_id: participantId,
-      amount: amount,
-    };
-  });
-
-  return splits;
-}
-
-/**
- * Validates that the sum of split amounts equals the transaction amount.
- */
-function validateSplitSum(
-  splits: Array<{ amount: number }>,
-  transactionAmount: number,
-  currencyCode: string = 'USD'
-): { valid: boolean; error?: string } {
-  const sum = splits.reduce((acc, split) => acc + split.amount, 0);
-  const difference = Math.abs(sum - transactionAmount);
-  const tolerance = 0.01;
-
-  if (difference > tolerance) {
-    return {
-      valid: false,
-      error: `Split amounts sum (${formatCurrency(sum, currencyCode)}) does not equal transaction amount (${formatCurrency(transactionAmount, currencyCode)}). Difference: ${formatCurrency(difference, currencyCode)}`,
-    };
-  }
-
-  return { valid: true };
 }
 
 function parsePositiveInt(input: string | null): number | null {
@@ -409,6 +361,34 @@ Deno.serve(async (req: Request) => {
         }
       }
 
+      const parsedSplits = parseCustomSplits(transactionData.splits);
+      if (parsedSplits.present && 'error' in parsedSplits) {
+        return createErrorResponse(400, parsedSplits.error, 'VALIDATION_ERROR', undefined, req);
+      }
+      const customSplits = parsedSplits.present && 'splits' in parsedSplits
+        ? parsedSplits.splits
+        : null;
+      const resolvedSplits = resolveParticipantIdsForSplits(
+        transactionData.split_among_participant_ids,
+        customSplits,
+      );
+      if (resolvedSplits.error) {
+        return createErrorResponse(400, resolvedSplits.error, 'VALIDATION_ERROR', undefined, req);
+      }
+      const participantIds = resolvedSplits.participantIds;
+
+      if (participantIds.length > 0) {
+        const preview = buildTransactionSplitRows(
+          0,
+          transactionData.amount,
+          participantIds,
+          customSplits,
+        );
+        if (preview.error) {
+          return createErrorResponse(400, preview.error, 'VALIDATION_ERROR', undefined, req);
+        }
+      }
+
       if (transactionData.group_id && transactionData.type === 'expense') {
         // Validate paid_by_participant_id
         if (transactionData.paid_by_participant_id) {
@@ -424,35 +404,25 @@ Deno.serve(async (req: Request) => {
           }
         }
 
-        // Validate split_among_participant_ids
-        if (transactionData.split_among_participant_ids && Array.isArray(transactionData.split_among_participant_ids)) {
-          const uniqueParticipantIds = [...new Set(transactionData.split_among_participant_ids)];
-          if (uniqueParticipantIds.length > 0) {
-            // Validate all participant_ids exist and belong to the group
-            const { data: participants, error: participantsError } = await supabase
-              .from('participants')
-              .select('id')
-              .eq('group_id', transactionData.group_id)
-              .in('id', uniqueParticipantIds);
+        if (participantIds.length > 0) {
+          const { data: participants, error: participantsError } = await supabase
+            .from('participants')
+            .select('id')
+            .eq('group_id', transactionData.group_id)
+            .in('id', participantIds);
 
-            if (participantsError) {
-              return createErrorResponse(400, 'Failed to validate participants', 'VALIDATION_ERROR', undefined, req);
-            }
+          if (participantsError) {
+            return createErrorResponse(400, 'Failed to validate participants', 'VALIDATION_ERROR', undefined, req);
+          }
 
-            const foundParticipantIds = new Set((participants || []).map((p: { id: string }) => p.id));
-            const invalidParticipantIds = uniqueParticipantIds.filter(id => !foundParticipantIds.has(id));
-            
-            if (invalidParticipantIds.length > 0) {
-              return createErrorResponse(400, `Invalid participant_ids: ${invalidParticipantIds.join(', ')}`, 'VALIDATION_ERROR', undefined, req);
-            }
+          const foundParticipantIds = new Set((participants || []).map((p: { id: string }) => p.id));
+          const invalidParticipantIds = participantIds.filter(id => !foundParticipantIds.has(id));
+          
+          if (invalidParticipantIds.length > 0) {
+            return createErrorResponse(400, `Invalid participant_ids: ${invalidParticipantIds.join(', ')}`, 'VALIDATION_ERROR', undefined, req);
           }
         }
       }
-
-      // Use split_among_participant_ids directly
-      const participantIds = transactionData.split_among_participant_ids && Array.isArray(transactionData.split_among_participant_ids)
-        ? [...new Set(transactionData.split_among_participant_ids)]
-        : [];
 
       const { data: transaction, error } = await supabase
         .from('transactions')
@@ -475,25 +445,32 @@ Deno.serve(async (req: Request) => {
       }
 
       if (transaction && participantIds.length > 0) {
-        const splits = calculateEqualSplits(transaction.amount, participantIds);
-        splits.forEach(split => {
-          split.transaction_id = transaction.id;
-        });
+        const builtSplits = buildTransactionSplitRows(
+          transaction.id,
+          transaction.amount,
+          participantIds,
+          customSplits,
+        );
+        if (builtSplits.error) {
+          const { error: rollbackError } = await supabase
+            .from('transactions')
+            .delete()
+            .eq('id', transaction.id);
 
-        const splitValidation = validateSplitSum(splits, transaction.amount, transaction.currency || 'USD');
-        if (!splitValidation.valid) {
-          log.error('Split validation failed', 'transaction-creation', {
-            transactionId: transaction.id,
-            error: splitValidation.error,
-            splits,
-            amount: transaction.amount,
-            currency: transaction.currency || 'USD',
-          });
+          if (rollbackError) {
+            log.error('Failed to rollback transaction after split validation failure', 'transaction-creation', {
+              transactionId: transaction.id,
+              error: rollbackError.message,
+              code: rollbackError.code,
+            });
+          }
+
+          return createErrorResponse(400, builtSplits.error, 'VALIDATION_ERROR', undefined, req);
         }
 
         const { error: splitsError } = await supabase
           .from('transaction_splits')
-          .insert(splits);
+          .insert(builtSplits.splits);
 
         if (splitsError) {
           log.error('Failed to create transaction_splits, rolling back transaction', 'transaction-creation', {
@@ -592,7 +569,7 @@ Deno.serve(async (req: Request) => {
 
       const { data: existingTransaction, error: fetchError } = await supabase
         .from('transactions')
-        .select('group_id, type, user_id, paid_by_participant_id')
+        .select('group_id, type, user_id, paid_by_participant_id, amount')
         .eq('id', transactionData.id)
         .single();
 
@@ -624,6 +601,43 @@ Deno.serve(async (req: Request) => {
         ? transactionData.type 
         : existingTransaction.type;
 
+      const parsedSplits = parseCustomSplits(transactionData.splits);
+      if (parsedSplits.present && 'error' in parsedSplits) {
+        return createErrorResponse(400, parsedSplits.error, 'VALIDATION_ERROR', undefined, req);
+      }
+      const customSplits = parsedSplits.present && 'splits' in parsedSplits
+        ? parsedSplits.splits
+        : null;
+      const replacingSplits = parsedSplits.present
+        || transactionData.split_among_participant_ids !== undefined;
+      let nextSplitParticipantIds: string[] | null = null;
+      if (replacingSplits) {
+        const resolvedSplits = resolveParticipantIdsForSplits(
+          transactionData.split_among_participant_ids,
+          customSplits,
+        );
+        if (resolvedSplits.error) {
+          return createErrorResponse(400, resolvedSplits.error, 'VALIDATION_ERROR', undefined, req);
+        }
+        nextSplitParticipantIds = resolvedSplits.participantIds;
+        const nextAmount = Number(
+          transactionData.amount !== undefined
+            ? transactionData.amount
+            : existingTransaction.amount,
+        );
+        if (nextSplitParticipantIds.length > 0 && Number.isFinite(nextAmount)) {
+          const preview = buildTransactionSplitRows(
+            0,
+            nextAmount,
+            nextSplitParticipantIds,
+            customSplits,
+          );
+          if (preview.error) {
+            return createErrorResponse(400, preview.error, 'VALIDATION_ERROR', undefined, req);
+          }
+        }
+      }
+
       // Validate participant_ids for expense transactions
       if (groupId && transactionType === 'expense') {
         if (transactionData.paid_by_participant_id !== undefined && transactionData.paid_by_participant_id) {
@@ -639,25 +653,26 @@ Deno.serve(async (req: Request) => {
           }
         }
 
-        if (transactionData.split_among_participant_ids !== undefined && Array.isArray(transactionData.split_among_participant_ids)) {
-          const uniqueParticipantIds = [...new Set(transactionData.split_among_participant_ids)];
-          if (uniqueParticipantIds.length > 0) {
-            const { data: participants, error: participantsError } = await supabase
-              .from('participants')
-              .select('id')
-              .eq('group_id', groupId)
-              .in('id', uniqueParticipantIds);
+        const idsToValidate = nextSplitParticipantIds
+          ?? (transactionData.split_among_participant_ids !== undefined && Array.isArray(transactionData.split_among_participant_ids)
+            ? [...new Set(transactionData.split_among_participant_ids)]
+            : []);
+        if (idsToValidate.length > 0) {
+          const { data: participants, error: participantsError } = await supabase
+            .from('participants')
+            .select('id')
+            .eq('group_id', groupId)
+            .in('id', idsToValidate);
 
-            if (participantsError) {
-              return createErrorResponse(400, 'Failed to validate participants', 'VALIDATION_ERROR', undefined, req);
-            }
+          if (participantsError) {
+            return createErrorResponse(400, 'Failed to validate participants', 'VALIDATION_ERROR', undefined, req);
+          }
 
-            const foundParticipantIds = new Set((participants || []).map((p: { id: string }) => p.id));
-            const invalidParticipantIds = uniqueParticipantIds.filter(id => !foundParticipantIds.has(id));
-            
-            if (invalidParticipantIds.length > 0) {
-              return createErrorResponse(400, `Invalid participant_ids: ${invalidParticipantIds.join(', ')}`, 'VALIDATION_ERROR', undefined, req);
-            }
+          const foundParticipantIds = new Set((participants || []).map((p: { id: string }) => p.id));
+          const invalidParticipantIds = idsToValidate.filter(id => !foundParticipantIds.has(id));
+          
+          if (invalidParticipantIds.length > 0) {
+            return createErrorResponse(400, `Invalid participant_ids: ${invalidParticipantIds.join(', ')}`, 'VALIDATION_ERROR', undefined, req);
           }
         }
       }
@@ -686,34 +701,26 @@ Deno.serve(async (req: Request) => {
         return createErrorResponse(404, 'Transaction not found', 'NOT_FOUND', undefined, req);
       }
 
-      if (transactionData.split_among_participant_ids !== undefined) {
+      if (nextSplitParticipantIds !== null) {
         await supabase
           .from('transaction_splits')
           .delete()
           .eq('transaction_id', transactionData.id);
 
-        if (transactionData.split_among_participant_ids && Array.isArray(transactionData.split_among_participant_ids) && transactionData.split_among_participant_ids.length > 0) {
-          const uniqueParticipantIds = [...new Set(transactionData.split_among_participant_ids)];
-          const totalAmount = transaction.amount;
-          const splits = calculateEqualSplits(totalAmount, uniqueParticipantIds);
-          splits.forEach(split => {
-            split.transaction_id = transaction.id;
-          });
-
-          const validation = validateSplitSum(splits, totalAmount, transaction.currency || transactionData.currency || 'USD');
-          if (!validation.valid) {
-            log.error('Split validation failed during update', 'transaction-update', {
-              transactionId: transaction.id,
-              error: validation.error,
-              splits,
-              amount: totalAmount,
-              currency: transaction.currency || transactionData.currency || 'USD',
-            });
+        if (nextSplitParticipantIds.length > 0) {
+          const builtSplits = buildTransactionSplitRows(
+            transaction.id,
+            transaction.amount,
+            nextSplitParticipantIds,
+            customSplits,
+          );
+          if (builtSplits.error) {
+            return createErrorResponse(400, builtSplits.error, 'VALIDATION_ERROR', undefined, req);
           }
 
           const { error: splitsError } = await supabase
             .from('transaction_splits')
-            .insert(splits);
+            .insert(builtSplits.splits);
 
           if (splitsError) {
             log.error('Failed to update transaction_splits', 'transaction-update', {
@@ -721,34 +728,34 @@ Deno.serve(async (req: Request) => {
               error: splitsError.message,
               code: splitsError.code,
             });
+            return createErrorResponse(500, 'Failed to update transaction splits', 'TRANSACTION_SPLIT_ERROR', undefined, req);
           }
         }
       } else if (transactionData.amount !== undefined) {
-        // Recalculate splits when amount changes but participants don't
+        // Preserve existing share ratios when only the total changes.
         const { data: existingSplits, error: splitsFetchError } = await supabase
           .from('transaction_splits')
-          .select('participant_id')
+          .select('participant_id, amount')
           .eq('transaction_id', transactionData.id);
 
         if (!splitsFetchError && existingSplits && existingSplits.length > 0) {
-          const newAmount = transactionData.amount;
-          const participantIds = existingSplits
-            .map((s: { participant_id: string | null }) => s.participant_id)
-            .filter((id: string | null): id is string => !!id);
-          const newSplits = calculateEqualSplits(newAmount, participantIds);
-          newSplits.forEach(split => {
-            split.transaction_id = transaction.id;
-          });
-
-          const validation = validateSplitSum(newSplits, newAmount, transaction.currency || transactionData.currency || 'USD');
-          if (!validation.valid) {
-            log.error('Split validation failed during amount recalculation', 'transaction-update', {
-              transactionId: transaction.id,
-              error: validation.error,
-              splits: newSplits,
-              amount: newAmount,
-              currency: transaction.currency || transactionData.currency || 'USD',
-            });
+          const scaled = scaleSplitsToTotal(
+            existingSplits
+              .filter((s: { participant_id: string | null; amount: number }) => !!s.participant_id)
+              .map((s: { participant_id: string; amount: number }) => ({
+                participant_id: s.participant_id,
+                amount: Number(s.amount),
+              })),
+            transactionData.amount,
+          );
+          const builtSplits = buildTransactionSplitRows(
+            transaction.id,
+            transactionData.amount,
+            scaled.map((split) => split.participant_id),
+            scaled,
+          );
+          if (builtSplits.error) {
+            return createErrorResponse(400, builtSplits.error, 'VALIDATION_ERROR', undefined, req);
           }
 
           await supabase
@@ -756,17 +763,18 @@ Deno.serve(async (req: Request) => {
             .delete()
             .eq('transaction_id', transactionData.id);
 
-            const { error: insertError } = await supabase
-              .from('transaction_splits')
-              .insert(newSplits);
+          const { error: insertError } = await supabase
+            .from('transaction_splits')
+            .insert(builtSplits.splits);
 
-            if (insertError) {
-              log.error('Failed to insert recalculated splits', 'transaction-update', {
-                transactionId: transaction.id,
-                error: insertError.message,
-                code: insertError.code,
-              });
-            }
+          if (insertError) {
+            log.error('Failed to insert recalculated splits', 'transaction-update', {
+              transactionId: transaction.id,
+              error: insertError.message,
+              code: insertError.code,
+            });
+            return createErrorResponse(500, 'Failed to update transaction splits', 'TRANSACTION_SPLIT_ERROR', undefined, req);
+          }
         }
       }
 

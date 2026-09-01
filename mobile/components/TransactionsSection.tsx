@@ -4,6 +4,7 @@ import { ActivityIndicator, Icon, Surface, Text, useTheme } from "react-native-p
 import { useAuth } from "../contexts/AuthContext";
 import { Participant, Transaction } from "../types";
 import { formatCurrency, getDefaultCurrency } from "../utils/currency";
+import { isUnequalSplit } from "../utils/splits";
 import { openTransactionWithHighlightConsumption } from "../utils/transactionHighlight";
 import { styles } from "./TransactionsSection.styles";
 
@@ -113,6 +114,7 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
             }
 
             const payerName = getPayerName(transaction);
+            const unequalSplit = transaction.splits ? isUnequalSplit(transaction.splits) : false;
 
             return (
               <Surface
@@ -173,7 +175,7 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
                       
                       <View style={styles.subRow}>
                           <Text variant="bodySmall" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant, flex: 1 }}>
-                             {dateString} • {payerName} paid
+                             {dateString} • {payerName} paid{unequalSplit ? " • Unequal split" : ""}
                           </Text>
                       </View>
                     </View>
