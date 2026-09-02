@@ -9,6 +9,28 @@
       "verificationMethod": "A fresh Google Play Developer API or Play Console release read must return the exact saved text.",
       "releases": [
         {
+          "version": "2.23.0",
+          "builds": [
+            "86"
+          ],
+          "notes": "• Split group expenses equally, by exact amounts, or by shares.\n• See unequal splits labeled on the expense list.",
+          "storeStatus": "verified",
+          "verifiedAt": "2026-09-02T07:01:00Z",
+          "storeUrl": "https://play.google.com/console/u/0/developers/6745265774722656852/app/4974696703491943344/tracks/4700640425437558082/releases/40/details"
+        },
+        {
+          "version": "2.22.0",
+          "builds": [
+            "85"
+          ],
+          "notes": null,
+          "storeStatus": "unavailable",
+          "observedAt": "2026-09-02T07:01:00Z",
+          "blocker": "Google Play Console shows version code 85 as a deactivated app bundle inside internal release 2.23.0. Release notes belong to the release, and no separate editable or readable release-note field is available for the deactivated bundle.",
+          "storeUrl": "https://play.google.com/console/u/0/developers/6745265774722656852/app/4974696703491943344/tracks/4700640425437558082/releases/40/details",
+          "sourceUrl": "https://expo.dev/accounts/varora1406/projects/share-money/submissions/d2f37299-bfdf-4111-805c-941d754b8afe"
+        },
+        {
           "version": "2.18.1",
           "builds": [
             "73"
@@ -39,6 +61,16 @@
       "locale": "en-US",
       "verificationMethod": "A fresh App Store Connect build-detail read must return the exact saved What to Test text.",
       "releases": [
+        {
+          "version": "2.23.0",
+          "builds": [
+            "86"
+          ],
+          "notes": "• Add a group expense and switch between Equal, Amounts, and Shares.\n• Confirm Save stays disabled until custom amounts add up to the total.\n• Save an unequal split and confirm the expense list shows Unequal split.\n• Add a new expense and confirm it uses the group's last currency.\n• Open a notification and confirm it opens that group.",
+          "storeStatus": "verified",
+          "verifiedAt": "2026-09-02T07:11:00Z",
+          "storeUrl": "https://appstoreconnect.apple.com/teams/79c754e7-bf1d-488d-af46-225a13d01491/apps/6755923591/testflight/ios/969d7b82-815d-4fcd-8c5e-84c66db2bb23"
+        },
         {
           "version": "2.18.0",
           "builds": [
