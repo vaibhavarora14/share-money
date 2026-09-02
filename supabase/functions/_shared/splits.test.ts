@@ -12,11 +12,16 @@ const ALICE = '11111111-1111-1111-1111-111111111111';
 const BOB = '22222222-2222-2222-2222-222222222222';
 const CHARLIE = '33333333-3333-3333-3333-333333333333';
 
-Deno.test('equal splits give leftover cents to the first person', () => {
+Deno.test('equal splits spread leftover cents with largest remainder', () => {
   assertEquals(calculateEqualSplits(100, [ALICE, BOB, CHARLIE]), [
     { participant_id: ALICE, amount: 33.34 },
     { participant_id: BOB, amount: 33.33 },
     { participant_id: CHARLIE, amount: 33.33 },
+  ]);
+  assertEquals(calculateEqualSplits(10.01, [ALICE, BOB, CHARLIE]), [
+    { participant_id: ALICE, amount: 3.34 },
+    { participant_id: BOB, amount: 3.34 },
+    { participant_id: CHARLIE, amount: 3.33 },
   ]);
 });
 

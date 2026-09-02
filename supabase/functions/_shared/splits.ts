@@ -24,21 +24,49 @@ export function roundMoney(amount: number): number {
   return fromCents(toCents(amount));
 }
 
+function allocateLargestRemainderCents(
+  totalCents: number,
+  weights: number[],
+): number[] {
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+  if (weights.length === 0 || totalWeight <= 0) return [];
+
+  const allocations = weights.map((weight, index) => {
+    const raw = totalCents * weight;
+    return {
+      index,
+      amount: Math.floor(raw / totalWeight),
+      remainder: raw % totalWeight,
+    };
+  });
+  let remaining = totalCents - allocations.reduce((sum, item) => sum + item.amount, 0);
+
+  [...allocations]
+    .sort((left, right) => right.remainder - left.remainder || left.index - right.index)
+    .forEach((allocation) => {
+      if (remaining > 0) {
+        allocations[allocation.index].amount += 1;
+        remaining -= 1;
+      }
+    });
+
+  return allocations.map((allocation) => allocation.amount);
+}
+
 export function calculateEqualSplits(
   totalAmount: number,
   participantIds: string[],
 ): SplitShare[] {
   const uniqueIds = [...new Set(participantIds)];
-  const splitCount = uniqueIds.length;
-  if (splitCount === 0) return [];
+  if (uniqueIds.length === 0) return [];
 
-  const totalCents = toCents(totalAmount);
-  const baseCents = Math.floor(totalCents / splitCount);
-  const remainderCents = totalCents - baseCents * splitCount;
-
+  const cents = allocateLargestRemainderCents(
+    toCents(totalAmount),
+    uniqueIds.map(() => 1),
+  );
   return uniqueIds.map((participantId, index) => ({
     participant_id: participantId,
-    amount: fromCents(baseCents + (index === 0 ? remainderCents : 0)),
+    amount: fromCents(cents[index]),
   }));
 }
 
