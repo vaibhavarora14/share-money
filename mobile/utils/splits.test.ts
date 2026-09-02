@@ -17,11 +17,16 @@ import {
   sumSelectedAmounts,
 } from "./splits.ts";
 
-Deno.test("equal splits give leftover cents to the first person", () => {
+Deno.test("equal splits spread leftover cents with largest remainder", () => {
   assertEquals(calculateEqualSplits(100, ["a", "b", "c"]), [
     { participant_id: "a", amount: 33.34 },
     { participant_id: "b", amount: 33.33 },
     { participant_id: "c", amount: 33.33 },
+  ]);
+  assertEquals(calculateEqualSplits(10.01, ["a", "b", "c"]), [
+    { participant_id: "a", amount: 3.34 },
+    { participant_id: "b", amount: 3.34 },
+    { participant_id: "c", amount: 3.33 },
   ]);
 });
 
@@ -63,8 +68,10 @@ Deno.test("remaining amount and leftover split keep the total exact", () => {
   assertEquals(sumSelectedAmounts(next, selected), 100);
 });
 
-Deno.test("unequal detection treats a one-cent remainder as equal", () => {
+Deno.test("unequal detection treats leftover-cent equal splits as equal", () => {
   assertEquals(areSplitAmountsEqual([33.34, 33.33, 33.33]), true);
+  assertEquals(areSplitAmountsEqual([3.34, 3.34, 3.33]), true);
+  assertEquals(areSplitAmountsEqual([3.35, 3.33, 3.33]), true);
   assertEquals(isUnequalSplit([
     { amount: 50 },
     { amount: 30 },
@@ -73,6 +80,11 @@ Deno.test("unequal detection treats a one-cent remainder as equal", () => {
   assertEquals(isUnequalSplit([
     { amount: 25 },
     { amount: 25 },
+  ]), false);
+  assertEquals(isUnequalSplit([
+    { amount: 3.35 },
+    { amount: 3.33 },
+    { amount: 3.33 },
   ]), false);
 });
 
@@ -122,4 +134,9 @@ Deno.test("share splits weight a 2:1 couple and keep the total exact", () => {
   });
   assertEquals(sharesAreUnequal(["a", "b"], { a: 2, b: 1 }), true);
   assertEquals(sharesAreUnequal(["a", "b"], { a: 1, b: 1 }), false);
+  assertEquals(calculateShareSplits(10.01, ["a", "b", "c"], { a: 1, b: 1, c: 1 }), [
+    { participant_id: "a", amount: 3.34 },
+    { participant_id: "b", amount: 3.34 },
+    { participant_id: "c", amount: 3.33 },
+  ]);
 });
