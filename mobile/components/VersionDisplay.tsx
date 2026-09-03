@@ -1,6 +1,7 @@
 import Constants from 'expo-constants';
+import * as Updates from 'expo-updates';
 import React from 'react';
-import { StyleProp, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
+import { Platform, StyleProp, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
 import { useTheme } from 'react-native-paper';
 
 /**
@@ -33,6 +34,20 @@ interface VersionDisplayProps {
   style?: StyleProp<ViewStyle | TextStyle>;
 }
 
+function getNativeUpdateId(): string | null {
+  if (Platform.OS === 'web') {
+    return null;
+  }
+  if (!Updates.isEnabled) {
+    return null;
+  }
+  return Updates.updateId ?? null;
+}
+
+function formatUpdateId(updateId: string): string {
+  return updateId.replace(/-/g, '').slice(0, 8);
+}
+
 export const VersionDisplay: React.FC<VersionDisplayProps> = ({
   showBuildDate = false,
   variant = 'default',
@@ -45,18 +60,25 @@ export const VersionDisplay: React.FC<VersionDisplayProps> = ({
     Constants.expoConfig?.ios?.buildNumber || 
     Constants.expoConfig?.android?.versionCode || 
     'Unknown';
+  const updateId = getNativeUpdateId();
+  const shortUpdateId = updateId ? formatUpdateId(updateId) : null;
   
   const buildDate = showBuildDate && Constants.expoConfig?.extra?.buildDate
     ? new Date(Constants.expoConfig.extra.buildDate).toLocaleDateString()
     : null;
 
   if (variant === 'compact') {
+    const compactLabel = shortUpdateId
+      ? `Version ${version}, Build ${buildNumber}, Update ${shortUpdateId}`
+      : `Version ${version}, Build ${buildNumber}`;
     return (
       <Text 
         style={[styles.compactText, { color: theme.colors.onSurfaceVariant }, style]}
-        accessibilityLabel={`Version ${version}, Build ${buildNumber}`}
+        accessibilityLabel={compactLabel}
       >
-        v{version} ({buildNumber})
+        {shortUpdateId
+          ? `v${version} (${buildNumber}) · ${shortUpdateId}`
+          : `v${version} (${buildNumber})`}
       </Text>
     );
   }
@@ -88,6 +110,23 @@ export const VersionDisplay: React.FC<VersionDisplayProps> = ({
       >
         {buildNumber}
       </Text>
+
+      {shortUpdateId && (
+        <>
+          <Text 
+            style={[styles.label, { color: theme.colors.onSurfaceVariant }]}
+            accessibilityRole="text"
+          >
+            Update
+          </Text>
+          <Text 
+            style={[styles.value, { color: theme.colors.onSurface }]}
+            accessibilityLabel={`Update ${shortUpdateId}`}
+          >
+            {shortUpdateId}
+          </Text>
+        </>
+      )}
       
       {buildDate && (
         <>

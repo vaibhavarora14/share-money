@@ -8,6 +8,7 @@
     "android": "expo run:android",
     "android:release:local": "expo run:android --variant release",
     "update": "eas update --branch development",
+    "update:preview": "eas update --channel preview",
     "update:production": "eas update --branch production",
     "test:e2e": "maestro test .maestro/",
     "ios": "expo run:ios",
