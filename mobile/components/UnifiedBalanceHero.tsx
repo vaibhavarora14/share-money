@@ -5,7 +5,6 @@ import {
   ConvertedPart,
   RateSource,
   UnifiedTotal,
-  dominantRateSource,
   formatBreakdown,
   formatRateLabel,
   rateSourceLabel,
@@ -16,6 +15,8 @@ interface UnifiedBalanceHeroProps {
   title?: string;
   unified: UnifiedTotal;
   compact?: boolean;
+  /** `net` is a you-owe / you're-owed position. `total` is an unsigned spend total. */
+  intent?: "net" | "total";
   onPressRates?: () => void;
 }
 
@@ -29,14 +30,21 @@ export const UnifiedBalanceHero: React.FC<UnifiedBalanceHeroProps> = ({
   title = "In one currency",
   unified,
   compact = false,
+  intent = "net",
   onPressRates,
 }) => {
   const theme = useTheme();
-  const { verb, colorKey } = signLabel(unified.amount);
+  const { verb, colorKey } = intent === "total"
+    ? { verb: "", colorKey: "onSurface" as const }
+    : signLabel(unified.amount);
   const amountColor = theme.colors[colorKey];
-  const source = dominantRateSource(unified.parts);
   const breakdown = formatBreakdown(unified.parts);
   const primaryQuote = primaryForeignQuote(unified.parts, unified.currency);
+  const displayAmount = intent === "total"
+    ? formatCurrency(Math.abs(unified.amount), unified.currency)
+    : verb === "Settled"
+      ? formatCurrency(0, unified.currency)
+      : formatCurrency(Math.abs(unified.amount), unified.currency);
 
   return (
     <Surface
@@ -53,16 +61,16 @@ export const UnifiedBalanceHero: React.FC<UnifiedBalanceHeroProps> = ({
       <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>
         {title}
       </Text>
+      {verb ? (
+        <Text variant="titleSmall" style={{ color: theme.colors.onSurface, fontWeight: "600", marginTop: 2 }}>
+          {verb}
+        </Text>
+      ) : null}
       <Text
         variant={compact ? "titleLarge" : "headlineMedium"}
         style={[styles.amount, { color: amountColor }]}
       >
-        {verb === "Settled"
-          ? formatCurrency(0, unified.currency)
-          : formatCurrency(Math.abs(unified.amount), unified.currency)}
-      </Text>
-      <Text variant="titleSmall" style={{ color: theme.colors.onSurface, fontWeight: "600" }}>
-        {verb}
+        {displayAmount}
       </Text>
       {breakdown ? (
         <Text variant="bodySmall" style={[styles.breakdown, { color: theme.colors.onSurfaceVariant }]}>

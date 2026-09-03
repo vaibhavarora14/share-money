@@ -196,6 +196,7 @@ export const CurrencyMergePreviewScreen: React.FC<CurrencyMergePreviewScreenProp
                 title="Group total"
                 unified={groupTotal}
                 compact
+                intent="total"
                 onPressRates={() => setSettingsOpen(true)}
               />
             </PreviewPhone>
