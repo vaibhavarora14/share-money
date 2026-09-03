@@ -12,6 +12,7 @@ import {
 } from "react-native-paper";
 import { Balance, GroupBalance, Participant } from "../types";
 import { formatCurrency, getDefaultCurrency } from "../utils/currency";
+import { formatBreakdown } from "../utils/currencyMerge";
 import { styles } from "./BalancesSection.styles";
 
 interface BalancesSectionProps {
@@ -109,6 +110,19 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
       : "??";
   };
 
+  const renderOriginalParts = (balance: Balance) => {
+    const parts = "originalParts" in balance
+      && Array.isArray((balance as { originalParts?: unknown }).originalParts)
+      ? (balance as { originalParts: Parameters<typeof formatBreakdown>[0] }).originalParts
+      : [];
+    if (parts.length === 0) return null;
+    return (
+      <Text variant="bodySmall" style={{ opacity: 0.6, marginTop: 2 }}>
+        from {formatBreakdown(parts)}
+      </Text>
+    );
+  };
+
   return (
     <View>
       {loading ? (
@@ -178,6 +192,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                                   balance.currency
                                 )}
                               </Text>
+                              {renderOriginalParts(balance)}
                               {onSettleUp && (
                                 <Button
                                   mode="text"
@@ -258,6 +273,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                                   balance.currency
                                 )}
                               </Text>
+                              {renderOriginalParts(balance)}
                               {onSettleUp && (
                                 <Button
                                   mode="text"
@@ -361,6 +377,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                                   balance.currency
                                 )}
                               </Text>
+                              {renderOriginalParts(balance)}
                               {onSettleUp && (
                                 <Button
                                   mode="text"
@@ -414,6 +431,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                                   balance.currency
                                 )}
                               </Text>
+                              {renderOriginalParts(balance)}
                               {onSettleUp && (
                                 <Button
                                   mode="text"

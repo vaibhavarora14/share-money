@@ -7,7 +7,7 @@ import {
 } from '../hooks/useCurrencyPreferences';
 import { Balance } from '../types';
 import { formatCurrency } from '../utils/currency';
-import { unifyBalances } from '../utils/currencyMerge';
+import { formatUnifiedHeadline, unifyBalances } from '../utils/currencyMerge';
 import { createPreviewRateBook } from '../utils/previewRates';
 
 interface GroupBalanceData {
@@ -85,7 +85,8 @@ export const GroupBalanceBadge: React.FC<GroupBalanceBadgeProps> = ({
 
   if (settings?.enabled && settings.settlementCurrency) {
     const unified = unifyBalances(nonZeroBalances, settings.settlementCurrency, rateBook);
-    if (Math.abs(unified.amount) < 0.01 && unified.missing.length === 0) {
+    const leftover = unified.leftover.filter((part) => Math.abs(part.original) >= 0.01);
+    if (Math.abs(unified.amount) < 0.01 && leftover.length === 0) {
       return (
         <View style={[styles.balanceBadge, { backgroundColor: theme.colors.surfaceVariant }, style]}>
           <Text style={[styles.balanceText, { color: theme.colors.onSurfaceVariant }]}>Settled</Text>
@@ -93,14 +94,16 @@ export const GroupBalanceBadge: React.FC<GroupBalanceBadgeProps> = ({
       );
     }
 
-    const isPositive = unified.amount > 0;
+    const isPositive = Math.abs(unified.amount) >= 0.01
+      ? unified.amount > 0
+      : leftover.every((part) => part.original > 0);
     const badgeColor = isPositive ? theme.colors.primaryContainer : theme.colors.errorContainer;
     const textColor = isPositive ? theme.colors.onPrimaryContainer : theme.colors.onErrorContainer;
     return (
       <View style={[styles.balanceBadge, { backgroundColor: badgeColor }, style]}>
         <Text style={[styles.balanceText, { color: textColor, fontWeight: '700' }]}>
           {isPositive ? '+' : ''}
-          {formatCurrency(unified.amount, unified.currency)}
+          {formatUnifiedHeadline(unified)}
         </Text>
       </View>
     );
