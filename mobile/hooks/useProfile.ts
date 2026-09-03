@@ -13,6 +13,7 @@ export interface Profile {
   profile_completed: boolean;
   terms_accepted_at?: string | null;
   terms_version?: string | null;
+  preferred_currency?: string | null;
   created_at: string;
   updated_at: string;
 }

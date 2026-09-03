@@ -10,10 +10,22 @@ import {
     useTheme
 } from "react-native-paper";
 import { Balance, Transaction } from "../types";
+import { UnifiedBalanceHero } from "./UnifiedBalanceHero";
+import { UnifyPromptCard } from "./UnifyPromptCard";
+import { useCurrencyPreferences } from "../hooks/useCurrencyPreferences";
 import { formatCurrency, formatTotals, getDefaultCurrency } from "../utils/currency";
+import {
+  collectCurrencies,
+  formatBreakdown,
+  isMultiCurrency,
+  unifyBalances,
+  unifyDebtEdges,
+  type UnifiedDebtEdge,
+} from "../utils/currencyMerge";
 import { DebtEdge, simplifyDebts } from "../utils/debt";
 
 interface GroupDashboardProps {
+  groupId?: string;
   balances: Balance[];
   transactions: Transaction[];
   currentUserId?: string;
@@ -23,11 +35,13 @@ interface GroupDashboardProps {
   onSettlePress?: (balance: Balance) => void;
   onMyCostsPress?: () => void;
   onTotalCostsPress?: () => void;
+  onOpenCurrencySettings?: () => void;
 }
 
 
 
 export const GroupDashboard: React.FC<GroupDashboardProps> = ({
+  groupId,
   balances,
   transactions,
   currentUserId,
@@ -37,15 +51,30 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   onSettlePress,
   onMyCostsPress,
   onTotalCostsPress,
+  onOpenCurrencySettings,
 }) => {
   const theme = useTheme();
   const [showAllActions, setShowAllActions] = useState(false);
+  const {
+    preferredCurrency,
+    groupSettings,
+    rateBook,
+    setGroupSettings,
+  } = useCurrencyPreferences(groupId);
+
+  const usedCurrencies = useMemo(
+    () => collectCurrencies([...balances, ...transactions]),
+    [balances, transactions]
+  );
+  const hasMultipleCurrencies = isMultiCurrency(usedCurrencies);
+  const unifyEnabled = groupSettings?.enabled === true && !!groupSettings.settlementCurrency;
+  const settlementCurrency = groupSettings?.settlementCurrency || preferredCurrency || defaultCurrency;
 
   // 1. Calculate Debts (Action List)
   const debts = useMemo(() => {
     if (!currentUserId) return [];
     return simplifyDebts(balances, currentUserId, defaultCurrency, currentUserParticipantId);
-  }, [balances, currentUserId, defaultCurrency]);
+  }, [balances, currentUserId, defaultCurrency, currentUserParticipantId]);
 
   const myDebts = useMemo(() => {
     if (!currentUserId) return [];
@@ -53,16 +82,29 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
       (d) =>
         d.fromUser.user_id === currentUserId || d.toUser.user_id === currentUserId
     );
-    // Stable sort: by amount (descending), then by other user's id for consistency
-    return filtered.sort((a, b) => {
-      // First sort by amount (larger amounts first)
+    const displayEdges = unifyEnabled
+      ? unifyDebtEdges(filtered, settlementCurrency, rateBook, currentUserId)
+      : filtered;
+    return [...displayEdges].sort((a, b) => {
       if (b.amount !== a.amount) return b.amount - a.amount;
-      // Then by the other user's id for stability
       const aOtherId = a.fromUser.user_id === currentUserId ? a.toUser.user_id : a.fromUser.user_id;
       const bOtherId = b.fromUser.user_id === currentUserId ? b.toUser.user_id : b.fromUser.user_id;
-      return aOtherId.localeCompare(bOtherId);
+      return (aOtherId || "").localeCompare(bOtherId || "");
     });
-  }, [debts, currentUserId]);
+  }, [debts, currentUserId, unifyEnabled, settlementCurrency, rateBook]);
+
+  const myUnified = useMemo(() => {
+    if (!currentUserId || !unifyEnabled) return null;
+    const mine = balances.filter((balance) => (
+      balance.user_id === currentUserId
+      || (currentUserParticipantId && balance.participant_id === currentUserParticipantId)
+    ));
+    return unifyBalances(mine.length > 0 ? mine : myDebts.map((edge) => ({
+      user_id: currentUserId,
+      amount: edge.toUser.user_id === currentUserId ? edge.amount : -edge.amount,
+      currency: edge.currency,
+    })), settlementCurrency, rateBook);
+  }, [balances, currentUserId, currentUserParticipantId, myDebts, unifyEnabled, settlementCurrency, rateBook]);
 
   // 2. Calculate My Net Position (Hero)
   const netPositions = useMemo(() => {
@@ -137,7 +179,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
 
   // --- RENDER HELPERS ---
 
-  const renderActionItem = (edge: DebtEdge) => {
+  const renderActionItem = (edge: DebtEdge | UnifiedDebtEdge) => {
     const isOwed = edge.toUser.user_id === currentUserId;
     const otherUser = isOwed ? edge.fromUser : edge.toUser;
     
@@ -196,6 +238,11 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
               >
                 {formatCurrency(edge.amount, edge.currency)}
               </Text>
+              {"originalParts" in edge && Array.isArray(edge.originalParts) && edge.originalParts.length ? (
+                <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                  {formatBreakdown(edge.originalParts)}
+                </Text>
+              ) : null}
               {/* Action Button: Small, Tonal / Outlined */}
                <View style={[
                    styles.actionChip, 
@@ -261,6 +308,31 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
       {/* 2. Compact Stats (Top for Google design - Stats usually context) OR Bottom? User liked priority settlement.
           Let's keep Settlements top as user requested "prioritizing settlement". */}
       
+      {hasMultipleCurrencies && !unifyEnabled ? (
+        <UnifyPromptCard
+          currencies={usedCurrencies}
+          suggestedCurrency={settlementCurrency}
+          onEnable={() => {
+            if (!groupId) {
+              onOpenCurrencySettings?.();
+              return;
+            }
+            void setGroupSettings(groupId, {
+              enabled: true,
+              settlementCurrency,
+            });
+          }}
+          onChooseCurrency={onOpenCurrencySettings}
+        />
+      ) : null}
+
+      {unifyEnabled && myUnified ? (
+        <UnifiedBalanceHero
+          unified={myUnified}
+          onPressRates={onOpenCurrencySettings}
+        />
+      ) : null}
+
       {/* 1. Settlements List */}
       <View style={styles.section}>
         {myDebts.length > 0 ? (
