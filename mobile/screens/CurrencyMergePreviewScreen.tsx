@@ -82,7 +82,7 @@ export const CurrencyMergePreviewScreen: React.FC<CurrencyMergePreviewScreenProp
 
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-            Design preview for a Summer Vacation group. Original amounts stay as entered. The one-number total is derived from preview rates, not a backend convert.
+            Sample Summer Vacation group. Original amounts stay as entered. The one-number total is derived from the same merge math live groups use.
           </Text>
 
           <PreviewSection

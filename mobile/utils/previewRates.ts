@@ -1,9 +1,9 @@
 import { emptyRateBook, type RateBook } from "./currencyMerge";
 
 /**
- * Static mid-market-style quotes for UI preview only.
+ * Static mid-market-style quotes used by the design gallery and as an
+ * offline fallback when the shared rate book has not loaded yet.
  * Quoted as units of each currency per 1 USD.
- * Real rates will come from a shared server cache later.
  */
 export const PREVIEW_USD_RATES: Record<string, number> = {
   USD: 1,

@@ -88,7 +88,7 @@ export const SettlementCurrencySheet: React.FC<SettlementCurrencySheetProps> = (
                     Show one balance
                   </Text>
                   <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                    Mid-market preview rates, or a rate the group sets.
+                    Shared mid-market rates, or a rate the group sets.
                   </Text>
                 </View>
                 <Switch
@@ -148,7 +148,7 @@ export const SettlementCurrencySheet: React.FC<SettlementCurrencySheetProps> = (
             )}
 
             <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
-              Preview rates are for design only. They are not live market quotes yet, and they do not rewrite saved expenses.
+              Mid-market quotes are shared with every member so you see the same number. They are not a card or ATM rate, and they do not rewrite saved expenses.
             </Text>
           </View>
         </View>

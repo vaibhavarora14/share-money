@@ -1276,7 +1276,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
           rateBook={rateBook}
           onDismiss={() => setShowRateEditor(false)}
           onSave={(rate) => {
-            void setGroupRate(groupId, currency, settlementCurrency, rate);
+            void setGroupRate(groupId, currency, settlementCurrency, rate, "expense");
             setShowRateEditor(false);
           }}
           onResetToMarket={() => {

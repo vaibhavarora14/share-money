@@ -194,6 +194,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
         phone: phone.trim() || undefined,
         country_code: selectedCountry.code,
         profile_completed: true,
+        preferred_currency: preferredCurrency,
       });
       onComplete();
     } catch (error) {

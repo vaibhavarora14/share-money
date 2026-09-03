@@ -171,3 +171,15 @@ export const CURRENCY_SYMBOLS: Record<string, string> = Object.fromEntries(
 export const ZERO_DECIMAL_CURRENCIES = new Set(
   ISO_CURRENCIES.filter((currency) => currency.decimals === 0).map((currency) => currency.code)
 );
+
+const ISO_CURRENCY_SET = new Set(ISO_CURRENCIES.map((currency) => currency.code));
+
+export function normalizeIsoCurrency(code: unknown): string | null {
+  if (typeof code !== "string") return null;
+  const normalized = code.trim().toUpperCase();
+  return ISO_CURRENCY_SET.has(normalized) ? normalized : null;
+}
+
+export function isValidIsoCurrency(code: unknown): code is string {
+  return normalizeIsoCurrency(code) !== null;
+}

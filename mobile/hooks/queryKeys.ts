@@ -14,6 +14,8 @@ export const queryKeys = {
   invitations: (groupId: string) => ["invitations", groupId] as const,
   settlements: (groupId: string) => ["settlements", groupId] as const,
   participants: (groupId: string) => ["participants", groupId] as const,
+  marketRates: ["rates", "market"] as const,
+  groupRates: (groupId: string) => ["rates", "group", groupId] as const,
   notificationRoot: ["notifications"] as const,
   notifications: (userId: string | null) => ["notifications", "inbox", userId] as const,
   notification: (userId: string | null, notificationId: string) =>
