@@ -24,7 +24,7 @@ import {
   formatTotals,
   getDefaultCurrency,
 } from "../utils/currency";
-import { formatBreakdown, unifyTotals } from "../utils/currencyMerge";
+import { formatBreakdown, simplifyUnifiedDebts, unifyPeopleNets, unifyTotals, type ConvertedPart, type UnifiedPersonNet } from "../utils/currencyMerge";
 import { SettlementFormScreen } from "./SettlementFormScreen";
 
 export type GroupStatsMode = "my-costs" | "total-costs" | "settlement-plan" | "i-owe" | "im-owed";
@@ -212,8 +212,16 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
     }));
   }, [groupStats]);
 
+  const allGroupBalances = balancesData?.group_balances?.[0]?.balances || balancesData?.overall_balances || [];
+  const unifiedNets = useMemo(
+    () => unifyEnabled
+      ? unifyPeopleNets(allGroupBalances, settlementCurrency, rateBook)
+      : null,
+    [unifyEnabled, allGroupBalances, settlementCurrency, rateBook]
+  );
+
   const filteredBalances = useMemo(() => {
-    const balances = balancesData?.group_balances?.[0]?.balances || balancesData?.overall_balances || [];
+    const balances = unifiedNets || allGroupBalances;
     if (activeMode === "i-owe") {
       return balances.filter((balance) => balance.amount < 0);
     }
@@ -221,7 +229,7 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
       return balances.filter((balance) => balance.amount > 0);
     }
     return balances;
-  }, [balancesData, activeMode]);
+  }, [allGroupBalances, unifiedNets, activeMode]);
 
   const balanceTotals = useMemo(() => {
     const totals = new Map<string, number>();
@@ -233,6 +241,15 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
   }, [filteredBalances]);
 
   const settlementEdges = useMemo(() => {
+    if (unifyEnabled) {
+      return simplifyUnifiedDebts(
+        allGroupBalances,
+        settlementCurrency,
+        rateBook,
+        currentUserId,
+        currentUserParticipantId
+      );
+    }
     return (groupStats?.settlement_plan || []).map((edge) => ({
       fromUser: {
         user_id: edge.from_user_id || "",
@@ -255,7 +272,7 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
       amount: edge.amount,
       currency: edge.currency,
     }));
-  }, [groupStats]);
+  }, [groupStats, unifyEnabled, allGroupBalances, settlementCurrency, rateBook, currentUserId, currentUserParticipantId]);
 
   const resolveUserLabel = (userId: string | undefined, fallback?: string) => {
     if (userId) {
@@ -265,6 +282,37 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
     }
     if (fallback) return fallback;
     return userId ? `User ${userId.substring(0, 8)}...` : "Member";
+  };
+
+  const balancesForMember = (entry: { participantId: string; userId?: string | null }) =>
+    filteredBalances.filter((balance) =>
+      (balance.participant_id && balance.participant_id === entry.participantId)
+      || (balance.user_id && entry.userId && balance.user_id === entry.userId)
+    );
+
+  const originalPartsOf = (balance: Balance): ConvertedPart[] => {
+    const parts = (balance as UnifiedPersonNet).originalParts;
+    return Array.isArray(parts) ? parts : [];
+  };
+
+  const originalPartsOfEdge = (edge: object): ConvertedPart[] => {
+    if (!("originalParts" in edge) || !Array.isArray(edge.originalParts)) return [];
+    return edge.originalParts as ConvertedPart[];
+  };
+
+  const classifyMember = (userBals: Balance[]): "overpaid" | "underpaid" | "settled" => {
+    if (unifyEnabled) {
+      const settlementNet = userBals
+        .filter((balance) => balance.currency === settlementCurrency)
+        .reduce((sum, balance) => sum + balance.amount, 0);
+      if (settlementNet > 0.01) return "overpaid";
+      if (settlementNet < -0.01) return "underpaid";
+    }
+    const hasPositive = userBals.some((balance) => balance.amount > 0.01);
+    const hasNegative = userBals.some((balance) => balance.amount < -0.01);
+    if (hasPositive && !hasNegative) return "overpaid";
+    if (hasNegative && !hasPositive) return "underpaid";
+    return "settled";
   };
 
   const renderMemberBreakdown = () => {
@@ -285,15 +333,9 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
     const settled: typeof costBreakdown = [];
 
     costBreakdown.forEach(entry => {
-        const userBals = filteredBalances.filter(b => 
-            (b.participant_id && b.participant_id === entry.participantId) || 
-            (b.user_id && entry.userId && b.user_id === entry.userId)
-        );
-        const hasPositive = userBals.some(b => b.amount > 0.01);
-        const hasNegative = userBals.some(b => b.amount < -0.01);
-
-        if (hasPositive && !hasNegative) overpaid.push(entry);
-        else if (hasNegative) underpaid.push(entry);
+        const status = classifyMember(balancesForMember(entry));
+        if (status === "overpaid") overpaid.push(entry);
+        else if (status === "underpaid") underpaid.push(entry);
         else settled.push(entry);
     });
 
@@ -342,24 +384,26 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
               {/* 2. Net Balance & Status */}
               <View style={{ alignItems: 'flex-end' }}>
                    {(() => {
-                        const userBals = filteredBalances.filter(b => 
-                            (b.participant_id && b.participant_id === entry.participantId) || 
-                            (b.user_id && entry.userId && b.user_id === entry.userId)
-                        );
-                        const isOverpaid = userBals.some(b => b.amount > 0.01);
-                        const isUnderpaid = userBals.some(b => b.amount < -0.01);
-                        const isSettledStatus = !isOverpaid && !isUnderpaid;
+                        const userBals = balancesForMember(entry);
+                        const status = classifyMember(userBals);
   
                         return (
                             <>
                               {userBals.length > 0 ? (
                                   userBals.map((bal, i) => (
-                                      <Text key={i} variant="titleMedium" style={{ 
-                                          color: bal.amount >= 0 ? theme.colors.tertiary : theme.colors.error, 
-                                          fontWeight: 'bold' 
-                                      }}>
-                                          {bal.amount >= 0 ? "+" : ""}{formatCurrency(bal.amount, bal.currency)}
-                                      </Text>
+                                      <View key={`${bal.currency}-${i}`} style={{ alignItems: "flex-end" }}>
+                                        <Text variant="titleMedium" style={{ 
+                                            color: bal.amount >= 0 ? theme.colors.tertiary : theme.colors.error, 
+                                            fontWeight: 'bold' 
+                                        }}>
+                                            {bal.amount >= 0 ? "+" : ""}{formatCurrency(bal.amount, bal.currency)}
+                                        </Text>
+                                        {originalPartsOf(bal).length > 0 ? (
+                                          <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                                            from {formatBreakdown(originalPartsOf(bal))}
+                                          </Text>
+                                        ) : null}
+                                      </View>
                                   ))
                               ) : (
                                   <Text variant="titleMedium" style={{ opacity: 0.3, fontWeight: 'bold' }}>
@@ -369,11 +413,11 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
   
                               <Text variant="labelSmall" style={{ 
                                   fontWeight: 'bold',
-                                  color: isOverpaid ? theme.colors.tertiary : isUnderpaid ? theme.colors.error : theme.colors.onSurfaceVariant,
-                                  opacity: isSettledStatus ? 0.3 : 1,
+                                  color: status === "overpaid" ? theme.colors.tertiary : status === "underpaid" ? theme.colors.error : theme.colors.onSurfaceVariant,
+                                  opacity: status === "settled" ? 0.3 : 1,
                                   marginTop: 2
                               }}>
-                                  {isOverpaid ? "GETS BACK" : isUnderpaid ? "OWES" : "SETTLED"}
+                                  {status === "overpaid" ? "GETS BACK" : status === "underpaid" ? "OWES" : "SETTLED"}
                               </Text>
                             </>
                         );
@@ -542,6 +586,11 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
                                     <Text variant="titleMedium" style={{ color: amountColor, fontWeight: "700" }}>
                                         {formatCurrency(edge.amount, edge.currency)}
                                     </Text>
+                                    {originalPartsOfEdge(edge).length > 0 ? (
+                                        <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                                            from {formatBreakdown(originalPartsOfEdge(edge))}
+                                        </Text>
+                                    ) : null}
                                     <View style={[
                                         styles.actionChip, 
                                         { backgroundColor: isToMe ? theme.colors.tertiaryContainer : isFromMe ? theme.colors.errorContainer : theme.colors.surfaceVariant } 

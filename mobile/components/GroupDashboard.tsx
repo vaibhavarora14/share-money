@@ -19,7 +19,7 @@ import {
   formatBreakdown,
   isMultiCurrency,
   unifyBalances,
-  unifyDebtEdges,
+  simplifyUnifiedDebts,
   type UnifiedDebtEdge,
 } from "../utils/currencyMerge";
 import { DebtEdge, simplifyDebts } from "../utils/debt";
@@ -73,25 +73,35 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   // 1. Calculate Debts (Action List)
   const debts = useMemo(() => {
     if (!currentUserId) return [];
+    if (unifyEnabled) {
+      return simplifyUnifiedDebts(
+        balances,
+        settlementCurrency,
+        rateBook,
+        currentUserId,
+        currentUserParticipantId
+      );
+    }
     return simplifyDebts(balances, currentUserId, defaultCurrency, currentUserParticipantId);
-  }, [balances, currentUserId, defaultCurrency, currentUserParticipantId]);
+  }, [balances, currentUserId, currentUserParticipantId, defaultCurrency, unifyEnabled, settlementCurrency, rateBook]);
 
   const myDebts = useMemo(() => {
     if (!currentUserId) return [];
     const filtered = debts.filter(
       (d) =>
         d.fromUser.user_id === currentUserId || d.toUser.user_id === currentUserId
+        || (currentUserParticipantId && (
+          d.fromUser.participant_id === currentUserParticipantId
+          || d.toUser.participant_id === currentUserParticipantId
+        ))
     );
-    const displayEdges = unifyEnabled
-      ? unifyDebtEdges(filtered, settlementCurrency, rateBook, currentUserId)
-      : filtered;
-    return [...displayEdges].sort((a, b) => {
+    return [...filtered].sort((a, b) => {
       if (b.amount !== a.amount) return b.amount - a.amount;
       const aOtherId = a.fromUser.user_id === currentUserId ? a.toUser.user_id : a.fromUser.user_id;
       const bOtherId = b.fromUser.user_id === currentUserId ? b.toUser.user_id : b.fromUser.user_id;
       return (aOtherId || "").localeCompare(bOtherId || "");
     });
-  }, [debts, currentUserId, unifyEnabled, settlementCurrency, rateBook]);
+  }, [debts, currentUserId, currentUserParticipantId]);
 
   const myUnified = useMemo(() => {
     if (!currentUserId || !unifyEnabled) return null;

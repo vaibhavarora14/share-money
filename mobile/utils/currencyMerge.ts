@@ -1,5 +1,5 @@
 import { Balance } from "../types";
-import { DebtEdge } from "./debt";
+import { DebtEdge, simplifyDebts } from "./debt";
 import { formatCurrency, getDefaultCurrency } from "./currency";
 
 export type RateSource = "market" | "group" | "expense";
@@ -184,6 +184,77 @@ export function collectCurrencies(
   return Array.from(seen);
 }
 
+export function personKey(person: {
+  participant_id?: string | null;
+  user_id?: string | null;
+  email?: string | null;
+}): string {
+  return person.participant_id || person.user_id || person.email || "unknown";
+}
+
+export type UnifiedPersonNet = Balance & {
+  originalParts: ConvertedPart[];
+  missing: string[];
+};
+
+/**
+ * Collapse each person's per-currency leftovers into one net in `targetCurrency`.
+ * Currencies without a rate stay as their own leftover so they are not silently dropped.
+ */
+export function unifyPeopleNets(
+  balances: Balance[],
+  targetCurrency: string,
+  book: RateBook
+): UnifiedPersonNet[] {
+  const target = targetCurrency.toUpperCase();
+  const grouped = new Map<string, Balance[]>();
+  for (const balance of balances) {
+    const key = personKey(balance);
+    const list = grouped.get(key) || [];
+    list.push(balance);
+    grouped.set(key, list);
+  }
+
+  const nets: UnifiedPersonNet[] = [];
+  for (const rows of grouped.values()) {
+    const template = rows.find((row) => row.full_name) || rows[0];
+    const convertible: Balance[] = [];
+    const leftover: Balance[] = [];
+    for (const row of rows) {
+      const currency = (row.currency || getDefaultCurrency()).toUpperCase();
+      if (currency === target || resolveRate(currency, target, book)) {
+        convertible.push(row);
+      } else {
+        leftover.push(row);
+      }
+    }
+
+    if (convertible.length > 0) {
+      const unified = unifyBalances(convertible, target, book);
+      if (Math.abs(unified.amount) >= 0.01) {
+        nets.push({
+          ...template,
+          amount: unified.amount,
+          currency: unified.currency,
+          originalParts: unified.parts,
+          missing: unified.missing,
+        });
+      }
+    }
+
+    for (const row of leftover) {
+      if (Math.abs(row.amount) < 0.01) continue;
+      nets.push({
+        ...row,
+        originalParts: [],
+        missing: [(row.currency || getDefaultCurrency()).toUpperCase()],
+      });
+    }
+  }
+
+  return nets;
+}
+
 export function unifyBalances(
   balances: Balance[],
   targetCurrency: string,
@@ -242,9 +313,7 @@ export function unifyDebtEdges(
     if (!quote) continue;
 
     const converted = edge.amount * quote.rate;
-    const fromId = edge.fromUser.user_id || edge.fromUser.participant_id || "from";
-    const toId = edge.toUser.user_id || edge.toUser.participant_id || "to";
-    const key = `${fromId}->${toId}`;
+    const key = `${personKey(edge.fromUser)}->${personKey(edge.toUser)}`;
     const existing = grouped.get(key);
 
     const part: ConvertedPart = {
@@ -269,14 +338,100 @@ export function unifyDebtEdges(
   }
 
   const merged = Array.from(grouped.values()).filter((edge) => Math.abs(edge.amount) >= 0.01);
-  if (!currentUserId) return merged;
+  const netted = netOppositeDebtEdges(merged, target);
+  if (!currentUserId) return netted;
 
-  return merged.sort((a, b) => {
+  return netted.sort((a, b) => {
     if (b.amount !== a.amount) return b.amount - a.amount;
     const aOther = a.fromUser.user_id === currentUserId ? a.toUser.user_id : a.fromUser.user_id;
     const bOther = b.fromUser.user_id === currentUserId ? b.toUser.user_id : b.fromUser.user_id;
     return (aOther || "").localeCompare(bOther || "");
   });
+}
+
+function netOppositeDebtEdges(
+  edges: UnifiedDebtEdge[],
+  targetCurrency: string
+): UnifiedDebtEdge[] {
+  const unused = new Set(edges);
+  const result: UnifiedDebtEdge[] = [];
+
+  for (const edge of edges) {
+    if (!unused.has(edge)) continue;
+    unused.delete(edge);
+    const reverse = [...unused].find((candidate) =>
+      personKey(candidate.fromUser) === personKey(edge.toUser)
+      && personKey(candidate.toUser) === personKey(edge.fromUser)
+    );
+    if (!reverse) {
+      result.push(edge);
+      continue;
+    }
+    unused.delete(reverse);
+    const net = roundMoney(edge.amount - reverse.amount, targetCurrency);
+    if (Math.abs(net) < 0.01) continue;
+    if (net > 0) {
+      result.push({
+        ...edge,
+        amount: net,
+        originalParts: [...edge.originalParts, ...reverse.originalParts],
+      });
+    } else {
+      result.push({
+        ...reverse,
+        amount: roundMoney(-net, targetCurrency),
+        originalParts: [...reverse.originalParts, ...edge.originalParts],
+      });
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Convert every member to the settlement currency, then simplify the group
+ * as a single ledger. Opposite leftovers between the same people cancel.
+ */
+export function simplifyUnifiedDebts(
+  balances: Balance[],
+  targetCurrency: string,
+  book: RateBook,
+  currentUserId?: string,
+  currentParticipantId?: string
+): UnifiedDebtEdge[] {
+  const nets = unifyPeopleNets(balances, targetCurrency, book);
+  const edges = simplifyDebts(
+    nets,
+    currentUserId,
+    targetCurrency,
+    currentParticipantId
+  );
+  const netByPerson = new Map(nets.map((net) => [personKey(net), net]));
+
+  return edges.map((edge) => ({
+    ...edge,
+    originalParts: originalPartsForEdge(edge, netByPerson),
+  }));
+}
+
+function originalPartsForEdge(
+  edge: DebtEdge,
+  netByPerson: Map<string, UnifiedPersonNet>
+): ConvertedPart[] {
+  // Only attach originals when this payment fully settles that person's unified net.
+  // Partial greedy matches in 3+ person groups should not show someone else's whole leftover mix.
+  const candidates = [edge.fromUser, edge.toUser];
+  for (const person of candidates) {
+    const net = netByPerson.get(personKey(person));
+    if (
+      net
+      && net.originalParts.length > 0
+      && Math.abs(Math.abs(net.amount) - edge.amount) < 0.01
+    ) {
+      return net.originalParts;
+    }
+  }
+  return [];
 }
 
 export function isMultiCurrency(currencies: string[]): boolean {

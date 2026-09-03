@@ -24,6 +24,7 @@ import {
   convertAmount,
   formatBreakdown,
   resolveRate,
+  simplifyUnifiedDebts,
   unifyBalances,
   unifyTotals,
   withOverrides,
@@ -45,6 +46,13 @@ const SAMPLE_BALANCES: Balance[] = [
   { user_id: MAYA, amount: 12, currency: "USD", full_name: "Maya" },
 ];
 
+const SAMPLE_OPPOSITE_BALANCES: Balance[] = [
+  { user_id: YOU, amount: -32, currency: "EUR", full_name: "You" },
+  { user_id: YOU, amount: 12, currency: "USD", full_name: "You" },
+  { user_id: MAYA, amount: 32, currency: "EUR", full_name: "Maya" },
+  { user_id: MAYA, amount: -12, currency: "USD", full_name: "Maya" },
+];
+
 const SAMPLE_SETTINGS: GroupCurrencySettings = {
   enabled: true,
   settlementCurrency: "INR",
@@ -64,6 +72,17 @@ export const CurrencyMergePreviewScreen: React.FC<CurrencyMergePreviewScreenProp
   );
   const myBalances = SAMPLE_BALANCES.filter((balance) => balance.user_id === YOU);
   const unified = unifyBalances(myBalances, settings.settlementCurrency, rateBook);
+  const oppositeMine = unifyBalances(
+    SAMPLE_OPPOSITE_BALANCES.filter((balance) => balance.user_id === YOU),
+    settings.settlementCurrency,
+    rateBook
+  );
+  const oppositeEdges = simplifyUnifiedDebts(
+    SAMPLE_OPPOSITE_BALANCES,
+    settings.settlementCurrency,
+    rateBook,
+    YOU
+  );
   const groupTotal = unifyTotals(
     { EUR: 210, USD: 84, INR: 12800 },
     settings.settlementCurrency,
@@ -150,6 +169,46 @@ export const CurrencyMergePreviewScreen: React.FC<CurrencyMergePreviewScreenProp
                   </View>
                 </View>
               </Surface>
+            </PreviewPhone>
+          </PreviewSection>
+
+          <PreviewSection
+            label="Opposite leftovers"
+            caption="You owe Maya €32 and Maya owes you $12. After the group rate, that is one INR payment, not two."
+          >
+            <PreviewPhone>
+              <UnifiedBalanceHero
+                unified={oppositeMine}
+                onPressRates={() => setSettingsOpen(true)}
+              />
+              {oppositeEdges.map((edge) => (
+                <Surface
+                  key={`${edge.currency}-${edge.fromUser.user_id}-${edge.toUser.user_id}`}
+                  style={styles.actionCard}
+                  elevation={0}
+                >
+                  <View style={styles.actionRow}>
+                    <Avatar.Text size={40} label="MA" style={{ backgroundColor: theme.colors.surfaceVariant }} />
+                    <View style={{ flex: 1 }}>
+                      <Text variant="bodyLarge" style={{ fontWeight: "500" }}>Maya</Text>
+                      <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>you owe</Text>
+                    </View>
+                    <View style={{ alignItems: "flex-end" }}>
+                      <Text variant="titleMedium" style={{ color: theme.colors.error, fontWeight: "700" }}>
+                        {formatCurrency(edge.amount, edge.currency)}
+                      </Text>
+                      <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                        {formatBreakdown(edge.originalParts)}
+                      </Text>
+                      <View style={[styles.payChip, { backgroundColor: theme.colors.errorContainer }]}>
+                        <Text variant="labelSmall" style={{ color: theme.colors.onErrorContainer, fontWeight: "700" }}>
+                          PAY
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </Surface>
+              ))}
             </PreviewPhone>
           </PreviewSection>
 
