@@ -39,6 +39,10 @@ export const UnifiedBalanceHero: React.FC<UnifiedBalanceHeroProps> = ({
     : signLabel(unified.amount);
   const amountColor = theme.colors[colorKey];
   const breakdown = formatBreakdown(unified.parts);
+  const leftoverLabel = unified.leftover
+    .filter((part) => Math.abs(part.original) >= 0.01)
+    .map((part) => formatCurrency(Math.abs(part.original), part.currency))
+    .join(" + ");
   const primaryQuote = primaryForeignQuote(unified.parts, unified.currency);
   const displayAmount = intent === "total"
     ? formatCurrency(Math.abs(unified.amount), unified.currency)
@@ -97,7 +101,11 @@ export const UnifiedBalanceHero: React.FC<UnifiedBalanceHeroProps> = ({
           ) : null}
         </View>
       ) : null}
-      {unified.missing.length > 0 ? (
+      {leftoverLabel ? (
+        <Text variant="labelSmall" style={{ color: theme.colors.error, marginTop: 8 }}>
+          {leftoverLabel} left unmerged — no rate yet
+        </Text>
+      ) : unified.missing.length > 0 ? (
         <Text variant="labelSmall" style={{ color: theme.colors.error, marginTop: 8 }}>
           No rate yet for {unified.missing.join(", ")}
         </Text>

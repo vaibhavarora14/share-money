@@ -13,13 +13,14 @@ import { Balance, Transaction } from "../types";
 import { UnifiedBalanceHero } from "./UnifiedBalanceHero";
 import { UnifyPromptCard } from "./UnifyPromptCard";
 import { useCurrencyPreferences } from "../hooks/useCurrencyPreferences";
-import { formatCurrency, formatTotals, getDefaultCurrency } from "../utils/currency";
+import { formatCurrency, getDefaultCurrency } from "../utils/currency";
 import {
   collectCurrencies,
   formatBreakdown,
+  formatDisplayTotals,
   isMultiCurrency,
   unifyBalances,
-  unifyDebtEdges,
+  simplifyUnifiedDebts,
   type UnifiedDebtEdge,
 } from "../utils/currencyMerge";
 import { DebtEdge, simplifyDebts } from "../utils/debt";
@@ -73,25 +74,35 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   // 1. Calculate Debts (Action List)
   const debts = useMemo(() => {
     if (!currentUserId) return [];
+    if (unifyEnabled) {
+      return simplifyUnifiedDebts(
+        balances,
+        settlementCurrency,
+        rateBook,
+        currentUserId,
+        currentUserParticipantId
+      );
+    }
     return simplifyDebts(balances, currentUserId, defaultCurrency, currentUserParticipantId);
-  }, [balances, currentUserId, defaultCurrency, currentUserParticipantId]);
+  }, [balances, currentUserId, currentUserParticipantId, defaultCurrency, unifyEnabled, settlementCurrency, rateBook]);
 
   const myDebts = useMemo(() => {
     if (!currentUserId) return [];
     const filtered = debts.filter(
       (d) =>
         d.fromUser.user_id === currentUserId || d.toUser.user_id === currentUserId
+        || (currentUserParticipantId && (
+          d.fromUser.participant_id === currentUserParticipantId
+          || d.toUser.participant_id === currentUserParticipantId
+        ))
     );
-    const displayEdges = unifyEnabled
-      ? unifyDebtEdges(filtered, settlementCurrency, rateBook, currentUserId)
-      : filtered;
-    return [...displayEdges].sort((a, b) => {
+    return [...filtered].sort((a, b) => {
       if (b.amount !== a.amount) return b.amount - a.amount;
       const aOtherId = a.fromUser.user_id === currentUserId ? a.toUser.user_id : a.fromUser.user_id;
       const bOtherId = b.fromUser.user_id === currentUserId ? b.toUser.user_id : b.fromUser.user_id;
       return (aOtherId || "").localeCompare(bOtherId || "");
     });
-  }, [debts, currentUserId, unifyEnabled, settlementCurrency, rateBook]);
+  }, [debts, currentUserId, currentUserParticipantId]);
 
   const myUnified = useMemo(() => {
     if (!currentUserId || !unifyEnabled) return null;
@@ -169,10 +180,23 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
     return { myCostTotal: myTotal, groupCostTotal: groupTotal };
   }, [transactions, currentUserId, currentUserParticipantId, defaultCurrency]);
 
-  const formattedMyCost = useMemo(() => formatTotals(myCostTotal), [myCostTotal]);
-  const formattedGroupCost = useMemo(
-    () => formatTotals(groupCostTotal),
-    [groupCostTotal]
+  const myCostDisplay = useMemo(
+    () => formatDisplayTotals(myCostTotal, {
+      unifyEnabled,
+      settlementCurrency,
+      rateBook,
+      defaultCurrency,
+    }),
+    [myCostTotal, unifyEnabled, settlementCurrency, rateBook, defaultCurrency]
+  );
+  const groupCostDisplay = useMemo(
+    () => formatDisplayTotals(groupCostTotal, {
+      unifyEnabled,
+      settlementCurrency,
+      rateBook,
+      defaultCurrency,
+    }),
+    [groupCostTotal, unifyEnabled, settlementCurrency, rateBook, defaultCurrency]
   );
 
   // --- RENDER HELPERS ---
@@ -277,8 +301,13 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
             <View style={{ flex: 1 }}>
                 <Text variant="labelSmall" style={{ color: theme.colors.onSecondaryContainer, opacity: 0.8 }}>My Spending</Text>
                 <Text variant="labelMedium" numberOfLines={2} style={{ color: theme.colors.onSecondaryContainer, fontWeight: 'bold' }}>
-                    {loading ? "..." : formattedMyCost}
+                    {loading ? "..." : myCostDisplay.headline}
                 </Text>
+                {!loading && myCostDisplay.breakdown ? (
+                  <Text variant="labelSmall" numberOfLines={1} style={{ color: theme.colors.onSecondaryContainer, opacity: 0.75 }}>
+                    from {myCostDisplay.breakdown}
+                  </Text>
+                ) : null}
             </View>
           </View>
         </TouchableRipple>
@@ -294,8 +323,13 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
             <View style={{ flex: 1 }}>
                 <Text variant="labelSmall" style={{ color: theme.colors.onTertiaryContainer, opacity: 0.8 }}>Group summary</Text>
                 <Text variant="labelMedium" numberOfLines={2} style={{ color: theme.colors.onTertiaryContainer, fontWeight: 'bold' }}>
-                    {loading ? "..." : formattedGroupCost}
+                    {loading ? "..." : groupCostDisplay.headline}
                 </Text>
+                {!loading && groupCostDisplay.breakdown ? (
+                  <Text variant="labelSmall" numberOfLines={1} style={{ color: theme.colors.onTertiaryContainer, opacity: 0.75 }}>
+                    from {groupCostDisplay.breakdown}
+                  </Text>
+                ) : null}
             </View>
           </View>
         </TouchableRipple>
