@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BalancesSection } from "../components/BalancesSection";
 import { useAuth } from "../contexts/AuthContext";
+import { useCurrencyPreferences } from "../hooks/useCurrencyPreferences";
 import { useBalances, useGroupStats } from "../hooks/useBalances";
 import { useGroupDetails } from "../hooks/useGroups";
 import { useParticipants } from "../hooks/useParticipants";
@@ -23,6 +24,7 @@ import {
   formatTotals,
   getDefaultCurrency,
 } from "../utils/currency";
+import { formatBreakdown, unifyTotals } from "../utils/currencyMerge";
 import { SettlementFormScreen } from "./SettlementFormScreen";
 
 export type GroupStatsMode = "my-costs" | "total-costs" | "settlement-plan" | "i-owe" | "im-owed";
@@ -73,6 +75,9 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
   const theme = useTheme();
   const defaultCurrency = getDefaultCurrency();
   const { session } = useAuth();
+  const { groupSettings, rateBook } = useCurrencyPreferences(groupId);
+  const unifyEnabled = groupSettings?.enabled === true && !!groupSettings.settlementCurrency;
+  const settlementCurrency = groupSettings?.settlementCurrency || defaultCurrency;
   const [settlingBalance, setSettlingBalance] = useState<Balance | null>(null);
   const [settlementInitialData, setSettlementInitialData] = useState<{
     fromParticipantId: string;
@@ -583,8 +588,20 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
             variant="headlineSmall"
             style={[styles.summaryValue, colorStyles.summaryValue]}
           >
-            {groupStatsLoading ? "..." : formatTotals(summaryValue)}
+            {groupStatsLoading
+              ? "..."
+              : unifyEnabled
+                ? formatCurrency(
+                    Math.abs(unifyTotals(summaryValue, settlementCurrency, rateBook).amount),
+                    settlementCurrency
+                  )
+                : formatTotals(summaryValue)}
           </Text>
+          {unifyEnabled && !groupStatsLoading ? (
+            <Text variant="bodySmall" style={[styles.summaryHelpText, colorStyles.summaryHelpText]}>
+              from {formatBreakdown(unifyTotals(summaryValue, settlementCurrency, rateBook).parts) || "original currencies"}
+            </Text>
+          ) : null}
           <Text style={[styles.summaryHelpText, colorStyles.summaryHelpText]}>
             {MODE_COPY[activeMode].subtitle}
           </Text>
@@ -642,8 +659,20 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
           variant="headlineMedium"
           style={[styles.summaryValue, colorStyles.summaryValue]}
         >
-          {balancesLoading ? "..." : formatTotals(balanceTotals)}
+          {balancesLoading
+            ? "..."
+            : unifyEnabled
+              ? formatCurrency(
+                  Math.abs(unifyTotals(balanceTotals, settlementCurrency, rateBook).amount),
+                  settlementCurrency
+                )
+              : formatTotals(balanceTotals)}
         </Text>
+        {unifyEnabled && !balancesLoading ? (
+          <Text variant="bodySmall" style={[styles.summaryHelpText, colorStyles.summaryHelpText]}>
+            from {formatBreakdown(unifyTotals(balanceTotals, settlementCurrency, rateBook).parts) || "original currencies"}
+          </Text>
+        ) : null}
         <Text style={[styles.summaryHelpText, colorStyles.summaryHelpText]}>
           {MODE_COPY[activeMode].subtitle}
         </Text>

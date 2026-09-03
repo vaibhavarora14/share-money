@@ -3,6 +3,7 @@ import { verifyAuth } from '../_shared/auth.ts';
 import { SUPABASE_SERVICE_ROLE_KEY, SUPABASE_URL } from '../_shared/env.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { buildTermsAcceptanceUpdate } from '../_shared/profile.ts';
+import { normalizeOptionalCurrency } from '../_shared/rates.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
 import { fetchUserEmails } from '../_shared/user-email.ts';
 import { validateBodySize } from '../_shared/validation.ts';
@@ -16,11 +17,12 @@ interface Profile {
   profile_completed: boolean;
   terms_accepted_at?: string | null;
   terms_version?: string | null;
+  preferred_currency?: string | null;
   created_at: string;
   updated_at: string;
 }
 
-type ProfileUpdates = Partial<Pick<Profile, 'full_name' | 'avatar_url' | 'phone' | 'country_code' | 'profile_completed'>>;
+type ProfileUpdates = Partial<Pick<Profile, 'full_name' | 'avatar_url' | 'phone' | 'country_code' | 'profile_completed' | 'preferred_currency'>>;
 type ProfileUpdateRequest = ProfileUpdates & { accept_terms?: boolean };
 
 interface ValidationResult {
@@ -133,6 +135,13 @@ function validateProfileUpdates(updates: ProfileUpdateRequest): ValidationResult
 
   if (updates.accept_terms !== undefined && updates.accept_terms !== true) {
     return { valid: false, error: 'Terms must be explicitly accepted' };
+  }
+
+  if (updates.preferred_currency !== undefined) {
+    const currency = normalizeOptionalCurrency(updates.preferred_currency);
+    if (!currency.valid) {
+      return { valid: false, error: currency.error || 'Invalid preferred currency' };
+    }
   }
 
   return { valid: true };
@@ -334,6 +343,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
         sanitizedUpdates.profile_completed = updates.profile_completed;
       }
 
+      if (updates.preferred_currency !== undefined) {
+        sanitizedUpdates.preferred_currency = normalizeOptionalCurrency(updates.preferred_currency).value ?? null;
+      }
+
       if (updates.accept_terms === true) {
         Object.assign(sanitizedUpdates, buildTermsAcceptanceUpdate(true));
       }
@@ -356,6 +369,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
               phone: sanitizedUpdates.phone ?? null,
               country_code: sanitizedUpdates.country_code ?? null,
               profile_completed: sanitizedUpdates.profile_completed ?? false,
+              preferred_currency: sanitizedUpdates.preferred_currency ?? null,
               terms_accepted_at: sanitizedUpdates.terms_accepted_at ?? null,
               terms_version: sanitizedUpdates.terms_version ?? null,
             })

@@ -16,6 +16,7 @@ import {
 } from "react-native-paper";
 import { ActivityFeed } from "../components/ActivityFeed";
 import { GroupDashboard } from "../components/GroupDashboard";
+import { SettlementCurrencySheet } from "../components/SettlementCurrencySheet";
 import { InvitationsList } from "../components/InvitationsList";
 import { MembersList } from "../components/MembersList";
 import { SafetyAction, SafetyActionModal } from "../components/SafetyActionModal";
@@ -55,7 +56,9 @@ import {
   Settlement,
   Transaction,
 } from "../types";
+import { useCurrencyPreferences } from "../hooks/useCurrencyPreferences";
 import { getDefaultCurrency } from "../utils/currency";
+import { collectCurrencies } from "../utils/currencyMerge";
 import { showErrorAlert } from "../utils/errorHandling";
 import {
   getUserFriendlyErrorMessage,
@@ -115,6 +118,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     null
   );
   const [showMembers, setShowMembers] = useState<boolean>(false);
+  const [showCurrencySettings, setShowCurrencySettings] = useState<boolean>(false);
   const [listMode, setListMode] = useState<"transactions" | "activity">(
     initialListMode
   );
@@ -217,6 +221,14 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   >(null);
   const { session, signOut } = useAuth();
   const theme = useTheme();
+  const {
+    preferredCurrency,
+    groupSettings,
+    rateBook,
+    setGroupSettings,
+    setGroupRate,
+    clearGroupRate,
+  } = useCurrencyPreferences(initialGroup.id);
 
 
   // Map user_id to participant_id for involvement filtering
@@ -934,6 +946,15 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               title="People"
               leadingIcon="account-group"
             />
+            <Menu.Item
+              onPress={() => {
+                handleCloseMenu();
+                setShowCurrencySettings(true);
+              }}
+              title="Settlement currency"
+              leadingIcon="cash-sync"
+              testID="group-menu-settlement-currency"
+            />
             {onImportSplitwise && (
               <Menu.Item
                 onPress={() => {
@@ -1016,6 +1037,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           // DASHBOARD & LIST VIEW
           <>
             <GroupDashboard
+              groupId={group.id}
               balances={balancesData?.group_balances?.[0]?.balances || []}
               transactions={transactions || []}
               currentUserId={session?.user?.id}
@@ -1028,6 +1050,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               }}
               onMyCostsPress={() => handleStatNavigation("my-costs")}
               onTotalCostsPress={() => handleStatNavigation("total-costs")}
+              onOpenCurrencySettings={() => setShowCurrencySettings(true)}
             />
 
             <View
@@ -1216,6 +1239,34 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           setShowSettlementForm(false);
           setSettlingBalance(null);
           setEditingSettlement(null);
+        }}
+      />
+
+      <SettlementCurrencySheet
+        visible={showCurrencySettings}
+        groupName={group.name}
+        currencies={collectCurrencies([
+          ...(balancesData?.group_balances?.[0]?.balances || []),
+          ...(transactions || []),
+        ])}
+        settings={groupSettings}
+        preferredCurrency={preferredCurrency}
+        rateBook={rateBook}
+        onDismiss={() => setShowCurrencySettings(false)}
+        onToggle={(enabled, settlementCurrency) => {
+          void setGroupSettings(group.id, { enabled, settlementCurrency });
+        }}
+        onChangeCurrency={(currency) => {
+          void setGroupSettings(group.id, {
+            enabled: true,
+            settlementCurrency: currency,
+          });
+        }}
+        onSaveRate={(from, to, rate) => {
+          void setGroupRate(group.id, from, to, rate);
+        }}
+        onResetRate={(from, to) => {
+          void clearGroupRate(group.id, from, to);
         }}
       />
 

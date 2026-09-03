@@ -63,6 +63,8 @@ export interface Group {
   created_at: string;
   updated_at: string;
   user_status?: 'active' | 'left' | 'invited';
+  settlement_currency?: string | null;
+  unify_balances?: boolean;
 }
 
 export interface GroupMember {

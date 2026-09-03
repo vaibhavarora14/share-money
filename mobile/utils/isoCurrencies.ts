@@ -230,6 +230,16 @@ export function getIsoCurrency(code: string): IsoCurrency | undefined {
   return currencyByCode.get(code.toUpperCase());
 }
 
+export function normalizeIsoCurrency(code: unknown): string | null {
+  if (typeof code !== "string") return null;
+  const normalized = code.trim().toUpperCase();
+  return currencyByCode.has(normalized) ? normalized : null;
+}
+
+export function isValidIsoCurrency(code: unknown): code is string {
+  return normalizeIsoCurrency(code) !== null;
+}
+
 export function filterCurrencies(query: string, currencies: Currency[] = CURRENCIES): Currency[] {
   const normalized = query.trim().toLowerCase();
   if (!normalized) return currencies;

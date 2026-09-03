@@ -4,6 +4,7 @@ import { parsePath } from '../_shared/path-parser.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
 import { fetchUserEmails } from '../_shared/user-email.ts';
 import { fetchUserProfiles } from '../_shared/user-profiles.ts';
+import { normalizeOptionalCurrency } from '../_shared/rates.ts';
 import { isValidUUID, validateBodySize, validateGroupData } from '../_shared/validation.ts';
 import { requireMinVersion } from '../_shared/version-check.ts';
 
@@ -14,6 +15,7 @@ import { requireMinVersion } from '../_shared/version-check.ts';
  * - GET /groups - List all groups user belongs to
  * - GET /groups/:id - Get group details with members
  * - POST /groups - Create new group
+ * - PATCH /groups/:id - Update settlement currency settings (active members)
  * - DELETE /groups/:id - Delete group (owners only)
  * 
  * @route /functions/v1/groups
@@ -27,6 +29,8 @@ interface Group {
   created_by: string;
   created_at: string;
   updated_at: string;
+  settlement_currency?: string | null;
+  unify_balances?: boolean;
 }
 
 interface GroupMember {
@@ -89,6 +93,8 @@ Deno.serve(async (req: Request) => {
           created_by, 
           created_at, 
           updated_at,
+          settlement_currency,
+          unify_balances,
           group_members!inner(status)
         `)
         .eq('group_members.user_id', user.id)
@@ -126,7 +132,7 @@ Deno.serve(async (req: Request) => {
       // Get group details
       const { data: group, error: groupError } = await supabase
         .from('groups')
-        .select('id, name, description, created_by, created_at, updated_at')
+        .select('id, name, description, created_by, created_at, updated_at, settlement_currency, unify_balances')
         .eq('id', groupId)
         .single();
 
@@ -213,7 +219,7 @@ Deno.serve(async (req: Request) => {
       // Fetch the created group to return full details
       const { data: group, error: fetchError } = await supabase
         .from('groups')
-        .select('id, name, description, created_by, created_at, updated_at')
+        .select('id, name, description, created_by, created_at, updated_at, settlement_currency, unify_balances')
         .eq('id', groupResult)
         .single();
 
@@ -222,6 +228,64 @@ Deno.serve(async (req: Request) => {
       }
 
       return createSuccessResponse(group, 201, 0, req);
+    }
+
+    // Handle PATCH /groups/:id - settlement currency settings
+    if (httpMethod === 'PATCH' && groupId) {
+      if (!isValidUUID(groupId)) {
+        return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR', undefined, req);
+      }
+
+      let updates: { settlement_currency?: string | null; unify_balances?: boolean };
+      try {
+        updates = body ? JSON.parse(body) : {};
+      } catch {
+        return createErrorResponse(400, 'Invalid JSON in request body', 'VALIDATION_ERROR', undefined, req);
+      }
+
+      const currency = normalizeOptionalCurrency(updates.settlement_currency);
+      if (!currency.valid) {
+        return createErrorResponse(400, currency.error || 'Invalid settlement currency', 'VALIDATION_ERROR', undefined, req);
+      }
+      if (updates.unify_balances !== undefined && typeof updates.unify_balances !== 'boolean') {
+        return createErrorResponse(400, 'unify_balances must be a boolean', 'VALIDATION_ERROR', undefined, req);
+      }
+
+      const { data: existing, error: existingError } = await supabase
+        .from('groups')
+        .select('id, settlement_currency, unify_balances')
+        .eq('id', groupId)
+        .single();
+
+      if (existingError || !existing) {
+        return createErrorResponse(404, 'Group not found', 'NOT_FOUND', undefined, req);
+      }
+
+      const nextCurrency = currency.value !== undefined
+        ? currency.value
+        : existing.settlement_currency ?? null;
+      const nextUnify = updates.unify_balances !== undefined
+        ? updates.unify_balances
+        : existing.unify_balances === true;
+
+      const { data: group, error } = await supabase.rpc('update_group_currency_settings', {
+        p_group_id: groupId,
+        p_settlement_currency: nextCurrency,
+        p_unify_balances: nextUnify,
+      });
+
+      if (error) {
+        const message = (error.message || '').toLowerCase();
+        if (message.includes('not an active group member')) {
+          return createErrorResponse(403, 'Not an active group member', 'PERMISSION_DENIED', undefined, req);
+        }
+        if (message.includes('not authenticated')) {
+          return createErrorResponse(401, 'Unauthorized', 'AUTH_ERROR', undefined, req);
+        }
+        return handleError(error, 'updating group currency settings', req);
+      }
+
+      return createSuccessResponse(group, 200, 0, req);
     }
 
     // Method not allowed
