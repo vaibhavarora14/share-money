@@ -78,6 +78,7 @@ import { GroupStatsMode, GroupStatsScreen } from "./screens/GroupStatsScreen";
 import { GroupsListScreen } from "./screens/GroupsListScreen";
 import { NotificationDetailScreen } from "./screens/NotificationDetailScreen";
 import { NotificationsScreen } from "./screens/NotificationsScreen";
+import { CurrencyMergePreviewScreen } from "./screens/CurrencyMergePreviewScreen";
 import { ProfileSetupScreen } from "./screens/ProfileSetupScreen";
 import { SplitwiseImportScreen } from "./screens/SplitwiseImportScreen";
 import { TermsAcceptanceScreen } from "./screens/TermsAcceptanceScreen";
@@ -843,6 +844,20 @@ function AppContent() {
     </NotificationsPanel>
   ) : null;
 
+  const showCurrencyMergePreview =
+    Platform.OS === "web" &&
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("preview") === "currency-merge";
+
+  if (showCurrencyMergePreview) {
+    return (
+      <>
+        <CurrencyMergePreviewScreen onBack={() => setCurrentRoute("groups")} />
+        <StatusBar style={theme.dark ? "light" : "dark"} />
+      </>
+    );
+  }
+
   if (loading) {
     return (
       <View
@@ -957,6 +972,17 @@ function AppContent() {
   }
 
   // Show profile screen
+  if (currentRoute === "currency-merge-preview") {
+    return (
+      <>
+        <CurrencyMergePreviewScreen
+          onBack={() => setCurrentRoute("profile")}
+        />
+        <StatusBar style={theme.dark ? "light" : "dark"} />
+      </>
+    );
+  }
+
   if (currentRoute === "profile") {
     return (
       <>
@@ -966,6 +992,7 @@ function AppContent() {
             setCurrentRoute("groups");
             setGroupRefreshTrigger((prev) => prev + 1);
           }}
+          onOpenCurrencyPreview={() => setCurrentRoute("currency-merge-preview")}
         />
         <BottomNavBar
           currentRoute={currentRoute}
