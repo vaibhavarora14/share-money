@@ -13,6 +13,8 @@ import json
 import os
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from collections import defaultdict
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
@@ -21,6 +23,42 @@ from urllib.parse import quote_plus
 
 def round_money(amount: float) -> float:
     return float(Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def stringify_rows(rows: list[Any]) -> list[dict[str, str]]:
+    out: list[dict[str, str]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        out.append({key: "" if value is None else str(value) for key, value in row.items()})
+    return out
+
+
+def query_via_management_api(sql: str) -> list[dict[str, str]] | None:
+    token = os.environ.get("SUPABASE_ACCESS_TOKEN", "").strip()
+    ref = os.environ.get("SUPABASE_PROJECT_REF", "").strip() or "xesuklogveedeppxbbit"
+    if not token:
+        return None
+    payload = json.dumps({"query": sql}).encode("utf-8")
+    request = urllib.request.Request(
+        f"https://api.supabase.com/v1/projects/{ref}/database/query",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            body = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode("utf-8", errors="replace")[:240]
+        raise SystemExit(f"management query failed: HTTP {error.code} {detail}") from error
+    rows = body if isinstance(body, list) else body.get("data") or body.get("result") or []
+    if not isinstance(rows, list):
+        raise SystemExit("management query returned unexpected payload")
+    return stringify_rows(rows)
 
 
 def db_url() -> str:
@@ -52,6 +90,13 @@ def psql(url: str, sql: str) -> list[dict[str, str]]:
         return []
     reader = csv.DictReader(io.StringIO(raw), delimiter="\t")
     return list(reader)
+
+
+def query(sql: str) -> list[dict[str, str]]:
+    managed = query_via_management_api(sql)
+    if managed is not None:
+        return managed
+    return psql(db_url(), sql)
 
 
 def first_name(value: str) -> str:
@@ -177,12 +222,27 @@ def compute_balances(
 
 
 def main() -> None:
-    url = db_url()
-    groups = psql(
-        url,
-        """
-        SELECT id::text, name, coalesce(settlement_currency, '') AS settlement_currency,
-               coalesce(unify_balances, false)::text AS unify_balances,
+    group_columns = {
+        row.get("column_name")
+        for row in query(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'groups'
+              AND column_name IN ('settlement_currency', 'unify_balances');
+            """
+        )
+    }
+    settlement_select = (
+        "coalesce(settlement_currency, '')" if "settlement_currency" in group_columns else "''"
+    )
+    unify_select = (
+        "coalesce(unify_balances, false)::text" if "unify_balances" in group_columns else "'false'"
+    )
+    groups = query(
+        f"""
+        SELECT id::text, name, {settlement_select} AS settlement_currency,
+               {unify_select} AS unify_balances,
                created_at::text
         FROM public.groups
         WHERE name ILIKE '%phuket%'
@@ -190,7 +250,7 @@ def main() -> None:
         """,
     )
     if not groups:
-        all_names = psql(url, "SELECT name FROM public.groups ORDER BY created_at DESC LIMIT 40;")
+        all_names = query("SELECT name FROM public.groups ORDER BY created_at DESC LIMIT 40;")
         raise SystemExit(
             "no group name matched Phuket. sample names: "
             + ", ".join((row.get("name") or "")[:40] for row in all_names[:12])
@@ -199,8 +259,7 @@ def main() -> None:
     group = groups[0]
     group_id = group["id"]
 
-    participants = psql(
-        url,
+    participants = query(
         f"""
         SELECT id::text,
                coalesce(user_id::text, '') AS user_id,
@@ -214,8 +273,7 @@ def main() -> None:
         WHERE group_id = '{group_id}';
         """,
     )
-    expenses = psql(
-        url,
+    expenses = query(
         f"""
         SELECT id::text, amount::text, currency,
                coalesce(paid_by_participant_id::text, '') AS paid_by_participant_id
@@ -223,8 +281,7 @@ def main() -> None:
         WHERE group_id = '{group_id}' AND type = 'expense';
         """,
     )
-    splits = psql(
-        url,
+    splits = query(
         f"""
         SELECT s.transaction_id::text, coalesce(s.participant_id::text, '') AS participant_id,
                s.amount::text
@@ -233,8 +290,7 @@ def main() -> None:
         WHERE t.group_id = '{group_id}' AND t.type = 'expense';
         """,
     )
-    settlements = psql(
-        url,
+    settlements = query(
         f"""
         SELECT coalesce(from_participant_id::text, '') AS from_participant_id,
                coalesce(to_participant_id::text, '') AS to_participant_id,
@@ -243,22 +299,31 @@ def main() -> None:
         WHERE group_id = '{group_id}';
         """,
     )
-    overrides = psql(
-        url,
+    tables = {
+        row.get("table_name")
+        for row in query(
+            """
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = 'public'
+              AND table_name IN ('group_exchange_rates', 'exchange_rates');
+            """
+        )
+    }
+    overrides = query(
         f"""
         SELECT from_currency, to_currency, rate::text, source
         FROM public.group_exchange_rates
         WHERE group_id = '{group_id}';
         """,
-    )
-    market = psql(
-        url,
+    ) if "group_exchange_rates" in tables else []
+    market = query(
         """
         SELECT quote_currency, rate::text, as_of::text, provider
         FROM public.exchange_rates
         WHERE base_currency = 'USD';
         """,
-    )
+    ) if "exchange_rates" in tables else []
 
     usd_rates = {"USD": 1.0}
     as_of = None
@@ -273,7 +338,7 @@ def main() -> None:
         "group": {
             "name": group["name"],
             "settlement_currency": (group.get("settlement_currency") or "").upper() or None,
-            "unify_balances": group.get("unify_balances") == "true",
+            "unify_balances": str(group.get("unify_balances") or "").lower() == "true",
             "member_count": len(participants),
             "expense_count": len(expenses),
             "settlement_count": len(settlements),
