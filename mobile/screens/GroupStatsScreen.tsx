@@ -21,10 +21,9 @@ import { useCreateSettlement } from "../hooks/useSettlements";
 import { Balance, GroupMember, Participant, Transaction } from "../types";
 import {
   formatCurrency,
-  formatTotals,
   getDefaultCurrency,
 } from "../utils/currency";
-import { formatBreakdown, simplifyUnifiedDebts, unifyPeopleNets, unifyTotals, type ConvertedPart, type UnifiedPersonNet } from "../utils/currencyMerge";
+import { formatBreakdown, formatDisplayTotals, simplifyUnifiedDebts, unifyPeopleNets, type ConvertedPart, type UnifiedPersonNet } from "../utils/currencyMerge";
 import { SettlementFormScreen } from "./SettlementFormScreen";
 
 export type GroupStatsMode = "my-costs" | "total-costs" | "settlement-plan" | "i-owe" | "im-owed";
@@ -370,8 +369,18 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
                 {/* Paid vs Share Comparison */}
                 {(() => {
                     const paidMap = paymentsBreakdown.get(entry.participantId) || new Map<string, number>();
-                    const paidText = formatTotals(paidMap, defaultCurrency);
-                    const shareText = formatTotals(entry.amounts, defaultCurrency);
+                    const paidText = formatDisplayTotals(paidMap, {
+                      unifyEnabled,
+                      settlementCurrency,
+                      rateBook,
+                      defaultCurrency,
+                    }).headline;
+                    const shareText = formatDisplayTotals(entry.amounts, {
+                      unifyEnabled,
+                      settlementCurrency,
+                      rateBook,
+                      defaultCurrency,
+                    }).headline;
                     
                     return (
                         <Text variant="labelSmall" style={{ opacity: 0.6, marginTop: 2 }}>
@@ -620,6 +629,12 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
   const renderCostContent = () => {
     const summaryValue = activeMode === "my-costs" ? myShare : totalCosts;
     const showTabs = activeMode === "total-costs" || activeMode === "settlement-plan";
+    const summaryDisplay = formatDisplayTotals(summaryValue, {
+      unifyEnabled,
+      settlementCurrency,
+      rateBook,
+      defaultCurrency,
+    });
 
     return (
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -637,18 +652,11 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
             variant="headlineSmall"
             style={[styles.summaryValue, colorStyles.summaryValue]}
           >
-            {groupStatsLoading
-              ? "..."
-              : unifyEnabled
-                ? formatCurrency(
-                    Math.abs(unifyTotals(summaryValue, settlementCurrency, rateBook).amount),
-                    settlementCurrency
-                  )
-                : formatTotals(summaryValue)}
+            {groupStatsLoading ? "..." : summaryDisplay.headline}
           </Text>
           {unifyEnabled && !groupStatsLoading ? (
             <Text variant="bodySmall" style={[styles.summaryHelpText, colorStyles.summaryHelpText]}>
-              from {formatBreakdown(unifyTotals(summaryValue, settlementCurrency, rateBook).parts) || "original currencies"}
+              from {summaryDisplay.breakdown || "original currencies"}
             </Text>
           ) : null}
           <Text style={[styles.summaryHelpText, colorStyles.summaryHelpText]}>
@@ -692,7 +700,14 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
     );
   };
 
-  const renderBalanceContent = () => (
+  const renderBalanceContent = () => {
+    const balanceDisplay = formatDisplayTotals(balanceTotals, {
+      unifyEnabled,
+      settlementCurrency,
+      rateBook,
+      defaultCurrency,
+    });
+    return (
     <ScrollView contentContainerStyle={styles.scrollContent}>
       <Surface
         style={[styles.summaryCard, colorStyles.summaryCard]}
@@ -704,24 +719,17 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
         >
           {MODE_COPY[activeMode].summaryLabel}
         </Text>
-        <Text
-          variant="headlineMedium"
-          style={[styles.summaryValue, colorStyles.summaryValue]}
-        >
-          {balancesLoading
-            ? "..."
-            : unifyEnabled
-              ? formatCurrency(
-                  Math.abs(unifyTotals(balanceTotals, settlementCurrency, rateBook).amount),
-                  settlementCurrency
-                )
-              : formatTotals(balanceTotals)}
-        </Text>
-        {unifyEnabled && !balancesLoading ? (
-          <Text variant="bodySmall" style={[styles.summaryHelpText, colorStyles.summaryHelpText]}>
-            from {formatBreakdown(unifyTotals(balanceTotals, settlementCurrency, rateBook).parts) || "original currencies"}
+          <Text
+            variant="headlineMedium"
+            style={[styles.summaryValue, colorStyles.summaryValue]}
+          >
+            {balancesLoading ? "..." : balanceDisplay.headline}
           </Text>
-        ) : null}
+          {unifyEnabled && !balancesLoading ? (
+            <Text variant="bodySmall" style={[styles.summaryHelpText, colorStyles.summaryHelpText]}>
+              from {balanceDisplay.breakdown || "original currencies"}
+            </Text>
+          ) : null}
         <Text style={[styles.summaryHelpText, colorStyles.summaryHelpText]}>
           {MODE_COPY[activeMode].subtitle}
         </Text>
@@ -752,7 +760,8 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
         </Text>
       )}
     </ScrollView>
-  );
+    );
+  };
 
   const isCostMode = activeMode === "my-costs" || activeMode === "total-costs" || activeMode === "settlement-plan";
 

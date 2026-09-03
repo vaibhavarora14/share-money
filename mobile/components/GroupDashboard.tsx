@@ -13,10 +13,11 @@ import { Balance, Transaction } from "../types";
 import { UnifiedBalanceHero } from "./UnifiedBalanceHero";
 import { UnifyPromptCard } from "./UnifyPromptCard";
 import { useCurrencyPreferences } from "../hooks/useCurrencyPreferences";
-import { formatCurrency, formatTotals, getDefaultCurrency } from "../utils/currency";
+import { formatCurrency, getDefaultCurrency } from "../utils/currency";
 import {
   collectCurrencies,
   formatBreakdown,
+  formatDisplayTotals,
   isMultiCurrency,
   unifyBalances,
   simplifyUnifiedDebts,
@@ -179,10 +180,23 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
     return { myCostTotal: myTotal, groupCostTotal: groupTotal };
   }, [transactions, currentUserId, currentUserParticipantId, defaultCurrency]);
 
-  const formattedMyCost = useMemo(() => formatTotals(myCostTotal), [myCostTotal]);
-  const formattedGroupCost = useMemo(
-    () => formatTotals(groupCostTotal),
-    [groupCostTotal]
+  const myCostDisplay = useMemo(
+    () => formatDisplayTotals(myCostTotal, {
+      unifyEnabled,
+      settlementCurrency,
+      rateBook,
+      defaultCurrency,
+    }),
+    [myCostTotal, unifyEnabled, settlementCurrency, rateBook, defaultCurrency]
+  );
+  const groupCostDisplay = useMemo(
+    () => formatDisplayTotals(groupCostTotal, {
+      unifyEnabled,
+      settlementCurrency,
+      rateBook,
+      defaultCurrency,
+    }),
+    [groupCostTotal, unifyEnabled, settlementCurrency, rateBook, defaultCurrency]
   );
 
   // --- RENDER HELPERS ---
@@ -287,8 +301,13 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
             <View style={{ flex: 1 }}>
                 <Text variant="labelSmall" style={{ color: theme.colors.onSecondaryContainer, opacity: 0.8 }}>My Spending</Text>
                 <Text variant="labelMedium" numberOfLines={2} style={{ color: theme.colors.onSecondaryContainer, fontWeight: 'bold' }}>
-                    {loading ? "..." : formattedMyCost}
+                    {loading ? "..." : myCostDisplay.headline}
                 </Text>
+                {!loading && myCostDisplay.breakdown ? (
+                  <Text variant="labelSmall" numberOfLines={1} style={{ color: theme.colors.onSecondaryContainer, opacity: 0.75 }}>
+                    from {myCostDisplay.breakdown}
+                  </Text>
+                ) : null}
             </View>
           </View>
         </TouchableRipple>
@@ -304,8 +323,13 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
             <View style={{ flex: 1 }}>
                 <Text variant="labelSmall" style={{ color: theme.colors.onTertiaryContainer, opacity: 0.8 }}>Group summary</Text>
                 <Text variant="labelMedium" numberOfLines={2} style={{ color: theme.colors.onTertiaryContainer, fontWeight: 'bold' }}>
-                    {loading ? "..." : formattedGroupCost}
+                    {loading ? "..." : groupCostDisplay.headline}
                 </Text>
+                {!loading && groupCostDisplay.breakdown ? (
+                  <Text variant="labelSmall" numberOfLines={1} style={{ color: theme.colors.onTertiaryContainer, opacity: 0.75 }}>
+                    from {groupCostDisplay.breakdown}
+                  </Text>
+                ) : null}
             </View>
           </View>
         </TouchableRipple>

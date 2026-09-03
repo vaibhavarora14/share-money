@@ -2,7 +2,9 @@ import { assertEquals, assertAlmostEquals } from "jsr:@std/assert@1";
 import {
   convertAmount,
   formatBreakdown,
+  formatDisplayTotals,
   formatRateLabel,
+  formatUnifiedHeadline,
   pairKey,
   resolveRate,
   simplifyUnifiedDebts,
@@ -43,8 +45,50 @@ Deno.test("unifyTotals keeps originals and reports missing currencies", () => {
   const unified = unifyTotals({ EUR: -32, USD: -12, XYZ: 5 }, "INR", book);
   assertEquals(unified.currency, "INR");
   assertEquals(unified.missing, ["XYZ"]);
+  assertEquals(unified.leftover, [{ currency: "XYZ", original: 5 }]);
   assertAlmostEquals(unified.amount, -(32 * 91.2 + 12 * 88.5), 0.01);
   assertEquals(formatBreakdown(unified.parts), "€32.00 + $12.00");
+  assertEquals(formatUnifiedHeadline(unified).endsWith("XYZ5.00"), true);
+});
+
+Deno.test("formatDisplayTotals shows one settlement currency with originals underneath", () => {
+  const book = createPreviewRateBook({ "THB:INR": 3.2 });
+  const display = formatDisplayTotals(
+    { THB: 1000, EUR: 50, USD: 20 },
+    { unifyEnabled: true, settlementCurrency: "INR", rateBook: book }
+  );
+  assertEquals(display.unified?.currency, "INR");
+  assertAlmostEquals(
+    display.unified?.amount ?? 0,
+    1000 * 3.2 + 50 * (88.5 / 0.86) + 20 * 88.5,
+    0.01
+  );
+  assertEquals(display.headline.includes("€"), false);
+  assertEquals(display.headline.includes("$"), false);
+  assertEquals(display.headline.includes("฿"), false);
+  assertEquals(display.breakdown, "฿1,000.00 + €50.00 + $20.00");
+});
+
+Deno.test("formatDisplayTotals leaves unconvertible leftovers in the headline", () => {
+  const book = createPreviewRateBook({ "THB:INR": 3.2 });
+  const display = formatDisplayTotals(
+    { THB: 1000, XYZ: 5 },
+    { unifyEnabled: true, settlementCurrency: "INR", rateBook: book }
+  );
+  assertEquals(display.unified?.missing, ["XYZ"]);
+  assertEquals(display.headline, "₹3,200.00 + XYZ5.00");
+  assertEquals(display.breakdown, "฿1,000.00");
+});
+
+Deno.test("formatDisplayTotals still lists each currency when unify is off", () => {
+  const book = createPreviewRateBook({ "THB:INR": 3.2 });
+  const display = formatDisplayTotals(
+    { THB: 1000, EUR: 50 },
+    { unifyEnabled: false, settlementCurrency: "INR", rateBook: book }
+  );
+  assertEquals(display.unified, null);
+  assertEquals(display.headline, "฿1,000.00 + €50.00");
+  assertEquals(display.breakdown, "");
 });
 
 Deno.test("unifyDebtEdges merges the same people across currencies", () => {

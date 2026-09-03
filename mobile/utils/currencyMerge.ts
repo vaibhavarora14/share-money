@@ -33,11 +33,17 @@ export type ConvertedPart = {
   quote: RateQuote;
 };
 
+export type LeftoverPart = {
+  currency: string;
+  original: number;
+};
+
 export type UnifiedTotal = {
   amount: number;
   currency: string;
   parts: ConvertedPart[];
   missing: string[];
+  leftover: LeftoverPart[];
 };
 
 const PAIR_SEPARATOR = ":";
@@ -146,13 +152,16 @@ export function unifyTotals(
 
   const parts: ConvertedPart[] = [];
   const missing: string[] = [];
+  const leftover: LeftoverPart[] = [];
   let amount = 0;
 
   for (const [currency, original] of entries) {
     if (!Number.isFinite(original) || original === 0) continue;
     const quote = resolveRate(currency, target, book);
     if (!quote) {
-      missing.push(currency.toUpperCase());
+      const code = currency.toUpperCase();
+      missing.push(code);
+      leftover.push({ currency: code, original });
       continue;
     }
     const converted = original * quote.rate;
@@ -170,6 +179,7 @@ export function unifyTotals(
     currency: target,
     parts,
     missing,
+    leftover,
   };
 }
 
@@ -319,6 +329,72 @@ export function formatBreakdown(parts: ConvertedPart[]): string {
   return visible
     .map((part) => formatCurrency(Math.abs(part.original), part.currency))
     .join(" + ");
+}
+
+/**
+ * One settlement-currency total, with any unconvertible leftovers still listed.
+ * Does not drop a currency just because it has no rate.
+ */
+export function formatUnifiedHeadline(unified: UnifiedTotal): string {
+  const pieces: string[] = [];
+  if (Math.abs(unified.amount) >= 0.01 || unified.leftover.length === 0) {
+    pieces.push(formatCurrency(Math.abs(unified.amount), unified.currency));
+  }
+  for (const part of unified.leftover) {
+    if (Math.abs(part.original) < 0.01) continue;
+    pieces.push(formatCurrency(Math.abs(part.original), part.currency));
+  }
+  return pieces.join(" + ");
+}
+
+export type DisplayTotals = {
+  headline: string;
+  breakdown: string;
+  unified: UnifiedTotal | null;
+};
+
+function formatJoinedTotals(
+  totals: Map<string, number> | Record<string, number>,
+  defaultCurrency: string
+): string {
+  const entries = totals instanceof Map
+    ? Array.from(totals.entries())
+    : Object.entries(totals);
+  const visible = entries.filter(([, amount]) => Number.isFinite(amount) && amount !== 0);
+  if (visible.length === 0) return formatCurrency(0, defaultCurrency);
+  return visible
+    .map(([currency, amount]) => formatCurrency(amount, currency))
+    .join(" + ");
+}
+
+/**
+ * Display-layer totals: one derived number when unify is on, originals underneath.
+ * Stored expenses are not rewritten.
+ */
+export function formatDisplayTotals(
+  totals: Map<string, number> | Record<string, number>,
+  options: {
+    unifyEnabled: boolean;
+    settlementCurrency: string;
+    rateBook: RateBook;
+    defaultCurrency?: string;
+  }
+): DisplayTotals {
+  const fallback = options.defaultCurrency || options.settlementCurrency || getDefaultCurrency();
+  if (!options.unifyEnabled || !options.settlementCurrency) {
+    return {
+      headline: formatJoinedTotals(totals, fallback),
+      breakdown: "",
+      unified: null,
+    };
+  }
+
+  const unified = unifyTotals(totals, options.settlementCurrency, options.rateBook);
+  return {
+    headline: formatUnifiedHeadline(unified),
+    breakdown: formatBreakdown(unified.parts),
+    unified,
+  };
 }
 
 export function formatRateLabel(quote: RateQuote): string {
