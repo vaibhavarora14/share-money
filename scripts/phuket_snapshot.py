@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
-"""Anonymized Phuket group snapshot from a production-equivalent database.
+"""Anonymized Phuket group snapshot via the Supabase CLI.
 
-Prints JSON with first-name labels only. Never prints emails, full names,
-or connection strings.
+Prefers `supabase db query --linked`. Prints JSON with first-name labels only.
+Never prints emails, full names, tokens, or connection strings.
 """
 from __future__ import annotations
 
-import csv
 import hashlib
-import io
 import json
 import os
+import re
 import subprocess
 import sys
-import urllib.error
-import urllib.request
 from collections import defaultdict
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
-from urllib.parse import quote_plus
+from urllib.parse import urlparse
+
+
+UUID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 
 def round_money(amount: float) -> float:
@@ -34,74 +34,93 @@ def stringify_rows(rows: list[Any]) -> list[dict[str, str]]:
     return out
 
 
-def http_json(url: str, headers: dict[str, str], data: bytes | None = None) -> Any:
-    request = urllib.request.Request(url, data=data, headers=headers, method="POST" if data else "GET")
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            raw = response.read().decode("utf-8")
-            return json.loads(raw) if raw else None
-    except urllib.error.HTTPError as error:
-        detail = error.read().decode("utf-8", errors="replace")[:240]
-        raise SystemExit(f"request failed: HTTP {error.code} {detail}") from error
+def redact(text: str) -> str:
+    text = re.sub(r"postgres(?:ql)?://\S+", "postgresql://***", text)
+    text = re.sub(r"Bearer \S+", "Bearer ***", text)
+    return text.strip().splitlines()[-1] if text.strip() else "query failed"
 
 
-def project_ref() -> str:
-    return os.environ.get("SUPABASE_PROJECT_REF", "").strip() or "xesuklogveedeppxbbit"
-
-
-def rest_credentials() -> tuple[str, str]:
-    ref = project_ref()
-    url = (
-        os.environ.get("EXPO_PUBLIC_SUPABASE_URL", "").strip()
-        or os.environ.get("SUPABASE_URL", "").strip()
-        or f"https://{ref}.supabase.co"
-    ).rstrip("/")
-    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
-    if key:
-        return url, key
-    token = os.environ.get("SUPABASE_ACCESS_TOKEN", "").strip()
-    if not token:
-        raise SystemExit("missing SUPABASE_ACCESS_TOKEN to load project API keys")
-    payload = http_json(
-        f"https://api.supabase.com/v1/projects/{ref}/api-keys",
-        {"Authorization": f"Bearer {token}", "Accept": "application/json"},
-    )
-    rows = payload if isinstance(payload, list) else []
-    service = next(
-        (
-            row.get("api_key") or row.get("key") or ""
-            for row in rows
-            if isinstance(row, dict) and str(row.get("name") or row.get("id") or "").lower() in {"service_role", "service-role"}
-        ),
-        "",
-    )
-    if not service:
-        raise SystemExit("management API did not return a service_role key")
-    return url, service
-
-
-def rest_get(base_url: str, key: str, table: str, query: str) -> list[dict[str, str]]:
-    url = f"{base_url}/rest/v1/{table}?{query}"
-    headers = {
-        "apikey": key,
-        "Authorization": f"Bearer {key}",
-        "Accept": "application/json",
-        "Prefer": "count=none",
-    }
-    request = urllib.request.Request(url, headers=headers, method="GET")
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            body = json.loads(response.read().decode("utf-8") or "[]")
-    except urllib.error.HTTPError as error:
-        if error.code in {404, 300, 406}:
-            return []
-        detail = error.read().decode("utf-8", errors="replace")[:240]
-        if error.code == 400 and ("does not exist" in detail or "schema cache" in detail):
-            return []
-        raise SystemExit(f"rest {table} failed: HTTP {error.code} {detail}") from error
+def parse_query_json(raw: str) -> list[dict[str, str]]:
+    payload = raw.strip()
+    for prefix in ("[", "{"):
+        idx = payload.find(prefix)
+        if idx >= 0:
+            payload = payload[idx:]
+            break
+    body = json.loads(payload or "[]")
+    if isinstance(body, dict):
+        body = body.get("data") or body.get("result") or body.get("rows") or []
     if not isinstance(body, list):
-        raise SystemExit(f"rest {table} returned unexpected payload")
+        raise SystemExit("supabase db query returned unexpected JSON")
     return stringify_rows(body)
+
+
+def repo_root() -> str:
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def ensure_linked_ref() -> None:
+    ref = os.environ.get("SUPABASE_PROJECT_REF", "").strip() or "xesuklogveedeppxbbit"
+    temp = os.path.join(repo_root(), "supabase", ".temp")
+    os.makedirs(temp, exist_ok=True)
+    path = os.path.join(temp, "project-ref")
+    if not os.path.exists(path) or not open(path, encoding="utf-8").read().strip():
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(ref)
+
+
+def run_supabase(args: list[str], extra_env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    if extra_env:
+        env.update(extra_env)
+    return subprocess.run(
+        ["supabase", *args],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=repo_root(),
+        env=env,
+    )
+
+
+def cli_query(sql: str) -> list[dict[str, str]]:
+    ensure_linked_ref()
+    linked = run_supabase(["db", "query", "--linked", "-o", "json", sql])
+    if linked.returncode == 0:
+        try:
+            return parse_query_json(linked.stdout)
+        except json.JSONDecodeError:
+            raise SystemExit(f"linked query returned non-JSON: {redact(linked.stdout)}") from None
+
+    db_url = os.environ.get("SUPABASE_DATABASE_URL", "").strip()
+    if db_url:
+        parsed = urlparse(db_url)
+        if parsed.scheme.startswith("postgres"):
+            remote = run_supabase(["db", "query", "--db-url", db_url, "-o", "json", sql])
+            if remote.returncode == 0:
+                try:
+                    return parse_query_json(remote.stdout)
+                except json.JSONDecodeError:
+                    raise SystemExit(f"db-url query returned non-JSON: {redact(remote.stdout)}") from None
+            url_error = redact(remote.stderr or remote.stdout)
+        else:
+            url_error = "database url is not postgres"
+    else:
+        url_error = "no database url"
+
+    local = run_supabase(["db", "query", "--local", "-o", "json", sql])
+    if local.returncode == 0:
+        try:
+            return parse_query_json(local.stdout)
+        except json.JSONDecodeError:
+            raise SystemExit(f"local query returned non-JSON: {redact(local.stdout)}") from None
+
+    raise SystemExit(
+        "supabase db query failed: "
+        f"linked={redact(linked.stderr or linked.stdout)}; "
+        f"db-url={url_error}; "
+        f"local={redact(local.stderr or local.stdout)}"
+    )
 
 
 def first_name(value: str) -> str:
@@ -177,7 +196,6 @@ def compute_balances(
         return labels[pid]
 
     nets: dict[tuple[str, str], float] = defaultdict(float)
-
     splits_by_tx: dict[str, list[dict[str, str]]] = defaultdict(list)
     for row in split_rows:
         splits_by_tx[row["transaction_id"]].append(row)
@@ -226,82 +244,115 @@ def compute_balances(
     return balances
 
 
+def require_uuid(value: str) -> str:
+    if not UUID_RE.match(value or ""):
+        raise SystemExit("group id from query was not a UUID")
+    return value
+
+
+def table_exists(name: str) -> bool:
+    rows = cli_query(
+        f"""
+        SELECT 1 AS present
+        FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = '{name}'
+        LIMIT 1;
+        """
+    )
+    return bool(rows)
+
+
+def column_exists(table: str, column: str) -> bool:
+    rows = cli_query(
+        f"""
+        SELECT 1 AS present
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = '{table}' AND column_name = '{column}'
+        LIMIT 1;
+        """
+    )
+    return bool(rows)
+
+
 def main() -> None:
-    base_url, key = rest_credentials()
-    groups = rest_get(
-        base_url,
-        key,
-        "groups",
-        "name=ilike.*phuket*&select=id,name,settlement_currency,unify_balances,created_at&order=created_at.desc",
+    has_settlement = column_exists("groups", "settlement_currency")
+    has_unify = column_exists("groups", "unify_balances")
+    settlement_sql = "coalesce(settlement_currency, '')" if has_settlement else "''"
+    unify_sql = "coalesce(unify_balances, false)::text" if has_unify else "'false'"
+
+    groups = cli_query(
+        f"""
+        SELECT id::text, name, {settlement_sql} AS settlement_currency,
+               {unify_sql} AS unify_balances, created_at::text
+        FROM public.groups
+        WHERE name ILIKE '%phuket%'
+        ORDER BY created_at DESC;
+        """
     )
     if not groups:
-        groups = rest_get(
-            base_url,
-            key,
-            "groups",
-            "name=ilike.*phuket*&select=id,name,created_at&order=created_at.desc",
-        )
-    if not groups:
-        sample = rest_get(base_url, key, "groups", "select=name&order=created_at.desc&limit=12")
+        sample = cli_query("SELECT name FROM public.groups ORDER BY created_at DESC LIMIT 12;")
         raise SystemExit(
             "no group name matched Phuket. sample names: "
             + ", ".join((row.get("name") or "")[:40] for row in sample)
         )
 
     group = groups[0]
-    group_id = group["id"]
+    group_id = require_uuid(group["id"])
 
-    raw_participants = rest_get(
-        base_url,
-        key,
-        "participants",
-        f"group_id=eq.{group_id}&select=id,user_id,type,full_name,email",
+    participants = cli_query(
+        f"""
+        SELECT id::text,
+               coalesce(user_id::text, '') AS user_id,
+               coalesce(type, '') AS type,
+               split_part(coalesce(full_name, ''), ' ', 1) AS first_name,
+               CASE
+                 WHEN email IS NULL OR btrim(email) = '' THEN ''
+                 ELSE md5(lower(btrim(email)))
+               END AS email_hash
+        FROM public.participants
+        WHERE group_id = '{group_id}';
+        """
     )
-    participants: list[dict[str, str]] = []
-    for row in raw_participants:
-        email = (row.get("email") or "").strip()
-        participants.append({
-            "id": row.get("id") or "",
-            "user_id": row.get("user_id") or "",
-            "type": row.get("type") or "",
-            "first_name": first_name(row.get("full_name") or ""),
-            "email_hash": hashlib.md5(email.lower().encode("utf-8")).hexdigest() if email else "",
-        })
-
-    expenses = rest_get(
-        base_url,
-        key,
-        "transactions",
-        f"group_id=eq.{group_id}&type=eq.expense&select=id,amount,currency,paid_by_participant_id&limit=1000",
+    expenses = cli_query(
+        f"""
+        SELECT id::text, amount::text, currency,
+               coalesce(paid_by_participant_id::text, '') AS paid_by_participant_id
+        FROM public.transactions
+        WHERE group_id = '{group_id}' AND type = 'expense';
+        """
     )
-    tx_ids = [row["id"] for row in expenses if row.get("id")]
-    splits: list[dict[str, str]] = []
-    for i in range(0, len(tx_ids), 50):
-        chunk = ",".join(tx_ids[i:i + 50])
-        splits.extend(rest_get(
-            base_url,
-            key,
-            "transaction_splits",
-            f"transaction_id=in.({chunk})&select=transaction_id,participant_id,amount",
-        ))
-    settlements = rest_get(
-        base_url,
-        key,
-        "settlements",
-        f"group_id=eq.{group_id}&select=from_participant_id,to_participant_id,amount,currency&limit=1000",
+    splits = cli_query(
+        f"""
+        SELECT s.transaction_id::text, coalesce(s.participant_id::text, '') AS participant_id,
+               s.amount::text
+        FROM public.transaction_splits s
+        JOIN public.transactions t ON t.id = s.transaction_id
+        WHERE t.group_id = '{group_id}' AND t.type = 'expense';
+        """
     )
-    overrides = rest_get(
-        base_url,
-        key,
-        "group_exchange_rates",
-        f"group_id=eq.{group_id}&select=from_currency,to_currency,rate,source",
+    settlements = cli_query(
+        f"""
+        SELECT coalesce(from_participant_id::text, '') AS from_participant_id,
+               coalesce(to_participant_id::text, '') AS to_participant_id,
+               amount::text, currency
+        FROM public.settlements
+        WHERE group_id = '{group_id}';
+        """
     )
-    market = rest_get(
-        base_url,
-        key,
-        "exchange_rates",
-        "base_currency=eq.USD&select=quote_currency,rate,as_of,provider",
-    )
+    overrides = cli_query(
+        f"""
+        SELECT from_currency, to_currency, rate::text, source
+        FROM public.group_exchange_rates
+        WHERE group_id = '{group_id}';
+        """
+    ) if table_exists("group_exchange_rates") else []
+    market = cli_query(
+        """
+        SELECT quote_currency, rate::text, as_of::text, provider
+        FROM public.exchange_rates
+        WHERE base_currency = 'USD';
+        """
+    ) if table_exists("exchange_rates") else []
 
     usd_rates = {"USD": 1.0}
     as_of = None
@@ -316,11 +367,12 @@ def main() -> None:
         "group": {
             "name": group["name"],
             "settlement_currency": (group.get("settlement_currency") or "").upper() or None,
-            "unify_balances": str(group.get("unify_balances") or "").lower() == "true",
+            "unify_balances": str(group.get("unify_balances") or "").lower() in {"true", "t", "1"},
             "member_count": len(participants),
             "expense_count": len(expenses),
             "settlement_count": len(settlements),
             "match_count": len(groups),
+            "source": "supabase db query",
         },
         "rate_book": {
             "as_of": as_of,

@@ -22,22 +22,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install psql and Deno
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Link ShareMoney project
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client
-          curl -fsSL https://deno.land/install.sh | sh
-          echo "$HOME/.deno/bin" >> "$GITHUB_PATH"
+          mkdir -p supabase/.temp
+          printf '%s' "$SUPABASE_PROJECT_REF" > supabase/.temp/project-ref
+          supabase --version
+          if ! supabase link --project-ref "$SUPABASE_PROJECT_REF" --yes -p "$SUPABASE_DB_PASSWORD"; then
+            echo "link with database password failed; continuing with project-ref for management queries"
+          fi
 
       - name: Snapshot Phuket group
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
           SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
           SNAPSHOT_PATH: phuket-snapshot.json
-        run: python3 scripts/phuket_snapshot.py > /tmp/phuket-stdout.json
+        run: python3 scripts/phuket_snapshot.py
 
       - name: Compare old vs new settlement
         run: deno run --allow-read scripts/compare-unified-settlement.ts phuket-snapshot.json | tee phuket-compare.json
@@ -47,7 +60,7 @@ jobs:
           {
             echo "## Phuket unified settlement snapshot"
             echo
-            echo "Anonymized first names only. No emails."
+            echo "Source: supabase db query. Anonymized first names only. No emails."
             echo
             echo '```json'
             cat phuket-compare.json
