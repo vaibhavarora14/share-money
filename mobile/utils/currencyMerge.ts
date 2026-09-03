@@ -189,7 +189,57 @@ export function personKey(person: {
   user_id?: string | null;
   email?: string | null;
 }): string {
-  return person.participant_id || person.user_id || person.email || "unknown";
+  return person.user_id || person.participant_id || person.email || "unknown";
+}
+
+function identityTokens(person: {
+  participant_id?: string | null;
+  user_id?: string | null;
+  email?: string | null;
+}): string[] {
+  const tokens: string[] = [];
+  if (person.user_id) tokens.push(`u:${person.user_id}`);
+  if (person.participant_id) tokens.push(`p:${person.participant_id}`);
+  if (person.email) tokens.push(`e:${person.email.trim().toLowerCase()}`);
+  if (tokens.length === 0) tokens.push(`k:${personKey(person)}`);
+  return tokens;
+}
+
+function groupBalancesByPerson<T extends {
+  participant_id?: string | null;
+  user_id?: string | null;
+  email?: string | null;
+}>(rows: T[]): T[][] {
+  const parent = new Map<string, string>();
+  const find = (id: string): string => {
+    const current = parent.get(id) ?? id;
+    if (current !== id) {
+      const root = find(current);
+      parent.set(id, root);
+      return root;
+    }
+    parent.set(id, id);
+    return id;
+  };
+  const union = (left: string, right: string) => {
+    const a = find(left);
+    const b = find(right);
+    if (a !== b) parent.set(a, b);
+  };
+
+  for (const row of rows) {
+    const tokens = identityTokens(row);
+    for (let i = 1; i < tokens.length; i++) union(tokens[0], tokens[i]);
+  }
+
+  const grouped = new Map<string, T[]>();
+  for (const row of rows) {
+    const root = find(identityTokens(row)[0]);
+    const list = grouped.get(root) || [];
+    list.push(row);
+    grouped.set(root, list);
+  }
+  return Array.from(grouped.values());
 }
 
 export type UnifiedPersonNet = Balance & {
@@ -207,17 +257,12 @@ export function unifyPeopleNets(
   book: RateBook
 ): UnifiedPersonNet[] {
   const target = targetCurrency.toUpperCase();
-  const grouped = new Map<string, Balance[]>();
-  for (const balance of balances) {
-    const key = personKey(balance);
-    const list = grouped.get(key) || [];
-    list.push(balance);
-    grouped.set(key, list);
-  }
-
   const nets: UnifiedPersonNet[] = [];
-  for (const rows of grouped.values()) {
-    const template = rows.find((row) => row.full_name) || rows[0];
+  for (const rows of groupBalancesByPerson(balances)) {
+    const template = rows.find((row) => row.user_id && row.full_name)
+      || rows.find((row) => row.user_id)
+      || rows.find((row) => row.full_name)
+      || rows[0];
     const convertible: Balance[] = [];
     const leftover: Balance[] = [];
     for (const row of rows) {

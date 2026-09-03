@@ -1,0 +1,61 @@
+name: Phuket unify snapshot
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/phuket-unify-snapshot.yml"
+      - "scripts/phuket_snapshot.py"
+      - "scripts/compare-unified-settlement.ts"
+      - "mobile/utils/currencyMerge.ts"
+      - "mobile/utils/debt.ts"
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    name: Anonymized Phuket balances
+    runs-on: ubuntu-latest
+    environment: Production
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install psql and Deno
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          curl -fsSL https://deno.land/install.sh | sh
+          echo "$HOME/.deno/bin" >> "$GITHUB_PATH"
+
+      - name: Snapshot Phuket group
+        env:
+          SUPABASE_DATABASE_URL: ${{ secrets.SUPABASE_DATABASE_URL }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          SNAPSHOT_PATH: phuket-snapshot.json
+        run: python3 scripts/phuket_snapshot.py > /tmp/phuket-stdout.json
+
+      - name: Compare old vs new settlement
+        run: deno run --allow-read scripts/compare-unified-settlement.ts phuket-snapshot.json | tee phuket-compare.json
+
+      - name: Write summary
+        run: |
+          {
+            echo "## Phuket unified settlement snapshot"
+            echo
+            echo "Anonymized first names only. No emails."
+            echo
+            echo '```json'
+            cat phuket-compare.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phuket-unify-snapshot
+          path: |
+            phuket-snapshot.json
+            phuket-compare.json
+          if-no-files-found: error
