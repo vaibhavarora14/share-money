@@ -76,6 +76,19 @@ Build numbers are **automatically incremented** when you push to the `main` bran
 - When you run `npm run version:patch/minor/major`, CI/CD detects the manual change and skips auto-increment
 - Manual bumps increment both version AND build number
 
+## OTA vs store version bumps
+
+`runtimeVersion` follows the `appVersion` policy (`mobile/version.json` →
+`expo.version`). An OTA only reaches users already on that marketing version.
+
+- **JS/asset-only fix:** do **not** bump `version.json`. Publish with
+  `.github/workflows/publish-ota.yml` (or `eas update --channel …`).
+- **Store release:** bump as below, then cut binaries with the release-mobile
+  skill. A version bump creates a new runtime; existing users stay on the old
+  runtime until they install the new store binary.
+
+See `mobile/EXPO_PUBLISH.md` for eligibility, publish, verify, and rollback.
+
 ## Release Workflow
 
 ### For Bug Fixes (Patch)

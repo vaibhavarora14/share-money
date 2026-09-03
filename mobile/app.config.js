@@ -173,7 +173,7 @@ module.exports = ({ config }) => {
       updates: {
         url: "https://u.expo.dev/afddb7db-3d7d-46da-a1b5-0d6e4b4374ce",
         enabled: true,
-        checkAutomatically: "ON_ERROR_RECOVERY",
+        checkAutomatically: "ON_LOAD",
         fallbackToCacheTimeout: 0
       },
       plugins: [

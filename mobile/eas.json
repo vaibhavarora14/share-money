@@ -16,7 +16,6 @@
       "distribution": "internal",
       "channel": "preview",
       "env": {
-        "EXPO_NO_UPDATES": "1",
         "EAS_BUILD": "true",
         "EXPO_PUBLIC_USE_DEV_CLIENT": "true"
       }

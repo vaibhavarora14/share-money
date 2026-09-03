@@ -126,3 +126,45 @@ The workflow deploys all functions in `supabase/functions/`:
 - Free tier includes 500,000 invocations per month
 - Deployment typically takes 1-2 minutes
 - All functions are deployed in a single operation
+
+---
+
+## Publish OTA Update
+
+**File**: `.github/workflows/publish-ota.yml`
+
+### Purpose
+
+Publish a JS/asset-only EAS Update to the `preview` or `production` channel.
+Does **not** run on merge to `main`.
+
+### Inputs
+
+| Input | Default | Notes |
+|---|---|---|
+| `channel` | `preview` | `preview` or `production`. Production is an explicit choice. |
+| `message` | (required) | Shown in the Expo updates dashboard. |
+| `git_ref` | `main` | Branch, tag, or SHA to publish from. |
+
+### How it works
+
+1. Checks out `git_ref`
+2. Installs `mobile/` dependencies and runs `npx tsc --noEmit`
+3. Requires Production environment secrets: `EXPO_TOKEN`, `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_API_URL`
+4. Exports `EXPO_PUBLIC_*` (including optional `EXPO_PUBLIC_APP_URL`, `EXPO_PUBLIC_DEFAULT_CURRENCY`, `EXPO_PUBLIC_SENTRY_DSN`) so the JS bundle matches store builds
+5. Runs `eas update --channel <channel> --message <message> --non-interactive`
+6. Prints the runtime version (`appVersion` from `mobile/version.json`) and the Expo updates dashboard URL
+
+### Usage
+
+1. GitHub → Actions → **Publish OTA Update** → Run workflow
+2. Dogfood on `preview` first, then rerun with `channel=production`
+3. Devices apply the update on the **second** cold start
+
+Do not bump `mobile/version.json` for a JS-only OTA. See `mobile/EXPO_PUBLISH.md`.
+
+Rollback is a local CLI, not this workflow:
+
+```bash
+cd mobile && eas update --channel production --rollback --non-interactive
+```

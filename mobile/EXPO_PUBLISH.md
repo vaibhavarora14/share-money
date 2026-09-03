@@ -1,33 +1,89 @@
 # Publishing to Expo
 
-## ✅ Setup Complete!
+EAS project: `afddb7db-3d7d-46da-a1b5-0d6e4b4374ce`  
+Account / slug: `varora1406` / `share-money`  
+Android package / iOS bundle: `com.vaibhavarora.sharemoney`
 
-The app has been configured and published to Expo. Here's what's been done:
+Dashboard: https://expo.dev/accounts/varora1406/projects/share-money  
+Updates: https://expo.dev/accounts/varora1406/projects/share-money/updates  
+Builds: https://expo.dev/accounts/varora1406/projects/share-money/builds
 
-- ✅ EAS project linked: `afddb7db-3d7d-46da-a1b5-0d6e4b4374ce`
-- ✅ App published to Expo account: `varora1406`
-- ✅ OTA updates configured and published
-- ✅ Android build in progress
-- ✅ iOS configuration ready
+## OTA updates (EAS Update)
 
-## OTA Updates (EAS Update)
+Production binaries check for updates on launch (`ON_LOAD`), download in the
+background, and apply the new JS/asset bundle on the **next cold start**. Splash
+is not blocked (`fallbackToCacheTimeout: 0`). There is no in-app reload prompt.
 
-To publish updates to the live app:
+`runtimeVersion` uses the `appVersion` policy. An OTA only reaches store
+binaries whose marketing version matches `mobile/version.json` at publish time.
+Do **not** bump `version.json` for a JS-only OTA.
+
+### What can go OTA
+
+- UI copy, layout, JS bug fixes
+- Feature-flag tweaks
+- Metro assets already referenced by the bundle
+
+### What needs a store binary
+
+- New or changed native modules
+- Expo SDK upgrades, config plugins, permissions
+- Icons, splash, push native config, New Architecture
+- A new marketing version (users on the old `appVersion` will not receive the OTA)
+
+Users on an unsupported native binary are forced through the existing HTTP 426
++ in-app store modal, not through OTA.
+
+Existing store binaries built with `checkAutomatically: ON_ERROR_RECOVERY` will
+not start receiving OTAs until they install a binary produced after that setting
+changed to `ON_LOAD`.
+
+### Publish (preferred)
+
+On-demand GitHub Action only — not on every merge to `main`:
+
+1. Actions → **Publish OTA Update** → Run workflow
+2. Leave `channel` as `preview` for dogfood, or choose `production` explicitly
+3. Set `message` and `git_ref` (default `main`)
+
+Preview builds listen on channel `preview`. Production / store builds listen on
+`production`.
+
+### Publish (local)
 
 ```bash
 cd mobile
-eas update --branch production --message "Your update message"
+# Preview first
+npm run update:preview -- --message "fix: describe the change"
+# Production
+eas update --channel production --message "fix: describe the change"
 ```
 
-This pushes Over-The-Air updates that users receive automatically.
+`EXPO_PUBLIC_*` must match the store binary. The GitHub Action exports the
+Production environment secrets before bundling.
 
-## Legacy Web Redirect
+### Verify
+
+1. Install a binary built after `ON_LOAD` shipped (preview or store)
+2. Publish an OTA to that binary's channel
+3. Force-quit and reopen twice
+4. Confirm Settings / `VersionDisplay` shows a new short update id
+
+### Rollback
+
+```bash
+cd mobile
+eas update --channel production --rollback --non-interactive
+```
+
+Or republish the last good commit to the same channel. Users pick up the
+rollback on the launch after it downloads (second cold start).
+
+## Legacy web redirect
 
 `https://share-money.expo.app` is not the canonical web app. It hosts only a
 small path-preserving redirect artifact for old links. New user-facing app links
 must use `https://sharedmoney.app/app`.
-
-To deploy the legacy redirect artifact:
 
 ```bash
 npm run deploy:web:expo-redirect
@@ -36,45 +92,18 @@ npm run deploy:web:expo-redirect
 The full web app is exported into the Vercel-hosted marketing site with
 `npm run export:web:sharedmoney`.
 
-## Production Builds (EAS Build)
+## Production builds (EAS Build)
 
-For production builds (standalone apps):
+For store binaries, follow the release-mobile skill. Quick local commands:
 
-**✅ Already configured!** EAS is set up and ready.
+```bash
+cd mobile
+eas build --platform ios --profile production
+eas build --platform android --profile production
+```
 
-To build for production:
-   ```bash
-   # iOS
-   eas build --platform ios
-   
-   # Android
-   eas build --platform android
-   
-   # Both
-   eas build --platform all
-   ```
+## Environment variables
 
-## Important Notes
-
-- **API URL**: ✅ Configured in `App.tsx` - uses production URL for non-dev builds
-- **Environment Variables**: 
-  - Must use the `EXPO_PUBLIC_` prefix to be accessible in the app (e.g., `EXPO_PUBLIC_SUPABASE_URL`)
-  - Can be set in EAS dashboard or via `eas secret:create`
-  - For local development, create a `.env` file in the `mobile/` directory
-- **Updates**: Use `eas update` to push OTA updates (already published initial version)
-
-## Current Configuration
-
-- **App Name**: SharedMoney
-- **Slug**: share-money
-- **Owner**: varora1406
-- **Version**: 1.0.0
-- **Android Package**: com.vaibhavarora.sharemoney
-- **iOS Bundle ID**: com.vaibhavarora.sharemoney
-- **EAS Project ID**: afddb7db-3d7d-46da-a1b5-0d6e4b4374ce
-
-## View Your App
-
-- **Dashboard**: https://expo.dev/accounts/varora1406/projects/share-money
-- **Updates**: https://expo.dev/accounts/varora1406/projects/share-money/updates
-- **Builds**: https://expo.dev/accounts/varora1406/projects/share-money/builds
+- Client values must use the `EXPO_PUBLIC_` prefix
+- Store builds and OTAs should use the same Production environment secrets
+- For local development, create a `.env` file in `mobile/`
