@@ -32,10 +32,13 @@ import {
     SafeAreaView,
     useSafeAreaInsets,
 } from "react-native-safe-area-context";
+import { ConvertedAmountHint } from "../components/ConvertedAmountHint";
+import { ExchangeRateEditor } from "../components/ExchangeRateEditor";
 import { SplitAmongEditor, SplitMode } from "../components/SplitAmongEditor";
 import { TransactionWebDateField } from "../components/TransactionWebDateField";
 import { WEB_MAX_WIDTH } from "../constants/layout";
 import { useAuth } from "../contexts/AuthContext";
+import { useCurrencyPreferences } from "../hooks/useCurrencyPreferences";
 import { useParticipants } from "../hooks/useParticipants";
 import { Participant, Transaction } from "../types";
 import {
@@ -43,6 +46,7 @@ import {
     getCurrencySymbol,
     getDefaultCurrency,
 } from "../utils/currency";
+import { convertAmount, resolveRate } from "../utils/currencyMerge";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 import {
     amountsFromShares,
@@ -118,6 +122,14 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   const [currency, setCurrency] = useState<string>(effectiveDefaultCurrency);
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
   const [currencySearch, setCurrencySearch] = useState("");
+  const [showRateEditor, setShowRateEditor] = useState(false);
+  const {
+    groupSettings,
+    rateBook,
+    setGroupRate,
+    clearGroupRate,
+  } = useCurrencyPreferences(groupId);
+  const settlementCurrency = groupSettings?.settlementCurrency;
   const [loading, setLoading] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -736,6 +748,14 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
             >
               {currency}
             </Chip>
+            {groupSettings?.enabled && settlementCurrency && settlementCurrency !== currency ? (
+              <ConvertedAmountHint
+                amount={convertAmount(Number.parseFloat(amount) || 0, currency, settlementCurrency, rateBook) ?? 0}
+                currency={settlementCurrency}
+                quote={resolveRate(currency, settlementCurrency, rateBook)}
+                onPressRate={() => setShowRateEditor(true)}
+              />
+            ) : null}
           </View>
 
           {/* DETAILS CARD */}
@@ -1246,6 +1266,25 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {groupId && settlementCurrency ? (
+        <ExchangeRateEditor
+          visible={showRateEditor}
+          from={currency}
+          to={settlementCurrency}
+          amount={Number.parseFloat(amount) || 1}
+          rateBook={rateBook}
+          onDismiss={() => setShowRateEditor(false)}
+          onSave={(rate) => {
+            void setGroupRate(groupId, currency, settlementCurrency, rate);
+            setShowRateEditor(false);
+          }}
+          onResetToMarket={() => {
+            void clearGroupRate(groupId, currency, settlementCurrency);
+            setShowRateEditor(false);
+          }}
+        />
+      ) : null}
     </SafeAreaView>
   );
 };

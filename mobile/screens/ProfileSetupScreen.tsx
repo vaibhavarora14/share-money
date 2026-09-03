@@ -32,7 +32,9 @@ import {
   ThemePreference,
   useThemePreference,
 } from "../contexts/ThemePreferenceContext";
+import { useCurrencyPreferences } from "../hooks/useCurrencyPreferences";
 import { useProfile } from "../hooks/useProfile";
+import { CURRENCIES, getCurrencyName } from "../utils/currency";
 import {
   setCachedNotificationPreference,
   useNotifications,
@@ -57,11 +59,13 @@ import {
 interface ProfileSetupScreenProps {
   onComplete: () => void;
   onBack?: () => void;
+  onOpenCurrencyPreview?: () => void;
 }
 
 export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   onComplete,
   onBack,
+  onOpenCurrencyPreview,
 }) => {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -79,6 +83,8 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     useThemePreference();
   const insets = useSafeAreaInsets();
   const { data: profile, updateProfile } = useProfile();
+  const { preferredCurrency, setPreferredCurrency } = useCurrencyPreferences();
+  const [showPreferredCurrencyPicker, setShowPreferredCurrencyPicker] = useState(false);
   const notifications = useNotifications();
   const notificationsEnabled =
     isTransactionNotificationsEnabled(notifications.data);
@@ -418,6 +424,48 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
               />
             </View>
 
+            <View
+              style={[
+                styles.notificationSetting,
+                { borderTopColor: theme.colors.outlineVariant },
+              ]}
+            >
+              <View style={styles.notificationSettingCopy}>
+                <Text
+                  variant="titleSmall"
+                  style={{ color: theme.colors.onSurface, fontWeight: "700" }}
+                >
+                  Preferred currency
+                </Text>
+                <Text
+                  variant="bodySmall"
+                  style={{ color: theme.colors.onSurfaceVariant }}
+                >
+                  Used for your personal totals. Groups can still settle in another currency.
+                </Text>
+              </View>
+              <Button
+                mode="outlined"
+                compact
+                onPress={() => setShowPreferredCurrencyPicker(true)}
+                testID="preferred-currency-button"
+              >
+                {preferredCurrency}
+              </Button>
+            </View>
+
+            {onOpenCurrencyPreview ? (
+              <Button
+                mode="text"
+                icon="eye-outline"
+                onPress={onOpenCurrencyPreview}
+                style={{ alignSelf: "flex-start", marginBottom: 8 }}
+                testID="currency-merge-preview-button"
+              >
+                Preview unified balances
+              </Button>
+            ) : null}
+
             {notificationsEnabled ? (
               <View
                 style={[
@@ -567,6 +615,54 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
         onSelect={setSelectedCountry}
         selectedCountry={selectedCountry}
       />
+      <Portal>
+        <Modal
+          visible={showPreferredCurrencyPicker}
+          onDismiss={() => setShowPreferredCurrencyPicker(false)}
+          contentContainerStyle={[
+            styles.currencyPickerModal,
+            { backgroundColor: theme.colors.surface },
+          ]}
+        >
+          <Text variant="titleMedium" style={{ fontWeight: "700", marginBottom: 8 }}>
+            Preferred currency
+          </Text>
+          <Text
+            variant="bodySmall"
+            style={{ color: theme.colors.onSurfaceVariant, marginBottom: 12 }}
+          >
+            Used for your personal totals. Groups can still settle in another currency.
+          </Text>
+          <ScrollView style={{ maxHeight: 360 }}>
+            {CURRENCIES.slice(0, 24).map((item) => {
+              const selected = item.code === preferredCurrency;
+              return (
+                <Pressable
+                  key={item.code}
+                  onPress={() => {
+                    void setPreferredCurrency(item.code);
+                    setShowPreferredCurrencyPicker(false);
+                  }}
+                  style={[
+                    styles.currencyOption,
+                    selected && { backgroundColor: theme.colors.primaryContainer },
+                  ]}
+                >
+                  <View>
+                    <Text variant="bodyLarge">{item.code} ({item.symbol})</Text>
+                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                      {getCurrencyName(item.code)}
+                    </Text>
+                  </View>
+                  {selected ? (
+                    <Icon source="check" size={20} color={theme.colors.primary} />
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </Modal>
+      </Portal>
       <Portal>
         <Modal
           visible={supportSheetVisible}
@@ -836,5 +932,19 @@ const styles = StyleSheet.create({
   supportTopicText: {
     flex: 1,
     gap: 2,
+  },
+  currencyPickerModal: {
+    margin: 24,
+    borderRadius: 20,
+    padding: 20,
+    maxHeight: "80%",
+  },
+  currencyOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 12,
   },
 });

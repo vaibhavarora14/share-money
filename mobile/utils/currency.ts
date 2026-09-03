@@ -3,9 +3,14 @@ import {
   CURRENCY_SYMBOLS,
   ZERO_DECIMAL_CURRENCIES,
   filterCurrencies,
+  getIsoCurrency,
 } from "./isoCurrencies";
 
-export { CURRENCIES, filterCurrencies };
+export { CURRENCIES, filterCurrencies, getIsoCurrency };
+
+export function getCurrencyName(currencyCode: string): string {
+  return getIsoCurrency(currencyCode)?.name || currencyCode.toUpperCase();
+}
 
 /**
  * Gets the default currency code from environment variable
