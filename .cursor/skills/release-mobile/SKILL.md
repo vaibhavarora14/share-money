@@ -16,6 +16,22 @@ local artifacts to Play/TestFlight. Use the GitHub Actions cloud-build workflow
 only as a fallback after local build prerequisites are missing and the user
 explicitly agrees.
 
+## Store vs OTA
+
+Decide **before** bumping `version.json` or building binaries:
+
+- **OTA** (`.github/workflows/publish-ota.yml`, default channel `preview`):
+  JS/asset-only changes for users already on the live store marketing version.
+  Do **not** bump `mobile/version.json`. Devices download on launch and apply
+  on the next cold start. See `mobile/EXPO_PUBLISH.md`.
+- **Store release** (this skill): new/changed native modules, Expo SDK,
+  config plugins, permissions, icons/splash, push native config, New
+  Architecture, or a new marketing version.
+
+OTA only reaches binaries built with `checkAutomatically: ON_LOAD` whose
+`appVersion` matches `mobile/version.json` at publish time. Older marketing
+versions need a store update (or the HTTP 426 force-upgrade path).
+
 ## Identifiers
 
 | | |

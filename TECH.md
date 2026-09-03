@@ -218,8 +218,8 @@ See `mobile/EXPO_PUBLISH.md` for detailed EAS build and OTA update instructions.
 ```bash
 cd mobile
 
-# OTA Updates
-eas update --branch production --message "Your update message"
+# OTA Updates (on-demand; prefer GitHub Action Publish OTA Update)
+eas update --channel production --message "Your update message"
 
 # Production Builds
 eas build --platform ios
@@ -305,7 +305,8 @@ access token and project reference.
 | Marketing site (`web/`, `sharedmoney.app`) | Vercel Git integration (not GitHub Actions); `deploy-marketing.yml` is only a build check | Every push |
 | Legacy Expo redirect (`share-money.expo.app`) | EAS Hosting redirect artifact from `mobile/expo-redirect` | Changes to redirect artifact files + manual dispatch |
 | Database migrations | `.github/workflows/deploy-edge-functions.yml` before function deployment | Push to `main` + manual dispatch |
-| Android / iOS binaries & OTA updates | Manual (`mobile/build-release*.sh`, `eas submit`, `eas update`) | — |
+| Android / iOS binaries | Manual (`mobile/build-release*.sh`, `eas submit`) | — |
+| Mobile OTA (EAS Update) | `.github/workflows/publish-ota.yml` | Manual `workflow_dispatch` (`preview` default; `production` explicit) |
 
 Canonical app links must use `https://sharedmoney.app/app`. The Expo hostname is
 kept only as a path-preserving legacy redirect for old links and should not be
