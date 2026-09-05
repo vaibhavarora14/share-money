@@ -72,7 +72,9 @@ import {
   useDeleteTransaction,
   useUpdateTransaction,
 } from "./hooks/useTransactions";
+import { usePeopleSettlements } from "./hooks/usePeopleSettlements";
 import { AddMemberScreen } from "./screens/AddMemberScreen";
+import { AllSettlementsScreen } from "./screens/AllSettlementsScreen";
 import { AuthScreen } from "./screens/AuthScreen";
 import { GroupDetailsScreen } from "./screens/GroupDetailsScreen";
 import { GroupStatsMode, GroupStatsScreen } from "./screens/GroupStatsScreen";
@@ -185,6 +187,7 @@ function AppContent() {
     error: profileError,
     refetch: refetchProfile,
   } = useProfile();
+  const peopleSettlements = usePeopleSettlements();
   const notificationInbox = useNotifications();
   const notificationFeatureResolved =
     notificationInbox.data?.feature_enabled !== undefined;
@@ -782,6 +785,19 @@ function AppContent() {
     // Group details will be fetched via useGroupDetails hook
   };
 
+  const goToGroups = () => {
+    setSelectedGroup(null);
+    setStatsContext(null);
+    setCurrentRoute("groups");
+    setGroupRefreshTrigger((prev) => prev + 1);
+  };
+
+  const goToSettlements = () => {
+    setSelectedGroup(null);
+    setStatsContext(null);
+    setCurrentRoute("settlements");
+  };
+
   const handleSaveTransaction = async (transactionData: any) => {
     if (!selectedGroup) return;
 
@@ -845,15 +861,26 @@ function AppContent() {
     </NotificationsPanel>
   ) : null;
 
-  const showCurrencyMergePreview =
-    Platform.OS === "web" &&
-    typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).get("preview") === "currency-merge";
+  const previewParam =
+    Platform.OS === "web" && typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("preview")
+      : null;
+  const showCurrencyMergePreview = previewParam === "currency-merge";
+  const showPeopleSettlementsPreview = previewParam === "people-settlements";
 
   if (showCurrencyMergePreview) {
     return (
       <>
         <CurrencyMergePreviewScreen onBack={() => setCurrentRoute("groups")} />
+        <StatusBar style={theme.dark ? "light" : "dark"} />
+      </>
+    );
+  }
+
+  if (showPeopleSettlementsPreview) {
+    return (
+      <>
+        <AllSettlementsScreen preview />
         <StatusBar style={theme.dark ? "light" : "dark"} />
       </>
     );
@@ -984,6 +1011,23 @@ function AppContent() {
     );
   }
 
+  if (currentRoute === "settlements") {
+    return (
+      <>
+        <AllSettlementsScreen onOpenGroup={handleGroupPress} />
+        <BottomNavBar
+          currentRoute={currentRoute}
+          onGroupsPress={goToGroups}
+          onSettlementsPress={goToSettlements}
+          onProfilePress={() => setCurrentRoute("profile")}
+          onLogoutPress={signOut}
+          settlementsCount={peopleSettlements.summary.personCount}
+        />
+        <StatusBar style={theme.dark ? "light" : "dark"} />
+      </>
+    );
+  }
+
   if (currentRoute === "profile") {
     return (
       <>
@@ -997,14 +1041,13 @@ function AppContent() {
         />
         <BottomNavBar
           currentRoute={currentRoute}
-          onGroupsPress={() => {
-            setCurrentRoute("groups");
-            setGroupRefreshTrigger((prev) => prev + 1);
-          }}
+          onGroupsPress={goToGroups}
+          onSettlementsPress={goToSettlements}
           onProfilePress={() => {
             setCurrentRoute("profile");
           }}
           onLogoutPress={signOut}
+          settlementsCount={peopleSettlements.summary.personCount}
         />
         <StatusBar style={theme.dark ? "light" : "dark"} />
       </>
@@ -1124,14 +1167,11 @@ function AppContent() {
         />
         <BottomNavBar
           currentRoute={currentRoute}
-          onGroupsPress={() => {
-            setSelectedGroup(null);
-            setCurrentRoute("groups");
-            setStatsContext(null);
-            setGroupRefreshTrigger((prev) => prev + 1);
-          }}
+          onGroupsPress={goToGroups}
+          onSettlementsPress={goToSettlements}
           onLogoutPress={signOut}
           onProfilePress={() => setCurrentRoute("profile")}
+          settlementsCount={peopleSettlements.summary.personCount}
         />
         {showAddMember && selectedGroup && (
           <AddMemberScreen
@@ -1164,17 +1204,17 @@ function AppContent() {
         }}
         refetchTrigger={groupRefreshTrigger}
         onNotificationsPress={openNotifications}
+        onSettlementsPress={goToSettlements}
       />
       <InAppBanner notice={banner} onDismiss={dismissBanner} />
       {desktopNotificationPanel}
       <BottomNavBar
         currentRoute={currentRoute}
-        onGroupsPress={() => {
-          setCurrentRoute("groups");
-          setGroupRefreshTrigger((prev) => prev + 1);
-        }}
+        onGroupsPress={goToGroups}
+        onSettlementsPress={goToSettlements}
         onProfilePress={() => setCurrentRoute("profile")}
         onLogoutPress={signOut}
+        settlementsCount={peopleSettlements.summary.personCount}
       />
       <StatusBar style={theme.dark ? "light" : "dark"} />
     </>

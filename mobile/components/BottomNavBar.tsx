@@ -11,20 +11,24 @@ import { ProfileIcon } from "./ProfileIcon";
 
 interface BottomNavBarProps {
   onGroupsPress: () => void;
+  onSettlementsPress: () => void;
   onLogoutPress: () => void;
   onProfilePress: () => void;
   currentRoute: string;
-
+  settlementsCount?: number;
 }
 
 export const BottomNavBar: React.FC<BottomNavBarProps> = ({
   onGroupsPress,
+  onSettlementsPress,
   onLogoutPress,
   onProfilePress,
   currentRoute,
+  settlementsCount = 0,
 }) => {
   const theme = useTheme();
   const isGroupsActive = currentRoute === "groups";
+  const isSettlementsActive = currentRoute === "settlements";
   const isProfileActive = currentRoute === "profile";
 
   const renderItem = (
@@ -33,22 +37,24 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
     activeIcon: string,
     isActive: boolean,
     onPress: () => void,
-    isLogout: boolean = false
+    options?: { testID?: string; badge?: number; isLogout?: boolean }
   ) => {
+    const isLogout = options?.isLogout === true;
     const iconColor = isLogout
       ? theme.colors.error
       : isActive
-      ? theme.colors.onPrimaryContainer
-      : theme.colors.onSurfaceVariant;
+        ? theme.colors.onPrimaryContainer
+        : theme.colors.onSurfaceVariant;
 
     const labelColor = isLogout
       ? theme.colors.error
       : isActive
-      ? theme.colors.onPrimaryContainer
-      : theme.colors.onSurfaceVariant;
+        ? theme.colors.onPrimaryContainer
+        : theme.colors.onSurfaceVariant;
 
     return (
       <TouchableRipple
+        testID={options?.testID}
         onPress={onPress}
         style={styles.tab}
         borderless
@@ -73,6 +79,16 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
               size={24}
               color={iconColor}
             />
+            {options?.badge && options.badge > 0 ? (
+              <View
+                testID={`${options.testID || "tab"}-badge`}
+                style={[styles.badge, { backgroundColor: theme.colors.error }]}
+              >
+                <Text style={[styles.badgeText, { color: theme.colors.onError }]}>
+                  {options.badge > 9 ? "9+" : String(options.badge)}
+                </Text>
+              </View>
+            ) : null}
           </View>
           <Text
             variant="labelMedium"
@@ -100,6 +116,14 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
           "home",
           isGroupsActive,
           onGroupsPress
+        )}
+        {renderItem(
+          "Settle",
+          "hand-coin-outline",
+          "hand-coin",
+          isSettlementsActive,
+          onSettlementsPress,
+          { testID: "settlements-tab", badge: settlementsCount }
         )}
         <TouchableRipple
           testID="profile-tab"
@@ -148,7 +172,7 @@ const styles = StyleSheet.create({
   content: {
     flexDirection: "row",
     height: 80,
-    paddingBottom: 0, 
+    paddingBottom: 0,
   },
   tab: {
     flex: 1,
@@ -170,5 +194,21 @@ const styles = StyleSheet.create({
   },
   label: {
     textAlign: "center",
+  },
+  badge: {
+    position: "absolute",
+    top: -2,
+    right: 8,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    lineHeight: 12,
   },
 });
