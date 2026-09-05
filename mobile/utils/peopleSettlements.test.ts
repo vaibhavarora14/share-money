@@ -176,6 +176,20 @@ Deno.test("clubPersonSettlements keeps different emails with the same name apart
   ]);
 });
 
+Deno.test("personSettlementHeadline keeps a single foreign currency as-is", () => {
+  const [raj] = clubPersonSettlements([
+    group("dinner", "Dinner club", [
+      balance(YOU, -80, { currency: "USD", participant_id: "p-you-dinner" }),
+      balance(RAJ, 80, { currency: "USD", participant_id: "p-raj-dinner", full_name: "Raj" }),
+    ], false),
+  ], YOU);
+
+  const headline = personSettlementHeadline(raj, "INR", book);
+  assertEquals(headline.verb, "pay");
+  assertEquals(headline.headline, "$80.00");
+  assertEquals(headline.breakdown, "");
+});
+
 Deno.test("personSettlementHeadline nets opposite group leftovers in one currency", () => {
   const [maya] = clubPersonSettlements([
     group("trip", "Phuket", [

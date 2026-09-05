@@ -293,6 +293,17 @@ export function personSettlementHeadline(
     };
   }
 
+  if (visible.length === 1) {
+    const [currency, amount] = visible[0];
+    return {
+      verb: amount > 0.01 ? "receive" : amount < -0.01 ? "pay" : "settled",
+      headline: formatCurrency(Math.abs(amount), currency),
+      breakdown: "",
+      leftover: "",
+      unified: null,
+    };
+  }
+
   const signs = new Set(visible.map(([, amount]) => (amount > 0 ? 1 : -1)));
   const unified = unifyTotals(person.netsByCurrency, preferredCurrency, rateBook);
   const leftover = unified.leftover

@@ -1,5 +1,5 @@
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import {
   Avatar,
   Surface,
@@ -116,7 +116,10 @@ export const PeopleSettlementsList: React.FC<PeopleSettlementsListProps> = ({
                     testID={`settle-line-${line.groupId}-${person.key}`}
                     onPress={() => onSettleLine(line)}
                     disabled={!canSettle}
-                    style={styles.lineRipple}
+                    style={[
+                      styles.lineRipple,
+                      Platform.OS === "web" ? { outlineStyle: "solid", outlineWidth: 0 } : null,
+                    ]}
                   >
                     <View style={styles.lineRow}>
                       <View style={styles.lineInfo}>
