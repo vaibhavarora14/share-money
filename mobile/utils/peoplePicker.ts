@@ -30,6 +30,14 @@ function normalizeName(name: string): string {
   return name.trim().toLocaleLowerCase();
 }
 
+export function existingPersonLabel(person: ExistingPerson): string {
+  const name = (person.full_name ?? "").trim();
+  if (name) return name;
+  const email = normalizeEmail(person.email);
+  if (!email) return "";
+  return email.split("@")[0] || email;
+}
+
 function identityKey(person: ExistingPerson): string {
   if (person.user_id) return `user:${person.user_id}`;
   const email = normalizeEmail(person.email);
@@ -51,7 +59,7 @@ export function dedupeExistingPeople(
   const chosen = new Map<string, ExistingPerson>();
 
   for (const person of people) {
-    if (!person.full_name.trim()) continue;
+    if (!existingPersonLabel(person)) continue;
     const key = identityKey(person);
     const existing = chosen.get(key);
     if (!existing || richness(person) > richness(existing)) {
@@ -72,13 +80,16 @@ export function filterAndSortExistingPeople(
   const normalizedSearch = search.trim().toLocaleLowerCase();
 
   return dedupeExistingPeople(people)
-    .filter((person) =>
-      !normalizedSearch ||
-      person.full_name.toLocaleLowerCase().includes(normalizedSearch) ||
-      normalizeEmail(person.email).includes(normalizedSearch)
-    )
+    .filter((person) => {
+      const label = existingPersonLabel(person);
+      return !normalizedSearch ||
+        label.toLocaleLowerCase().includes(normalizedSearch) ||
+        normalizeEmail(person.email).includes(normalizedSearch);
+    })
     .sort((left, right) => {
-      const nameOrder = left.full_name.localeCompare(right.full_name);
+      const nameOrder = existingPersonLabel(left).localeCompare(
+        existingPersonLabel(right),
+      );
       return nameOrder !== 0
         ? nameOrder
         : normalizeEmail(left.email).localeCompare(normalizeEmail(right.email));
