@@ -10,7 +10,6 @@ import {
   useTheme,
 } from "react-native-paper";
 import { PeopleSettlementsList } from "../components/PeopleSettlementsList";
-import { SettlePersonSheet } from "../components/SettlePersonSheet";
 import { useAuth } from "../contexts/AuthContext";
 import { usePeopleSettlements, type PersonSettlementView } from "../hooks/usePeopleSettlements";
 import { useCreateSettlement, useCreateSettlements } from "../hooks/useSettlements";
@@ -204,7 +203,25 @@ export const AllSettlementsScreen: React.FC<AllSettlementsScreenProps> = ({
 
               <PeopleSettlementsList
                 people={people}
+                confirmingPerson={selectedPerson}
+                submitting={createSettlements.isLoading}
+                preview={preview}
                 onSettlePerson={setSelectedPerson}
+                onCancelPerson={() => setSelectedPerson(null)}
+                onConfirmPerson={async () => {
+                  if (!selectedPerson) return;
+                  if (preview) {
+                    setSelectedPerson(null);
+                    return;
+                  }
+                  const plan = personSettlePlan(selectedPerson, personSettleNotes(selectedPerson));
+                  try {
+                    await createSettlements.mutate(plan.recordable);
+                    setSelectedPerson(null);
+                  } catch (error) {
+                    showErrorAlert(error, signOut, "Couldn’t settle all groups");
+                  }
+                }}
                 onSettleLine={(line) => {
                   if (preview) {
                     handleOpenGroup(line.groupId);
@@ -223,28 +240,6 @@ export const AllSettlementsScreen: React.FC<AllSettlementsScreenProps> = ({
           ) : null}
         </ScrollView>
       )}
-
-      <SettlePersonSheet
-        person={selectedPerson}
-        visible={!!selectedPerson}
-        submitting={createSettlements.isLoading}
-        preview={preview}
-        onDismiss={() => setSelectedPerson(null)}
-        onConfirm={async () => {
-          if (!selectedPerson) return;
-          if (preview) {
-            setSelectedPerson(null);
-            return;
-          }
-          const plan = personSettlePlan(selectedPerson, personSettleNotes(selectedPerson));
-          try {
-            await createSettlements.mutate(plan.recordable);
-            setSelectedPerson(null);
-          } catch (error) {
-            showErrorAlert(error, signOut, "Couldn’t settle all groups");
-          }
-        }}
-      />
 
       {selectedLine && user?.id ? (
         <SettlementFormScreen

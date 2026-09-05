@@ -1,5 +1,5 @@
 import React from "react";
-import { Platform, StyleSheet, View } from "react-native";
+import { Platform, Pressable, StyleSheet, View } from "react-native";
 import {
   Avatar,
   Button,
@@ -20,7 +20,12 @@ import {
 
 interface PeopleSettlementsListProps {
   people: PersonSettlementView[];
+  confirmingPerson: PersonSettlementView | null;
+  submitting?: boolean;
+  preview?: boolean;
   onSettlePerson: (person: PersonSettlementView) => void;
+  onConfirmPerson: () => void;
+  onCancelPerson: () => void;
   onSettleLine?: (line: GroupSettlementLine) => void;
 }
 
@@ -43,7 +48,12 @@ function verbLabel(verb: PersonSettlementView["headline"]["verb"]): string {
 
 export const PeopleSettlementsList: React.FC<PeopleSettlementsListProps> = ({
   people,
+  confirmingPerson,
+  submitting = false,
+  preview = false,
   onSettlePerson,
+  onConfirmPerson,
+  onCancelPerson,
   onSettleLine,
 }) => {
   const theme = useTheme();
@@ -154,16 +164,62 @@ export const PeopleSettlementsList: React.FC<PeopleSettlementsListProps> = ({
               })}
             </View>
 
-            <Button
-              mode="contained"
-              testID={`settle-person-${person.key}`}
-              onPress={() => onSettlePerson(person)}
-              disabled={!plan.canSettleAll}
-              style={styles.settleAll}
-              compact={false}
-            >
-              {actionLabel}
-            </Button>
+            {confirmingPerson?.key === person.key ? (
+              <View testID="settle-person-sheet" style={styles.confirm}>
+                <Text variant="bodyMedium" style={{ color: theme.colors.onSurface }}>
+                  {plan.groupCount > 1
+                    ? `This records a payment in each of ${plan.groupCount} groups. Cash between you is the net.`
+                    : "This records the payment in that group."}
+                </Text>
+                {preview ? (
+                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                    Preview only — nothing is written until you do this on a real account.
+                  </Text>
+                ) : null}
+                <Button
+                  mode="contained"
+                  testID="confirm-settle-person"
+                  onPress={onConfirmPerson}
+                  loading={submitting}
+                  disabled={submitting || !plan.canSettleAll}
+                >
+                  {personSettleActionLabel(person, person.headline)}
+                </Button>
+                <Button mode="text" onPress={onCancelPerson} disabled={submitting}>
+                  Cancel
+                </Button>
+              </View>
+            ) : (
+              <Pressable
+                testID={`settle-person-${person.key}`}
+                onPress={() => onSettlePerson(person)}
+                disabled={!plan.canSettleAll}
+                style={[
+                  styles.settleAll,
+                  {
+                    backgroundColor: plan.canSettleAll
+                      ? theme.colors.primary
+                      : theme.colors.surfaceDisabled,
+                    borderRadius: 24,
+                    paddingVertical: 12,
+                    paddingHorizontal: 16,
+                  },
+                ]}
+              >
+                <Text
+                  variant="labelLarge"
+                  style={{
+                    color: plan.canSettleAll
+                      ? theme.colors.onPrimary
+                      : theme.colors.onSurfaceDisabled,
+                    textAlign: "center",
+                    fontWeight: "700",
+                  }}
+                >
+                  {actionLabel}
+                </Text>
+              </Pressable>
+            )}
           </Surface>
         );
       })}
@@ -223,5 +279,9 @@ const styles = StyleSheet.create({
   },
   settleAll: {
     marginTop: 12,
+  },
+  confirm: {
+    marginTop: 12,
+    gap: 8,
   },
 });
