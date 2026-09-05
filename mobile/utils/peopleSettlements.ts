@@ -443,3 +443,97 @@ export function settleBalanceFromLine(line: GroupSettlementLine): Balance {
 export function canRecordSettlementLine(line: GroupSettlementLine): boolean {
   return Boolean(line.you.participant_id && line.other.participant_id);
 }
+
+export type SettlementCreateInput = {
+  group_id: string;
+  group_name: string;
+  from_participant_id: string;
+  to_participant_id: string;
+  amount: number;
+  currency: string;
+  direction: "pay" | "receive";
+  notes?: string;
+};
+
+export function settlementCreateFromLine(
+  line: GroupSettlementLine,
+  notes?: string
+): SettlementCreateInput | null {
+  if (!canRecordSettlementLine(line) || !line.you.participant_id || !line.other.participant_id) {
+    return null;
+  }
+  return {
+    group_id: line.groupId,
+    group_name: line.groupName,
+    from_participant_id: line.direction === "pay"
+      ? line.you.participant_id
+      : line.other.participant_id,
+    to_participant_id: line.direction === "pay"
+      ? line.other.participant_id
+      : line.you.participant_id,
+    amount: line.amount,
+    currency: line.currency,
+    direction: line.direction,
+    notes,
+  };
+}
+
+export type PersonSettlePlan = {
+  recordable: SettlementCreateInput[];
+  skipped: GroupSettlementLine[];
+  groupCount: number;
+  canSettleAll: boolean;
+};
+
+export function personSettlePlan(
+  person: PersonSettlement,
+  notes?: string
+): PersonSettlePlan {
+  const recordable: SettlementCreateInput[] = [];
+  const skipped: GroupSettlementLine[] = [];
+  for (const line of person.lines) {
+    const payload = settlementCreateFromLine(line, notes);
+    if (payload) recordable.push(payload);
+    else skipped.push(line);
+  }
+  return {
+    recordable,
+    skipped,
+    groupCount: new Set(person.lines.map((line) => line.groupId)).size,
+    canSettleAll: recordable.length > 0 && skipped.length === 0,
+  };
+}
+
+export function personSettleNotes(person: PersonSettlement): string {
+  const groups = new Set(person.lines.map((line) => line.groupName));
+  if (groups.size <= 1) return `Settled with ${person.displayName}`;
+  return `Settled with ${person.displayName} across ${groups.size} groups`;
+}
+
+export function personSettleActionLabel(
+  person: PersonSettlement,
+  headline: PersonSettlementHeadline,
+  options?: { compact?: boolean }
+): string {
+  const plan = personSettlePlan(person);
+  if (options?.compact) {
+    if (headline.verb === "pay") return `Pay ${headline.headline}`;
+    if (headline.verb === "receive") return `Record ${headline.headline}`;
+    if (headline.verb === "mixed") return `Settle ${plan.groupCount} groups`;
+    return "Settled";
+  }
+  if (headline.verb === "pay") {
+    return plan.groupCount > 1
+      ? `Pay ${headline.headline} and close ${plan.groupCount} groups`
+      : `Pay ${headline.headline}`;
+  }
+  if (headline.verb === "receive") {
+    return plan.groupCount > 1
+      ? `Record ${headline.headline} and close ${plan.groupCount} groups`
+      : `Record ${headline.headline}`;
+  }
+  if (headline.verb === "mixed") {
+    return `Settle ${plan.groupCount} groups`;
+  }
+  return "Settled";
+}

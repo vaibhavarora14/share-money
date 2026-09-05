@@ -6,7 +6,11 @@ import {
   clubPersonSettlements,
   crossGroupIdentityTokens,
   groupContextsFromBalances,
+  personSettleActionLabel,
+  personSettleNotes,
+  personSettlePlan,
   personSettlementHeadline,
+  settlementCreateFromLine,
   settlementSummary,
   type GroupSettlementContext,
 } from "./peopleSettlements.ts";
@@ -226,6 +230,53 @@ Deno.test("settlementSummary counts people and group lines", () => {
     payCount: 2,
     receiveCount: 1,
   });
+});
+
+Deno.test("personSettlePlan writes one settlement per group so both ledgers close", () => {
+  const [maya] = clubPersonSettlements([
+    group("trip", "Phuket", [
+      balance(YOU, -500, { participant_id: "p-you-trip" }),
+      balance(MAYA, 500, {
+        participant_id: "p-maya-trip",
+        full_name: "Maya",
+        user_id: "u-maya",
+      }),
+    ]),
+    group("home", "Roommates", [
+      balance(YOU, 200, { participant_id: "p-you-home" }),
+      balance(MAYA, -200, {
+        participant_id: "p-maya-home",
+        full_name: "Maya",
+        user_id: "u-maya",
+      }),
+    ]),
+  ], YOU);
+
+  const notes = personSettleNotes(maya);
+  const plan = personSettlePlan(maya, notes);
+  assertEquals(plan.canSettleAll, true);
+  assertEquals(plan.groupCount, 2);
+  assertEquals(plan.recordable.length, 2);
+  assertEquals(
+    plan.recordable.map((item) => `${item.group_name}:${item.direction}:${item.amount}`).sort(),
+    ["Phuket:pay:500", "Roommates:receive:200"],
+  );
+  assertEquals(plan.recordable[0].notes, "Settled with Maya across 2 groups");
+  assertEquals(
+    personSettleActionLabel(maya, personSettlementHeadline(maya, "INR", book)),
+    "Pay ₹300.00 and close 2 groups",
+  );
+});
+
+Deno.test("settlementCreateFromLine skips a row without participant ids", () => {
+  const [person] = clubPersonSettlements([
+    group("trip", "Phuket", [
+      balance(YOU, -50),
+      balance(MAYA, 50, { full_name: "Maya" }),
+    ]),
+  ], YOU);
+  assertEquals(settlementCreateFromLine(person.lines[0]), null);
+  assertEquals(personSettlePlan(person).canSettleAll, false);
 });
 
 Deno.test("groupContextsFromBalances uses each group's own unify setting", () => {

@@ -2,6 +2,7 @@ import React from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import {
   Avatar,
+  Button,
   Surface,
   Text,
   TouchableRipple,
@@ -12,12 +13,15 @@ import { formatCurrency } from "../utils/currency";
 import { formatBreakdown } from "../utils/currencyMerge";
 import {
   canRecordSettlementLine,
+  personSettleActionLabel,
+  personSettlePlan,
   type GroupSettlementLine,
 } from "../utils/peopleSettlements";
 
 interface PeopleSettlementsListProps {
   people: PersonSettlementView[];
-  onSettleLine: (line: GroupSettlementLine) => void;
+  onSettlePerson: (person: PersonSettlementView) => void;
+  onSettleLine?: (line: GroupSettlementLine) => void;
 }
 
 function initials(name: string): string {
@@ -39,6 +43,7 @@ function verbLabel(verb: PersonSettlementView["headline"]["verb"]): string {
 
 export const PeopleSettlementsList: React.FC<PeopleSettlementsListProps> = ({
   people,
+  onSettlePerson,
   onSettleLine,
 }) => {
   const theme = useTheme();
@@ -52,6 +57,8 @@ export const PeopleSettlementsList: React.FC<PeopleSettlementsListProps> = ({
             ? theme.colors.error
             : theme.colors.onSurface;
         const groupNames = [...new Set(person.lines.map((line) => line.groupName))];
+        const plan = personSettlePlan(person);
+        const actionLabel = personSettleActionLabel(person, person.headline, { compact: true });
 
         return (
           <Surface
@@ -114,8 +121,8 @@ export const PeopleSettlementsList: React.FC<PeopleSettlementsListProps> = ({
                   <TouchableRipple
                     key={`${line.groupId}-${line.currency}-${line.direction}`}
                     testID={`settle-line-${line.groupId}-${person.key}`}
-                    onPress={() => onSettleLine(line)}
-                    disabled={!canSettle}
+                    onPress={() => onSettleLine?.(line)}
+                    disabled={!canSettle || !onSettleLine}
                     style={[
                       styles.lineRipple,
                       Platform.OS === "web" ? { outlineStyle: "solid", outlineWidth: 0 } : null,
@@ -147,6 +154,15 @@ export const PeopleSettlementsList: React.FC<PeopleSettlementsListProps> = ({
               })}
             </View>
 
+            <Button
+              mode="contained"
+              testID={`settle-person-${person.key}`}
+              onPress={() => onSettlePerson(person)}
+              disabled={!plan.canSettleAll}
+              style={styles.settleAll}
+            >
+              {actionLabel}
+            </Button>
           </Surface>
         );
       })}
@@ -203,5 +219,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     minWidth: 72,
     alignItems: "center",
+  },
+  settleAll: {
+    marginTop: 12,
   },
 });

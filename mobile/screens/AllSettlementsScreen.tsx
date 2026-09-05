@@ -10,16 +10,20 @@ import {
   useTheme,
 } from "react-native-paper";
 import { PeopleSettlementsList } from "../components/PeopleSettlementsList";
+import { SettlePersonSheet } from "../components/SettlePersonSheet";
 import { useAuth } from "../contexts/AuthContext";
 import { usePeopleSettlements, type PersonSettlementView } from "../hooks/usePeopleSettlements";
-import { useCreateSettlement } from "../hooks/useSettlements";
+import { useCreateSettlement, useCreateSettlements } from "../hooks/useSettlements";
 import { useGroups } from "../hooks/useGroups";
 import { Group } from "../types";
 import { getDefaultCurrency } from "../utils/currency";
+import { showErrorAlert } from "../utils/errorHandling";
 import { createPreviewRateBook } from "../utils/previewRates";
 import {
   clubPersonSettlements,
   membersFromSettlementLine,
+  personSettleNotes,
+  personSettlePlan,
   personSettlementHeadline,
   settleBalanceFromLine,
   settlementSummary,
@@ -108,11 +112,13 @@ export const AllSettlementsScreen: React.FC<AllSettlementsScreenProps> = ({
   preview = false,
 }) => {
   const theme = useTheme();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const live = usePeopleSettlements();
   const { data: groups } = useGroups();
   const createSettlement = useCreateSettlement();
+  const createSettlements = useCreateSettlements();
   const [selectedLine, setSelectedLine] = useState<GroupSettlementLine | null>(null);
+  const [selectedPerson, setSelectedPerson] = useState<PersonSettlementView | null>(null);
 
   const people = preview ? previewPeople() : live.people;
   const summary = preview ? settlementSummary(people) : live.summary;
@@ -148,9 +154,9 @@ export const AllSettlementsScreen: React.FC<AllSettlementsScreenProps> = ({
           showsVerticalScrollIndicator={false}
         >
           <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 16 }}>
-            After each group is simplified, the same person is grouped here.
-            Record a payment in the group it belongs to — a single cross-group
-            payout is not recorded yet.
+            The same person is grouped across every leftover payment. One
+            action records a settlement in each group so you only exchange the
+            net.
           </Text>
 
           {preview ? (
@@ -198,6 +204,7 @@ export const AllSettlementsScreen: React.FC<AllSettlementsScreenProps> = ({
 
               <PeopleSettlementsList
                 people={people}
+                onSettlePerson={setSelectedPerson}
                 onSettleLine={(line) => {
                   if (preview) {
                     handleOpenGroup(line.groupId);
@@ -216,6 +223,28 @@ export const AllSettlementsScreen: React.FC<AllSettlementsScreenProps> = ({
           ) : null}
         </ScrollView>
       )}
+
+      <SettlePersonSheet
+        person={selectedPerson}
+        visible={!!selectedPerson}
+        submitting={createSettlements.isLoading}
+        preview={preview}
+        onDismiss={() => setSelectedPerson(null)}
+        onConfirm={async () => {
+          if (!selectedPerson) return;
+          if (preview) {
+            setSelectedPerson(null);
+            return;
+          }
+          const plan = personSettlePlan(selectedPerson, personSettleNotes(selectedPerson));
+          try {
+            await createSettlements.mutate(plan.recordable);
+            setSelectedPerson(null);
+          } catch (error) {
+            showErrorAlert(error, signOut, "Couldn’t settle all groups");
+          }
+        }}
+      />
 
       {selectedLine && user?.id ? (
         <SettlementFormScreen
