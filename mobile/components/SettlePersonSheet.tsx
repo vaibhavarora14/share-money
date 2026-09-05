@@ -1,6 +1,6 @@
 import React from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
-import { Button, Modal, Portal, Text, useTheme } from "react-native-paper";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Button, Surface, Text, useTheme } from "react-native-paper";
 import { WEB_MAX_WIDTH } from "../constants/layout";
 import { PersonSettlementView } from "../hooks/usePeopleSettlements";
 import { formatCurrency } from "../utils/currency";
@@ -27,7 +27,7 @@ export const SettlePersonSheet: React.FC<SettlePersonSheetProps> = ({
   onDismiss,
 }) => {
   const theme = useTheme();
-  if (!person) return null;
+  if (!visible || !person) return null;
 
   const plan = personSettlePlan(person);
   const actionLabel = personSettleActionLabel(person, person.headline);
@@ -38,15 +38,13 @@ export const SettlePersonSheet: React.FC<SettlePersonSheetProps> = ({
       : `Settle with ${person.displayName}`;
 
   return (
-    <Portal>
-      <Modal
-        visible={visible}
-        onDismiss={submitting ? undefined : onDismiss}
-        contentContainerStyle={[
-          styles.container,
-          { backgroundColor: theme.colors.surface },
-        ]}
-      >
+    <View style={styles.overlay} testID="settle-person-sheet" pointerEvents="box-none">
+      <Pressable
+        testID="settle-person-backdrop"
+        style={[styles.backdrop, { backgroundColor: "rgba(23, 32, 42, 0.45)" }]}
+        onPress={submitting ? undefined : onDismiss}
+      />
+      <Surface style={[styles.sheet, { backgroundColor: theme.colors.surface }]} elevation={3}>
         <Text variant="titleLarge" style={{ fontWeight: "800", color: theme.colors.onSurface }}>
           Settle with {person.displayName}
         </Text>
@@ -111,16 +109,24 @@ export const SettlePersonSheet: React.FC<SettlePersonSheetProps> = ({
         <Button mode="text" onPress={onDismiss} disabled={submitting}>
           Cancel
         </Button>
-      </Modal>
-    </Portal>
+      </Surface>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    marginHorizontal: 16,
-    maxWidth: WEB_MAX_WIDTH,
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 20,
+    justifyContent: "center",
+    padding: 16,
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  sheet: {
     width: "100%",
+    maxWidth: WEB_MAX_WIDTH,
     alignSelf: "center",
     borderRadius: 16,
     padding: 20,

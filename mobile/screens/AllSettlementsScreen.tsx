@@ -282,6 +282,7 @@ export const AllSettlementsScreen: React.FC<AllSettlementsScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    overflow: "visible",
   },
   center: {
     flex: 1,

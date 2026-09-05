@@ -160,6 +160,7 @@ export const PeopleSettlementsList: React.FC<PeopleSettlementsListProps> = ({
               onPress={() => onSettlePerson(person)}
               disabled={!plan.canSettleAll}
               style={styles.settleAll}
+              compact={false}
             >
               {actionLabel}
             </Button>
