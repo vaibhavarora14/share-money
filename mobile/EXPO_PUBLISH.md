@@ -12,7 +12,9 @@ Builds: https://expo.dev/accounts/varora1406/projects/share-money/builds
 
 Production binaries check for updates on launch (`ON_LOAD`), download in the
 background, and apply the new JS/asset bundle on the **next cold start**. Splash
-is not blocked (`fallbackToCacheTimeout: 0`). There is no in-app reload prompt.
+is not blocked (`fallbackToCacheTimeout: 0`). While a download is in progress
+or ready, `OtaUpdateBanner` shows a quiet status chip. Tapping it after the
+download finishes restarts into the new bundle.
 
 `runtimeVersion` uses the `appVersion` policy. An OTA only reaches store
 binaries whose marketing version matches `mobile/version.json` at publish time.
@@ -66,8 +68,9 @@ Production environment secrets before bundling.
 
 1. Install a binary built after `ON_LOAD` shipped (preview or store)
 2. Publish an OTA to that binary's channel
-3. Force-quit and reopen twice
-4. Confirm Settings / `VersionDisplay` shows a new short update id
+3. Confirm the in-app chip shows “Downloading update…” then “Update ready”
+4. Tap the chip to restart, or force-quit and reopen
+5. Confirm Settings / `VersionDisplay` shows a new short update id
 
 ### Rollback
 
