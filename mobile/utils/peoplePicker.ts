@@ -1,9 +1,9 @@
 export interface ExistingPerson {
   id: string;
   full_name: string;
+  email?: string | null;
   avatar_url?: string | null;
-  source_group_id: string;
-  source_group_name: string;
+  user_id?: string | null;
 }
 
 interface RemovablePerson {
@@ -22,9 +22,48 @@ export function canRemovePerson(
   return options.canManageMembers || person.user_id === options.currentUserId;
 }
 
+function normalizeEmail(email?: string | null): string {
+  return (email ?? "").trim().toLocaleLowerCase();
+}
+
+function normalizeName(name: string): string {
+  return name.trim().toLocaleLowerCase();
+}
+
+function identityKey(person: ExistingPerson): string {
+  if (person.user_id) return `user:${person.user_id}`;
+  const email = normalizeEmail(person.email);
+  if (email) return `email:${email}`;
+  return `name:${normalizeName(person.full_name)}`;
+}
+
+function richness(person: ExistingPerson): number {
+  return (person.user_id ? 2 : 0) + (normalizeEmail(person.email) ? 1 : 0);
+}
+
 /**
- * Keeps duplicate names visible by sorting their group context rather than
- * collapsing them into a single match.
+ * One row per person: same account, same email, or the same name-only
+ * placeholder must not appear twice.
+ */
+export function dedupeExistingPeople(
+  people: ExistingPerson[],
+): ExistingPerson[] {
+  const chosen = new Map<string, ExistingPerson>();
+
+  for (const person of people) {
+    if (!person.full_name.trim()) continue;
+    const key = identityKey(person);
+    const existing = chosen.get(key);
+    if (!existing || richness(person) > richness(existing)) {
+      chosen.set(key, person);
+    }
+  }
+
+  return Array.from(chosen.values());
+}
+
+/**
+ * Search by name or email and sort the unique directory.
  */
 export function filterAndSortExistingPeople(
   people: ExistingPerson[],
@@ -32,16 +71,16 @@ export function filterAndSortExistingPeople(
 ): ExistingPerson[] {
   const normalizedSearch = search.trim().toLocaleLowerCase();
 
-  return people
+  return dedupeExistingPeople(people)
     .filter((person) =>
       !normalizedSearch ||
       person.full_name.toLocaleLowerCase().includes(normalizedSearch) ||
-      person.source_group_name.toLocaleLowerCase().includes(normalizedSearch)
+      normalizeEmail(person.email).includes(normalizedSearch)
     )
     .sort((left, right) => {
       const nameOrder = left.full_name.localeCompare(right.full_name);
       return nameOrder !== 0
         ? nameOrder
-        : left.source_group_name.localeCompare(right.source_group_name);
+        : normalizeEmail(left.email).localeCompare(normalizeEmail(right.email));
     });
 }
