@@ -9,6 +9,10 @@ import { fetchUserEmails } from "../_shared/user-email.ts";
 import { fetchUserProfiles } from "../_shared/user-profiles.ts";
 import { findUserIdByEmail } from "../_shared/user-lookup.ts";
 import {
+  buildReusablePeopleDirectory,
+  type ReusablePerson,
+} from "../_shared/reusable-people.ts";
+import {
   isValidEmail,
   isValidUUID,
   validateBodySize,
@@ -55,12 +59,11 @@ interface UpdateParticipantRequest {
   email?: string | null;
 }
 
-interface ReusablePerson {
+interface ParticipantIdentity {
   id: string;
+  user_id?: string | null;
+  email?: string | null;
   full_name: string;
-  avatar_url: string | null;
-  source_group_id: string;
-  source_group_name: string;
 }
 
 function normalizeName(name: unknown): string | null {
@@ -123,20 +126,33 @@ async function fetchParticipantById(
   return (data as Participant | null) ?? null;
 }
 
+function toPersonIdentity(
+  person: Participant,
+  profileName?: string | null,
+  profileEmail?: string | null,
+): ParticipantIdentity {
+  return {
+    id: person.id,
+    user_id: person.user_id,
+    email: person.email || profileEmail || null,
+    full_name: person.full_name || profileName || "",
+  };
+}
+
 async function fetchReusablePeople(
   supabase: Awaited<ReturnType<typeof verifyAuth>>["supabase"],
   targetGroupId: string,
   userId: string,
+  currentUserEmail: string | null,
 ): Promise<ReusablePerson[]> {
   const [membershipsResult, ownedGroupsResult] = await Promise.all([
     supabase
       .from("group_members")
       .select("group_id")
-      .eq("user_id", userId)
-      .eq("status", "active"),
+      .eq("user_id", userId),
     supabase
       .from("groups")
-      .select("id, name")
+      .select("id")
       .eq("created_by", userId),
   ]);
 
@@ -150,57 +166,49 @@ async function fetchReusablePeople(
   (ownedGroupsResult.data || []).forEach((group: { id: string }) =>
     groupIds.add(group.id)
   );
-  groupIds.delete(targetGroupId);
 
   if (groupIds.size === 0) return [];
 
-  const reusableGroupIds = Array.from(groupIds);
-  const [
-    { data: groups, error: groupsError },
-    { data: people, error: peopleError },
-  ] = await Promise.all([
-    supabase
-      .from("groups")
-      .select("id, name")
-      .in("id", reusableGroupIds),
-    supabase
-      .from("participants")
-      .select("id, group_id, user_id, full_name, avatar_url, type, created_at")
-      .in("group_id", reusableGroupIds)
-      .eq("type", "member")
-      .order("created_at", { ascending: true }),
-  ]);
+  const directoryGroupIds = Array.from(groupIds);
+  const { data: people, error: peopleError } = await supabase
+    .from("participants")
+    .select("id, group_id, user_id, email, full_name, type, created_at")
+    .in("group_id", directoryGroupIds)
+    .eq("type", "member")
+    .order("created_at", { ascending: true });
 
-  if (groupsError) throw groupsError;
   if (peopleError) throw peopleError;
 
-  const groupNames = new Map<string, string>(
-    ((groups as Array<{ id: string; name: string }> | null) ?? []).map((
-      group,
-    ) => [group.id, group.name]),
-  );
   const participantRows = (people as Participant[] | null) ?? [];
-  const peopleWithAccounts = participantRows.filter((person) =>
-    Boolean(person.user_id)
-  );
-  const profileMap = await fetchUserProfiles(
-    supabase,
-    peopleWithAccounts.map((person: Participant) => person.user_id as string),
-  );
+  const userIds = participantRows
+    .map((person) => person.user_id)
+    .filter((id): id is string => Boolean(id));
+  const [profileMap, emailMap] = await Promise.all([
+    fetchUserProfiles(supabase, userIds),
+    fetchUserEmails(userIds, userId, currentUserEmail),
+  ]);
 
-  return participantRows
-    .map((person): ReusablePerson => ({
-      id: person.id,
-      full_name: person.full_name ||
-        (person.user_id ? profileMap.get(person.user_id)?.full_name : null) ||
-        "",
-      avatar_url: person.avatar_url ||
-        (person.user_id ? profileMap.get(person.user_id)?.avatar_url : null) ||
-        null,
-      source_group_id: person.group_id,
-      source_group_name: groupNames.get(person.group_id) || "Another group",
-    }))
-    .filter((person) => Boolean(person.full_name));
+  const candidates: ParticipantIdentity[] = [];
+  const alreadyInTarget: ParticipantIdentity[] = [];
+
+  for (const person of participantRows) {
+    const profile = person.user_id ? profileMap.get(person.user_id) : undefined;
+    const identity = toPersonIdentity(
+      person,
+      profile?.full_name,
+      person.user_id ? emailMap.get(person.user_id) ?? null : null,
+    );
+    if (person.group_id === targetGroupId) {
+      alreadyInTarget.push(identity);
+    } else {
+      candidates.push(identity);
+    }
+  }
+
+  return buildReusablePeopleDirectory(candidates, {
+    excludeUserId: userId,
+    excludePeople: alreadyInTarget,
+  });
 }
 
 async function createInvitation(
@@ -896,6 +904,7 @@ Deno.serve(async (req: Request) => {
         supabase,
         reusableForGroupId,
         user.id,
+        user.email,
       );
       return createSuccessResponse(people, 200, 0, req);
     }

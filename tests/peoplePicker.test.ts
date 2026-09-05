@@ -8,44 +8,52 @@ const people: ExistingPerson[] = [
   {
     id: "p-3",
     full_name: "Arya",
-    source_group_id: "g-2",
-    source_group_name: "Flat Expenses",
+    email: "arya@example.com",
   },
   {
     id: "p-1",
     full_name: "Anuj",
-    source_group_id: "g-1",
-    source_group_name: "Goa Trip",
+    email: "anuj@example.com",
+    user_id: "u-anuj",
   },
   {
     id: "p-2",
     full_name: "Anuj",
-    source_group_id: "g-3",
-    source_group_name: "Weekend Plan",
+    email: "anuj@example.com",
+    user_id: "u-anuj",
+  },
+  {
+    id: "p-4",
+    full_name: "Sam",
   },
 ];
 
-Deno.test("filters people by name and keeps duplicate names distinguishable by group", () => {
+Deno.test("filters people by name or email and drops repeats", () => {
   const result = filterAndSortExistingPeople(people, "anuj");
 
-  if (result.length !== 2) throw new Error("expected both Anuj entries");
-  if (result[0].source_group_name !== "Goa Trip") {
-    throw new Error("expected alphabetical order");
-  }
-  if (result[1].source_group_name !== "Weekend Plan") {
-    throw new Error("expected group context");
+  if (result.length !== 1) throw new Error("expected one unique Anuj");
+  if (result[0].email !== "anuj@example.com") {
+    throw new Error("expected email on the unique match");
   }
 });
 
-Deno.test("sorts the full directory by person name then group name", () => {
+Deno.test("matches the directory by email as well as name", () => {
+  const result = filterAndSortExistingPeople(people, "arya@");
+
+  if (result.length !== 1 || result[0].full_name !== "Arya") {
+    throw new Error("expected Arya to match by email");
+  }
+});
+
+Deno.test("sorts the unique directory by person name then email", () => {
   const result = filterAndSortExistingPeople(people, "");
 
   const labels = result.map((person) =>
-    `${person.full_name}:${person.source_group_name}`
+    `${person.full_name}:${person.email ?? ""}`
   );
-  const expected = ["Anuj:Goa Trip", "Anuj:Weekend Plan", "Arya:Flat Expenses"];
+  const expected = ["Anuj:anuj@example.com", "Arya:arya@example.com", "Sam:"];
   if (labels.join("|") !== expected.join("|")) {
-    throw new Error("unexpected sort order");
+    throw new Error(`unexpected sort order: ${labels.join("|")}`);
   }
 });
 

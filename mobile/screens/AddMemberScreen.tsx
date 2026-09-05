@@ -243,7 +243,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                       color: theme.colors.onSurfaceVariant,
                     }]}
                   >
-                    People you’ve added before
+                    People from your groups
                   </Text>
                 </View>
                 <ScrollView
@@ -263,7 +263,9 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                             { pressed },
                           ) => [styles.personRow, pressed && styles.pressedRow]}
                           accessibilityRole="button"
-                          accessibilityLabel={`Add ${person.full_name} from ${person.source_group_name}`}
+                          accessibilityLabel={person.email
+                            ? `Add ${person.full_name}, ${person.email}`
+                            : `Add ${person.full_name}`}
                         >
                           <View
                             style={[styles.avatar, {
@@ -281,12 +283,18 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                           </View>
                           <View style={styles.personText}>
                             <Text variant="bodyLarge">{person.full_name}</Text>
-                            <Text
-                              variant="bodySmall"
-                              style={{ color: theme.colors.onSurfaceVariant }}
-                            >
-                              Also in {person.source_group_name}
-                            </Text>
+                            {person.email
+                              ? (
+                                <Text
+                                  variant="bodySmall"
+                                  style={{
+                                    color: theme.colors.onSurfaceVariant,
+                                  }}
+                                >
+                                  {person.email}
+                                </Text>
+                              )
+                              : null}
                           </View>
                           <Appbar.Action
                             icon="chevron-right"
@@ -298,7 +306,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                     : (
                       <View style={styles.emptyState}>
                         <Text variant="titleMedium">
-                          No people to reuse yet
+                          No people from your other groups yet
                         </Text>
                         <Text
                           style={{
@@ -306,8 +314,8 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                             textAlign: "center",
                           }}
                         >
-                          Create a person once, then reuse them in your other
-                          groups.
+                          People from groups you’ve been part of will show up
+                          here.
                         </Text>
                         <Button
                           mode="outlined"
@@ -348,12 +356,13 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                           color: theme.colors.onSurfaceVariant,
                         }]}
                       >
-                        Reuse someone you already added, or create someone new.
+                        Reuse someone from a group you’ve been part of, or
+                        create someone new.
                       </Text>
                       <ChoiceCard
                         icon="account-group"
                         title="Choose existing person"
-                        description="From another group"
+                        description="Name and email from your groups"
                         primary
                         onPress={() => setMode("existing")}
                       />
