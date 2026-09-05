@@ -17,6 +17,7 @@ import { NotificationBell } from "../components/NotificationBell";
 import { useAuth } from "../contexts/AuthContext";
 import { useBalances } from "../hooks/useBalances";
 import { useGroups } from "../hooks/useGroups";
+import { usePeopleSettlements } from "../hooks/usePeopleSettlements";
 import {
   setCachedNotificationPreference,
   useNotifications,
@@ -45,6 +46,7 @@ interface GroupsListScreenProps {
   onRefetchReady?: (refetch: () => Promise<any>) => void;
   refetchTrigger?: number; // Added to trigger refetch from parent
   onNotificationsPress: () => void;
+  onSettlementsPress?: () => void;
 }
 
 export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
@@ -53,6 +55,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   onRefetchReady,
   refetchTrigger,
   onNotificationsPress,
+  onSettlementsPress,
 }) => {
   const [showCreateGroup, setShowCreateGroup] = useState<boolean>(false);
   const [formerGroupsExpanded, setFormerGroupsExpanded] = useState<boolean>(false);
@@ -71,6 +74,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
     data: balancesData,
     refetch: refetchBalances,
   } = useBalances();
+  const peopleSettlements = usePeopleSettlements();
 
   // Load which groups the user has already opened (for the NEW badge).
   // First run baselines all current groups so existing members see no badges
@@ -432,6 +436,36 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
             </View>
           ) : (
             <>
+              {onSettlementsPress && peopleSettlements.people.length > 0 ? (
+                <Surface
+                  style={[styles.settlementsCard, { backgroundColor: theme.colors.primaryContainer }]}
+                  elevation={0}
+                >
+                  <TouchableOpacity
+                    testID="home-settlements-card"
+                    onPress={onSettlementsPress}
+                    activeOpacity={0.8}
+                    style={styles.settlementsTouchable}
+                    accessibilityLabel={`Settle with ${peopleSettlements.summary.personCount} ${peopleSettlements.summary.personCount === 1 ? "person" : "people"}`}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text variant="labelMedium" style={{ color: theme.colors.onPrimaryContainer, opacity: 0.8 }}>
+                        Settlements
+                      </Text>
+                      <Text variant="titleMedium" style={{ color: theme.colors.onPrimaryContainer, fontWeight: "700" }}>
+                        {peopleSettlements.summary.personCount === 1
+                          ? `Settle with ${peopleSettlements.people[0].displayName}`
+                          : `Settle with ${peopleSettlements.summary.personCount} people`}
+                      </Text>
+                      <Text variant="bodySmall" style={{ color: theme.colors.onPrimaryContainer }}>
+                        Same person across groups is grouped together
+                      </Text>
+                    </View>
+                    <List.Icon icon="chevron-right" color={theme.colors.onPrimaryContainer} />
+                  </TouchableOpacity>
+                </Surface>
+              ) : null}
+
               {/* Active Groups */}
               {activeGroups.map((group) => renderGroupItem(group))}
 
@@ -558,6 +592,18 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     marginLeft: 3,
+  },
+  settlementsCard: {
+    borderRadius: 16,
+    marginBottom: 16,
+    overflow: "hidden",
+  },
+  settlementsTouchable: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingLeft: 16,
+    paddingRight: 4,
   },
   permissionCard: {
     borderRadius: 12,
