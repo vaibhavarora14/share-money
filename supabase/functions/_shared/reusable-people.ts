@@ -41,6 +41,15 @@ function normalizeReusableName(name: string): string {
   return name.trim().toLocaleLowerCase();
 }
 
+/** Linked accounts often have a blank cached name. Fall back to the email local part. */
+export function reusableDisplayName(person: ReusablePersonInput): string {
+  const name = person.full_name.trim();
+  if (name) return name;
+  const email = normalizeReusableEmail(person.email);
+  if (!email) return "";
+  return email.split("@")[0] || email;
+}
+
 function identityKeys(person: ReusablePersonInput): string[] {
   const keys: string[] = [];
   if (person.user_id) keys.push(`user:${person.user_id}`);
@@ -83,8 +92,8 @@ export function buildReusablePeopleDirectory(
   };
 
   for (const person of people) {
-    const fullName = person.full_name.trim();
-    if (!fullName) continue;
+    const displayName = reusableDisplayName(person);
+    if (!displayName) continue;
     if (options.excludeUserId && person.user_id === options.excludeUserId) {
       continue;
     }
@@ -110,7 +119,7 @@ export function buildReusablePeopleDirectory(
   return Array.from(new Set(chosenByKey.values()))
     .map((person) => ({
       id: person.id,
-      full_name: person.full_name.trim(),
+      full_name: reusableDisplayName(person),
       email: normalizeReusableEmail(person.email),
     }))
     .sort((left, right) => {

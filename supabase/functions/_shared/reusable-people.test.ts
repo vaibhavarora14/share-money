@@ -73,6 +73,31 @@ Deno.test("collapses the same email across groups even without a user id", () =>
   assertEquals(result[0].email, "arya@example.com");
 });
 
+Deno.test("keeps a grouped-with person who has an email but no stored name", () => {
+  const result = buildReusablePeopleDirectory([
+    {
+      id: "p-gitanshu",
+      user_id: "u-gitanshu",
+      full_name: "   ",
+      email: "gitanshumalhotra@gmail.com",
+    },
+  ]);
+
+  assertEquals(result, [{
+    id: "p-gitanshu",
+    full_name: "gitanshumalhotra",
+    email: "gitanshumalhotra@gmail.com",
+  }]);
+});
+
+Deno.test("drops people with neither a name nor an email", () => {
+  const result = buildReusablePeopleDirectory([
+    { id: "p-blank", user_id: "u-blank", full_name: "" },
+  ]);
+
+  assertEquals(result, []);
+});
+
 Deno.test("collapses name-only people with no other identifier", () => {
   const result = buildReusablePeopleDirectory([
     { id: "p-1", full_name: "Sam" },

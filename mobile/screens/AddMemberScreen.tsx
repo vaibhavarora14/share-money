@@ -30,6 +30,7 @@ import { getInviteLinkUrl } from "../utils/inviteLinks";
 import { showErrorAlert } from "../utils/errorHandling";
 import {
   type ExistingPerson,
+  existingPersonLabel,
   filterAndSortExistingPeople,
 } from "../utils/peoplePicker";
 
@@ -172,7 +173,9 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
     setLoading(true);
     try {
       await onAddMember({ sourceParticipantId: person.id });
-      Alert.alert("Added", `${person.full_name} was added to this group.`, [
+      const addedLabel = existingPersonLabel(person) || person.email ||
+        "This person";
+      Alert.alert("Added", `${addedLabel} was added to this group.`, [
         { text: "OK", onPress: handleDismiss },
       ]);
     } catch (error) {
@@ -254,7 +257,11 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                     ? <ActivityIndicator style={styles.loadingIndicator} />
                     : filteredPeople.length > 0
                     ? (
-                      filteredPeople.map((person) => (
+                      filteredPeople.map((person) => {
+                        const label = existingPersonLabel(person);
+                        const initials = (label || "?").slice(0, 2)
+                          .toUpperCase();
+                        return (
                         <Pressable
                           key={person.id}
                           onPress={() => handleAddExisting(person)}
@@ -264,8 +271,8 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                           ) => [styles.personRow, pressed && styles.pressedRow]}
                           accessibilityRole="button"
                           accessibilityLabel={person.email
-                            ? `Add ${person.full_name}, ${person.email}`
-                            : `Add ${person.full_name}`}
+                            ? `Add ${label}, ${person.email}`
+                            : `Add ${label}`}
                         >
                           <View
                             style={[styles.avatar, {
@@ -278,11 +285,11 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                                 fontWeight: "700",
                               }}
                             >
-                              {person.full_name.slice(0, 2).toUpperCase()}
+                              {initials}
                             </Text>
                           </View>
                           <View style={styles.personText}>
-                            <Text variant="bodyLarge">{person.full_name}</Text>
+                            <Text variant="bodyLarge">{label}</Text>
                             {person.email
                               ? (
                                 <Text
@@ -301,7 +308,8 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                             onPress={() => handleAddExisting(person)}
                           />
                         </Pressable>
-                      ))
+                        );
+                      })
                     )
                     : (
                       <View style={styles.emptyState}>
