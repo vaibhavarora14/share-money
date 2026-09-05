@@ -1204,7 +1204,6 @@ function AppContent() {
         }}
         refetchTrigger={groupRefreshTrigger}
         onNotificationsPress={openNotifications}
-        onSettlementsPress={goToSettlements}
       />
       <InAppBanner notice={banner} onDismiss={dismissBanner} />
       {desktopNotificationPanel}
