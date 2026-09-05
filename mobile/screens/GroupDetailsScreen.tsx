@@ -617,17 +617,10 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     const performRemove = async () => {
       try {
         setRemovingMemberId(participant.id);
-        if (participant.user_id) {
-          await removeMemberMutation.mutate({
-            groupId: group.id,
-            userId: participant.user_id,
-          });
-        } else {
-          await removeParticipant.mutate({
-            groupId: group.id,
-            participantId: participant.id,
-          });
-        }
+        await removeParticipant.mutate({
+          groupId: group.id,
+          participantId: participant.id,
+        });
         // If removing self, navigate back
         if (isRemovingSelf && onLeaveGroup) {
           onLeaveGroup();
