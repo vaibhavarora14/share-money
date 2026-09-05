@@ -15,6 +15,10 @@ import {
   type ReusablePerson,
 } from "../_shared/reusable-people.ts";
 import {
+  isMissingTargetMembershipError,
+  planPersonRemoval,
+} from "../_shared/remove-person.ts";
+import {
   isValidEmail,
   isValidUUID,
   validateBodySize,
@@ -29,6 +33,7 @@ import {
  * - PATCH /participants/:id - Edit a person's name/email
  * - POST /participants/:id/invite - Invite a person with an email
  * - POST /participants/:id/connect - Connect a person to an existing SharedMoney account by email
+ * - DELETE /participants/:id - Remove an active person (delete if unused, otherwise mark former)
  * @route /functions/v1/participants
  * @requires Authentication
  */
@@ -623,22 +628,23 @@ Deno.serve(async (req: Request) => {
           );
         }
 
-        if (participant.user_id || participant.type !== "member") {
+        if (participant.type !== "member") {
           return createErrorResponse(
             400,
-            "Only unlinked people without a pending invitation can be removed directly",
+            "Only active people can be removed from a group",
             "VALIDATION_ERROR",
             undefined,
             req,
           );
         }
 
+        const isSelf = participant.user_id === user.id;
         const canManage = await requireCanManageParticipants(
           supabase,
           participant.group_id,
           user.id,
         );
-        if (!canManage) {
+        if (!canManage && !isSelf) {
           return createErrorResponse(
             403,
             "You must be an active group member to remove people",
@@ -672,30 +678,103 @@ Deno.serve(async (req: Request) => {
         if (payerResult.error) return handleError(payerResult.error, "checking expense history", req);
         if (settlementResult.error) return handleError(settlementResult.error, "checking settlement history", req);
 
-        if (
+        const hasHistory =
           (splitResult.data?.length || 0) > 0 ||
           (payerResult.data?.length || 0) > 0 ||
-          (settlementResult.data?.length || 0) > 0
-        ) {
+          (settlementResult.data?.length || 0) > 0;
+        const plan = planPersonRemoval(participant, hasHistory);
+
+        if (plan.action === "reject") {
+          return createErrorResponse(
+            400,
+            "Only active people can be removed from a group",
+            "VALIDATION_ERROR",
+            undefined,
+            req,
+          );
+        }
+
+        if (plan.action === "mark_former" && plan.leaveMembership && participant.user_id) {
+          const { error: rpcError } = await supabase.rpc("remove_group_member", {
+            p_group_id: participant.group_id,
+            p_user_id: participant.user_id,
+          });
+
+          if (rpcError && !isMissingTargetMembershipError(rpcError.message)) {
+            const errorMessage = rpcError.message || "Failed to remove member";
+            if (
+              errorMessage.includes("not authenticated") ||
+              errorMessage.includes("Unauthorized")
+            ) {
+              return createErrorResponse(401, "Unauthorized", "AUTH_ERROR", undefined, req);
+            }
+            if (errorMessage.includes("active member of the group")) {
+              return createErrorResponse(
+                403,
+                "You must be an active group member to remove people",
+                "PERMISSION_DENIED",
+                undefined,
+                req,
+              );
+            }
+            return handleError(rpcError, "removing member", req);
+          }
+
+          if (!rpcError) {
+            return createSuccessResponse({ success: true, former: true }, 200, 0, req);
+          }
+        }
+
+        if (plan.action === "hard_delete") {
+          const { data: deleted, error: deleteError } = await supabase
+            .from("participants")
+            .delete()
+            .eq("id", participant.id)
+            .select("id");
+
+          if (deleteError) {
+            return handleError(deleteError, "removing person", req);
+          }
+
+          if (!deleted?.length) {
+            return createErrorResponse(
+              403,
+              "You must be an active group member to remove people",
+              "PERMISSION_DENIED",
+              undefined,
+              req,
+            );
+          }
+
+          return createSuccessResponse({ success: true, deleted: true }, 200, 0, req);
+        }
+
+        const { data: updated, error: updateError } = await supabase
+          .from("participants")
+          .update({
+            type: "former",
+            left_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", participant.id)
+          .eq("type", "member")
+          .select("id");
+
+        if (updateError) {
+          return handleError(updateError, "removing person", req);
+        }
+
+        if (!updated?.length) {
           return createErrorResponse(
             409,
-            "This person has expense history and cannot be removed",
+            "This person could not be removed from the group",
             "CONFLICT",
             undefined,
             req,
           );
         }
 
-        const { error: deleteError } = await supabase
-          .from("participants")
-          .delete()
-          .eq("id", participant.id);
-
-        if (deleteError) {
-          return handleError(deleteError, "removing person", req);
-        }
-
-        return createSuccessResponse({ success: true }, 200, 0, req);
+        return createSuccessResponse({ success: true, former: true }, 200, 0, req);
       }
 
       if (
