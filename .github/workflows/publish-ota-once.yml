@@ -80,7 +80,7 @@ jobs:
           EXPO_PUBLIC_DEFAULT_CURRENCY: ${{ secrets.EXPO_PUBLIC_DEFAULT_CURRENCY }}
           EXPO_PUBLIC_SENTRY_DSN: ${{ secrets.EXPO_PUBLIC_SENTRY_DSN }}
           OTA_CHANNEL: production
-          OTA_MESSAGE: "fix: allow removing people who have group expense history"
+          OTA_MESSAGE: "fix: show when an app update is downloading"
         run: |
           set -euo pipefail
           eas update --channel "$OTA_CHANNEL" --message "$OTA_MESSAGE" --non-interactive
