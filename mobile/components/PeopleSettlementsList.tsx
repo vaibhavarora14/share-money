@@ -180,6 +180,7 @@ export const PeopleSettlementsList: React.FC<PeopleSettlementsListProps> = ({
                   mode="contained"
                   testID="confirm-settle-person"
                   onPress={onConfirmPerson}
+                  {...(Platform.OS === "web" ? { onClick: onConfirmPerson } : {})}
                   loading={submitting}
                   disabled={submitting || !plan.canSettleAll}
                 >
@@ -192,8 +193,12 @@ export const PeopleSettlementsList: React.FC<PeopleSettlementsListProps> = ({
             ) : (
               <Pressable
                 testID={`settle-person-${person.key}`}
+                accessibilityRole="button"
                 onPress={() => onSettlePerson(person)}
                 disabled={!plan.canSettleAll}
+                {...(Platform.OS === "web"
+                  ? { onClick: () => onSettlePerson(person) }
+                  : {})}
                 style={[
                   styles.settleAll,
                   {
