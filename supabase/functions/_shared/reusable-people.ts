@@ -1,10 +1,20 @@
 /**
  * Unique people directory for "add from existing list".
  *
- * A person can appear in several groups as different participant rows.
- * Collapse those rows to one entry using user_id, then email, then name
- * when no other identifier exists.
+ * Only people the current user has already shared a group with — not a
+ * system-wide directory, and not filtered by who added them. A person can
+ * appear in several groups as different participant rows; collapse those
+ * to one name+email entry using user_id, then email, then name when no
+ * other identifier exists.
  */
+
+export const REUSABLE_PARTICIPANT_TYPES = ["member", "former"] as const;
+
+export function isReusableParticipantType(
+  type: string | null | undefined,
+): boolean {
+  return type === "member" || type === "former";
+}
 
 export interface ReusablePersonInput {
   id: string;

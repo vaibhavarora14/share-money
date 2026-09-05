@@ -243,7 +243,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                       color: theme.colors.onSurfaceVariant,
                     }]}
                   >
-                    People from your groups
+                    People you’ve grouped with
                   </Text>
                 </View>
                 <ScrollView
@@ -306,7 +306,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                     : (
                       <View style={styles.emptyState}>
                         <Text variant="titleMedium">
-                          No people from your other groups yet
+                          No one you’ve grouped with yet
                         </Text>
                         <Text
                           style={{
@@ -314,8 +314,8 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                             textAlign: "center",
                           }}
                         >
-                          People from groups you’ve been part of will show up
-                          here.
+                          Anyone you’ve shared a group with will show up here.
+                          Only their name and email are listed.
                         </Text>
                         <Button
                           mode="outlined"
@@ -356,13 +356,13 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                           color: theme.colors.onSurfaceVariant,
                         }]}
                       >
-                        Reuse someone from a group you’ve been part of, or
-                        create someone new.
+                        Pick someone you’ve shared a group with, or create
+                        someone new.
                       </Text>
                       <ChoiceCard
                         icon="account-group"
                         title="Choose existing person"
-                        description="Name and email from your groups"
+                        description="Name and email only"
                         primary
                         onPress={() => setMode("existing")}
                       />

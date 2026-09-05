@@ -10,6 +10,8 @@ import { fetchUserProfiles } from "../_shared/user-profiles.ts";
 import { findUserIdByEmail } from "../_shared/user-lookup.ts";
 import {
   buildReusablePeopleDirectory,
+  isReusableParticipantType,
+  REUSABLE_PARTICIPANT_TYPES,
   type ReusablePerson,
 } from "../_shared/reusable-people.ts";
 import {
@@ -50,7 +52,7 @@ interface CreateParticipantRequest {
   group_id?: string;
   full_name?: string;
   email?: string | null;
-  /** Reuses a participant that the requester can already access in another group. */
+  /** Reuses someone the requester has already been grouped with. */
   source_participant_id?: string;
 }
 
@@ -98,6 +100,30 @@ async function requireCanManageParticipants(
   ) {
     return true;
   }
+
+  const { data: group, error: groupError } = await supabase
+    .from("groups")
+    .select("created_by")
+    .eq("id", groupId)
+    .maybeSingle();
+
+  return !groupError && !!group &&
+    (group as { created_by: string }).created_by === userId;
+}
+
+async function hasBeenGroupedIn(
+  supabase: Awaited<ReturnType<typeof verifyAuth>>["supabase"],
+  groupId: string,
+  userId: string,
+): Promise<boolean> {
+  const { data: membership, error: membershipError } = await supabase
+    .from("group_members")
+    .select("id")
+    .eq("group_id", groupId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!membershipError && membership) return true;
 
   const { data: group, error: groupError } = await supabase
     .from("groups")
@@ -174,7 +200,7 @@ async function fetchReusablePeople(
     .from("participants")
     .select("id, group_id, user_id, email, full_name, type, created_at")
     .in("group_id", directoryGroupIds)
-    .eq("type", "member")
+    .in("type", [...REUSABLE_PARTICIPANT_TYPES])
     .order("created_at", { ascending: true });
 
   if (peopleError) throw peopleError;
@@ -348,7 +374,9 @@ Deno.serve(async (req: Request) => {
             createData.source_participant_id,
           );
           if (
-            !source || source.type !== "member" || source.group_id === groupId
+            !source ||
+            !isReusableParticipantType(source.type) ||
+            source.group_id === groupId
           ) {
             return createErrorResponse(
               404,
@@ -359,7 +387,7 @@ Deno.serve(async (req: Request) => {
             );
           }
 
-          const canAccessSource = await requireCanManageParticipants(
+          const canAccessSource = await hasBeenGroupedIn(
             supabase,
             source.group_id,
             user.id,

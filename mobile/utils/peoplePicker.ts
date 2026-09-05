@@ -4,8 +4,6 @@ export interface ExistingPerson {
   email?: string | null;
   avatar_url?: string | null;
   user_id?: string | null;
-  source_group_id?: string;
-  source_group_name?: string;
 }
 
 interface RemovablePerson {

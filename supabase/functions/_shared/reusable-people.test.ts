@@ -1,5 +1,6 @@
 import {
   buildReusablePeopleDirectory,
+  isReusableParticipantType,
 } from "./reusable-people.ts";
 
 function assertEquals(actual: unknown, expected: unknown, message?: string) {
@@ -128,6 +129,39 @@ Deno.test("excludes the current user and people already in the target group", ()
     full_name: "Kai",
     email: "kai@example.com",
   }]);
+});
+
+Deno.test("returns only name and email, including people who later left a group", () => {
+  const result = buildReusablePeopleDirectory([
+    {
+      id: "p-left",
+      user_id: "u-leah",
+      full_name: "Leah",
+      email: "leah@example.com",
+    },
+    {
+      id: "p-current",
+      full_name: "Omar",
+      email: "omar@example.com",
+    },
+  ]);
+
+  assertEquals(result, [
+    { id: "p-left", full_name: "Leah", email: "leah@example.com" },
+    { id: "p-current", full_name: "Omar", email: "omar@example.com" },
+  ]);
+  for (const person of result) {
+    assertEquals(Object.keys(person).sort(), ["email", "full_name", "id"]);
+  }
+});
+
+Deno.test("treats current and former group people as reusable", () => {
+  if (!isReusableParticipantType("member") || !isReusableParticipantType("former")) {
+    throw new Error("people you grouped with stay reusable after they leave");
+  }
+  if (isReusableParticipantType("invited")) {
+    throw new Error("invited people are not already grouped");
+  }
 });
 
 Deno.test("prefers the richer row when merging a linked user and an email-only copy", () => {
