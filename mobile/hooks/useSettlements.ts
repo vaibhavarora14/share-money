@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
 import { SettlementsResponse } from "../types";
 import { fetchWithAuth } from "../utils/api";
+import type { SettlementCreateInput } from "../utils/peopleSettlements";
 import { queryKeys } from "./queryKeys";
 
 export async function fetchSettlements(groupId: string): Promise<SettlementsResponse> {
@@ -40,6 +41,51 @@ export function useSettlements(groupId?: string | null) {
     isFetching: query.isFetching,
     error: query.error ?? null,
     refetch: query.refetch,
+  };
+}
+
+export function useCreateSettlements(onSuccess?: () => void) {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation<SettlementsResponse[], Error, SettlementCreateInput[]>({
+    mutationFn: async (settlements) => {
+      const created: SettlementsResponse[] = [];
+      for (const settlementData of settlements) {
+        const response = await fetchWithAuth("/settlements", {
+          method: "POST",
+          body: JSON.stringify({
+            group_id: settlementData.group_id,
+            from_participant_id: settlementData.from_participant_id,
+            to_participant_id: settlementData.to_participant_id,
+            amount: settlementData.amount,
+            currency: settlementData.currency,
+            notes: settlementData.notes,
+          }),
+        });
+        if (!response.ok) {
+          throw new Error(
+            created.length === 0
+              ? "Failed to record settlements"
+              : `Recorded ${created.length} of ${settlements.length} group payments, then one failed`
+          );
+        }
+        created.push(await response.json());
+      }
+      return created;
+    },
+    onSuccess: (_data, settlements) => {
+      const groupIds = [...new Set(settlements.map((item) => item.group_id))];
+      for (const groupId of groupIds) {
+        invalidateSettlementAdjacents(queryClient, groupId);
+      }
+      onSuccess?.();
+    },
+  });
+
+  return {
+    mutate: mutation.mutateAsync,
+    isLoading: mutation.isPending,
+    error: (mutation.error as Error | null) ?? null,
   };
 }
 
