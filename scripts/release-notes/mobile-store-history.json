@@ -9,6 +9,27 @@
       "verificationMethod": "A fresh Google Play Developer API or Play Console release read must return the exact saved text.",
       "releases": [
         {
+          "version": "2.25.1",
+          "builds": [
+            "91"
+          ],
+          "notes": "• Find people from your other groups even when they only have an email saved.\n• Search by name or email when adding someone you have already grouped with.",
+          "storeStatus": "verified",
+          "verifiedAt": "2026-09-05T09:56:05Z",
+          "storeUrl": "https://play.google.com/console/u/0/developers/6745265774722656852/app/4974696703491943344/tracks/4700640425437558082/releases/45/details"
+        },
+        {
+          "version": "2.25.0",
+          "builds": [
+            "90"
+          ],
+          "notes": null,
+          "storeStatus": "unavailable",
+          "observedAt": "2026-09-05T09:56:05Z",
+          "blocker": "Google Play Console shows version code 90 as a deactivated app bundle inside internal release 2.25.1. Release notes belong to the release, and no separate editable or readable release-note field is available for the deactivated bundle.",
+          "storeUrl": "https://play.google.com/console/u/0/developers/6745265774722656852/app/4974696703491943344/tracks/4700640425437558082/releases/45/details"
+        },
+        {
           "version": "2.23.1",
           "builds": [
             "87"
@@ -61,6 +82,16 @@
       "locale": "en-US",
       "verificationMethod": "A fresh App Store Connect build-detail read must return the exact saved What to Test text.",
       "releases": [
+        {
+          "version": "2.25.1",
+          "builds": [
+            "91"
+          ],
+          "notes": "• Open Add people and choose an existing person.\n• Search for a grouped-with person who has an email but no stored name.\n• Confirm they appear once with that email and can be added.\n• Confirm someone already in this group does not appear.",
+          "storeStatus": "verified",
+          "verifiedAt": "2026-09-05T09:56:05Z",
+          "storeUrl": "https://appstoreconnect.apple.com/teams/79c754e7-bf1d-488d-af46-225a13d01491/apps/6755923591/testflight/ios/c542add4-572b-44ee-af34-39fe8cfc4d3b"
+        },
         {
           "version": "2.23.1",
           "builds": [
