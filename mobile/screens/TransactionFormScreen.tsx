@@ -669,7 +669,11 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     >
       {/* Header */}
       <Appbar.Header style={[styles.header, { backgroundColor: theme.colors.background }]}>
-        <Appbar.BackAction onPress={onDismiss} />
+        <Appbar.BackAction
+          onPress={onDismiss}
+          accessibilityLabel="Navigate back"
+          testID="transaction-form-back-button"
+        />
         <Appbar.Content
           title={transaction ? "Edit Expense" : "Add Expense"}
           titleStyle={{ fontWeight: "600" }}

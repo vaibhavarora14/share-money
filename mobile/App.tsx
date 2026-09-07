@@ -98,6 +98,10 @@ import { Group, GroupWithMembers } from "./types";
 import { getDefaultCurrency } from "./utils/currency";
 import { isTransactionNotificationsEnabled } from "./utils/featureFlags";
 import {
+  isTransactionFormCoveringGroupDetails,
+  shouldKeepGroupDetailsMounted,
+} from "./utils/groupDetailsPersistence";
+import {
   extractGroupDeepLinkId,
   extractInviteToken,
   getConfiguredWebAppPath,
@@ -1054,26 +1058,6 @@ function AppContent() {
     );
   }
 
-  // Show transaction form screen
-  if (currentRoute === "transaction-form" && selectedGroup) {
-    return (
-      <>
-        <TransactionFormScreen
-          transaction={editingTransaction}
-          onSave={handleSaveTransaction}
-          onDismiss={() => {
-            setCurrentRoute("group-details");
-            setEditingTransaction(null);
-          }}
-          onDelete={editingTransaction ? handleDeleteTransaction : undefined}
-          defaultCurrency={transactionFormDefaultCurrency}
-          groupId={selectedGroup.id}
-        />
-        <StatusBar style={theme.dark ? "light" : "dark"} />
-      </>
-    );
-  }
-
   // Show Splitwise import screen
   if (currentRoute === "splitwise-import" && selectedGroup) {
     return (
@@ -1105,9 +1089,9 @@ function AppContent() {
     );
   }
 
-  // Show group details screen (with bottom nav)
-  // Render as soon as a group is selected - the screen handles loading states internally
-  if (currentRoute === "group-details" && selectedGroup) {
+  // Show group details. Keep the screen mounted while a transaction is open so
+  // going back lands on the same row instead of the top of the group.
+  if (selectedGroup && shouldKeepGroupDetailsMounted(currentRoute)) {
     // Use fetched group details if available, otherwise use selectedGroup as initial data
     // GroupDetailsScreen will handle loading state while fetching full details
     const groupToDisplay: GroupWithMembers = selectedGroupDetails || {
@@ -1115,79 +1099,114 @@ function AppContent() {
       members: [],
       invitations: [],
     };
+    const transactionFormVisible = isTransactionFormCoveringGroupDetails(currentRoute);
 
     return (
       <>
-        <GroupDetailsScreen
-          group={groupToDisplay}
-          refreshTrigger={invitationsRefreshTrigger}
-          groupRefreshTrigger={groupRefreshTrigger}
-          onBack={() => {
-            setSelectedGroup(null);
-            setCurrentRoute("groups");
-            setStatsContext(null);
-            setGroupRefreshTrigger((prev) => prev + 1);
-          }}
-          onAddMember={() => setShowAddMember(true)}
-          onRemoveMember={async (userId: string) => {
-            await handleRemoveMember(userId);
-          }}
-          onLeaveGroup={() => {
-            setSelectedGroup(null);
-            setCurrentRoute("groups");
-            setStatsContext(null);
-            setGroupRefreshTrigger((prev) => prev + 1);
-          }}
-          onAddTransaction={() => {
-            setEditingTransaction(null);
-            if (groupToDisplay.id) {
-              setTransactionFormDefaultCurrency(
-                getGroupFormDefaultCurrency(queryClientInstance, groupToDisplay.id)
-              );
-            } else {
-              setTransactionFormDefaultCurrency(getDefaultCurrency());
+        <View style={styles.container} collapsable={false}>
+          <View
+            style={styles.container}
+            pointerEvents={transactionFormVisible ? "none" : "auto"}
+            accessibilityElementsHidden={transactionFormVisible}
+            importantForAccessibility={
+              transactionFormVisible ? "no-hide-descendants" : "auto"
             }
-            setCurrentRoute("transaction-form");
-          }}
-          onEditTransaction={(transaction) => {
-            setEditingTransaction(transaction);
-            setCurrentRoute("transaction-form");
-          }}
-          onImportSplitwise={() => {
-            setCurrentRoute("splitwise-import");
-          }}
-          onStatsPress={(mode) => {
-            if (!groupToDisplay.id) return;
-            setStatsContext({ groupId: groupToDisplay.id, mode });
-            setCurrentRoute("group-stats");
-          }}
-          initialListMode={groupInitialListMode}
-          highlightedTransactionId={highlightedTransactionId}
-          onHighlightedTransactionShown={handleTransactionHighlightShown}
-        />
-        <BottomNavBar
-          currentRoute={currentRoute}
-          onGroupsPress={goToGroups}
-          onSettlementsPress={goToSettlements}
-          onLogoutPress={signOut}
-          onProfilePress={() => setCurrentRoute("profile")}
-          settlementsCount={peopleSettlements.summary.personCount}
-        />
-        {showAddMember && selectedGroup && (
-          <AddMemberScreen
-            visible={showAddMember}
-            groupId={selectedGroup.id}
-            onAddMember={async (person) => {
-              const result = await handleAddMember(person);
-              // Don't close modal automatically - let AddMemberScreen handle it
-              return result;
-            }}
-            onDismiss={() => {
-              setShowAddMember(false);
-            }}
-          />
-        )}
-        {desktopNotificationPanel}
+            collapsable={false}
+          >
+            <GroupDetailsScreen
+              group={groupToDisplay}
+              refreshTrigger={invitationsRefreshTrigger}
+              groupRefreshTrigger={groupRefreshTrigger}
+              captureHardwareBack={!transactionFormVisible}
+              onBack={() => {
+                setSelectedGroup(null);
+                setCurrentRoute("groups");
+                setStatsContext(null);
+                setGroupRefreshTrigger((prev) => prev + 1);
+              }}
+              onAddMember={() => setShowAddMember(true)}
+              onRemoveMember={async (userId: string) => {
+                await handleRemoveMember(userId);
+              }}
+              onLeaveGroup={() => {
+                setSelectedGroup(null);
+                setCurrentRoute("groups");
+                setStatsContext(null);
+                setGroupRefreshTrigger((prev) => prev + 1);
+              }}
+              onAddTransaction={() => {
+                setEditingTransaction(null);
+                if (groupToDisplay.id) {
+                  setTransactionFormDefaultCurrency(
+                    getGroupFormDefaultCurrency(queryClientInstance, groupToDisplay.id)
+                  );
+                } else {
+                  setTransactionFormDefaultCurrency(getDefaultCurrency());
+                }
+                setCurrentRoute("transaction-form");
+              }}
+              onEditTransaction={(transaction) => {
+                setEditingTransaction(transaction);
+                setCurrentRoute("transaction-form");
+              }}
+              onImportSplitwise={() => {
+                setCurrentRoute("splitwise-import");
+              }}
+              onStatsPress={(mode) => {
+                if (!groupToDisplay.id) return;
+                setStatsContext({ groupId: groupToDisplay.id, mode });
+                setCurrentRoute("group-stats");
+              }}
+              initialListMode={groupInitialListMode}
+              highlightedTransactionId={highlightedTransactionId}
+              onHighlightedTransactionShown={handleTransactionHighlightShown}
+            />
+            <BottomNavBar
+              currentRoute="group-details"
+              onGroupsPress={goToGroups}
+              onSettlementsPress={goToSettlements}
+              onLogoutPress={signOut}
+              onProfilePress={() => setCurrentRoute("profile")}
+              settlementsCount={peopleSettlements.summary.personCount}
+            />
+            {showAddMember && selectedGroup && (
+              <AddMemberScreen
+                visible={showAddMember}
+                groupId={selectedGroup.id}
+                onAddMember={async (person) => {
+                  const result = await handleAddMember(person);
+                  // Don't close modal automatically - let AddMemberScreen handle it
+                  return result;
+                }}
+                onDismiss={() => {
+                  setShowAddMember(false);
+                }}
+              />
+            )}
+            {desktopNotificationPanel}
+          </View>
+          {transactionFormVisible && (
+            <View
+              style={[
+                styles.transactionFormOverlay,
+                { backgroundColor: theme.colors.background },
+              ]}
+              accessibilityViewIsModal
+            >
+              <TransactionFormScreen
+                transaction={editingTransaction}
+                onSave={handleSaveTransaction}
+                onDismiss={() => {
+                  setCurrentRoute("group-details");
+                  setEditingTransaction(null);
+                }}
+                onDelete={editingTransaction ? handleDeleteTransaction : undefined}
+                defaultCurrency={transactionFormDefaultCurrency}
+                groupId={selectedGroup.id}
+              />
+            </View>
+          )}
+        </View>
         <StatusBar style={theme.dark ? "light" : "dark"} />
       </>
     );
@@ -1420,6 +1439,11 @@ const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
     width: "100%",
+  },
+  transactionFormOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 20,
+    elevation: 20,
   },
   appWrapper: {
     flex: 1,
