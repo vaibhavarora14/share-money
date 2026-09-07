@@ -63,9 +63,11 @@ import {
 import { fetchGroupDetails, useGroupDetails } from "./hooks/useGroups";
 import { useProfile } from "./hooks/useProfile";
 import {
+  fetchLatestGroupExpenseSplitAmong,
   fetchLatestGroupTransactionCurrency,
   fetchTransactionsPage,
   getGroupFormDefaultCurrency,
+  getGroupFormDefaultSplitAmong,
   TransactionsCursor,
   TransactionsPageResponse,
   useCreateTransaction,
@@ -213,6 +215,8 @@ function AppContent() {
   const [editingTransaction, setEditingTransaction] = useState<any>(null);
   const [transactionFormDefaultCurrency, setTransactionFormDefaultCurrency] =
     useState(() => getDefaultCurrency());
+  const [transactionFormDefaultSplitAmong, setTransactionFormDefaultSplitAmong] =
+    useState<string[] | undefined>(undefined);
   const [banner, setBanner] = useState<BannerNotice | null>(null);
   const dismissBanner = React.useCallback(() => setBanner(null), []);
   const [statsContext, setStatsContext] = useState<{
@@ -247,6 +251,10 @@ function AppContent() {
         queryClientInstance.prefetchQuery({
           queryKey: queryKeys.lastGroupTransactionCurrency(groupId),
           queryFn: () => fetchLatestGroupTransactionCurrency(groupId),
+        }),
+        queryClientInstance.prefetchQuery({
+          queryKey: queryKeys.lastGroupExpenseSplitAmong(groupId),
+          queryFn: () => fetchLatestGroupExpenseSplitAmong(groupId),
         }),
         queryClientInstance.prefetchQuery({
           queryKey: queryKeys.balances(groupId),
@@ -1140,8 +1148,12 @@ function AppContent() {
                   setTransactionFormDefaultCurrency(
                     getGroupFormDefaultCurrency(queryClientInstance, groupToDisplay.id)
                   );
+                  setTransactionFormDefaultSplitAmong(
+                    getGroupFormDefaultSplitAmong(queryClientInstance, groupToDisplay.id)
+                  );
                 } else {
                   setTransactionFormDefaultCurrency(getDefaultCurrency());
+                  setTransactionFormDefaultSplitAmong(undefined);
                 }
                 setCurrentRoute("transaction-form");
               }}
@@ -1202,6 +1214,7 @@ function AppContent() {
                 }}
                 onDelete={editingTransaction ? handleDeleteTransaction : undefined}
                 defaultCurrency={transactionFormDefaultCurrency}
+                defaultSplitAmong={transactionFormDefaultSplitAmong}
                 groupId={selectedGroup.id}
               />
             </View>
