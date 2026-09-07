@@ -40,6 +40,7 @@ import { WEB_MAX_WIDTH } from "../constants/layout";
 import { useAuth } from "../contexts/AuthContext";
 import { useCurrencyPreferences } from "../hooks/useCurrencyPreferences";
 import { useParticipants } from "../hooks/useParticipants";
+import { useGroupLastExpenseSplitAmong } from "../hooks/useTransactions";
 import { Participant, Transaction } from "../types";
 import {
     filterCurrencies,
@@ -48,6 +49,7 @@ import {
 } from "../utils/currency";
 import { convertAmount, resolveRate } from "../utils/currencyMerge";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
+import { intersectSplitAmongWithAvailable } from "../utils/groupSplit";
 import {
     amountsFromShares,
     calculateShareSplits,
@@ -70,6 +72,7 @@ interface TransactionFormScreenProps {
   onDismiss: () => void;
   onDelete?: () => Promise<void>;
   defaultCurrency?: string;
+  defaultSplitAmong?: string[];
   groupId?: string;
 }
 
@@ -102,6 +105,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   onDismiss,
   onDelete,
   defaultCurrency,
+  defaultSplitAmong,
   groupId,
 }) => {
   const effectiveDefaultCurrency = defaultCurrency || getDefaultCurrency();
@@ -153,6 +157,9 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     isLoading: isLoadingParticipants,
     error: participantsError,
   } = useParticipants(groupId || null);
+  const lastExpenseSplitQuery = useGroupLastExpenseSplitAmong(
+    transaction || !groupId ? null : groupId
+  );
 
   // Memoized values
   const isGroupExpense = useMemo(
@@ -318,9 +325,31 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       setPaidBy("");
       didDefaultSplitRef.current = false;
     } else {
-      // For a new group expense, default split to all people once. After that,
-      // an empty selection is an intentional user state and should remain empty.
+      // For a new group expense, default split to the last expense's people once.
+      // After that, an empty selection is an intentional user state and should remain empty.
       if (!didDefaultSplitRef.current && splitAmong.length === 0 && allParticipantIds.length > 0) {
+        const rememberedSource =
+          (defaultSplitAmong && defaultSplitAmong.length > 0)
+            ? defaultSplitAmong
+            : lastExpenseSplitQuery.data;
+        const rememberedIds = intersectSplitAmongWithAvailable(
+          rememberedSource,
+          allParticipantIds,
+        );
+        if (rememberedIds.length > 0) {
+          setSplitAmong(rememberedIds);
+          setSplitShares(defaultShareMap(rememberedIds));
+          didDefaultSplitRef.current = true;
+          return;
+        }
+
+        const lastSplitResolved =
+          lastExpenseSplitQuery.isFetched
+          || lastExpenseSplitQuery.isError
+          || !groupId
+          || Boolean(defaultSplitAmong && defaultSplitAmong.length > 0);
+        if (!lastSplitResolved) return;
+
         setSplitAmong(allParticipantIds);
         setSplitShares(defaultShareMap(allParticipantIds));
         didDefaultSplitRef.current = true;
@@ -334,7 +363,20 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
         }
       }
     }
-  }, [isGroupExpense, transaction, allParticipantIds, splitAmong.length, user, participants, paidBy]);
+  }, [
+    isGroupExpense,
+    transaction,
+    allParticipantIds,
+    splitAmong.length,
+    user,
+    participants,
+    paidBy,
+    defaultSplitAmong,
+    lastExpenseSplitQuery.data,
+    lastExpenseSplitQuery.isFetched,
+    lastExpenseSplitQuery.isError,
+    groupId,
+  ]);
 
   const formatDateForInput = (date: Date): string => {
     return date.toISOString().split("T")[0];

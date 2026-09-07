@@ -8,6 +8,8 @@ export const queryKeys = {
   transactionsFeed: (groupId: string) => ["transactions", groupId, "feed"] as const,
   lastGroupTransactionCurrency: (groupId: string) =>
     ["transactions", groupId, "latest-currency"] as const,
+  lastGroupExpenseSplitAmong: (groupId: string) =>
+    ["transactions", groupId, "latest-split-among"] as const,
   groupStats: (groupId: string) => ["groupStats", groupId] as const,
   balances: (groupId: string) => ["balances", groupId] as const,
   activity: (groupId: string) => ["activity", groupId] as const,
