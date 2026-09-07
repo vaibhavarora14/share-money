@@ -370,6 +370,12 @@ export function groupContextsFromBalances(options: {
   marketBook: RateBook;
   preferredCurrency: string;
   defaultCurrency?: string;
+  /**
+   * Server (or hydrated) pair overrides keyed by group id.
+   * Settlements must use these — market FX alone diverges from the group page
+   * whenever a group has a custom rate (e.g. Phuket THB→INR).
+   */
+  groupCustomRates?: Record<string, Record<string, number>>;
 }): GroupSettlementContext[] {
   const fallback = options.defaultCurrency || options.preferredCurrency || getDefaultCurrency();
   const groupById = new Map(options.groups.map((group) => [group.id, group]));
@@ -378,13 +384,16 @@ export function groupContextsFromBalances(options: {
     const group = groupById.get(groupBalance.group_id);
     const stored = options.prefsGroups[groupBalance.group_id];
     const settings = stored || groupSettingsFromGroup(group, fallback);
+    const customRates = options.groupCustomRates?.[groupBalance.group_id]
+      ?? settings.customRates
+      ?? {};
     return {
       groupId: groupBalance.group_id,
       groupName: groupBalance.group_name || group?.name || "Group",
       balances: groupBalance.balances,
       unifyEnabled: settings.enabled === true,
       settlementCurrency: settings.settlementCurrency || fallback,
-      rateBook: resolveRateBook(options.marketBook, settings.customRates),
+      rateBook: resolveRateBook(options.marketBook, customRates),
       defaultCurrency: fallback,
     };
   });

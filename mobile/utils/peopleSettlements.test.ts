@@ -313,3 +313,85 @@ Deno.test("groupContextsFromBalances uses each group's own unify setting", () =>
   const lines = buildGroupSettlementLines(contexts[0], YOU);
   assertEquals(lines[0].currency, "INR");
 });
+
+Deno.test("groupContextsFromBalances applies per-group custom rates like the group page", () => {
+  // Phuket-shaped leftovers: without the group THB→INR override, Settlements
+  // would convert via market FX and disagree with the group dashboard.
+  const groupBalances: GroupBalance[] = [
+    {
+      group_id: "phuket",
+      group_name: "Phuket",
+      balances: [
+        balance(YOU, -10733.36, {
+          currency: "INR",
+          participant_id: "p-you",
+          full_name: "You",
+        }),
+        balance(YOU, 10165.95, {
+          currency: "THB",
+          participant_id: "p-you",
+          full_name: "You",
+        }),
+        balance(MAYA, -39027.32, {
+          currency: "INR",
+          participant_id: "p-gaurav",
+          full_name: "Gaurav",
+        }),
+        balance(MAYA, -13102.62, {
+          currency: "THB",
+          participant_id: "p-gaurav",
+          full_name: "Gaurav",
+        }),
+        balance(RAJ, 49760.68, {
+          currency: "INR",
+          participant_id: "p-member",
+          full_name: "Member",
+        }),
+        balance(RAJ, 2936.67, {
+          currency: "THB",
+          participant_id: "p-member",
+          full_name: "Member",
+        }),
+      ],
+    },
+  ];
+  const groups: Group[] = [{
+    id: "phuket",
+    name: "Phuket",
+    created_by: YOU,
+    created_at: "",
+    updated_at: "",
+    unify_balances: true,
+    settlement_currency: "INR",
+  }];
+
+  const withGroupRate = groupContextsFromBalances({
+    groupBalances,
+    groups,
+    prefsGroups: {
+      phuket: { enabled: true, settlementCurrency: "INR", customRates: {} },
+    },
+    marketBook: book,
+    preferredCurrency: "INR",
+    groupCustomRates: { phuket: { "THB:INR": 3 } },
+  });
+  const withoutGroupRate = groupContextsFromBalances({
+    groupBalances,
+    groups,
+    prefsGroups: {
+      phuket: { enabled: true, settlementCurrency: "INR", customRates: {} },
+    },
+    marketBook: book,
+    preferredCurrency: "INR",
+  });
+
+  const withLine = buildGroupSettlementLines(withGroupRate[0], YOU)
+    .find((line) => line.other.full_name === "Gaurav");
+  const withoutLine = buildGroupSettlementLines(withoutGroupRate[0], YOU)
+    .find((line) => line.other.full_name === "Gaurav");
+
+  assertEquals(withLine?.currency, "INR");
+  assertEquals(Math.round((withLine?.amount || 0) * 100) / 100, 19764.49);
+  // Preview/market book converts THB differently — must not match the group rate.
+  assertEquals(withLine?.amount === withoutLine?.amount, false);
+});
