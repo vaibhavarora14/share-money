@@ -1,0 +1,34 @@
+appId: com.vaibhavarora.sharemoney
+---
+# Test: Opening a transaction and going back keeps that row in view
+# Regression: group details used to remount and jump to the top of the group.
+
+- runFlow: _helpers/ensure-groups.yaml
+
+- tapOn: "Summer Vacation 2024"
+- waitForAnimationToEnd
+- assertVisible: "Transactions"
+
+# Scroll to a seeded row that sits below the dashboard
+- scrollUntilVisible:
+    element:
+      text: "Car rental for the week"
+    direction: DOWN
+    timeout: 10000
+
+- tapOn: "Car rental for the week"
+- waitForAnimationToEnd
+- assertVisible: "Edit Expense"
+
+# Dismiss the form; the same row should still be on screen
+- tapOn:
+    id: "transaction-form-back-button"
+- waitForAnimationToEnd
+- assertVisible: "Car rental for the week"
+- assertVisible: "Transactions"
+- assertNotVisible: "Edit Expense"
+
+- tapOn: "Navigate back"
+- waitForAnimationToEnd
+- assertVisible: "Your Groups"
+- runFlow: signout.yaml
