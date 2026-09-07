@@ -90,6 +90,7 @@ interface GroupDetailsScreenProps {
   initialListMode?: "transactions" | "activity";
   highlightedTransactionId?: number | null;
   onHighlightedTransactionShown?: (transactionId: number) => void;
+  captureHardwareBack?: boolean;
 }
 
 export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
@@ -107,6 +108,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   initialListMode = "transactions",
   highlightedTransactionId = null,
   onHighlightedTransactionShown,
+  captureHardwareBack = true,
 }) => {
   const [leaving, setLeaving] = useState<boolean>(false);
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
@@ -347,8 +349,11 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     }
   }, [groupError, signOut]);
 
-  // Handle Android hardware back button
+  // Handle Android hardware back button. Skip while another screen is covering
+  // this one so the overlay (e.g. transaction form) owns the back press.
   useEffect(() => {
+    if (!captureHardwareBack) return;
+
     const handleHardwareBack = () => {
       if (showMembers) {
         setShowMembers(false);
@@ -363,7 +368,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       handleHardwareBack
     );
     return () => subscription.remove();
-  }, [onBack, showMembers]);
+  }, [captureHardwareBack, onBack, showMembers]);
 
   // Refetch all data function
   const refetchAll = () => {
