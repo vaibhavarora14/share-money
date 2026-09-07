@@ -8,6 +8,10 @@ import {
   normalizeGroupCurrency,
   resolveGroupDefaultCurrency,
 } from "../utils/groupCurrency";
+import {
+  extractSplitAmongParticipantIds,
+  resolveGroupDefaultSplitAmong,
+} from "../utils/groupSplit";
 import { queryKeys } from "./queryKeys";
 
 export interface TransactionsCursor {
@@ -92,6 +96,21 @@ export async function fetchLatestGroupTransactionCurrency(
   return normalizeGroupCurrency(transaction?.currency) ?? null;
 }
 
+export async function fetchLatestGroupExpenseSplitAmong(
+  groupId: string
+): Promise<string[] | null> {
+  const page = await fetchTransactionsPage({
+    groupId,
+    limit: TRANSACTIONS_PAGE_SIZE,
+    sort: "created_at",
+  });
+  return resolveGroupDefaultSplitAmong({
+    groupId,
+    latestSplitAmong: null,
+    feedTransactions: page.items,
+  }) ?? null;
+}
+
 function getCachedGroupFeedTransactions(
   queryClient: QueryClient,
   groupId: string
@@ -118,6 +137,19 @@ export function getGroupFormDefaultCurrency(
   });
 }
 
+export function getGroupFormDefaultSplitAmong(
+  queryClient: QueryClient,
+  groupId: string
+): string[] | undefined {
+  return resolveGroupDefaultSplitAmong({
+    groupId,
+    latestSplitAmong: queryClient.getQueryData<string[] | null>(
+      queryKeys.lastGroupExpenseSplitAmong(groupId)
+    ),
+    feedTransactions: getCachedGroupFeedTransactions(queryClient, groupId),
+  });
+}
+
 function mapInfiniteTransactions(
   data: InfiniteData<TransactionsPageResponse> | undefined,
   mapper: (tx: Transaction) => Transaction | null
@@ -139,6 +171,7 @@ function invalidateTransactionAdjacents(queryClient: QueryClient, groupId?: stri
   queryClient.invalidateQueries({ queryKey: queryKeys.transactionsFeed(groupId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.transactions(groupId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.lastGroupTransactionCurrency(groupId) });
+  queryClient.invalidateQueries({ queryKey: queryKeys.lastGroupExpenseSplitAmong(groupId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.groupStats(groupId) });
   queryClient.invalidateQueries({ queryKey: ["balances"] }); // Invalidate all balances (including global)
   queryClient.invalidateQueries({ queryKey: queryKeys.balances(groupId) });
@@ -153,6 +186,19 @@ export function useGroupLastTransactionCurrency(groupId?: string | null) {
       ? queryKeys.lastGroupTransactionCurrency(groupId)
       : queryKeys.lastGroupTransactionCurrency(""),
     queryFn: () => fetchLatestGroupTransactionCurrency(groupId as string),
+    enabled: !!user?.id && !!groupId,
+    staleTime: 30_000,
+  });
+}
+
+export function useGroupLastExpenseSplitAmong(groupId?: string | null) {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: groupId
+      ? queryKeys.lastGroupExpenseSplitAmong(groupId)
+      : queryKeys.lastGroupExpenseSplitAmong(""),
+    queryFn: () => fetchLatestGroupExpenseSplitAmong(groupId as string),
     enabled: !!user?.id && !!groupId,
     staleTime: 30_000,
   });
@@ -209,6 +255,7 @@ export function useCreateTransaction(onSuccess?: () => void) {
     {
       previous?: InfiniteData<TransactionsPageResponse>;
       previousLatestCurrency?: string | null;
+      previousLatestSplitAmong?: string[] | null;
       groupId: string;
     }
   >({
@@ -232,11 +279,17 @@ export function useCreateTransaction(onSuccess?: () => void) {
       await queryClient.cancelQueries({
         queryKey: queryKeys.lastGroupTransactionCurrency(groupId),
       });
+      await queryClient.cancelQueries({
+        queryKey: queryKeys.lastGroupExpenseSplitAmong(groupId),
+      });
       const previous = queryClient.getQueryData<InfiniteData<TransactionsPageResponse>>(
         queryKeys.transactionsFeed(groupId)
       );
       const previousLatestCurrency = queryClient.getQueryData<string | null>(
         queryKeys.lastGroupTransactionCurrency(groupId)
+      );
+      const previousLatestSplitAmong = queryClient.getQueryData<string[] | null>(
+        queryKeys.lastGroupExpenseSplitAmong(groupId)
       );
 
       const optimisticEntry: Transaction = {
@@ -274,7 +327,15 @@ export function useCreateTransaction(onSuccess?: () => void) {
         );
       }
 
-      return { previous, previousLatestCurrency, groupId };
+      const latestSplitAmong = extractSplitAmongParticipantIds(variables);
+      if (latestSplitAmong.length > 0) {
+        queryClient.setQueryData(
+          queryKeys.lastGroupExpenseSplitAmong(groupId),
+          latestSplitAmong
+        );
+      }
+
+      return { previous, previousLatestCurrency, previousLatestSplitAmong, groupId };
     },
     onError: (_error, _variables, context) => {
       if (!context?.groupId) return;
@@ -287,6 +348,10 @@ export function useCreateTransaction(onSuccess?: () => void) {
       queryClient.setQueryData(
         queryKeys.lastGroupTransactionCurrency(context.groupId),
         context.previousLatestCurrency
+      );
+      queryClient.setQueryData(
+        queryKeys.lastGroupExpenseSplitAmong(context.groupId),
+        context.previousLatestSplitAmong
       );
     },
     onSuccess: (_data, variables, context) => {

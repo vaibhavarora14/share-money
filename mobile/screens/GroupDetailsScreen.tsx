@@ -44,6 +44,7 @@ import {
   useUpdateSettlement,
 } from "../hooks/useSettlements";
 import {
+  useGroupLastExpenseSplitAmong,
   useGroupLastTransactionCurrency,
   useTransactions,
 } from "../hooks/useTransactions";
@@ -184,8 +185,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     fetchNextPage: fetchNextTransactionsPage,
     refetch: refetchTx,
   } = useTransactions(initialGroup.id);
-  // Keep this group's latest-entered currency cached while the screen is open.
+  // Keep this group's latest-entered currency and split-among cached while the screen is open.
   useGroupLastTransactionCurrency(initialGroup.id);
+  useGroupLastExpenseSplitAmong(initialGroup.id);
   const {
     data: invitations = [] as GroupInvitation[],
     isLoading: invitationsLoading,
