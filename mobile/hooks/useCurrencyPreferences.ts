@@ -103,7 +103,7 @@ export function buildGroupRateBook(
   return resolveRateBook(market, settings?.customRates || {});
 }
 
-async function fetchRates(groupId?: string): Promise<RatesResponse | null> {
+export async function fetchRates(groupId?: string): Promise<RatesResponse | null> {
   try {
     const path = groupId
       ? `/rates?group_id=${encodeURIComponent(groupId)}`
@@ -117,6 +117,16 @@ async function fetchRates(groupId?: string): Promise<RatesResponse | null> {
     });
     return null;
   }
+}
+
+function sameRateMap(
+  left: Record<string, number> | undefined,
+  right: Record<string, number>
+): boolean {
+  const leftKeys = Object.keys(left || {});
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) return false;
+  return rightKeys.every((key) => left?.[key] === right[key]);
 }
 
 function isMissingEndpointError(error: unknown): boolean {
@@ -339,6 +349,39 @@ export function useCurrencyPreferences(groupId?: string) {
       }
     },
   });
+
+  // Keep local prefs in sync with the shared group rate book so the Settlements
+  // tab (which has no groupId) sees the same THB→INR override as the group page.
+  useEffect(() => {
+    if (!groupId || !groupRatesQuery.data) return;
+    if (persistGroupRate.isPending || deleteGroupRate.isPending) return;
+    const serverRates = overrideMapFromResponse(groupRatesQuery.data);
+    void update((current) => {
+      const existing = current.groups[groupId] || {
+        enabled: groupFromServer?.unify_balances === true,
+        settlementCurrency: (
+          groupFromServer?.settlement_currency || current.preferredCurrency
+        ).toUpperCase(),
+        customRates: {},
+      };
+      if (sameRateMap(existing.customRates, serverRates)) return current;
+      return {
+        ...current,
+        groups: {
+          ...current.groups,
+          [groupId]: { ...existing, customRates: serverRates },
+        },
+      };
+    });
+  }, [
+    groupId,
+    groupRatesQuery.data,
+    persistGroupRate.isPending,
+    deleteGroupRate.isPending,
+    groupFromServer?.unify_balances,
+    groupFromServer?.settlement_currency,
+    update,
+  ]);
 
   const setPreferredCurrency = useCallback(async (currency: string) => {
     const next = currency.toUpperCase();
