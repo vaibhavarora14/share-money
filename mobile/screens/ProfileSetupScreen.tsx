@@ -33,6 +33,7 @@ import {
   useThemePreference,
 } from "../contexts/ThemePreferenceContext";
 import { useCurrencyPreferences } from "../hooks/useCurrencyPreferences";
+import { useDeleteAccount } from "../hooks/useDeleteAccount";
 import { useProfile } from "../hooks/useProfile";
 import { CURRENCIES, getCurrencyName } from "../utils/currency";
 import {
@@ -89,6 +90,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   const notificationsEnabled =
     isTransactionNotificationsEnabled(notifications.data);
   const { signOut, user } = useAuth();
+  const deleteAccount = useDeleteAccount();
 
   useEffect(() => {
     if (profile) {
@@ -226,6 +228,31 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
         `Please email ${SUPPORT_EMAIL} from your registered email with the subject "SharedMoney support — ${topic.label}".`
       );
     }
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Delete Account?",
+      "Are you sure you want to delete your account? This action is permanent. Your profile details will be deleted, you will be removed from your groups, and your past shared expenses will be anonymized to maintain group ledger integrity.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete Account",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteAccount.mutateAsync();
+            } catch (err) {
+              const message =
+                err instanceof Error
+                  ? err.message
+                  : "Could not delete your account. Please try again later.";
+              Alert.alert("Error", message);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const getInitials = () => {
@@ -604,6 +631,142 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                 source="chevron-right"
                 size={20}
                 color={theme.colors.onSurfaceVariant}
+              />
+            </Pressable>
+          </Surface>
+
+          <Surface
+            style={[
+              styles.supportCard,
+              { backgroundColor: theme.colors.surfaceVariant },
+            ]}
+            elevation={0}
+          >
+            <View style={styles.supportHeader}>
+              <Icon
+                source="shield-check-outline"
+                size={22}
+                color={theme.colors.onSurfaceVariant}
+              />
+              <View style={styles.supportText}>
+                <Text
+                  variant="titleSmall"
+                  style={{ color: theme.colors.onSurface }}
+                >
+                  Legal
+                </Text>
+                <Text
+                  variant="bodySmall"
+                  style={{ color: theme.colors.onSurfaceVariant }}
+                >
+                  Review the terms and privacy policy that protect your data.
+                </Text>
+              </View>
+            </View>
+            <Pressable
+              accessibilityRole="link"
+              accessibilityLabel="View Terms of Use"
+              onPress={() => void Linking.openURL("https://sharedmoney.app/terms")}
+              style={[
+                styles.supportButton,
+                {
+                  borderColor: theme.colors.outline,
+                  backgroundColor: theme.colors.surface,
+                },
+              ]}
+            >
+              <Text
+                variant="labelLarge"
+                style={{ color: theme.colors.onSurface, fontWeight: "700" }}
+              >
+                Terms of Use
+              </Text>
+              <Icon
+                source="open-in-new"
+                size={18}
+                color={theme.colors.onSurfaceVariant}
+              />
+            </Pressable>
+            <Pressable
+              accessibilityRole="link"
+              accessibilityLabel="View Privacy Policy"
+              onPress={() => void Linking.openURL("https://sharedmoney.app/privacy")}
+              style={[
+                styles.supportButton,
+                {
+                  borderColor: theme.colors.outline,
+                  backgroundColor: theme.colors.surface,
+                  marginTop: 8,
+                },
+              ]}
+            >
+              <Text
+                variant="labelLarge"
+                style={{ color: theme.colors.onSurface, fontWeight: "700" }}
+              >
+                Privacy Policy
+              </Text>
+              <Icon
+                source="open-in-new"
+                size={18}
+                color={theme.colors.onSurfaceVariant}
+              />
+            </Pressable>
+          </Surface>
+
+          <Surface
+            style={[
+              styles.supportCard,
+              { backgroundColor: theme.colors.surfaceVariant, marginBottom: 32 },
+            ]}
+            elevation={0}
+          >
+            <View style={styles.supportHeader}>
+              <Icon
+                source="alert-circle-outline"
+                size={22}
+                color={theme.colors.error}
+              />
+              <View style={styles.supportText}>
+                <Text
+                  variant="titleSmall"
+                  style={{ color: theme.colors.error }}
+                >
+                  Account Actions
+                </Text>
+                <Text
+                  variant="bodySmall"
+                  style={{ color: theme.colors.onSurfaceVariant }}
+                >
+                  Permanently delete your SharedMoney account and data.
+                </Text>
+              </View>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Delete your SharedMoney account"
+              accessibilityHint="Permanently closes your account and removes personal data"
+              disabled={deleteAccount.isPending || loading}
+              onPress={handleDeleteAccount}
+              style={[
+                styles.supportButton,
+                {
+                  borderColor: theme.colors.error,
+                  backgroundColor: theme.colors.surface,
+                },
+                (deleteAccount.isPending || loading) && styles.supportButtonDisabled,
+              ]}
+            >
+              <Text
+                variant="labelLarge"
+                style={{ color: theme.colors.error, fontWeight: "700" }}
+              >
+                {deleteAccount.isPending ? "Deleting account..." : "Delete Account"}
+              </Text>
+              <Icon
+                source="delete-outline"
+                size={20}
+                color={theme.colors.error}
               />
             </Pressable>
           </Surface>
