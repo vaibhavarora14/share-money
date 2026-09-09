@@ -232,18 +232,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       </Text>
 
       <View style={styles.methodStack}>
-        <Button
-          mode="contained"
-          icon="google"
-          onPress={handleGoogleSignIn}
-          disabled={formDisabled}
-          loading={googleLoading}
-          style={styles.methodButton}
-          contentStyle={styles.methodButtonContent}
-        >
-          Continue with Google
-        </Button>
-
         {appleSignInAvailable ? (
           <View
             pointerEvents={formDisabled ? "none" : "auto"}
@@ -264,6 +252,18 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             />
           </View>
         ) : null}
+
+        <Button
+          mode="contained"
+          icon="google"
+          onPress={handleGoogleSignIn}
+          disabled={formDisabled}
+          loading={googleLoading}
+          style={styles.methodButton}
+          contentStyle={styles.methodButtonContent}
+        >
+          Continue with Google
+        </Button>
 
         <Button
           mode="outlined"
