@@ -125,8 +125,7 @@ async function getStatus() {
     const reviewDetails = versions.data.included.filter(i => i.type === 'appStoreReviewDetails');
     for (const rd of reviewDetails) {
       console.log('\n📝 Review Information:');
-      console.log(`  Contact: ${rd.attributes.contactFirstName} ${rd.attributes.contactLastName} (${rd.attributes.contactPhone})`);
-      console.log(`  Demo Account: ${rd.attributes.demoAccountName}`);
+      console.log(JSON.stringify(rd.attributes, null, 2));
     }
 
     const builds = versions.data.included.filter(i => i.type === 'builds');
@@ -151,12 +150,105 @@ async function getBuilds(limit = 10) {
   }
 }
 
-async function getReviewNotes() {
-  const versions = await request(`/v1/apps/${APP_ID}/appStoreVersions?include=appStoreReviewDetail`);
-  const details = versions.data.included?.filter(i => i.type === 'appStoreReviewDetails') || [];
-  for (const d of details) {
-    console.log('=== CURRENT REVIEW NOTES ===');
-    console.log(d.attributes.notes);
+async function getSubmissions() {
+  const res = await request(`/v1/reviewSubmissions?filter[app]=${APP_ID}&include=items`);
+  console.log('📋 Review Submissions:');
+  console.log(JSON.stringify(res.data, null, 2));
+}
+
+async function attachBuild(buildId, versionId = '17aba419-24c1-44f6-96bb-a67f8039d53b') {
+  console.log(`Linking Build ID ${buildId} to Version ${versionId}...`);
+  const res = await request(`/v1/appStoreVersions/${versionId}/relationships/build`, 'PATCH', {
+    data: {
+      type: 'builds',
+      id: buildId
+    }
+  });
+  console.log(`Response status: ${res.status}`);
+  if (res.status === 204 || res.status === 200) {
+    console.log('✅ Successfully attached build to App Store Version!');
+  } else {
+    console.error('❌ Failed to attach build:', res.data || res.raw);
+  }
+}
+
+async function submitForReview(versionId = '17aba419-24c1-44f6-96bb-a67f8039d53b') {
+  console.log(`Submitting Version ${versionId} for App Review...`);
+  // First check if a reviewSubmission exists in state 'READY_FOR_REVIEW' or 'WAITING_FOR_REVIEW'
+  const submissions = await request(`/v1/reviewSubmissions?filter[app]=${APP_ID}`);
+  console.log('Existing review submissions:', JSON.stringify(submissions.data, null, 2));
+
+  // Try creating a new review submission if needed
+  let submissionId = null;
+  const existing = submissions.data?.data?.find(s => s.attributes.state === 'READY_FOR_REVIEW');
+  if (existing) {
+    submissionId = existing.id;
+    console.log(`Found existing submission in READY_FOR_REVIEW: ${submissionId}`);
+  } else {
+    console.log('Creating new review submission...');
+    const createSub = await request(`/v1/reviewSubmissions`, 'POST', {
+      data: {
+        type: 'reviewSubmissions',
+        attributes: {
+          platform: 'IOS'
+        },
+        relationships: {
+          app: {
+            data: {
+              type: 'apps',
+              id: APP_ID
+            }
+          }
+        }
+      }
+    });
+    console.log('Create submission response:', createSub.status, JSON.stringify(createSub.data, null, 2));
+    if (createSub.status === 201) {
+      submissionId = createSub.data.data.id;
+    } else {
+      submissionId = submissions.data?.data?.[0]?.id;
+    }
+  }
+
+  if (submissionId) {
+    // Add version item to submission if not already added
+    console.log(`Adding version ${versionId} to review submission ${submissionId}...`);
+    const addItem = await request(`/v1/reviewSubmissionItems`, 'POST', {
+      data: {
+        type: 'reviewSubmissionItems',
+        relationships: {
+          reviewSubmission: {
+            data: {
+              type: 'reviewSubmissions',
+              id: submissionId
+            }
+          },
+          appStoreVersion: {
+            data: {
+              type: 'appStoreVersions',
+              id: versionId
+            }
+          }
+        }
+      }
+    });
+    console.log('Add item response:', addItem.status, JSON.stringify(addItem.data, null, 2));
+
+    // Submit the review submission
+    console.log(`Finalizing submission ${submissionId}...`);
+    const finalize = await request(`/v1/reviewSubmissions/${submissionId}`, 'PATCH', {
+      data: {
+        type: 'reviewSubmissions',
+        id: submissionId,
+        attributes: {
+          submitted: true
+        }
+      }
+    });
+    console.log('Finalize response:', finalize.status, JSON.stringify(finalize.data, null, 2));
+    if (finalize.status === 200) {
+      console.log('🎉 SUCCESSFULLY SUBMITTED TO APP STORE REVIEW!');
+    }
   }
 }
 
@@ -172,7 +264,17 @@ switch (command) {
   case 'review-notes':
     await getReviewNotes();
     break;
+  case 'submissions':
+    await getSubmissions();
+    break;
+  case 'attach-build':
+    await attachBuild(process.argv[3], process.argv[4]);
+    break;
+  case 'submit':
+    await submitForReview(process.argv[3]);
+    break;
   default:
-    console.log('Usage: node scripts/asc.mjs [status|builds|review-notes]');
+    console.log('Usage: node scripts/asc.mjs [status|builds|review-notes|submissions|attach-build <buildId>|submit]');
     break;
 }
+

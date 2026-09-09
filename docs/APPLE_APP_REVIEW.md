@@ -10,8 +10,8 @@ When submitting an app update or new version in **App Store Connect -> iOS App -
 
 ### Sign-In Required
 - **Checkbox**: Checked (`Yes`)
-- **Username**: `apple-review@sharedmoney.app` (or your configured review test account)
-- **Password**: *(Your dedicated review account password)*
+- **Username**: `charlie@test.com`
+- **Password**: `testpassword123`
 
 > [!IMPORTANT]
 > **Pre-populate the Demo Account with Sample Data!**
