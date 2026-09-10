@@ -1,41 +1,67 @@
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
 import { ActivityFeedResponse } from "../types";
 import { fetchWithAuth } from "../utils/api";
 import { queryKeys } from "./queryKeys";
 
-export async function fetchActivity(
-  groupId: string
+const ACTIVITY_PAGE_SIZE = 50;
+
+export async function fetchActivityPage(
+  groupId: string,
+  offset: number = 0,
+  limit: number = ACTIVITY_PAGE_SIZE
 ): Promise<ActivityFeedResponse> {
-  const response = await fetchWithAuth(`/activity?group_id=${groupId}&limit=50`);
+  const response = await fetchWithAuth(
+    `/activity?group_id=${groupId}&limit=${limit}&offset=${offset}`
+  );
   if (!response.ok) {
     throw new Error(`Failed to fetch activity: ${response.status}`);
   }
   return response.json();
 }
 
+export async function fetchActivity(
+  groupId: string
+): Promise<ActivityFeedResponse> {
+  return fetchActivityPage(groupId, 0, ACTIVITY_PAGE_SIZE);
+}
+
 export function useActivity(groupId?: string | null) {
   const { user } = useAuth();
 
-  const query = useQuery<ActivityFeedResponse, Error>({
+  const query = useInfiniteQuery<ActivityFeedResponse, Error>({
     // Guarded by `enabled`, so groupId is always non-null inside queryFn
     queryKey: groupId ? queryKeys.activity(groupId) : queryKeys.activity(""),
-    queryFn: () => fetchActivity(groupId as string),
+    queryFn: ({ pageParam = 0 }) =>
+      fetchActivityPage(groupId as string, pageParam as number, ACTIVITY_PAGE_SIZE),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      if (!lastPage?.has_more) return undefined;
+      const loadedCount = allPages.reduce(
+        (acc, page) => acc + (page?.activities?.length || 0),
+        0
+      );
+      return loadedCount;
+    },
     enabled: !!user?.id && !!groupId,
-    // Use placeholderData so initial load still reports isLoading=true
-    placeholderData: { activities: [], total: 0, has_more: false },
     staleTime: 60_000,
   });
 
-  const data = query.data ?? { activities: [], total: 0, has_more: false };
+  const pages = query.data?.pages || [];
+  const flattenedActivities = pages.flatMap((page) => page?.activities || []);
+  const total = pages[0]?.total ?? flattenedActivities.length;
+  const hasMore = query.hasNextPage;
 
   return {
-    data: { activities: data.activities || [] },
+    data: { activities: flattenedActivities },
     isLoading: query.isLoading,
     isFetching: query.isFetching,
+    isFetchingNextPage: query.isFetchingNextPage,
+    hasNextPage: query.hasNextPage,
+    fetchNextPage: query.fetchNextPage,
     error: query.error ?? null,
-    total: data.total || 0,
-    hasMore: data.has_more || false,
+    total,
+    hasMore,
     refetch: query.refetch,
   };
 }
