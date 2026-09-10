@@ -52,7 +52,8 @@ import {
   refreshNotificationReads,
   useNotifications,
 } from "./hooks/useNotifications";
-import { fetchActivity } from "./hooks/useActivity";
+import { fetchActivityPage } from "./hooks/useActivity";
+import { activityQueryOptions } from "./hooks/activityQuery";
 import { fetchBalances } from "./hooks/useBalances";
 import { redeemGroupInviteLinkRPC } from "./hooks/useGroupInvitations";
 import {
@@ -261,10 +262,9 @@ function AppContent() {
           queryKey: queryKeys.balances(groupId),
           queryFn: () => fetchBalances(groupId),
         }),
-        queryClientInstance.prefetchQuery({
-          queryKey: queryKeys.activity(groupId),
-          queryFn: () => fetchActivity(groupId),
-        }),
+        queryClientInstance.prefetchInfiniteQuery(
+          activityQueryOptions(groupId, fetchActivityPage)
+        ),
       ]);
     },
     [queryClientInstance]
