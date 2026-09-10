@@ -1,3 +1,4 @@
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import React, { useEffect, useMemo, useState } from "react";
 import { BackHandler, ScrollView, StyleSheet, View } from "react-native";
 import {
@@ -32,6 +33,7 @@ interface GroupStatsScreenProps {
   groupId: string;
   mode: GroupStatsMode;
   onBack: () => void;
+  onEditTransaction?: (transaction: Transaction) => void;
 }
 
 const MODE_COPY: Record<
@@ -69,6 +71,7 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
   groupId,
   mode,
   onBack,
+  onEditTransaction,
 }) => {
   const [activeMode, setActiveMode] = useState<GroupStatsMode>(mode);
   const theme = useTheme();
@@ -489,35 +492,60 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
             styles.entryCard,
             colorStyles.entryCard,
             index === 0 && { marginTop: 8 },
+            { padding: 0, overflow: "hidden" },
           ]}
           elevation={1}
         >
-          <View style={styles.entryHeader}>
+          <TouchableRipple
+            onPress={
+              onEditTransaction
+                ? () => onEditTransaction(entry.transaction)
+                : undefined
+            }
+            disabled={!onEditTransaction}
+            style={{ padding: 16 }}
+            accessibilityRole="button"
+            accessibilityLabel={`${entry.transaction.description || "Untitled expense"}, ${formatCurrency(entry.transaction.amount, currency)}`}
+          >
             <View>
-              <Text variant="titleSmall" style={{ fontWeight: "600" }}>
-                {entry.transaction.description || "Untitled expense"}
-              </Text>
-              <Text style={[styles.entrySubtext, colorStyles.entrySubtext]}>
-                {transactionDate}
-              </Text>
+              <View style={styles.entryHeader}>
+                <View style={{ flex: 1, marginRight: 8 }}>
+                  <Text variant="titleSmall" style={{ fontWeight: "600" }}>
+                    {entry.transaction.description || "Untitled expense"}
+                  </Text>
+                  <Text style={[styles.entrySubtext, colorStyles.entrySubtext]}>
+                    {transactionDate}
+                  </Text>
+                </View>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <Text variant="titleMedium" style={{ fontWeight: "bold" }}>
+                    {formatCurrency(entry.transaction.amount, currency)}
+                  </Text>
+                  {onEditTransaction && (
+                    <MaterialCommunityIcons
+                      name="chevron-right"
+                      size={20}
+                      color={theme.colors.onSurfaceVariant}
+                      style={{ marginLeft: 4 }}
+                    />
+                  )}
+                </View>
+              </View>
+              {entry.shareAmount !== null && (
+                <Text style={[styles.entryNote, colorStyles.entryNote]}>
+                  You owe {formatCurrency(entry.shareAmount, currency)} for this
+                  expense.
+                </Text>
+              )}
+              {entry.isPayer &&
+                entry.netReceivable !== null &&
+                entry.netReceivable > 0 && (
+                  <Text style={[styles.entryNote, colorStyles.entryNote]}>
+                    Others owe you {formatCurrency(entry.netReceivable, currency)}.
+                  </Text>
+                )}
             </View>
-            <Text variant="titleMedium" style={{ fontWeight: "bold" }}>
-              {formatCurrency(entry.transaction.amount, currency)}
-            </Text>
-          </View>
-          {entry.shareAmount !== null && (
-            <Text style={[styles.entryNote, colorStyles.entryNote]}>
-              You owe {formatCurrency(entry.shareAmount, currency)} for this
-              expense.
-            </Text>
-          )}
-          {entry.isPayer &&
-            entry.netReceivable !== null &&
-            entry.netReceivable > 0 && (
-              <Text style={[styles.entryNote, colorStyles.entryNote]}>
-                Others owe you {formatCurrency(entry.netReceivable, currency)}.
-              </Text>
-            )}
+          </TouchableRipple>
         </Surface>
       );
     });

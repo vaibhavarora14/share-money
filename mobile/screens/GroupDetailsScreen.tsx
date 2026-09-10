@@ -212,6 +212,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const {
     data: activityData,
     isLoading: activityLoading,
+    isFetchingNextPage: activityFetchingNextPage,
+    hasNextPage: activityHasNextPage,
+    fetchNextPage: fetchNextActivityPage,
     refetch: refetchActivity,
   } = useActivity(initialGroup.id);
   const {
@@ -428,6 +431,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
   useEffect(() => {
     if (highlightedTransactionId === null) return;
+    setListMode("transactions");
     highlightTimerRef.current?.cancel();
     highlightTimerRef.current = createTransactionHighlightTimer(() => {
       setVisibleHighlightedTransactionId((currentTransactionId) =>
@@ -517,15 +521,25 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   }, [clearVisibleTransactionHighlight, visibleHighlightedTransactionId]);
 
   const handleMainScroll = React.useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    if (listMode !== "transactions" || !txHasNextPage || txIsFetchingNextPage) return;
-
     const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
     const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
 
-    if (distanceFromBottom < 220) {
+    if (distanceFromBottom >= 220) return;
+
+    if (listMode === "transactions" && txHasNextPage && !txIsFetchingNextPage) {
       void fetchNextTransactionsPage();
+    } else if (listMode === "activity" && activityHasNextPage && !activityFetchingNextPage) {
+      void fetchNextActivityPage();
     }
-  }, [listMode, txHasNextPage, txIsFetchingNextPage, fetchNextTransactionsPage]);
+  }, [
+    listMode,
+    txHasNextPage,
+    txIsFetchingNextPage,
+    fetchNextTransactionsPage,
+    activityHasNextPage,
+    activityFetchingNextPage,
+    fetchNextActivityPage,
+  ]);
 
   // Refresh invitations when refreshTrigger changes (e.g., after adding a member)
   useEffect(() => {
@@ -1180,6 +1194,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 <ActivityFeed
                   items={filteredActivities}
                   loading={activityLoading}
+                  hasNextPage={activityHasNextPage}
+                  isFetchingNextPage={activityFetchingNextPage}
+                  onLoadMore={fetchNextActivityPage}
                   isFiltered={activityFilterType !== "all" || activityFilterParticipantId !== "all"}
                   onReport={(activity) => openActivitySafetyAction("report", activity)}
                   onBlock={(activity) => openActivitySafetyAction("block", activity)}

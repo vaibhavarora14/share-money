@@ -3,8 +3,13 @@ type ActivityWithAuthor = {
 };
 
 type ActivityFeedCache<TActivity extends ActivityWithAuthor = ActivityWithAuthor> = {
-  activities: TActivity[];
-  total: number;
+  activities?: TActivity[];
+  total?: number;
+  pages?: Array<{
+    activities?: TActivity[];
+    total?: number;
+    has_more?: boolean;
+  }>;
 };
 
 export type ActivityQueryCacheEntry<
@@ -20,16 +25,41 @@ export function filterActivityFeedForBlockedUser<TFeed extends ActivityFeedCache
 ): TFeed | undefined {
   if (!current) return current;
 
-  const activities = current.activities.filter(
-    (activity) => activity.changed_by.id !== blockedUserId
-  );
-  const removedCount = current.activities.length - activities.length;
+  if (Array.isArray(current.pages)) {
+    let totalRemoved = 0;
+    const updatedPages = current.pages.map((page) => {
+      if (!page || !Array.isArray(page.activities)) return page;
+      const filtered = page.activities.filter(
+        (activity) => activity.changed_by.id !== blockedUserId
+      );
+      totalRemoved += page.activities.length - filtered.length;
+      return {
+        ...page,
+        activities: filtered,
+        total: Math.max(0, (page.total ?? filtered.length) - totalRemoved),
+      };
+    });
 
-  return {
-    ...current,
-    activities,
-    total: Math.max(0, current.total - removedCount),
-  } as TFeed;
+    return {
+      ...current,
+      pages: updatedPages,
+    } as TFeed;
+  }
+
+  if (Array.isArray(current.activities)) {
+    const activities = current.activities.filter(
+      (activity) => activity.changed_by.id !== blockedUserId
+    );
+    const removedCount = current.activities.length - activities.length;
+
+    return {
+      ...current,
+      activities,
+      total: Math.max(0, (current.total ?? activities.length) - removedCount),
+    } as TFeed;
+  }
+
+  return current;
 }
 
 export function filterActivityQueriesForBlockedUser<TFeed extends ActivityFeedCache>(

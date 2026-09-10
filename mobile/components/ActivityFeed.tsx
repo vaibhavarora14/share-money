@@ -1,6 +1,6 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import React from "react";
-import { View } from "react-native";
+import { Pressable, View } from "react-native";
 import {
   ActivityIndicator,
   Card,
@@ -22,6 +22,9 @@ import { styles } from "./ActivityFeed.styles";
 interface ActivityFeedProps {
   items: ActivityItem[];
   loading: boolean;
+  hasNextPage?: boolean;
+  isFetchingNextPage?: boolean;
+  onLoadMore?: () => void;
   isFiltered?: boolean;
   onReport?: (activity: ActivityItem) => void;
   onBlock?: (activity: ActivityItem) => void;
@@ -30,6 +33,9 @@ interface ActivityFeedProps {
 export const ActivityFeed: React.FC<ActivityFeedProps> = ({
   items,
   loading,
+  hasNextPage = false,
+  isFetchingNextPage = false,
+  onLoadMore,
   isFiltered,
   onReport,
   onBlock,
@@ -225,6 +231,30 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
             </View>
           );
         })}
+        {(isFetchingNextPage || hasNextPage) && (
+          <View style={{ alignItems: "center", paddingVertical: 16 }}>
+            {isFetchingNextPage ? (
+              <ActivityIndicator size="small" />
+            ) : (
+              <Pressable
+                onPress={onLoadMore}
+                accessibilityRole="button"
+                accessibilityLabel="Load more activity"
+                style={({ pressed }) => ({
+                  paddingHorizontal: 16,
+                  paddingVertical: 10,
+                  borderRadius: 20,
+                  opacity: pressed ? 0.7 : 1,
+                  backgroundColor: theme.colors.surfaceVariant,
+                })}
+              >
+                <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant, fontWeight: "600" }}>
+                  Load more activity
+                </Text>
+              </Pressable>
+            )}
+          </View>
+        )}
       </View>
     );
   } catch (error) {
