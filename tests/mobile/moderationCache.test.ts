@@ -75,3 +75,58 @@ Deno.test("filterActivityQueriesForBlockedUser preserves empty cache entries", (
     [[["activity", "group-a"], undefined]]
   );
 });
+
+Deno.test("filterActivityQueriesForBlockedUser filters paginated cache with pages array", () => {
+  const paginatedCache = [
+    [
+      ["activity", "group-paginated"],
+      {
+        pages: [
+          {
+            activities: [
+              { id: "p1", changed_by: { id: "blocked-user" } },
+              { id: "p2", changed_by: { id: "user-1" } },
+            ],
+            total: 3,
+            has_more: true,
+          },
+          {
+            activities: [
+              { id: "p3", changed_by: { id: "blocked-user" } },
+            ],
+            total: 3,
+            has_more: false,
+          },
+        ],
+        pageParams: [0, 50],
+      },
+    ],
+  ] as const;
+
+  const result = filterActivityQueriesForBlockedUser(
+    paginatedCache as any,
+    "blocked-user"
+  );
+
+  assertEquals(result, [
+    [
+      ["activity", "group-paginated"],
+      {
+        pages: [
+          {
+            activities: [{ id: "p2", changed_by: { id: "user-1" } }],
+            total: 2,
+            has_more: true,
+          },
+          {
+            activities: [],
+            total: 1,
+            has_more: false,
+          },
+        ],
+        pageParams: [0, 50],
+      },
+    ],
+  ]);
+});
+
