@@ -2,9 +2,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
 import { ActivityFeedResponse } from "../types";
 import { fetchWithAuth } from "../utils/api";
-import { queryKeys } from "./queryKeys";
-
-const ACTIVITY_PAGE_SIZE = 50;
+import { activityQueryOptions, ACTIVITY_PAGE_SIZE } from "./activityQuery";
 
 export async function fetchActivityPage(
   groupId: string,
@@ -20,31 +18,12 @@ export async function fetchActivityPage(
   return response.json();
 }
 
-export async function fetchActivity(
-  groupId: string
-): Promise<ActivityFeedResponse> {
-  return fetchActivityPage(groupId, 0, ACTIVITY_PAGE_SIZE);
-}
-
 export function useActivity(groupId?: string | null) {
   const { user } = useAuth();
 
-  const query = useInfiniteQuery<ActivityFeedResponse, Error>({
-    // Guarded by `enabled`, so groupId is always non-null inside queryFn
-    queryKey: groupId ? queryKeys.activity(groupId) : queryKeys.activity(""),
-    queryFn: ({ pageParam = 0 }) =>
-      fetchActivityPage(groupId as string, pageParam as number, ACTIVITY_PAGE_SIZE),
-    initialPageParam: 0,
-    getNextPageParam: (lastPage, allPages) => {
-      if (!lastPage?.has_more) return undefined;
-      const loadedCount = allPages.reduce(
-        (acc, page) => acc + (page?.activities?.length || 0),
-        0
-      );
-      return loadedCount;
-    },
+  const query = useInfiniteQuery({
+    ...activityQueryOptions(groupId ?? "", fetchActivityPage),
     enabled: !!user?.id && !!groupId,
-    staleTime: 60_000,
   });
 
   const pages = query.data?.pages || [];
