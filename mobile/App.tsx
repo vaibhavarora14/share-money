@@ -213,6 +213,7 @@ function AppContent() {
     useState<number>(0);
   const [groupRefreshTrigger, setGroupRefreshTrigger] = useState<number>(0);
   const [editingTransaction, setEditingTransaction] = useState<any>(null);
+  const [transactionReturnRoute, setTransactionReturnRoute] = useState<string>("group-details");
   const [transactionFormDefaultCurrency, setTransactionFormDefaultCurrency] =
     useState(() => getDefaultCurrency());
   const [transactionFormDefaultSplitAmong, setTransactionFormDefaultSplitAmong] =
@@ -704,7 +705,7 @@ function AppContent() {
 
   // Transaction mutations
   const onTransactionSuccess = () => {
-    setCurrentRoute("group-details");
+    setCurrentRoute(transactionReturnRoute || "group-details");
     setEditingTransaction(null);
   };
 
@@ -1091,6 +1092,11 @@ function AppContent() {
             setStatsContext(null);
             setCurrentRoute(selectedGroup ? "group-details" : "groups");
           }}
+          onEditTransaction={(transaction) => {
+            setEditingTransaction(transaction);
+            setTransactionReturnRoute("group-stats");
+            setCurrentRoute("transaction-form");
+          }}
         />
         <StatusBar style={theme.dark ? "light" : "dark"} />
       </>
@@ -1144,6 +1150,7 @@ function AppContent() {
               }}
               onAddTransaction={() => {
                 setEditingTransaction(null);
+                setTransactionReturnRoute("group-details");
                 if (groupToDisplay.id) {
                   setTransactionFormDefaultCurrency(
                     getGroupFormDefaultCurrency(queryClientInstance, groupToDisplay.id)
@@ -1159,6 +1166,7 @@ function AppContent() {
               }}
               onEditTransaction={(transaction) => {
                 setEditingTransaction(transaction);
+                setTransactionReturnRoute("group-details");
                 setCurrentRoute("transaction-form");
               }}
               onImportSplitwise={() => {
@@ -1209,7 +1217,7 @@ function AppContent() {
                 transaction={editingTransaction}
                 onSave={handleSaveTransaction}
                 onDismiss={() => {
-                  setCurrentRoute("group-details");
+                  setCurrentRoute(transactionReturnRoute || "group-details");
                   setEditingTransaction(null);
                 }}
                 onDelete={editingTransaction ? handleDeleteTransaction : undefined}
