@@ -118,6 +118,10 @@ import {
 } from "./utils/notificationGroupNavigation";
 import { resolveNotificationRoute } from "./utils/notificationRouting";
 import {
+  captureScreenView,
+  initializePostHog,
+} from "./utils/posthogAnalytics";
+import {
   getSentryRuntimeTags,
   isSentryDiagnosticUrl,
 } from "./utils/sentryDiagnostics";
@@ -736,6 +740,11 @@ function AppContent() {
 
     prevSessionRef.current = session;
   }, [session]);
+
+  // Lightweight screen analytics for the custom (non-React-Navigation) router.
+  useEffect(() => {
+    captureScreenView(currentRoute);
+  }, [currentRoute]);
 
   // All API calls now use React Query hooks or fetchWithAuth utility
 
@@ -1360,6 +1369,10 @@ if (!process.env.EXPO_PUBLIC_SENTRY_DSN) {
     }),
   );
 }
+
+// Initialize PostHog once at startup. Guard against a missing project key so
+// local/dev builds stay quiet when SharedMoney Production analytics is unset.
+initializePostHog();
 
 export default function App() {
   const colorScheme = useColorScheme();

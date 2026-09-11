@@ -12,6 +12,7 @@ import {
   extractSplitAmongParticipantIds,
   resolveGroupDefaultSplitAmong,
 } from "../utils/groupSplit";
+import { captureAnalyticsEvent } from "../utils/posthogAnalytics";
 import { queryKeys } from "./queryKeys";
 
 export interface TransactionsCursor {
@@ -362,6 +363,10 @@ export function useCreateTransaction(onSuccess?: () => void) {
           queryKey: queryKeys.transactionsFeed(context.groupId),
         });
       }
+      captureAnalyticsEvent("expense_created", {
+        currency: variables.currency,
+        split_count: extractSplitAmongParticipantIds(variables).length,
+      });
       onSuccess?.();
     },
   });

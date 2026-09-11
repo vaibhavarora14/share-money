@@ -208,6 +208,14 @@ supabase start
 - Custom native modules support
 - Production-like environment
 
+### Mobile analytics (PostHog)
+
+The Expo app uses `posthog-react-native`, gated on `EXPO_PUBLIC_POSTHOG_KEY`
+(host defaults to `https://us.i.posthog.com`). Point builds at the dedicated
+**SharedMoney Production** PostHog project (`563625`) — not Paisewise/Glass Money.
+First enablement requires a new store/dev-client binary (native Expo peer
+modules); see `mobile/EXPO_PUBLISH.md`.
+
 ## Deployment
 
 ### Mobile (Expo)
@@ -260,6 +268,10 @@ Set these in Supabase Dashboard > Project Settings > Edge Functions > Environmen
 
 - `POSTHOG_PROJECT_TOKEN` - Public token for the dedicated PostHog `SharedMoney Production` project, used to evaluate the `transaction-notifications` flag.
 - `POSTHOG_HOST` - PostHog flags API host, normally `https://us.i.posthog.com`.
+
+Mobile EAS Production/Preview builds should set the matching client vars
+`EXPO_PUBLIC_POSTHOG_KEY` / `EXPO_PUBLIC_POSTHOG_HOST` for the same SharedMoney
+Production project (never the Paisewise token). See `mobile/EXPO_PUBLISH.md`.
 
 The notification API, transaction fan-out, and push worker all fail closed when
 the flag is disabled or cannot be evaluated.

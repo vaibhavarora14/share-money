@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchWithAuth } from "../utils/api";
+import { captureAnalyticsEvent } from "../utils/posthogAnalytics";
 import { queryKeys } from "./queryKeys";
 
 function invalidateGroupAdjacents(queryClient: QueryClient, groupId?: string) {
@@ -32,11 +33,14 @@ export function useCreateGroup(onSuccess?: () => void) {
 
       return response.json();
     },
-    onSuccess: (result) => {
+    onSuccess: (result, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.groups });
       if (result?.id) {
         queryClient.invalidateQueries({ queryKey: queryKeys.group(result.id) });
       }
+      captureAnalyticsEvent("group_created", {
+        has_description: Boolean(variables.description),
+      });
       onSuccess?.();
     },
   });
