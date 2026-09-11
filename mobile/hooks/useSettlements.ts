@@ -4,6 +4,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { SettlementsResponse } from "../types";
 import { fetchWithAuth } from "../utils/api";
 import type { SettlementCreateInput } from "../utils/peopleSettlements";
+import { captureAnalyticsEvent } from "../utils/posthogAnalytics";
 import { queryKeys } from "./queryKeys";
 
 export async function fetchSettlements(groupId: string): Promise<SettlementsResponse> {
@@ -78,6 +79,11 @@ export function useCreateSettlements(onSuccess?: () => void) {
       for (const groupId of groupIds) {
         invalidateSettlementAdjacents(queryClient, groupId);
       }
+      captureAnalyticsEvent("settlement_recorded", {
+        settlement_count: settlements.length,
+        currency: settlements[0]?.currency,
+        multi_group: groupIds.length > 1,
+      });
       onSuccess?.();
     },
   });
@@ -116,6 +122,11 @@ export function useCreateSettlement(onSuccess?: () => void) {
     },
     onSuccess: (_data, variables) => {
       invalidateSettlementAdjacents(queryClient, variables.group_id);
+      captureAnalyticsEvent("settlement_recorded", {
+        settlement_count: 1,
+        currency: variables.currency,
+        multi_group: false,
+      });
       onSuccess?.();
     },
   });
