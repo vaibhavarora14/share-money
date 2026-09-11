@@ -20,6 +20,7 @@ import { supabase } from "../supabase";
 import { getConfiguredWebAppPath } from "../utils/inviteLinks";
 import { log, logError } from "../utils/logger";
 import { performLocalLogout } from "../utils/logoutFlow";
+import { syncAnalyticsAuth } from "../utils/posthogAnalytics";
 import {
   classifySocialAuthFailure,
   getSocialAuthUserMessage,
@@ -264,6 +265,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           }
         : null
     );
+
+    // Sync with PostHog using user id as distinct_id (no email person props).
+    const provider = user?.app_metadata?.provider;
+    syncAnalyticsAuth(user?.id ?? null, {
+      auth_provider: typeof provider === "string" ? provider : undefined,
+    });
   }, []);
 
   useEffect(() => {
