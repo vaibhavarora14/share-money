@@ -31,6 +31,9 @@ Do **not** bump `version.json` for a JS-only OTA.
 - New or changed native modules
 - Expo SDK upgrades, config plugins, permissions
 - Icons, splash, push native config, New Architecture
+- PostHog (`posthog-react-native` + Expo peer packages such as
+  `expo-application` / `expo-localization`) — first enablement needs a new
+  store/dev-client binary; subsequent JS-only event tweaks can go OTA
 - A new marketing version (users on the old `appVersion` will not receive the OTA)
 
 Users on an unsupported native binary are forced through the existing HTTP 426
@@ -110,3 +113,8 @@ eas build --platform android --profile production
 - Client values must use the `EXPO_PUBLIC_` prefix
 - Store builds and OTAs should use the same Production environment secrets
 - For local development, create a `.env` file in `mobile/`
+- PostHog (SharedMoney Production project `563625`): set
+  `EXPO_PUBLIC_POSTHOG_KEY` and optionally `EXPO_PUBLIC_POSTHOG_HOST`
+  (`https://us.i.posthog.com`) as EAS secrets for **production** and
+  **preview** builds. Do not commit the real key. If the key is unset, the
+  SDK is not initialized. Do not use the Paisewise/Glass Money project token.
