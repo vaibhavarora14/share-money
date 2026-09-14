@@ -409,17 +409,27 @@ img {
 }
 
 .cta-text {
-  min-height: 2.75rem;
-  padding-inline: var(--space-2);
+  min-height: auto;
+  gap: var(--space-1);
+  padding: 0.35rem 0.15rem;
   border-color: transparent;
   color: var(--color-text-subtle);
   background: transparent;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--color-text-subtle) 45%, transparent);
+  text-underline-offset: 0.18em;
 }
 
 .cta-text:hover,
 .cta-text:focus-visible {
   color: var(--color-text);
-  background: var(--color-neutral-wash);
+  background: transparent;
+  text-decoration-color: currentColor;
+  transform: none;
+}
+
+.cta-text .cta-label {
+  font-weight: 560;
 }
 
 .cta-inverse {
@@ -559,11 +569,11 @@ html.dark .hero-trust-row span {
   width: min(45%, 34.5rem);
   height: auto;
   overflow: hidden;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  opacity: 0.36;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-2);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-media);
+  opacity: 1;
 }
 
 .hero-product-shot img {
@@ -2173,13 +2183,12 @@ html.dark .hero-trust-row span {
 
   .hero-secondary-actions {
     width: 100%;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-3);
   }
 
   .hero-secondary-actions .cta {
     min-width: 0;
-    padding-inline: var(--space-1);
     font-size: 0.875rem;
   }
 
