@@ -735,6 +735,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   };
 
   const handleSettleUp = (balance: Balance) => {
+    setEditingSettlement(null);
     setSettlingBalance(balance);
     setShowSettlementForm(true);
   };
@@ -1195,6 +1196,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               statsLoading={groupStatsLoading}
               defaultCurrency={getDefaultCurrency()}
               onSettlePress={(balance) => {
+                  setEditingSettlement(null);
                   setSettlingBalance(balance);
                   setShowSettlementForm(true);
               }}
@@ -1459,9 +1461,13 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         onUpdate={handleSettlementUpdate}
         onDelete={editingSettlement ? handleSettlementDelete : undefined}
         onDismiss={() => {
+          // Hide first so the closing frame keeps edit chrome (avoids a
+          // one-frame flash of the create "Select a member" UI).
           setShowSettlementForm(false);
-          setSettlingBalance(null);
-          setEditingSettlement(null);
+          setTimeout(() => {
+            setSettlingBalance(null);
+            setEditingSettlement(null);
+          }, 250);
         }}
       />
 
