@@ -26,6 +26,15 @@ function pageUrl(page) {
 report(pages.length === 10, `Expected 10 indexable routes, found ${pages.length}.`);
 report(new Set(pages.map((page) => page.path)).size === pages.length, "SEO paths must be unique.");
 
+const playStoreUrl =
+  "https://play.google.com/store/apps/details?id=com.vaibhavarora.sharemoney&pcampaignid=web_share";
+const homePage = pages.find((page) => page.path === "/");
+report(Boolean(homePage), "Home page must exist in seo-content.json.");
+report(
+  Boolean(homePage?.faqs.some((faq) => faq.question.includes("App Store"))),
+  "Home FAQ must include App Store status.",
+);
+
 for (const page of pages) {
   const filePath = outputPath(page);
   try {
@@ -46,6 +55,9 @@ for (const page of pages) {
   report(h1s.length === 1, `${page.path}: expected one H1, found ${h1s.length}.`);
   report(html.includes(`<h1>${page.heading}</h1>`), `${page.path}: static H1 does not match route content.`);
   report(html.includes('type="application/ld+json"'), `${page.path}: missing structured data.`);
+  report(html.includes(playStoreUrl), `${page.path}: missing Google Play store link.`);
+  report(html.includes("App Store listing pending review"), `${page.path}: missing soft iOS App Store status.`);
+  report(!html.includes("apps.apple.com"), `${page.path}: must not link a public App Store install URL yet.`);
 
   for (const relatedId of page.related) {
     const related = pages.find((candidate) => candidate.id === relatedId);

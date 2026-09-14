@@ -17,7 +17,8 @@
     ],
     "faqs": [
       {"question": "Does SharedMoney handle payments?", "answer": "No. SharedMoney records expenses and balances. Group members settle using the payment method they prefer, then can record that settlement in the shared ledger."},
-      {"question": "Can groups use different currencies?", "answer": "Yes. SharedMoney keeps balances specific to each currency instead of silently converting them."}
+      {"question": "Can groups use different currencies?", "answer": "Yes. SharedMoney keeps balances specific to each currency instead of silently converting them."},
+      {"question": "Is SharedMoney on the App Store?", "answer": "Android is live on Google Play. iOS 2.26.1 is submitted and waiting for App Store review. Until the public listing appears in your region, use the web app at sharedmoney.app/app on iPhone."}
     ],
     "related": ["split-bills", "group-expense-tracker", "trip-expense-splitter", "tools"]
   },
