@@ -1,9 +1,11 @@
+import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useEffect, useMemo, useState } from "react";
 import {
     Alert,
     KeyboardAvoidingView,
     Modal,
     Platform,
+    Pressable,
     ScrollView,
     StyleSheet,
     View,
@@ -42,7 +44,10 @@ interface SettlementFormScreenProps {
     notes?: string;
     from_participant_id?: string;
     to_participant_id?: string;
+    date?: string;
+    group_id?: string;
   }) => Promise<void>;
+  onDelete?: () => Promise<void>;
   onDismiss: () => void;
   // Admin mode: explicit sender/receiver
   fromParticipantId?: string;
@@ -50,6 +55,30 @@ interface SettlementFormScreenProps {
   initialAmount?: number;
   initialCurrency?: string;
   participants?: Participant[];
+}
+
+function toDateInputValue(value?: string | null): string {
+  if (!value) return new Date().toISOString().split("T")[0];
+  const safe = value.endsWith("Z") || value.includes("+") ? value : `${value}Z`;
+  const parsed = new Date(safe);
+  if (Number.isNaN(parsed.getTime())) {
+    return new Date().toISOString().split("T")[0];
+  }
+  return parsed.toISOString().split("T")[0];
+}
+
+function formatDateForDisplay(dateStr: string): string {
+  if (!dateStr) return "Select date";
+  try {
+    const d = new Date(`${dateStr}T00:00:00`);
+    return d.toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return dateStr;
+  }
 }
 
 export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
@@ -62,6 +91,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   defaultCurrency,
   onSave,
   onUpdate,
+  onDelete,
   onDismiss,
   fromParticipantId,
   toParticipantId,
@@ -85,19 +115,12 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
 
   const [amount, setAmount] = useState("");
   const [notes, setNotes] = useState("");
+  const [date, setDate] = useState("");
+  const [selectedFromParticipantId, setSelectedFromParticipantId] = useState<string>("");
   const [selectedToParticipantId, setSelectedToParticipantId] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [amountError, setAmountError] = useState<string>("");
-
-  // Determine the other user based on balance or selection
-  const otherMember = useMemo(() => {
-    if (balance) {
-      // If settling a specific balance, return the member from the balance
-      return groupMembers.find((m) => m.user_id === balance.user_id);
-    }
-    // Manual entry - find selected participant
-    return groupMembers.find((m) => m.participant_id === selectedToParticipantId);
-  }, [balance, selectedToParticipantId, groupMembers]);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Determine settlement direction
   const isPaying = useMemo(() => {
@@ -125,13 +148,36 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
     return groupMembers.filter((m) => m.user_id !== currentUserId);
   }, [groupMembers, currentUserId]);
 
+  const editableParticipants = useMemo(() => {
+    const fromMembers = groupMembers
+      .filter((m) => !!m.participant_id)
+      .map((m) => ({
+        id: m.participant_id as string,
+        label: m.full_name || m.email || `Member ${(m.participant_id || "").substring(0, 8)}`,
+      }));
+
+    if (fromMembers.length > 0) {
+      return fromMembers;
+    }
+
+    return participants
+      .filter((p) => !!p.id)
+      .map((p) => ({
+        id: p.id,
+        label: p.full_name || p.email || `Member ${p.id.substring(0, 8)}`,
+      }));
+  }, [groupMembers, participants]);
+
   // Initialize form when modal becomes visible
   useEffect(() => {
     if (!visible) {
       setAmount("");
       setNotes("");
+      setDate("");
+      setSelectedFromParticipantId("");
       setSelectedToParticipantId("");
       setAmountError("");
+      setShowDatePicker(false);
       return;
     }
 
@@ -139,16 +185,9 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
     if (settlement) {
       setAmount(settlement.amount.toString());
       setNotes(settlement.notes || "");
-      // Determine which participant is the "other" participant
-      const currentParticipant = groupMembers.find(m => m.user_id === currentUserId);
-      const currentParticipantId = currentParticipant?.participant_id;
-      
-      const otherParticipantId =
-        settlement.from_participant_id === currentParticipantId
-          ? settlement.to_participant_id
-          : settlement.from_participant_id;
-          
-      setSelectedToParticipantId(otherParticipantId || "");
+      setDate(toDateInputValue(settlement.created_at));
+      setSelectedFromParticipantId(settlement.from_participant_id || "");
+      setSelectedToParticipantId(settlement.to_participant_id || "");
     }
     // Pre-fill based on balance if provided
     else if (balance) {
@@ -157,14 +196,31 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
       setSelectedToParticipantId(balance.participant_id || member?.participant_id || balance.user_id);
       // Pre-fill with absolute balance amount as suggestion
       setAmount(Math.abs(balance.amount).toFixed(2));
-      setAmount(Math.abs(balance.amount).toFixed(2));
+      setDate(toDateInputValue(null));
     } else if (isAdminMode) {
       if (initialAmount) setAmount(initialAmount.toFixed(2));
+      setSelectedFromParticipantId(fromParticipantId || "");
+      setSelectedToParticipantId(toParticipantId || "");
+      setDate(toDateInputValue(null));
     } else if (availableUsers.length > 0) {
       // Default to first available user
       setSelectedToParticipantId(availableUsers[0].participant_id || "");
+      setDate(toDateInputValue(null));
+    } else {
+      setDate(toDateInputValue(null));
     }
-  }, [visible, balance, settlement, availableUsers, currentUserId, isAdminMode, initialAmount]);
+  }, [
+    visible,
+    balance,
+    settlement,
+    availableUsers,
+    currentUserId,
+    isAdminMode,
+    initialAmount,
+    fromParticipantId,
+    toParticipantId,
+    groupMembers,
+  ]);
 
   const validateForm = (): boolean => {
     let isValid = true;
@@ -183,6 +239,15 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
       isValid = false;
     }
 
+    if (isEditing) {
+      if (!selectedFromParticipantId || !selectedToParticipantId) {
+        isValid = false;
+      } else if (selectedFromParticipantId === selectedToParticipantId) {
+        Alert.alert("Error", "Payer and receiver must be different people");
+        isValid = false;
+      }
+    }
+
     return isValid;
   };
 
@@ -197,12 +262,20 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
       setLoading(true);
 
       // If editing, call onUpdate
-      if (isEditing && settlement && onUpdate) {
+      if (isEditing && settlement) {
+        if (!onUpdate) {
+          Alert.alert("Error", "Unable to update this settlement right now");
+          return;
+        }
         await onUpdate({
           id: settlement.id,
+          group_id: settlement.group_id || groupId,
           amount: amountNum,
           currency: effectiveDefaultCurrency,
           notes: notes.trim() || undefined,
+          from_participant_id: selectedFromParticipantId || undefined,
+          to_participant_id: selectedToParticipantId || undefined,
+          date: date || undefined,
         });
       } else if (isAdminMode) {
             // Explicit mode
@@ -247,13 +320,13 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
             }
 
             // Determine from_participant_id and to_participant_id
-            const fromParticipantId = isPaying ? currentParticipantId : otherParticipantId;
-            const toParticipantId = isPaying ? otherParticipantId : currentParticipantId;
+            const fromId = isPaying ? currentParticipantId : otherParticipantId;
+            const toId = isPaying ? otherParticipantId : currentParticipantId;
 
             await onSave({
             group_id: groupId,
-            from_participant_id: fromParticipantId,
-            to_participant_id: toParticipantId,
+            from_participant_id: fromId,
+            to_participant_id: toId,
             amount: amountNum,
             currency: effectiveDefaultCurrency,
             notes: notes.trim() || undefined,
@@ -264,6 +337,8 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
       // Reset form
       setAmount("");
       setNotes("");
+      setDate("");
+      setSelectedFromParticipantId("");
       setSelectedToParticipantId("");
       setAmountError("");
     } catch (error) {
@@ -271,6 +346,49 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDelete = () => {
+    if (!onDelete || !settlement || loading) return;
+
+    const performDelete = async () => {
+      setLoading(true);
+      try {
+        await onDelete();
+      } catch (error) {
+        Alert.alert("Error", getUserFriendlyErrorMessage(error));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (Platform.OS === "web") {
+      const confirmed =
+        typeof globalThis.confirm === "function"
+          ? globalThis.confirm(
+              "Delete this settlement? Balances will be recalculated. This cannot be undone."
+            )
+          : true;
+      if (confirmed) {
+        void performDelete();
+      }
+      return;
+    }
+
+    Alert.alert(
+      "Delete Settlement",
+      "Are you sure you want to delete this settlement? Balances will be recalculated. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void performDelete();
+          },
+        },
+      ]
+    );
   };
 
   const getParticipantDisplayName = (participantId: string): string => {
@@ -287,18 +405,16 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
     return `Member ${participantId.substring(0, 8)}`;
   };
 
-  const getBalanceDisplay = (): string => {
-    if (!balance) return "";
-    const absAmount = Math.abs(balance.amount);
-    if (balance.amount < 0) {
-      return `You owe ${formatCurrency(absAmount, effectiveDefaultCurrency)}`;
-    } else {
-      return `You are owed ${formatCurrency(
-        absAmount,
-        effectiveDefaultCurrency
-      )}`;
-    }
-  };
+  const headerFromId = isEditing
+    ? selectedFromParticipantId
+    : isAdminMode
+    ? fromParticipantId
+    : undefined;
+  const headerToId = isEditing
+    ? selectedToParticipantId
+    : isAdminMode
+    ? toParticipantId
+    : undefined;
 
   return (
     <Modal
@@ -306,6 +422,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
       animationType="slide"
       onRequestClose={onDismiss}
       presentationStyle="pageSheet"
+      testID="settlement-form-modal"
     >
       <View style={[styles.rootContainer, { backgroundColor: theme.colors.background }]}>
         <KeyboardAvoidingView
@@ -314,8 +431,17 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
           keyboardVerticalOffset={insets.top}
         >
           <Appbar.Header>
-            <Appbar.Action icon="close" onPress={onDismiss} />
+            <Appbar.Action icon="close" onPress={onDismiss} testID="settlement-form-close" />
             <Appbar.Content title={isEditing ? "Edit Settlement" : "Settle Up"} />
+            {isEditing && onDelete ? (
+              <Appbar.Action
+                icon="delete-outline"
+                onPress={handleDelete}
+                iconColor={theme.colors.error}
+                accessibilityLabel="Delete settlement"
+                testID="delete-settlement-button"
+              />
+            ) : null}
           </Appbar.Header>
 
           <ScrollView
@@ -335,17 +461,18 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                   let fromName = "";
                   let toName = "";
 
-                  if (isEditing && settlement) {
+                  if (isEditing && headerFromId && headerToId) {
                     const currentMember = groupMembers.find(m => m.user_id === currentUserId);
                     const currentParticipantId = currentMember?.participant_id;
                     
-                    if (settlement.from_participant_id === currentParticipantId) {
-                      fromName = "You";
-                      toName = getParticipantDisplayName(settlement.to_participant_id || "");
-                    } else {
-                      fromName = getParticipantDisplayName(settlement.from_participant_id || "");
-                      toName = "You";
-                    }
+                    fromName =
+                      headerFromId === currentParticipantId
+                        ? "You"
+                        : getParticipantDisplayName(headerFromId);
+                    toName =
+                      headerToId === currentParticipantId
+                        ? "You"
+                        : getParticipantDisplayName(headerToId);
                   } else if (isAdminMode) {
                     fromName = adminPayer?.full_name || adminPayer?.email || "Payer";
                     toName = adminReceiver?.full_name || adminReceiver?.email || "Receiver";
@@ -404,6 +531,64 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
               )}
             </View>
 
+            {isEditing ? (
+              <>
+                <View style={styles.section}>
+                  <Text variant="labelLarge" style={styles.label}>
+                    From (payer)
+                  </Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.userPicker}
+                  >
+                    {editableParticipants.map((participant) => (
+                      <Button
+                        key={`from-${participant.id}`}
+                        mode={
+                          selectedFromParticipantId === participant.id
+                            ? "contained"
+                            : "outlined"
+                        }
+                        onPress={() => setSelectedFromParticipantId(participant.id)}
+                        style={styles.userButton}
+                        testID={`settlement-from-${participant.id}`}
+                      >
+                        {participant.label}
+                      </Button>
+                    ))}
+                  </ScrollView>
+                </View>
+
+                <View style={styles.section}>
+                  <Text variant="labelLarge" style={styles.label}>
+                    To (receiver)
+                  </Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.userPicker}
+                  >
+                    {editableParticipants.map((participant) => (
+                      <Button
+                        key={`to-${participant.id}`}
+                        mode={
+                          selectedToParticipantId === participant.id
+                            ? "contained"
+                            : "outlined"
+                        }
+                        onPress={() => setSelectedToParticipantId(participant.id)}
+                        style={styles.userButton}
+                        testID={`settlement-to-${participant.id}`}
+                      >
+                        {participant.label}
+                      </Button>
+                    ))}
+                  </ScrollView>
+                </View>
+              </>
+            ) : null}
+
             {!isEditing && !balance && !isAdminMode && (
               <View style={styles.section}>
                 <Text variant="labelLarge" style={styles.label}>
@@ -448,6 +633,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                 keyboardType="decimal-pad"
                 error={!!amountError}
                 mode="outlined"
+                testID="settlement-amount-input"
                 left={
                   <TextInput.Affix
                     text={getCurrencySymbol(effectiveDefaultCurrency)}
@@ -464,6 +650,27 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
               ) : null}
             </View>
 
+            {isEditing ? (
+              <View style={styles.section}>
+                <Text variant="labelLarge" style={styles.label}>
+                  Date
+                </Text>
+                <Pressable
+                  onPress={() => setShowDatePicker(true)}
+                  testID="settlement-date-picker"
+                  style={[
+                    styles.dateButton,
+                    {
+                      borderColor: theme.colors.outline,
+                      backgroundColor: theme.colors.surface,
+                    },
+                  ]}
+                >
+                  <Text variant="bodyLarge">{formatDateForDisplay(date)}</Text>
+                </Pressable>
+              </View>
+            ) : null}
+
             <View style={styles.section}>
               <Text variant="labelLarge" style={styles.label}>
                 Notes (optional)
@@ -476,6 +683,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                 multiline
                 numberOfLines={3}
                 placeholder="e.g., Paid via Venmo"
+                testID="settlement-notes-input"
               />
             </View>
 
@@ -484,15 +692,23 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                 mode="contained"
                 onPress={handleSave}
                 loading={loading}
-                disabled={loading || !amount || (!isEditing && !isAdminMode && !selectedToParticipantId)}
+                disabled={
+                  loading ||
+                  !amount ||
+                  (!isEditing && !isAdminMode && !selectedToParticipantId) ||
+                  (isEditing &&
+                    (!selectedFromParticipantId || !selectedToParticipantId))
+                }
                 style={styles.saveButton}
+                testID="settlement-save-button"
               >
                 {isEditing
                   ? "Update Settlement"
-                  : isAdminMode && !isEditing ? "" : isPaying
+                  : isAdminMode
+                  ? "Record Payment"
+                  : isPaying
                   ? "Mark as Paid"
                   : "Mark as Received"}
-                 {isAdminMode && !isEditing && "Record Payment"}
               </Button>
               <Button
                 mode="outlined"
@@ -505,6 +721,74 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
+
+        {showDatePicker && Platform.OS === "ios" && (
+          <Modal visible={showDatePicker} transparent animationType="slide">
+            <View style={styles.datePickerOverlay}>
+              <View
+                style={[
+                  styles.datePickerModal,
+                  { backgroundColor: theme.colors.surface },
+                ]}
+              >
+                <View style={styles.datePickerHeader}>
+                  <Button onPress={() => setShowDatePicker(false)}>Done</Button>
+                </View>
+                <DateTimePicker
+                  value={date ? new Date(`${date}T00:00:00`) : new Date()}
+                  mode="date"
+                  display="spinner"
+                  onChange={(_event, selectedDate) => {
+                    if (selectedDate) {
+                      setDate(selectedDate.toISOString().split("T")[0]);
+                    }
+                  }}
+                />
+              </View>
+            </View>
+          </Modal>
+        )}
+
+        {showDatePicker && Platform.OS === "android" && (
+          <DateTimePicker
+            value={date ? new Date(`${date}T00:00:00`) : new Date()}
+            mode="date"
+            display="default"
+            onChange={(event, selectedDate) => {
+              setShowDatePicker(false);
+              if (event.type === "set" && selectedDate) {
+                setDate(selectedDate.toISOString().split("T")[0]);
+              }
+            }}
+          />
+        )}
+
+        {showDatePicker && Platform.OS === "web" && (
+          <Modal visible={showDatePicker} transparent animationType="slide">
+            <View style={styles.datePickerOverlay}>
+              <View
+                style={[
+                  styles.datePickerModal,
+                  { backgroundColor: theme.colors.surface },
+                ]}
+              >
+                <View style={styles.datePickerHeader}>
+                  <Button onPress={() => setShowDatePicker(false)}>Done</Button>
+                </View>
+                <DateTimePicker
+                  value={date ? new Date(`${date}T00:00:00`) : new Date()}
+                  mode="date"
+                  display="default"
+                  onChange={(_event, selectedDate) => {
+                    if (selectedDate) {
+                      setDate(selectedDate.toISOString().split("T")[0]);
+                    }
+                  }}
+                />
+              </View>
+            </View>
+          </Modal>
+        )}
       </View>
     </Modal>
   );
@@ -565,5 +849,26 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     marginTop: 8,
+  },
+  dateButton: {
+    borderWidth: 1,
+    borderRadius: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  datePickerOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.4)",
+  },
+  datePickerModal: {
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingBottom: 24,
+  },
+  datePickerHeader: {
+    alignItems: "flex-end",
+    paddingHorizontal: 8,
+    paddingTop: 8,
   },
 });

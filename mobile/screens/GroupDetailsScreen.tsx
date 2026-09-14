@@ -745,18 +745,40 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     notes?: string;
     from_participant_id?: string;
     to_participant_id?: string;
+    date?: string;
+    group_id?: string;
   }) => {
-    await updateSettlement.mutate(updateData);
+    await updateSettlement.mutate({
+      ...updateData,
+      group_id: updateData.group_id || group.id,
+    });
     setShowSettlementForm(false);
     setEditingSettlement(null);
+    setSettlingBalance(null);
+  };
+
+  const handleSettlementDelete = async () => {
+    if (!editingSettlement) return;
+    await deleteSettlement.mutate({
+      id: editingSettlement.id,
+      groupId: editingSettlement.group_id || group.id,
+    });
+    setShowSettlementForm(false);
+    setEditingSettlement(null);
+    setSettlingBalance(null);
   };
 
   const handleEditSettlement = (settlement: Settlement) => {
-    // Ensure settlement has group_id (may be missing from activity snapshot)
+    // Prefer live settlement row so edits use current amount/participants
+    const liveSettlement = settlementsData?.settlements?.find(
+      (item) => item.id === settlement.id
+    );
     const settlementWithGroupId = {
-      ...settlement,
-      group_id: settlement.group_id || group.id,
+      ...(liveSettlement || settlement),
+      group_id:
+        liveSettlement?.group_id || settlement.group_id || group.id,
     };
+    setSettlingBalance(null);
     setEditingSettlement(settlementWithGroupId);
     setShowSettlementForm(true);
   };
@@ -1278,6 +1300,11 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                   isFiltered={activityFilterType !== "all" || activityFilterParticipantId !== "all"}
                   onReport={(activity) => openActivitySafetyAction("report", activity)}
                   onBlock={(activity) => openActivitySafetyAction("block", activity)}
+                  onPressSettlement={
+                    isActiveMember
+                      ? (settlement) => handleEditSettlement(settlement)
+                      : undefined
+                  }
                 />
               </View>
             )}
@@ -1317,6 +1344,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         balance={settlingBalance}
         settlement={editingSettlement}
         groupMembers={group.members || []}
+        participants={participants}
         currentUserId={session?.user?.id || ""}
         groupId={group.id}
         defaultCurrency={getDefaultCurrency()}
@@ -1324,12 +1352,19 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           if (editingSettlement) {
             await handleSettlementUpdate({
               id: editingSettlement.id,
-              ...data,
+              group_id: editingSettlement.group_id || group.id,
+              amount: data.amount,
+              currency: data.currency,
+              notes: data.notes,
+              from_participant_id: data.from_participant_id,
+              to_participant_id: data.to_participant_id,
             });
           } else {
             await handleSettlementSave(data);
           }
         }}
+        onUpdate={handleSettlementUpdate}
+        onDelete={editingSettlement ? handleSettlementDelete : undefined}
         onDismiss={() => {
           setShowSettlementForm(false);
           setSettlingBalance(null);

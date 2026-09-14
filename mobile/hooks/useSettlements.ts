@@ -150,6 +150,7 @@ export function useUpdateSettlement(onSuccess?: () => void) {
     group_id?: string;
     from_participant_id?: string;
     to_participant_id?: string;
+    date?: string;
   }
 
   const mutation = useMutation<SettlementsResponse, Error, UpdateSettlementInput>({
@@ -165,8 +166,10 @@ export function useUpdateSettlement(onSuccess?: () => void) {
 
       return response.json();
     },
-    onSuccess: (_data, variables) => {
-      const groupId = variables.group_id;
+    onSuccess: (data, variables) => {
+      const groupId =
+        variables.group_id ||
+        (data as { settlement?: { group_id?: string } })?.settlement?.group_id;
       invalidateSettlementAdjacents(queryClient, groupId);
       onSuccess?.();
     },

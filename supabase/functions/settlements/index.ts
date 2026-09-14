@@ -2,7 +2,7 @@ import { verifyAuth } from '../_shared/auth.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
 import { fetchUserEmails } from '../_shared/user-email.ts';
-import { isValidUUID, validateBodySize, validateSettlementData } from '../_shared/validation.ts';
+import { isValidDate, isValidUUID, validateBodySize, validateSettlementData } from '../_shared/validation.ts';
 
 /**
  * Settlements Edge Function
@@ -42,6 +42,47 @@ interface CreateSettlementRequest {
   amount: number;
   currency?: string;
   notes?: string;
+}
+
+interface UpdateSettlementRequest {
+  id: string;
+  amount?: number;
+  currency?: string;
+  notes?: string;
+  from_participant_id?: string;
+  to_participant_id?: string;
+  /** YYYY-MM-DD payment date; maps to settlements.created_at */
+  date?: string;
+  group_id?: string;
+}
+
+async function canManageGroupSettlement(
+  supabase: any,
+  groupId: string,
+  createdBy: string,
+  currentUserId: string
+): Promise<boolean> {
+  // Match expense update/delete: creator OR any group member
+  if (createdBy === currentUserId) {
+    return true;
+  }
+
+  const { data: groupMember, error: memberError } = await supabase
+    .from('group_members')
+    .select('user_id')
+    .eq('group_id', groupId)
+    .eq('user_id', currentUserId)
+    .maybeSingle();
+
+  return !memberError && !!groupMember;
+}
+
+function parseSettlementDateToCreatedAt(date: string): string | null {
+  if (!isValidDate(date)) {
+    return null;
+  }
+  // Keep a stable midday UTC so local calendars don't shift the day
+  return `${date}T12:00:00.000Z`;
 }
 
 async function enrichSettlementsWithParticipants(
@@ -237,7 +278,7 @@ Deno.serve(async (req: Request) => {
         return createErrorResponse(400, 'Request body is required', 'VALIDATION_ERROR', undefined, req);
       }
 
-      let updateData: { id: string; amount?: number; currency?: string; notes?: string };
+      let updateData: UpdateSettlementRequest;
       try {
         updateData = JSON.parse(body);
       } catch {
@@ -248,9 +289,27 @@ Deno.serve(async (req: Request) => {
         return createErrorResponse(400, 'Settlement id is required', 'VALIDATION_ERROR', undefined, req);
       }
 
+      if (!isValidUUID(updateData.id)) {
+        return createErrorResponse(400, 'Invalid settlement id format. Expected UUID.', 'VALIDATION_ERROR', undefined, req);
+      }
+
+      const validation = validateSettlementData({
+        amount: updateData.amount,
+        currency: updateData.currency,
+        from_participant_id: updateData.from_participant_id,
+        to_participant_id: updateData.to_participant_id,
+      });
+      if (!validation.valid) {
+        return createErrorResponse(400, validation.error || 'Invalid settlement data', 'VALIDATION_ERROR', undefined, req);
+      }
+
+      if (updateData.date !== undefined && !isValidDate(updateData.date)) {
+        return createErrorResponse(400, 'Invalid date format (expected YYYY-MM-DD)', 'VALIDATION_ERROR', undefined, req);
+      }
+
       const { data: existingSettlement, error: fetchError } = await supabase
         .from('settlements')
-        .select('id, created_by')
+        .select('id, group_id, created_by, from_participant_id, to_participant_id')
         .eq('id', updateData.id)
         .single();
 
@@ -258,14 +317,84 @@ Deno.serve(async (req: Request) => {
         return createErrorResponse(404, 'Settlement not found', 'NOT_FOUND', undefined, req);
       }
 
-      if (existingSettlement.created_by !== currentUserId) {
-        return createErrorResponse(403, 'Forbidden: You can only update settlements you created', 'PERMISSION_DENIED', undefined, req);
+      const allowed = await canManageGroupSettlement(
+        supabase,
+        existingSettlement.group_id,
+        existingSettlement.created_by,
+        currentUserId
+      );
+      if (!allowed) {
+        return createErrorResponse(
+          403,
+          'You can only update settlements you created or settlements in groups you belong to',
+          'PERMISSION_DENIED',
+          undefined,
+          req
+        );
       }
 
-      const updateFields: any = {};
+      const nextFromParticipantId =
+        updateData.from_participant_id ?? existingSettlement.from_participant_id;
+      const nextToParticipantId =
+        updateData.to_participant_id ?? existingSettlement.to_participant_id;
+
+      if (nextFromParticipantId === nextToParticipantId) {
+        return createErrorResponse(
+          400,
+          'from_participant_id and to_participant_id must be different',
+          'VALIDATION_ERROR',
+          undefined,
+          req
+        );
+      }
+
+      if (
+        updateData.from_participant_id !== undefined ||
+        updateData.to_participant_id !== undefined
+      ) {
+        const participantIds = [nextFromParticipantId, nextToParticipantId];
+        const { data: participants, error: participantsError } = await supabase
+          .from('participants')
+          .select('id')
+          .eq('group_id', existingSettlement.group_id)
+          .in('id', participantIds);
+
+        if (participantsError) {
+          return handleError(participantsError, 'validating settlement participants', req);
+        }
+
+        if (!participants || participants.length !== 2) {
+          return createErrorResponse(
+            400,
+            'Both participants must belong to this group',
+            'VALIDATION_ERROR',
+            undefined,
+            req
+          );
+        }
+      }
+
+      const updateFields: Record<string, unknown> = {};
       if (updateData.amount !== undefined) updateFields.amount = updateData.amount;
       if (updateData.currency !== undefined) updateFields.currency = updateData.currency;
       if (updateData.notes !== undefined) updateFields.notes = updateData.notes || null;
+      if (updateData.from_participant_id !== undefined) {
+        updateFields.from_participant_id = updateData.from_participant_id;
+      }
+      if (updateData.to_participant_id !== undefined) {
+        updateFields.to_participant_id = updateData.to_participant_id;
+      }
+      if (updateData.date !== undefined) {
+        const createdAt = parseSettlementDateToCreatedAt(updateData.date);
+        if (!createdAt) {
+          return createErrorResponse(400, 'Invalid date format (expected YYYY-MM-DD)', 'VALIDATION_ERROR', undefined, req);
+        }
+        updateFields.created_at = createdAt;
+      }
+
+      if (Object.keys(updateFields).length === 0) {
+        return createErrorResponse(400, 'No fields to update', 'VALIDATION_ERROR', undefined, req);
+      }
 
       const { data: updatedSettlement, error: updateError } = await supabase
         .from('settlements')
@@ -297,9 +426,13 @@ Deno.serve(async (req: Request) => {
         return createErrorResponse(400, 'Settlement id is required', 'VALIDATION_ERROR', undefined, req);
       }
 
+      if (!isValidUUID(settlementId)) {
+        return createErrorResponse(400, 'Invalid settlement id format. Expected UUID.', 'VALIDATION_ERROR', undefined, req);
+      }
+
       const { data: existingSettlement, error: fetchError } = await supabase
         .from('settlements')
-        .select('id, created_by')
+        .select('id, group_id, created_by')
         .eq('id', settlementId)
         .single();
 
@@ -307,8 +440,20 @@ Deno.serve(async (req: Request) => {
         return createErrorResponse(404, 'Settlement not found', 'NOT_FOUND', undefined, req);
       }
 
-      if (existingSettlement.created_by !== currentUserId) {
-        return createErrorResponse(403, 'Forbidden: You can only delete settlements you created', 'PERMISSION_DENIED', undefined, req);
+      const allowed = await canManageGroupSettlement(
+        supabase,
+        existingSettlement.group_id,
+        existingSettlement.created_by,
+        currentUserId
+      );
+      if (!allowed) {
+        return createErrorResponse(
+          403,
+          'Forbidden: You can only delete settlements you created or settlements in groups you belong to',
+          'PERMISSION_DENIED',
+          undefined,
+          req
+        );
       }
 
       const { error: deleteError } = await supabase
