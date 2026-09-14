@@ -5,7 +5,7 @@
 - **Frontend**: React Native (Expo), TypeScript, React Native Paper
 - **Backend**: Supabase Edge Functions (Deno/TypeScript)
 - **Database**: Supabase (PostgreSQL)
-- **Auth**: Supabase Auth (Email/Password + Google OAuth)
+- **Auth**: Supabase Auth (Email/Password + Google OAuth / native Android Google Sign-In + native Apple on iOS)
 
 ## Project Structure
 
@@ -398,26 +398,36 @@ The workflow (`.github/workflows/deploy-edge-functions.yml`) automatically:
 
 ### Google OAuth Setup
 
+See [`docs/GOOGLE_AUTH.md`](docs/GOOGLE_AUTH.md) for the full Android native Sign-In
+and branding runbook (issues #269 / #270). Summary:
+
 1. Use the dedicated Google Cloud project `sharedmoney-504507` (`SharedMoney`)
 2. Configure Google Auth Platform branding as `SharedMoney`
 3. Set the application home page to `https://sharedmoney.app` and keep the
-   first viewport visibly branded as `SharedMoney`
+   first viewport H1 visibly branded as `SharedMoney`
 4. Set the privacy policy link to `https://sharedmoney.app/privacy`
 5. Verify `sharedmoney.app` in Google Search Console and include it in Google
    Auth Platform authorized domains
 6. Submit the Google Auth Platform branding for verification, then publish it.
    Google does not show the app name/logo to users until branding is verified
    and published.
-7. Create or update OAuth credentials in Google Cloud Console (Web application
-   type) and add the Supabase callback URI:
-   - `https://xesuklogveedeppxbbit.supabase.co/auth/v1/callback`
-8. Configure the resulting client ID/secret in Supabase Dashboard >
+7. Create or update OAuth credentials in Google Cloud Console:
+   - **Web application** client for Supabase browser OAuth + mobile
+     `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`, with callback
+     `https://xesuklogveedeppxbbit.supabase.co/auth/v1/callback`
+   - **Android** client for package `com.vaibhavarora.sharemoney` with upload +
+     Play App Signing SHA-1 fingerprints (enables Credential Manager account drawer)
+8. Configure the Web client ID/secret in Supabase Dashboard >
     Authentication > Providers > Google
 9. Keep Supabase URL Configuration entries for `https://sharedmoney.app`,
     `https://sharedmoney.app/app`, `sharedmoney://auth/callback`, and the legacy
     `owewho` callbacks
 10. Run `npm run verify:google-branding` and confirm Google's rendered OAuth
     page uses `SharedMoney` as the visible app name in the sign-in heading
+
+Android development/production builds use native Google Sign-In
+(`react-native-nitro-google-signin` + Supabase `signInWithIdToken`). Web, iOS,
+and Expo Go continue to use browser OAuth. Apple Sign In remains native on iOS.
 
 This matches the production Statements AI setup: it also routes Google OAuth
 through a Supabase callback domain, but Google renders the verified/published

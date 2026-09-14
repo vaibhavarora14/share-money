@@ -7,9 +7,9 @@
     "updated": "2026-08-08",
     "title": "SharedMoney | Split Bills and Track Group Expenses",
     "description": "SharedMoney helps friends, roommates, and travel groups split bills, track shared expenses, and see who owes who without handling payments.",
-    "eyebrow": "Shared expenses, made clear",
-    "heading": "Split shared expenses. Keep the group on the same page.",
-    "body": "SharedMoney is a shared ledger for trips, homes, dinners, and everyday group costs. Record who paid, choose who shared the cost, and see balances without linking a bank account or moving money in the app.",
+    "eyebrow": "No bank link. No payments. Web + mobile.",
+    "heading": "SharedMoney",
+    "body": "Split the trip. Settle up. One shared record for group money. Record who paid, choose who shared the cost, and see balances without linking a bank account or moving money in the app.",
     "proof": ["Trip and roommate ledgers", "Balances separated by currency", "No bank link or payment handling"],
     "sections": [
       {"heading": "A shared record beats a message thread", "body": "When several people pay for the same plans, the hard part is remembering the details. SharedMoney keeps each expense, participant, payer, and settlement in one group record that everyone can review.", "bullets": ["Add expenses as they happen", "Use equal or uneven splits", "Keep settlements visible after they happen outside the app"]},

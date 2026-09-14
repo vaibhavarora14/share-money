@@ -13,6 +13,7 @@ export type SocialAuthStage =
 export type SocialAuthFailureKind =
   | "cancelled"
   | "browser_unavailable"
+  | "play_services_unavailable"
   | "apple_unknown"
   | "provider_configuration"
   | "unexpected";
@@ -102,6 +103,12 @@ export function classifySocialAuthFailure(
   ) {
     kind = "browser_unavailable";
   } else if (
+    input.provider === "google" &&
+    (code === "PLAY_SERVICES_NOT_AVAILABLE" ||
+      message.includes("play services"))
+  ) {
+    kind = "play_services_unavailable";
+  } else if (
     input.provider === "apple" &&
     code === "ERR_REQUEST_UNKNOWN"
   ) {
@@ -112,7 +119,9 @@ export function classifySocialAuthFailure(
     message.includes("oauth client") ||
     message.includes("client id") ||
     message.includes("redirect uri") ||
-    message.includes("nonce configuration")
+    message.includes("nonce configuration") ||
+    code === "DEVELOPER_ERROR" ||
+    code === "GOOGLE_NATIVE_UNAVAILABLE"
   ) {
     kind = "provider_configuration";
   }
@@ -151,6 +160,7 @@ export function buildSocialAuthTelemetry(
     message: `Social authentication failure: ${failure.group}`,
     level:
       failure.kind === "browser_unavailable" ||
+      failure.kind === "play_services_unavailable" ||
       failure.kind === "provider_configuration" ||
       failure.kind === "apple_unknown"
         ? "warning"
@@ -183,6 +193,8 @@ export function getSocialAuthUserMessage(
       return "Authentication was cancelled";
     case "browser_unavailable":
       return "No supported browser is available. Install or enable Chrome (or another browser), then try Google sign-in again.";
+    case "play_services_unavailable":
+      return "Google Play Services is missing or outdated. Update Play Services, then try Google sign-in again.";
     case "apple_unknown":
       return "Apple sign-in couldn’t be completed. Please try again, or use email or Google sign-in.";
     case "provider_configuration":
