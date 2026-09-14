@@ -752,12 +752,46 @@ function AppContent() {
     name: string;
     description?: string;
   }) => {
-    await createGroupMutation.mutate(groupData);
+    const createdGroup = await createGroupMutation.mutate(groupData);
     // Refetch groups list to show the newly created group
     if (groupsListRefetchRef.current) {
       groupsListRefetchRef.current();
     }
+
+    // After create, open the new group and Add people so the create flow
+    // continues into inviting/adding members (#267).
+    // Defer navigation so CreateGroupScreen can dismiss cleanly first.
+    if (createdGroup?.id) {
+      setTimeout(() => {
+        setSelectedGroup(createdGroup);
+        setGroupInitialListMode("transactions");
+        setHighlightedTransactionId(null);
+        setStatsContext(null);
+        setCurrentRoute("group-details");
+        setShowAddMember(true);
+      }, 0);
+    }
   };
+
+  const handleGroupUpdated = React.useCallback(
+    (updatedGroup: Group) => {
+      setSelectedGroup((prev) => {
+        if (prev && prev.id === updatedGroup.id) {
+          return {
+            ...prev,
+            name: updatedGroup.name,
+            description: updatedGroup.description,
+          };
+        }
+        return prev;
+      });
+      if (groupsListRefetchRef.current) {
+        groupsListRefetchRef.current();
+      }
+      void refetchSelectedGroup();
+    },
+    [refetchSelectedGroup],
+  );
 
   const handleAddMember = async (person: {
     fullName?: string;
@@ -1157,6 +1191,7 @@ function AppContent() {
                 setStatsContext(null);
                 setGroupRefreshTrigger((prev) => prev + 1);
               }}
+              onGroupUpdated={handleGroupUpdated}
               onAddTransaction={() => {
                 setEditingTransaction(null);
                 setTransactionReturnRoute("group-details");

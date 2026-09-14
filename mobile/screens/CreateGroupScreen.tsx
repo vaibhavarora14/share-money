@@ -8,7 +8,7 @@ import {
     StyleSheet,
     View,
 } from "react-native";
-import { Appbar, Button, TextInput, useTheme } from "react-native-paper";
+import { Appbar, Button, Text, TextInput, useTheme } from "react-native-paper";
 import {
     SafeAreaView,
     useSafeAreaInsets,
@@ -127,14 +127,23 @@ export const CreateGroupScreen: React.FC<CreateGroupScreenProps> = ({
                 placeholder="Add a description for this group"
               />
 
+              <Text
+                variant="bodyMedium"
+                style={[styles.hint, { color: theme.colors.onSurfaceVariant }]}
+              >
+                Next you can add people to this group.
+              </Text>
+
               <Button
                 mode="contained"
                 onPress={handleCreate}
                 disabled={loading}
                 loading={loading}
                 style={styles.createButton}
+                icon="account-plus"
+                testID="create-group-and-add-people"
               >
-                Create
+                Create & add people
               </Button>
             </ScrollView>
           </KeyboardAvoidingView>
@@ -170,6 +179,9 @@ const styles = StyleSheet.create({
   },
   input: {
     marginBottom: 16,
+  },
+  hint: {
+    marginBottom: 8,
   },
   createButton: {
     marginTop: 8,
