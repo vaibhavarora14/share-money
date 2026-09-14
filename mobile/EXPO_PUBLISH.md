@@ -118,3 +118,6 @@ eas build --platform android --profile production
   (`https://us.i.posthog.com`) as EAS secrets for **production** and
   **preview** builds. Do not commit the real key. If the key is unset, the
   SDK is not initialized. Do not use the Paisewise/Glass Money project token.
+  After sign-in the app calls `identify(authUserId, { email, name })` so
+  support can search persons by email. Local `supabase/seed.sql` user ids
+  are never identified (avoids Maestro polluting Production).
