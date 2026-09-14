@@ -87,6 +87,33 @@ Deno.test("exact Android browser resolution failure is stable", () => {
   );
 });
 
+Deno.test("Play Services failures are grouped for native Google", () => {
+  const failure = classifySocialAuthFailure({
+    provider: "google",
+    stage: "native_request",
+    code: "PLAY_SERVICES_NOT_AVAILABLE",
+    message: "Play Services not available",
+  });
+
+  assertEquals(failure.kind, "play_services_unavailable");
+  assertEquals(
+    getSocialAuthUserMessage(failure),
+    "Google Play Services is missing or outdated. Update Play Services, then try Google sign-in again.",
+  );
+});
+
+Deno.test("Android developer errors map to provider configuration", () => {
+  assertEquals(
+    classifySocialAuthFailure({
+      provider: "google",
+      stage: "native_request",
+      code: "DEVELOPER_ERROR",
+      message: "Android OAuth client misconfigured",
+    }).kind,
+    "provider_configuration",
+  );
+});
+
 Deno.test("Apple cancellation code creates no actionable failure", () => {
   assertEquals(
     classifySocialAuthFailure({

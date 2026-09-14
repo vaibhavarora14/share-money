@@ -205,6 +205,9 @@ module.exports = ({ config }) => {
         "expo-localization",
         "expo-notifications",
         "expo-web-browser",
+        // Android Credential Manager Google Sign-In. Optional iOS URL scheme via
+        // EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME when native Google on iOS is enabled.
+        "./plugins/withNativeGoogleSignIn",
         // Only include expo-dev-client plugin for development builds
         ...(isDevelopmentBuild ? ["expo-dev-client"] : [])
       ]
