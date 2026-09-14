@@ -19,7 +19,12 @@ const faqs: FAQItem[] = [
   {
     question: "Do my friends need to download an app?",
     answer:
-      "SharedMoney is available through the web app for anyone, and Android users can install the app from Google Play.",
+      "SharedMoney is available through the web app for anyone, and Android users can install the app from Google Play. On iPhone, use the web app until the App Store listing is public.",
+  },
+  {
+    question: "Is SharedMoney on the App Store?",
+    answer:
+      "Android is live on Google Play. iOS 2.26.1 is submitted and waiting for App Store review. Until the public listing appears in your region, use the web app at sharedmoney.app/app on iPhone.",
   },
   {
     question: "What happens if someone doesn’t pay?",

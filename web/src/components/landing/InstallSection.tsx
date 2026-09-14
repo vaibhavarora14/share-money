@@ -17,7 +17,10 @@ export function InstallSection({
           <div>
             <p className="kicker kicker-inverse">Free to use</p>
             <h2>Start the group. Keep the money part simple.</h2>
-            <p>Use SharedMoney on the web or install the Android app from Google Play.</p>
+            <p>
+              Use SharedMoney on the web or install the Android app from Google Play.
+              iOS App Store listing is pending review — open the web app on iPhone in the meantime.
+            </p>
           </div>
         </div>
         <div className="install-actions">

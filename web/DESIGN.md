@@ -18,9 +18,10 @@ This document is the canonical reference for the landing-page redesign.
 
 ## Primary Conversion
 - Android visitors: `Get the Android app`
-- iOS visitors: `Join the iOS beta`
+- iOS visitors: `Open on iOS` (web app) while the App Store listing is pending review
 - Desktop visitors: Android is primary.
 - Secondary actions: remaining two destinations (`Open web app`, other platform action).
+- Hero store row: Google Play badge + soft iOS note (`App Store listing pending review` → web app). Do not link a public App Store install URL until the listing is live.
 - CTA event: `landing_cta_click` with `{ platform, placement, device }`.
 
 ## Visual System
