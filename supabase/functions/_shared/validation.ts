@@ -88,7 +88,7 @@ export function validateTransactionData(data: {
  */
 export function validateGroupData(data: {
   name?: string;
-  description?: string;
+  description?: string | null;
 }): TransactionValidationResult {
   if (data.name !== undefined) {
     if (typeof data.name !== 'string') {
