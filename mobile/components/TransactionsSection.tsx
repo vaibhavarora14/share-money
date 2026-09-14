@@ -2,24 +2,40 @@ import React from "react";
 import { Pressable, View } from "react-native";
 import { ActivityIndicator, Icon, Surface, Text, useTheme } from "react-native-paper";
 import { useAuth } from "../contexts/AuthContext";
-import { Participant, Transaction } from "../types";
+import { Participant, Settlement, Transaction } from "../types";
 import { formatCurrency, getDefaultCurrency } from "../utils/currency";
 import { isUnequalSplit } from "../utils/splits";
 import { openTransactionWithHighlightConsumption } from "../utils/transactionHighlight";
+import type { LedgerItem } from "../utils/transactionsLedger";
 import { styles } from "./TransactionsSection.styles";
 
 interface TransactionsSectionProps {
-  items: Transaction[];
+  items: LedgerItem[];
   loading: boolean;
   hasNextPage?: boolean;
   isFetchingNextPage?: boolean;
   onLoadMore?: () => void;
-  onEdit: (t: Transaction) => void;
-  members: any[]; // Using any[] temporarily if GroupMember import has issues, but ideally GroupMember[]
+  onEditExpense: (t: Transaction) => void;
+  onEditPayment?: (s: Settlement) => void;
+  members: any[];
   participants?: Participant[];
   highlightedTransactionId?: number | null;
   onHighlightedLayout?: (y: number) => void;
   onHighlightedInteraction?: (transactionId: number) => void;
+  filter?: "all" | "expenses" | "payments";
+}
+
+function formatRelativeDate(raw: string): string {
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const now = new Date();
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  if (date.toDateString() === now.toDateString()) return "Today";
+  if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
@@ -28,12 +44,14 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
   hasNextPage = false,
   isFetchingNextPage = false,
   onLoadMore,
-  onEdit,
+  onEditExpense,
+  onEditPayment,
   members = [],
   participants = [],
   highlightedTransactionId = null,
   onHighlightedLayout,
   onHighlightedInteraction,
+  filter = "all",
 }) => {
   const theme = useTheme();
   const { session } = useAuth();
@@ -54,40 +72,64 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
     return "tag-outline";
   };
 
-  const getPayerName = (transaction: Transaction) => {
-      // 1. Try resolving by participant_id from participants array first (for invited users)
-      if (transaction.paid_by_participant_id) {
-          // Check participants first (includes invited users)
-          const participant = participants.find(p => 
-            p.id === transaction.paid_by_participant_id
-          );
-          if (participant) {
-              const baseName = participant.user_id === currentUserId ? "You" : (participant.full_name || participant.email?.split('@')[0] || participant.email || "Unknown");
-              return participant.type === 'former' ? `${baseName} (Former)` : baseName;
-          }
-          
-          // Fallback to members lookup
-          const payer = members.find(m => 
-            m.participant_id === transaction.paid_by_participant_id || 
-            m.id === transaction.paid_by_participant_id
-          );
-          if (payer) {
-              const baseName = payer.user_id === currentUserId ? "You" : (payer.full_name || payer.email?.split('@')[0] || payer.email || "Unknown");
-              return payer.status === 'left' ? `${baseName} (Former)` : baseName;
-          }
-      }
-      
-      // 2. Fallback to user_id
-      if (transaction.paid_by) {
-           if (transaction.paid_by === currentUserId) return "You";
-           const payer = members.find(m => m.user_id === transaction.paid_by);
-           if (payer) {
-               return payer.full_name || payer.email?.split('@')[0] || payer.email || "Unknown";
-           }
+  const resolveParticipantName = (participantId?: string | null, userId?: string | null) => {
+    if (participantId) {
+      const participant = participants.find((p) => p.id === participantId);
+      if (participant) {
+        const baseName =
+          participant.user_id === currentUserId
+            ? "You"
+            : participant.full_name ||
+              participant.email?.split("@")[0] ||
+              participant.email ||
+              "Unknown";
+        return participant.type === "former" ? `${baseName} (Former)` : baseName;
       }
 
-      return "Unknown";
+      const member = members.find(
+        (m) => m.participant_id === participantId || m.id === participantId,
+      );
+      if (member) {
+        const baseName =
+          member.user_id === currentUserId
+            ? "You"
+            : member.full_name || member.email?.split("@")[0] || member.email || "Unknown";
+        return member.status === "left" ? `${baseName} (Former)` : baseName;
+      }
+    }
+
+    if (userId) {
+      if (userId === currentUserId) return "You";
+      const payer = members.find((m) => m.user_id === userId);
+      if (payer) {
+        return payer.full_name || payer.email?.split("@")[0] || payer.email || "Unknown";
+      }
+    }
+
+    return "Unknown";
   };
+
+  const getPayerName = (transaction: Transaction) =>
+    resolveParticipantName(transaction.paid_by_participant_id, transaction.paid_by);
+
+  const emptyCopy = (() => {
+    if (filter === "payments") {
+      return {
+        title: "No payments yet",
+        body: "Record a settlement from Settle Up and it will show up here.",
+      };
+    }
+    if (filter === "expenses") {
+      return {
+        title: "No expenses yet",
+        body: "Tap the + button to add your first expense.",
+      };
+    }
+    return {
+      title: "No transactions yet",
+      body: "Add an expense or record a payment to get started.",
+    };
+  })();
 
   return (
     <View style={styles.container}>
@@ -95,35 +137,113 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
         <ActivityIndicator size="small" style={{ marginVertical: 24 }} />
       ) : items.length > 0 ? (
         <View style={styles.list}>
-          {items.map((transaction) => {
+          {items.map((item) => {
+            if (item.kind === "payment") {
+              const settlement = item.settlement;
+              const currency = settlement.currency || getDefaultCurrency();
+              const dateString = formatRelativeDate(settlement.created_at);
+              const fromName = resolveParticipantName(
+                settlement.from_participant_id,
+                settlement.from_user_id,
+              );
+              const toName = resolveParticipantName(
+                settlement.to_participant_id,
+                settlement.to_user_id,
+              );
+              const title = settlement.notes?.trim() || "Payment";
+              const canEdit = !!onEditPayment;
+
+              return (
+                <Surface key={item.key} style={styles.card} elevation={0}>
+                  <Pressable
+                    onPress={() => onEditPayment?.(settlement)}
+                    disabled={!canEdit}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Payment, ${fromName} paid ${toName}, ${formatCurrency(settlement.amount, currency)}`}
+                    testID={`ledger-payment-${settlement.id}`}
+                    style={({ pressed }) => [
+                      styles.pressable,
+                      pressed && canEdit && { backgroundColor: theme.colors.surfaceVariant },
+                    ]}
+                  >
+                    <View style={styles.row}>
+                      <View
+                        style={[
+                          styles.iconContainer,
+                          { backgroundColor: theme.colors.tertiaryContainer },
+                        ]}
+                      >
+                        <Icon
+                          source="handshake-outline"
+                          size={18}
+                          color={theme.colors.onTertiaryContainer}
+                        />
+                      </View>
+
+                      <View style={styles.content}>
+                        <View style={styles.headerRow}>
+                          <Text
+                            variant="titleMedium"
+                            numberOfLines={1}
+                            style={[styles.title, { color: theme.colors.onSurface }]}
+                          >
+                            {title}
+                          </Text>
+                          <Text
+                            variant="titleMedium"
+                            style={{
+                              fontWeight: "bold",
+                              color: theme.colors.onSurface,
+                              flexShrink: 0,
+                            }}
+                          >
+                            {formatCurrency(settlement.amount, currency)}
+                          </Text>
+                        </View>
+
+                        <View style={styles.subRow}>
+                          <Text
+                            variant="labelSmall"
+                            style={[styles.typeLabel, { color: theme.colors.tertiary }]}
+                          >
+                            Payment
+                          </Text>
+                          <Text
+                            variant="bodySmall"
+                            numberOfLines={1}
+                            style={{ color: theme.colors.onSurfaceVariant, flex: 1 }}
+                          >
+                            {" "}
+                            • {dateString} • {fromName} → {toName}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  </Pressable>
+                </Surface>
+              );
+            }
+
+            const transaction = item.transaction;
             const isHighlighted = transaction.id === highlightedTransactionId;
             const currency = transaction.currency || getDefaultCurrency();
             const categoryIcon = getCategoryIcon(transaction.category || "");
-            const date = new Date(transaction.date);
-            const now = new Date();
-            const yesterday = new Date(now);
-            yesterday.setDate(yesterday.getDate() - 1);
-
-            let dateString = "";
-            if (date.toDateString() === now.toDateString()) {
-                dateString = "Today";
-            } else if (date.toDateString() === yesterday.toDateString()) {
-                dateString = "Yesterday";
-            } else {
-                dateString = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-            }
-
+            const dateString = formatRelativeDate(transaction.date);
             const payerName = getPayerName(transaction);
-            const unequalSplit = transaction.splits ? isUnequalSplit(transaction.splits) : false;
+            const unequalSplit = transaction.splits
+              ? isUnequalSplit(transaction.splits)
+              : false;
 
             return (
               <Surface
-                key={transaction.id}
-                onLayout={isHighlighted
-                  ? (event) => onHighlightedLayout?.(event.nativeEvent.layout.y)
-                  : undefined}
+                key={item.key}
+                onLayout={
+                  isHighlighted
+                    ? (event) => onHighlightedLayout?.(event.nativeEvent.layout.y)
+                    : undefined
+                }
                 style={styles.card}
-                elevation={0} // Flat, transparent background for list item feel
+                elevation={0}
               >
                 <View
                   pointerEvents="none"
@@ -140,43 +260,72 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
                   ]}
                 />
                 <Pressable
-                  onPress={() => openTransactionWithHighlightConsumption(
-                    highlightedTransactionId,
-                    onHighlightedInteraction,
-                    () => onEdit(transaction),
-                  )}
+                  onPress={() =>
+                    openTransactionWithHighlightConsumption(
+                      highlightedTransactionId,
+                      onHighlightedInteraction,
+                      () => onEditExpense(transaction),
+                    )
+                  }
                   accessibilityRole="button"
-                  accessibilityLabel={`${transaction.description || "Untitled"}, ${formatCurrency(transaction.amount, currency)}${isHighlighted ? ", highlighted from notification" : ""}`}
+                  accessibilityLabel={`Expense, ${transaction.description || "Untitled"}, ${formatCurrency(transaction.amount, currency)}${isHighlighted ? ", highlighted from notification" : ""}`}
+                  testID={`ledger-expense-${transaction.id}`}
                   style={({ pressed }) => [
                     styles.pressable,
-                    pressed && { backgroundColor: theme.colors.surfaceVariant }
+                    pressed && { backgroundColor: theme.colors.surfaceVariant },
                   ]}
                 >
                   <View style={styles.row}>
-                    {/* Icon: Tonal Circle */}
-                    <View style={[styles.iconContainer, { backgroundColor: theme.colors.primaryContainer }]}>
-                        <Icon
-                          source={categoryIcon}
-                          size={18}
-                          color={theme.colors.onPrimaryContainer}
-                        />
+                    <View
+                      style={[
+                        styles.iconContainer,
+                        { backgroundColor: theme.colors.primaryContainer },
+                      ]}
+                    >
+                      <Icon
+                        source={categoryIcon}
+                        size={18}
+                        color={theme.colors.onPrimaryContainer}
+                      />
                     </View>
 
-                    {/* Content */}
                     <View style={styles.content}>
                       <View style={styles.headerRow}>
-                          <Text variant="titleMedium" numberOfLines={1} style={[styles.title, { color: theme.colors.onSurface }]}>
-                            {transaction.description || "Untitled"}
-                          </Text>
-                          <Text variant="titleMedium" style={{ fontWeight: 'bold', color: theme.colors.onSurface, flexShrink: 0 }}>
-                            {formatCurrency(transaction.amount, currency)}
-                          </Text>
+                        <Text
+                          variant="titleMedium"
+                          numberOfLines={1}
+                          style={[styles.title, { color: theme.colors.onSurface }]}
+                        >
+                          {transaction.description || "Untitled"}
+                        </Text>
+                        <Text
+                          variant="titleMedium"
+                          style={{
+                            fontWeight: "bold",
+                            color: theme.colors.onSurface,
+                            flexShrink: 0,
+                          }}
+                        >
+                          {formatCurrency(transaction.amount, currency)}
+                        </Text>
                       </View>
-                      
+
                       <View style={styles.subRow}>
-                          <Text variant="bodySmall" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant, flex: 1 }}>
-                             {dateString} • {payerName} paid{unequalSplit ? " • Unequal split" : ""}
-                          </Text>
+                        <Text
+                          variant="labelSmall"
+                          style={[styles.typeLabel, { color: theme.colors.primary }]}
+                        >
+                          Expense
+                        </Text>
+                        <Text
+                          variant="bodySmall"
+                          numberOfLines={1}
+                          style={{ color: theme.colors.onSurfaceVariant, flex: 1 }}
+                        >
+                          {" "}
+                          • {dateString} • {payerName} paid
+                          {unequalSplit ? " • Unequal split" : ""}
+                        </Text>
                       </View>
                     </View>
                   </View>
@@ -184,7 +333,7 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
               </Surface>
             );
           })}
-          {(isFetchingNextPage || hasNextPage) && (
+          {(isFetchingNextPage || hasNextPage) && filter !== "payments" && (
             <View style={{ alignItems: "center", paddingVertical: 16 }}>
               {isFetchingNextPage ? (
                 <ActivityIndicator size="small" />
@@ -209,12 +358,20 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
         </View>
       ) : (
         <View style={[styles.emptyState, { backgroundColor: theme.colors.surfaceVariant }]}>
-          <Text style={{ fontSize: 40, marginBottom: 16 }}>💸</Text>
-          <Text variant="titleMedium" style={{ color: theme.colors.onSurface, marginBottom: 8 }}>
-            No transactions yet
+          <Text style={{ fontSize: 40, marginBottom: 16 }}>
+            {filter === "payments" ? "🤝" : "💸"}
           </Text>
-          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center' }}>
-            Tap the + button to add your first expense.
+          <Text
+            variant="titleMedium"
+            style={{ color: theme.colors.onSurface, marginBottom: 8 }}
+          >
+            {emptyCopy.title}
+          </Text>
+          <Text
+            variant="bodyMedium"
+            style={{ color: theme.colors.onSurfaceVariant, textAlign: "center" }}
+          >
+            {emptyCopy.body}
           </Text>
         </View>
       )}
