@@ -21,6 +21,7 @@ import { getConfiguredWebAppPath } from "../utils/inviteLinks";
 import { log, logError } from "../utils/logger";
 import { performLocalLogout } from "../utils/logoutFlow";
 import { syncAnalyticsAuth } from "../utils/posthogAnalytics";
+import { resolveAuthDisplayName } from "../utils/posthogIdentity";
 import {
   canUseNativeGoogleSignIn,
   signInWithNativeGoogle,
@@ -285,10 +286,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         : null
     );
 
-    // Sync with PostHog using user id as distinct_id (no email person props).
+    // Sync with PostHog: auth user id as distinct_id + email/name person props
+    // so support can search persons by email in SharedMoney Production.
     const provider = user?.app_metadata?.provider;
     syncAnalyticsAuth(user?.id ?? null, {
       auth_provider: typeof provider === "string" ? provider : undefined,
+      email: user?.email ?? undefined,
+      name: resolveAuthDisplayName(
+        user?.user_metadata as Record<string, unknown> | undefined,
+      ),
     });
   }, []);
 
