@@ -13,6 +13,11 @@ import {
   resolveGroupDefaultSplitAmong,
 } from "../utils/groupSplit";
 import { captureAnalyticsEvent } from "../utils/posthogAnalytics";
+import {
+  mapInfiniteTransactions,
+  replaceOptimisticTransactionInFeed,
+  resolveCreatedTransaction,
+} from "../utils/transactionOptimisticCache";
 import { queryKeys } from "./queryKeys";
 
 export interface TransactionsCursor {
@@ -151,22 +156,6 @@ export function getGroupFormDefaultSplitAmong(
   });
 }
 
-function mapInfiniteTransactions(
-  data: InfiniteData<TransactionsPageResponse> | undefined,
-  mapper: (tx: Transaction) => Transaction | null
-): InfiniteData<TransactionsPageResponse> | undefined {
-  if (!data) return data;
-  return {
-    ...data,
-    pages: data.pages.map((page) => ({
-      ...page,
-      items: page.items
-        .map((tx) => mapper(tx))
-        .filter((tx): tx is Transaction => tx !== null),
-    })),
-  };
-}
-
 function invalidateTransactionAdjacents(queryClient: QueryClient, groupId?: string | null) {
   if (!groupId) return;
   queryClient.invalidateQueries({ queryKey: queryKeys.transactionsFeed(groupId) });
@@ -257,7 +246,8 @@ export function useCreateTransaction(onSuccess?: () => void) {
       previous?: InfiniteData<TransactionsPageResponse>;
       previousLatestCurrency?: string | null;
       previousLatestSplitAmong?: string[] | null;
-      groupId: string;
+      groupId?: string;
+      optimisticId?: number;
     }
   >({
     mutationFn: async (transactionData) => {
@@ -293,9 +283,10 @@ export function useCreateTransaction(onSuccess?: () => void) {
         queryKeys.lastGroupExpenseSplitAmong(groupId)
       );
 
+      const optimisticId = Date.now();
       const optimisticEntry: Transaction = {
         ...(variables as Transaction),
-        id: Date.now(),
+        id: optimisticId,
         created_at: new Date().toISOString(),
       };
 
@@ -336,7 +327,13 @@ export function useCreateTransaction(onSuccess?: () => void) {
         );
       }
 
-      return { previous, previousLatestCurrency, previousLatestSplitAmong, groupId };
+      return {
+        previous,
+        previousLatestCurrency,
+        previousLatestSplitAmong,
+        groupId,
+        optimisticId,
+      };
     },
     onError: (_error, _variables, context) => {
       if (!context?.groupId) return;
@@ -355,12 +352,24 @@ export function useCreateTransaction(onSuccess?: () => void) {
         context.previousLatestSplitAmong
       );
     },
-    onSuccess: (_data, variables, context) => {
-      const groupId = variables.group_id;
+    onSuccess: (data, variables, context) => {
+      const groupId = variables.group_id || context?.groupId;
+      const created = resolveCreatedTransaction(data, variables as Partial<Transaction>);
+
+      // Replace temp optimistic id immediately so create → edit/delete
+      // before refetch cannot 404 with Date.now() ids.
+      if (groupId && context?.optimisticId != null) {
+        queryClient.setQueryData<InfiniteData<TransactionsPageResponse>>(
+          queryKeys.transactionsFeed(groupId),
+          (old) =>
+            replaceOptimisticTransactionInFeed(old, context.optimisticId!, created)
+        );
+      }
+
       invalidateTransactionAdjacents(queryClient, groupId);
-      if (context?.groupId) {
+      if (groupId) {
         queryClient.invalidateQueries({
-          queryKey: queryKeys.transactionsFeed(context.groupId),
+          queryKey: queryKeys.transactionsFeed(groupId),
         });
       }
       captureAnalyticsEvent("expense_created", {

@@ -11,7 +11,7 @@ import {
 } from "react-native-paper";
 import { ACTIVITY_FEED_UI, ACTIVITY_ICONS } from "../constants/activityFeed";
 import { useAuth } from "../contexts/AuthContext";
-import { ActivityItem } from "../types";
+import { ActivityItem, Settlement } from "../types";
 import {
     formatActivityTime,
     getUserDisplayName,
@@ -28,6 +28,7 @@ interface ActivityFeedProps {
   isFiltered?: boolean;
   onReport?: (activity: ActivityItem) => void;
   onBlock?: (activity: ActivityItem) => void;
+  onPressSettlement?: (settlement: Settlement, activity: ActivityItem) => void;
 }
 
 export const ActivityFeed: React.FC<ActivityFeedProps> = ({
@@ -39,6 +40,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
   isFiltered,
   onReport,
   onBlock,
+  onPressSettlement,
 }) => {
   const theme = useTheme();
   const { session } = useAuth();
@@ -150,9 +152,43 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                 };
 
                 const activityIcon = getActivityIcon(activity.type);
-                
-                return (
-                  <View key={activity.id} style={styles.activityItem}>
+                const isEditableSettlement =
+                  !!onPressSettlement &&
+                  activity.type.startsWith("settlement") &&
+                  activity.type !== "settlement_deleted" &&
+                  !!(activity.details?.settlement || activity.settlement_id);
+
+                const openSettlement = () => {
+                  if (!onPressSettlement || !isEditableSettlement) return;
+                  const snapshot = activity.details?.settlement;
+                  const settlementId =
+                    activity.settlement_id || snapshot?.id || "";
+                  // Guard against missing/stale ids (history row id is not a settlement id)
+                  const uuidPattern =
+                    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                  if (!settlementId || !uuidPattern.test(settlementId)) {
+                    return;
+                  }
+                  const settlement: Settlement = {
+                    id: settlementId,
+                    group_id: activity.group_id || snapshot?.group_id || "",
+                    from_user_id: snapshot?.from_user_id || "",
+                    to_user_id: snapshot?.to_user_id || "",
+                    from_participant_id: snapshot?.from_participant_id,
+                    to_participant_id: snapshot?.to_participant_id,
+                    amount: snapshot?.amount ?? 0,
+                    currency: snapshot?.currency || "USD",
+                    notes: snapshot?.notes,
+                    created_by: snapshot?.created_by || activity.changed_by.id,
+                    created_at: snapshot?.created_at || activity.changed_at,
+                    from_user_email: snapshot?.from_user_email,
+                    to_user_email: snapshot?.to_user_email,
+                  };
+                  onPressSettlement(settlement, activity);
+                };
+
+                const rowContent = (
+                  <>
                       {/* Left: Tonal Icon */}
                       <View
                         style={[
@@ -224,7 +260,35 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                          >
                              {activity.description}
                          </Text>
+                         {isEditableSettlement ? (
+                           <Text
+                             variant="labelSmall"
+                             style={{ color: theme.colors.primary, marginTop: 4 }}
+                           >
+                             Tap to edit
+                           </Text>
+                         ) : null}
                       </View>
+                  </>
+                );
+
+                return isEditableSettlement ? (
+                  <Pressable
+                    key={activity.id}
+                    style={({ pressed }) => [
+                      styles.activityItem,
+                      pressed ? { opacity: 0.7 } : null,
+                    ]}
+                    onPress={openSettlement}
+                    accessibilityRole="button"
+                    accessibilityLabel="Edit settlement"
+                    testID={`edit-settlement-activity-${activity.id}`}
+                  >
+                    {rowContent}
+                  </Pressable>
+                ) : (
+                  <View key={activity.id} style={styles.activityItem}>
+                    {rowContent}
                   </View>
                 );
               })}
