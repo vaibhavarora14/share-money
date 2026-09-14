@@ -1,6 +1,7 @@
 import type { PlatformDestination } from "../../landingContent";
 import type { SeoPage } from "../../seoPages";
 import { PlatformCta } from "./PlatformCta";
+import { StoreBadges } from "./StoreBadges";
 
 export function Hero({
   primaryDestination,
@@ -38,6 +39,7 @@ export function Hero({
                 ))}
               </div>
             </div>
+            <StoreBadges placement="hero_store" />
             <div className="hero-trust-row" aria-label="SharedMoney highlights">
               {page.proof.map((item) => <span key={item}>{item}</span>)}
             </div>

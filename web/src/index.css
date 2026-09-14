@@ -509,6 +509,47 @@ html.dark .hero-trust-row span {
   gap: var(--space-1);
 }
 
+.store-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.store-badge-play {
+  display: inline-flex;
+  line-height: 0;
+  border-radius: var(--radius-sm, 4px);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.store-badge-play:hover,
+.store-badge-play:focus-visible {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+
+.store-badge-play img {
+  display: block;
+  width: auto;
+  height: 3.25rem;
+}
+
+.store-badge-ios {
+  color: var(--color-text-subtle);
+  font-size: 0.9375rem;
+  line-height: 1.35;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--color-text-subtle) 45%, transparent);
+  text-underline-offset: 0.18em;
+}
+
+.store-badge-ios:hover,
+.store-badge-ios:focus-visible {
+  color: var(--color-text);
+  text-decoration-color: currentColor;
+}
+
 .hero-product-shot {
   position: absolute;
   z-index: 1;
@@ -2140,6 +2181,16 @@ html.dark .hero-trust-row span {
     min-width: 0;
     padding-inline: var(--space-1);
     font-size: 0.875rem;
+  }
+
+  .store-badges {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+
+  .store-badge-play img {
+    height: 3rem;
   }
 
   .pulse-column,

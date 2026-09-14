@@ -70,9 +70,9 @@ export const platformDestinations: PlatformDestination[] = [
   {
     platform: "ios",
     label: "Open on iOS",
-    status: "iOS | Web access",
+    status: "iOS | App Store review",
     href: "https://sharedmoney.app/app",
-    ariaLabel: "Open SharedMoney on iOS",
+    ariaLabel: "Open SharedMoney on iPhone while the App Store listing is in review",
   },
   {
     platform: "web",

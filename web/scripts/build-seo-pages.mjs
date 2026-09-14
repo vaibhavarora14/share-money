@@ -8,6 +8,8 @@ const indexPath = path.join(distDir, "index.html");
 const contentPath = path.resolve(__dirname, "../src/seo-content.json");
 const siteUrl = "https://sharedmoney.app";
 const appUrl = `${siteUrl}/app`;
+const playStoreUrl =
+  "https://play.google.com/store/apps/details?id=com.vaibhavarora.sharemoney&pcampaignid=web_share";
 const ogImage = `${siteUrl}/og-sharedmoney.png`;
 const pages = JSON.parse(await readFile(contentPath, "utf8"));
 const pagesById = new Map(pages.map((page) => [page.id, page]));
@@ -32,6 +34,18 @@ function pageLink(page) {
   return `<a href="${escapeHtml(page.path)}">${escapeHtml(page.heading)}</a>`;
 }
 
+function ctaMarkup(page) {
+  const webHref = `${appUrl}?utm_source=organic&utm_medium=seo&utm_campaign=${escapeHtml(page.id)}`;
+  const ctaAttrs = (platform) =>
+    `class="cta" data-seo-cta data-platform="${platform}" data-placement="ssr_fallback"`;
+
+  return [
+    `<p><a ${ctaAttrs("web")} href="${webHref}">Open the SharedMoney web app</a></p>`,
+    `<p><a ${ctaAttrs("android")} href="${playStoreUrl}">Get it on Google Play</a></p>`,
+    `<p>iOS: App Store listing pending review — <a ${ctaAttrs("ios")} href="${appUrl}">use the web app on iPhone</a></p>`,
+  ].join("");
+}
+
 function fallbackMarkup(page) {
   const proofItems = page.proof.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
   const sections = page.sections
@@ -48,7 +62,7 @@ function fallbackMarkup(page) {
     .join("");
   const related = linkedPages(page).map((relatedPage) => `<li>${pageLink(relatedPage)}</li>`).join("");
 
-  return `<main id="main-content"><article class="seo-source"><header><p>${escapeHtml(page.eyebrow)}</p><h1>${escapeHtml(page.heading)}</h1><p>${escapeHtml(page.body)}</p><ul>${proofItems}</ul><p><a href="${appUrl}?utm_source=organic&utm_medium=seo&utm_campaign=${escapeHtml(page.id)}">Open the SharedMoney web app</a></p></header>${sections}<section><h2>Common questions</h2>${faqs}</section><nav aria-label="Related SharedMoney pages"><h2>Explore SharedMoney</h2><ul>${related}</ul></nav><footer><a href="/privacy">Privacy Policy</a><a href="/delete-account">Delete Account</a><a href="mailto:support@sharedmoney.app">Contact support</a></footer></article></main>`;
+  return `<main id="main-content"><article class="seo-source"><header><p>${escapeHtml(page.eyebrow)}</p><h1>${escapeHtml(page.heading)}</h1><p>${escapeHtml(page.body)}</p><ul>${proofItems}</ul>${ctaMarkup(page)}</header>${sections}<section><h2>Common questions</h2>${faqs}</section><nav aria-label="Related SharedMoney pages"><h2>Explore SharedMoney</h2><ul>${related}</ul></nav><footer><a href="/privacy">Privacy Policy</a><a href="/delete-account">Delete Account</a><a href="mailto:support@sharedmoney.app">Contact support</a></footer></article></main>`;
 }
 
 function structuredData(page) {
