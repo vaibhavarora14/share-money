@@ -12,6 +12,7 @@ import {
   Portal,
   SegmentedButtons,
   Text,
+  TextInput,
   useTheme
 } from "react-native-paper";
 import { ActivityFeed } from "../components/ActivityFeed";
@@ -28,7 +29,7 @@ import {
   useCancelInvitation,
   useGroupInvitations,
 } from "../hooks/useGroupInvitations";
-import { useRemoveMember } from "../hooks/useGroupMutations";
+import { useRemoveMember, useUpdateGroup } from "../hooks/useGroupMutations";
 import { useGroupDetails } from "../hooks/useGroups";
 import { SafetyTarget, useModeration } from "../hooks/useModeration";
 import {
@@ -51,6 +52,7 @@ import {
 import {
   Balance,
   ActivityItem,
+  Group,
   GroupInvitation,
   GroupWithMembers,
   Participant,
@@ -82,6 +84,7 @@ interface GroupDetailsScreenProps {
   onAddMember: () => void;
   onRemoveMember?: (userId: string) => Promise<void>;
   onLeaveGroup?: () => void;
+  onGroupUpdated?: (group: Group) => void;
   onAddTransaction: () => void;
   onEditTransaction: (transaction: Transaction) => void;
   onImportSplitwise?: () => void;
@@ -100,6 +103,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   onAddMember,
   onRemoveMember,
   onLeaveGroup,
+  onGroupUpdated,
   onAddTransaction,
   onEditTransaction,
   onImportSplitwise,
@@ -122,6 +126,11 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   );
   const [showMembers, setShowMembers] = useState<boolean>(false);
   const [showCurrencySettings, setShowCurrencySettings] = useState<boolean>(false);
+  const [editDialogVisible, setEditDialogVisible] = useState(false);
+  const [editName, setEditName] = useState(initialGroup.name);
+  const [editDescription, setEditDescription] = useState(
+    initialGroup.description || ""
+  );
   const [listMode, setListMode] = useState<"transactions" | "activity">(
     initialListMode
   );
@@ -390,6 +399,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     refetchGroup();
     refetchInvites();
   });
+  const updateGroupMutation = useUpdateGroup(() => {
+    void refetchGroup();
+  });
   const inviteParticipant = useInviteParticipant(() => {
     refetchParticipants();
     refetchInvites();
@@ -410,6 +422,13 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
   // Use groupData directly, fallback to initialGroup while loading
   const group = groupData || initialGroup;
+
+  useEffect(() => {
+    if (!editDialogVisible) {
+      setEditName(group.name);
+      setEditDescription(group.description || "");
+    }
+  }, [group.name, group.description, editDialogVisible]);
 
   // API already filters by group_id, so no need for client-side filtering
   const transactions = txData;
@@ -745,8 +764,49 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const isActiveMember =
     group.members?.some((m) => m.user_id === currentUserId && m.status === 'active') ?? false;
 
+  const isOwner =
+    group.members?.some(
+      (m) =>
+        m.user_id === currentUserId &&
+        m.status === "active" &&
+        (m.role === "owner" || group.created_by === currentUserId)
+    ) ?? false;
+
   const canManageMembers = isActiveMember;
   const canManageInvites = isActiveMember;
+
+  const handleOpenEditGroup = () => {
+    setEditName(group.name);
+    setEditDescription(group.description || "");
+    setEditDialogVisible(true);
+  };
+
+  const handleCloseEditGroup = () => {
+    setEditDialogVisible(false);
+  };
+
+  const handleSaveGroupDetails = async () => {
+    const trimmedName = editName.trim();
+    if (!trimmedName) {
+      Alert.alert("Validation", "Group name cannot be empty.");
+      return;
+    }
+
+    const normalizedDescription = editDescription.trim();
+
+    try {
+      const updatedGroup = await updateGroupMutation.mutate({
+        groupId: group.id,
+        name: trimmedName,
+        description: normalizedDescription.length > 0 ? normalizedDescription : null,
+      });
+      setEditDialogVisible(false);
+      setMenuVisible(false);
+      onGroupUpdated?.(updatedGroup);
+    } catch (err) {
+      Alert.alert("Error", getUserFriendlyErrorMessage(err));
+    }
+  };
 
   const handleCancelInvitation = async (invitationId: string) => {
     const performCancel = async () => {
@@ -960,6 +1020,17 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               title="People"
               leadingIcon="account-group"
             />
+            {isOwner && (
+              <Menu.Item
+                onPress={() => {
+                  handleCloseMenu();
+                  handleOpenEditGroup();
+                }}
+                title="Edit group details"
+                leadingIcon="pencil"
+                testID="group-menu-edit-details"
+              />
+            )}
             <Menu.Item
               onPress={() => {
                 handleCloseMenu();
@@ -1286,6 +1357,58 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           void clearGroupRate(group.id, from, to);
         }}
       />
+
+      <Portal>
+        <Dialog
+          visible={editDialogVisible}
+          onDismiss={handleCloseEditGroup}
+          testID="edit-group-dialog"
+        >
+          <Dialog.Title>Edit group</Dialog.Title>
+          <Dialog.Content>
+            <TextInput
+              label="Group name"
+              value={editName}
+              onChangeText={setEditName}
+              mode="outlined"
+              disabled={updateGroupMutation.isLoading}
+              style={{ marginBottom: 16 }}
+              left={<TextInput.Icon icon="account-group" />}
+              testID="edit-group-name-input"
+            />
+            <TextInput
+              label="Description (optional)"
+              value={editDescription}
+              onChangeText={setEditDescription}
+              mode="outlined"
+              disabled={updateGroupMutation.isLoading}
+              multiline
+              numberOfLines={3}
+              left={<TextInput.Icon icon="text" />}
+              testID="edit-group-description-input"
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={handleCloseEditGroup}
+              disabled={updateGroupMutation.isLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              mode="contained"
+              onPress={() => {
+                void handleSaveGroupDetails();
+              }}
+              loading={updateGroupMutation.isLoading}
+              disabled={updateGroupMutation.isLoading}
+              testID="edit-group-save-button"
+            >
+              Save
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
 
       {/* Web-compatible confirmation dialog */}
       {Platform.OS === "web" && confirmDialog && (

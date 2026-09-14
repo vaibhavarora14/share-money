@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Group, GroupWithMembers } from "../types";
 import { fetchWithAuth } from "../utils/api";
 import { captureAnalyticsEvent } from "../utils/posthogAnalytics";
 import { queryKeys } from "./queryKeys";
@@ -69,6 +70,62 @@ export function useDeleteGroup(onSuccess?: () => void) {
     },
     onSuccess: (data) => {
       invalidateGroupAdjacents(queryClient, data.groupId);
+      onSuccess?.();
+    },
+  });
+
+  return {
+    mutate: mutation.mutateAsync,
+    isLoading: mutation.isPending,
+    error: (mutation.error as Error | null) ?? null,
+  };
+}
+
+export function useUpdateGroup(onSuccess?: () => void) {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: async (variables: {
+      groupId: string;
+      name?: string;
+      description?: string | null;
+    }) => {
+      const payload: Record<string, string | null> = {};
+
+      if (variables.name !== undefined) {
+        payload.name = variables.name;
+      }
+
+      if (variables.description !== undefined) {
+        payload.description = variables.description;
+      }
+
+      if (Object.keys(payload).length === 0) {
+        throw new Error("Please provide a name or description to update");
+      }
+
+      const response = await fetchWithAuth(`/groups/${variables.groupId}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+
+      return response.json() as Promise<Group>;
+    },
+    onSuccess: (result, variables) => {
+      invalidateGroupAdjacents(queryClient, variables.groupId);
+      queryClient.setQueryData<Group[]>(queryKeys.groups, (current) =>
+        (current || []).map((item) =>
+          item.id === result.id ? { ...item, ...result } : item
+        )
+      );
+      queryClient.setQueryData<GroupWithMembers | null>(
+        queryKeys.group(variables.groupId),
+        (current) => (current ? { ...current, ...result } : current)
+      );
+      captureAnalyticsEvent("group_updated", {
+        updated_name: variables.name !== undefined,
+        updated_description: variables.description !== undefined,
+      });
       onSuccess?.();
     },
   });
