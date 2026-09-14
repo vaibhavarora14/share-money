@@ -57,6 +57,12 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     width: '100%',
   },
+  typeLabel: {
+    fontWeight: "700",
+    letterSpacing: 0.2,
+    textTransform: "uppercase",
+    flexShrink: 0,
+  },
   // Empty State
   emptyState: {
     alignItems: "center",
