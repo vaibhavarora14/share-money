@@ -36,10 +36,13 @@ function pageLink(page) {
 
 function ctaMarkup(page) {
   const webHref = `${appUrl}?utm_source=organic&utm_medium=seo&utm_campaign=${escapeHtml(page.id)}`;
+  const ctaAttrs = (platform) =>
+    `class="cta" data-seo-cta data-platform="${platform}" data-placement="ssr_fallback"`;
+
   return [
-    `<p><a href="${webHref}">Open the SharedMoney web app</a></p>`,
-    `<p><a href="${playStoreUrl}">Get it on Google Play</a></p>`,
-    `<p>iOS: App Store listing pending review — <a href="${appUrl}">use the web app on iPhone</a></p>`,
+    `<p><a ${ctaAttrs("web")} href="${webHref}">Open the SharedMoney web app</a></p>`,
+    `<p><a ${ctaAttrs("android")} href="${playStoreUrl}">Get it on Google Play</a></p>`,
+    `<p>iOS: App Store listing pending review — <a ${ctaAttrs("ios")} href="${appUrl}">use the web app on iPhone</a></p>`,
   ].join("");
 }
 

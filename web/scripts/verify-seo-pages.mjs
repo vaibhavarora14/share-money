@@ -58,6 +58,11 @@ for (const page of pages) {
   report(html.includes(playStoreUrl), `${page.path}: missing Google Play store link.`);
   report(html.includes("App Store listing pending review"), `${page.path}: missing soft iOS App Store status.`);
   report(!html.includes("apps.apple.com"), `${page.path}: must not link a public App Store install URL yet.`);
+  report(html.includes('data-seo-cta'), `${page.path}: missing SSR CTA tracking markers.`);
+  report(html.includes('data-platform="android"'), `${page.path}: missing android SSR CTA marker.`);
+  report(html.includes('data-platform="ios"'), `${page.path}: missing ios SSR CTA marker.`);
+  report(html.includes('data-platform="web"'), `${page.path}: missing web SSR CTA marker.`);
+  report(html.includes('data-placement="ssr_fallback"'), `${page.path}: missing SSR CTA placement.`);
 
   for (const relatedId of page.related) {
     const related = pages.find((candidate) => candidate.id === relatedId);
