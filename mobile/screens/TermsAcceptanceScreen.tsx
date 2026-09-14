@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Linking, Pressable, ScrollView, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 import {
   Button,
   Checkbox,
@@ -11,7 +11,11 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../contexts/AuthContext";
 import { useProfile } from "../hooks/useProfile";
+import { openAppExternalUrl } from "../utils/openAppExternalUrl";
 import { styles } from "./TermsAcceptanceScreen.styles";
+
+const TERMS_URL = "https://sharedmoney.app/terms";
+const PRIVACY_URL = "https://sharedmoney.app/privacy";
 
 export const TermsAcceptanceScreen: React.FC = () => {
   const [accepted, setAccepted] = useState(false);
@@ -35,7 +39,14 @@ export const TermsAcceptanceScreen: React.FC = () => {
     }
   };
 
-  return (
+  const handleOpenLegalUrl = (url: string) => {
+    void (async () => {
+      const result = await openAppExternalUrl(url, { showUserError: false });
+      if (!result.ok) {
+        setError(result.error);
+      }
+    })();
+  };  return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: theme.colors.background }]}
       edges={["top", "bottom"]}
@@ -127,7 +138,7 @@ export const TermsAcceptanceScreen: React.FC = () => {
             mode="text"
             compact
             accessibilityRole="link"
-            onPress={() => Linking.openURL("https://sharedmoney.app/terms")}
+            onPress={() => handleOpenLegalUrl(TERMS_URL)}
           >
             Terms of Use
           </Button>
@@ -136,12 +147,11 @@ export const TermsAcceptanceScreen: React.FC = () => {
             mode="text"
             compact
             accessibilityRole="link"
-            onPress={() => Linking.openURL("https://sharedmoney.app/privacy")}
+            onPress={() => handleOpenLegalUrl(PRIVACY_URL)}
           >
             Privacy Policy
           </Button>
         </View>
-
         {error ? (
           <Text
             accessibilityRole="alert"
