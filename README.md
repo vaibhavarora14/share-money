@@ -209,9 +209,10 @@ configuration fails closed.
 | `EXPO_PUBLIC_SUPABASE_URL` | API URL | `http://127.0.0.1:54321` (iOS) or `http://10.0.2.2:54321` (Android) |
 | `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Public anon key | (from `supabase status`) |
 | `EXPO_PUBLIC_API_URL` | Edge Functions base | `http://localhost:8888/api` |
-| `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | Google Web OAuth client ID used by Supabase Google auth | `...apps.googleusercontent.com` |
+| `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | Google Web OAuth client ID used by Supabase Google auth and Android native Google Sign-In | `...apps.googleusercontent.com` |
+| `EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME` | Optional reversed iOS Google client ID (`com.googleusercontent.apps…`) if enabling native Google on iOS later | `com.googleusercontent.apps.…` |
 
-For Android emulator Google sign-in against local Supabase, use the `sharedmoney-504507` Google Cloud project, add `http://127.0.0.1:54321/auth/v1/callback` as an Authorized redirect URI on the Google Web OAuth client, set the Google client ID/secret in `supabase/.env`, restart Supabase with `supabase stop && supabase start`, then run `adb reverse tcp:54321 tcp:54321`.
+For Android emulator Google sign-in against local Supabase, use the `sharedmoney-504507` Google Cloud project, add `http://127.0.0.1:54321/auth/v1/callback` as an Authorized redirect URI on the Google Web OAuth client, create an Android OAuth client for package `com.vaibhavarora.sharemoney` with your debug SHA-1, set the Google client ID/secret in `supabase/.env`, set `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` in `mobile/.env`, restart Supabase with `supabase stop && supabase start`, then run `adb reverse tcp:54321 tcp:54321`. Native Google Sign-In requires an Expo development build (`expo run:android`), not Expo Go. Full steps: [`docs/GOOGLE_AUTH.md`](docs/GOOGLE_AUTH.md).
 
 ### Key Scripts
 
