@@ -3,6 +3,8 @@ import {
   buildSocialAuthTelemetry,
   classifySocialAuthFailure,
   getSocialAuthUserMessage,
+  sanitizeSocialAuthErrorMessage,
+  shouldRetryAppleNativeAuth,
 } from "./socialAuth.ts";
 
 Deno.test("Google cancellation is expected", () => {
@@ -17,25 +19,46 @@ Deno.test("Google cancellation is expected", () => {
 });
 
 Deno.test("telemetry payload is grouped and excludes raw auth material", () => {
-  const rawSecret = "nonce-and-identity-token-must-not-appear";
+  const jwt =
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature";
   const failure = classifySocialAuthFailure({
     provider: "apple",
     stage: "native_request",
     code: "ERR_REQUEST_UNKNOWN",
-    message: rawSecret,
+    message: `unknown reason identity_token=${jwt}`,
   });
   const telemetry = buildSocialAuthTelemetry(failure, "attempt-123", {
     release: "2.20.1",
     build_number: "78",
     device_type: "physical",
-  });
+  }, { retryCount: 1 });
 
   assertEquals(telemetry.fingerprint, ["auth.apple.apple_unknown"]);
+  assertEquals(telemetry.level, "warning");
   assertEquals(telemetry.tags.auth_provider, "apple");
   assertEquals(telemetry.tags.auth_stage, "native_request");
   assertEquals(telemetry.tags.auth_code, "ERR_REQUEST_UNKNOWN");
   assertEquals(telemetry.extra.auth_attempt_id, "attempt-123");
-  assertEquals(JSON.stringify(telemetry).includes(rawSecret), false);
+  assertEquals(telemetry.extra.auth_retry_count, 1);
+  assertEquals(
+    telemetry.extra.provider_message,
+    "unknown reason identity_token=[redacted]",
+  );
+  assertEquals(JSON.stringify(telemetry).includes(jwt), false);
+});
+Deno.test("sanitizer redacts JWTs, hex nonces, and labeled tokens", () => {
+  const jwt =
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature";
+  const sanitized = sanitizeSocialAuthErrorMessage(
+    `Apple failed identity_token=${jwt} nonce=abcdef0123456789abcdef0123456789abcd bare ${jwt} hex abcdef0123456789abcdef0123456789abcd detail`,
+  );
+
+  assertEquals(sanitized?.includes(jwt), false);
+  assertEquals(sanitized?.includes("abcdef0123456789abcdef0123456789abcd"), false);
+  assertEquals(sanitized?.includes("identity_token=[redacted]"), true);
+  assertEquals(sanitized?.includes("nonce=[redacted]"), true);
+  assertEquals(sanitized?.includes("[redacted-jwt]"), true);
+  assertEquals(sanitized?.includes("[redacted-hex]"), true);
 });
 
 Deno.test("untrusted error codes cannot become Sentry tags", () => {
@@ -75,7 +98,7 @@ Deno.test("Apple cancellation code creates no actionable failure", () => {
   );
 });
 
-Deno.test("Apple unknown request code is grouped and retryable", () => {
+Deno.test("Apple unknown request code is grouped and retryable at native_request", () => {
   const failure = classifySocialAuthFailure({
     provider: "apple",
     stage: "native_request",
@@ -85,10 +108,33 @@ Deno.test("Apple unknown request code is grouped and retryable", () => {
 
   assertEquals(failure.kind, "apple_unknown");
   assertEquals(failure.group, "auth.apple.apple_unknown");
+  assertEquals(shouldRetryAppleNativeAuth(failure), true);
   assertEquals(
     getSocialAuthUserMessage(failure),
     "Apple sign-in couldn’t be completed. Please try again, or use email or Google sign-in.",
   );
+});
+
+Deno.test("Apple unknown is not retried outside native_request", () => {
+  const failure = classifySocialAuthFailure({
+    provider: "apple",
+    stage: "token_exchange",
+    code: "ERR_REQUEST_UNKNOWN",
+  });
+
+  assertEquals(failure.kind, "apple_unknown");
+  assertEquals(shouldRetryAppleNativeAuth(failure), false);
+});
+
+Deno.test("Apple cancellation is never treated as retryable unknown", () => {
+  const failure = classifySocialAuthFailure({
+    provider: "apple",
+    stage: "native_request",
+    code: "ERR_REQUEST_CANCELED",
+  });
+
+  assertEquals(failure.kind, "cancelled");
+  assertEquals(shouldRetryAppleNativeAuth(failure), false);
 });
 
 Deno.test("provider configuration failures are separated from unexpected failures", () => {
@@ -108,4 +154,19 @@ Deno.test("provider configuration failures are separated from unexpected failure
     }).kind,
     "unexpected",
   );
+});
+
+Deno.test("classified failure carries sanitized provider message for extras", () => {
+  const jwt =
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature";
+  const failure = classifySocialAuthFailure({
+    provider: "apple",
+    stage: "native_request",
+    code: "ERR_REQUEST_UNKNOWN",
+    message: `ERR_REQUEST_UNKNOWN ${jwt}`,
+  });
+  const telemetry = buildSocialAuthTelemetry(failure, "attempt-9", {});
+
+  assertEquals(telemetry.extra.provider_message?.includes(jwt), false);
+  assertEquals(telemetry.extra.provider_message?.includes("[redacted-jwt]"), true);
 });
