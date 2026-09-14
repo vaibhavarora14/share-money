@@ -11,6 +11,7 @@ import {
 export function recordSocialAuthFailure(
   failure: SocialAuthFailure,
   attemptId: string,
+  options: { retryCount?: number } = {},
 ): void {
   if (failure.kind === "cancelled") return;
 
@@ -28,6 +29,7 @@ export function recordSocialAuthFailure(
       buildNumber,
       platform: Platform.OS,
     }),
+    { retryCount: options.retryCount },
   );
 
   Sentry.captureMessage(telemetry.message, {
