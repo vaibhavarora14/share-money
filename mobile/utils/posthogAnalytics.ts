@@ -2,6 +2,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import PostHog from "posthog-react-native";
 import { Platform } from "react-native";
 import { resolvePostHogEnvConfig } from "./posthogConfig";
+import {
+  analyticsPersonPropertiesKey,
+  buildAnalyticsPersonProperties,
+  isSeedAuthUserId,
+  type AnalyticsPersonProperties,
+} from "./posthogIdentity";
 
 type AnalyticsProperties = Record<
   string,
@@ -10,6 +16,7 @@ type AnalyticsProperties = Record<
 
 let client: PostHog | null = null;
 let identifiedUserId: string | null = null;
+let identifiedPersonKey: string | null = null;
 let appOpenCaptured = false;
 
 function sanitizeProperties(
@@ -90,19 +97,53 @@ export function captureScreenView(screen: string): void {
 }
 
 /**
- * Identify with the product user id only — do not attach email as a person prop.
+ * Identify with the Supabase auth user id and set searchable person props
+ * (email/name) so support can find users in PostHog persons search / HogQL.
+ *
+ * Local seed UUIDs from supabase/seed.sql are never identified — Maestro and
+ * local release builds often share the Production PostHog key.
  */
-export function identifyAnalyticsUser(userId: string): void {
+export function identifyAnalyticsUser(
+  userId: string,
+  person?: AnalyticsPersonProperties,
+): void {
   if (!client || !userId) return;
-  if (identifiedUserId === userId) return;
-  client.identify(userId);
+
+  if (isSeedAuthUserId(userId)) {
+    if (__DEV__) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[PostHog] Skipping identify for local seed auth user id; " +
+          "seed identities must not appear in SharedMoney Production.",
+      );
+    }
+    return;
+  }
+
+  const personProperties = buildAnalyticsPersonProperties(person);
+  const nextPersonKey = analyticsPersonPropertiesKey(personProperties);
+  if (
+    identifiedUserId === userId &&
+    identifiedPersonKey === nextPersonKey
+  ) {
+    return;
+  }
+
+  // RN SDK: second arg is person properties ($set), e.g. { email, name }.
+  if (personProperties) {
+    client.identify(userId, personProperties);
+  } else {
+    client.identify(userId);
+  }
   identifiedUserId = userId;
+  identifiedPersonKey = nextPersonKey;
 }
 
 export function resetAnalyticsUser(): void {
   if (!client) return;
   client.reset();
   identifiedUserId = null;
+  identifiedPersonKey = null;
 }
 
 /**
@@ -111,13 +152,28 @@ export function resetAnalyticsUser(): void {
  */
 export function syncAnalyticsAuth(
   userId: string | null,
-  properties?: { auth_provider?: string },
+  properties?: {
+    auth_provider?: string;
+    email?: string;
+    name?: string;
+  },
 ): void {
   if (!client) return;
 
   if (userId) {
+    // Never attach seed/E2E identities to Production analytics.
+    if (isSeedAuthUserId(userId)) {
+      if (identifiedUserId) {
+        resetAnalyticsUser();
+      }
+      return;
+    }
+
     const isNewIdentity = identifiedUserId !== userId;
-    identifyAnalyticsUser(userId);
+    identifyAnalyticsUser(userId, {
+      email: properties?.email,
+      name: properties?.name,
+    });
     if (isNewIdentity) {
       captureAnalyticsEvent("auth_succeeded", {
         auth_provider: properties?.auth_provider || "unknown",
