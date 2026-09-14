@@ -10,7 +10,7 @@ import {
     StyleSheet,
     View,
 } from "react-native";
-import { Appbar, Button, Text, TextInput, useTheme } from "react-native-paper";
+import { Appbar, Button, Dialog, Portal, Text, TextInput, useTheme } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WEB_MAX_WIDTH } from "../constants/layout";
 import { Balance, GroupMember, Participant, Settlement } from "../types";
@@ -121,6 +121,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   const [loading, setLoading] = useState(false);
   const [amountError, setAmountError] = useState<string>("");
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Determine settlement direction
   const isPaying = useMemo(() => {
@@ -149,23 +150,31 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   }, [groupMembers, currentUserId]);
 
   const editableParticipants = useMemo(() => {
-    const fromMembers = groupMembers
-      .filter((m) => !!m.participant_id)
-      .map((m) => ({
-        id: m.participant_id as string,
-        label: m.full_name || m.email || `Member ${(m.participant_id || "").substring(0, 8)}`,
-      }));
+    const byId = new Map<string, { id: string; label: string }>();
 
-    if (fromMembers.length > 0) {
-      return fromMembers;
+    for (const member of groupMembers) {
+      if (!member.participant_id) continue;
+      byId.set(member.participant_id, {
+        id: member.participant_id,
+        label:
+          member.full_name ||
+          member.email ||
+          `Member ${member.participant_id.substring(0, 8)}`,
+      });
     }
 
-    return participants
-      .filter((p) => !!p.id)
-      .map((p) => ({
-        id: p.id,
-        label: p.full_name || p.email || `Member ${p.id.substring(0, 8)}`,
-      }));
+    for (const participant of participants) {
+      if (!participant.id || byId.has(participant.id)) continue;
+      byId.set(participant.id, {
+        id: participant.id,
+        label:
+          participant.full_name ||
+          participant.email ||
+          `Member ${participant.id.substring(0, 8)}`,
+      });
+    }
+
+    return Array.from(byId.values());
   }, [groupMembers, participants]);
 
   // Initialize form when modal becomes visible
@@ -178,6 +187,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
       setSelectedToParticipantId("");
       setAmountError("");
       setShowDatePicker(false);
+      setShowDeleteConfirm(false);
       return;
     }
 
@@ -348,30 +358,24 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
     }
   };
 
+  const performDelete = async () => {
+    if (!onDelete || !settlement) return;
+    setShowDeleteConfirm(false);
+    setLoading(true);
+    try {
+      await onDelete();
+    } catch (error) {
+      Alert.alert("Error", getUserFriendlyErrorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDelete = () => {
     if (!onDelete || !settlement || loading) return;
 
-    const performDelete = async () => {
-      setLoading(true);
-      try {
-        await onDelete();
-      } catch (error) {
-        Alert.alert("Error", getUserFriendlyErrorMessage(error));
-      } finally {
-        setLoading(false);
-      }
-    };
-
     if (Platform.OS === "web") {
-      const confirmed =
-        typeof globalThis.confirm === "function"
-          ? globalThis.confirm(
-              "Delete this settlement? Balances will be recalculated. This cannot be undone."
-            )
-          : true;
-      if (confirmed) {
-        void performDelete();
-      }
+      setShowDeleteConfirm(true);
       return;
     }
 
@@ -789,6 +793,43 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
             </View>
           </Modal>
         )}
+
+        <Portal>
+          <Dialog
+            visible={showDeleteConfirm}
+            onDismiss={() => setShowDeleteConfirm(false)}
+            testID="delete-settlement-confirm-dialog"
+          >
+            <Dialog.Title>Delete Settlement</Dialog.Title>
+            <Dialog.Content>
+              <Text variant="bodyMedium">
+                Are you sure you want to delete this settlement? Balances will be
+                recalculated. This cannot be undone.
+              </Text>
+            </Dialog.Content>
+            <Dialog.Actions>
+              <Button
+                onPress={() => setShowDeleteConfirm(false)}
+                disabled={loading}
+              >
+                Cancel
+              </Button>
+              <Button
+                onPress={() => {
+                  void performDelete();
+                }}
+                mode="contained"
+                buttonColor={theme.colors.error}
+                textColor={theme.colors.onError}
+                loading={loading}
+                disabled={loading}
+                testID="confirm-delete-settlement-button"
+              >
+                Delete
+              </Button>
+            </Dialog.Actions>
+          </Dialog>
+        </Portal>
       </View>
     </Modal>
   );
