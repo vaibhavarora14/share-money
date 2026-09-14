@@ -9,7 +9,7 @@ import {
     TouchableRipple,
     useTheme
 } from "react-native-paper";
-import { Balance, Transaction } from "../types";
+import { Balance, GroupStatsResponse } from "../types";
 import { UnifiedBalanceHero } from "./UnifiedBalanceHero";
 import { UnifyPromptCard } from "./UnifyPromptCard";
 import { useCurrencyPreferences } from "../hooks/useCurrencyPreferences";
@@ -24,14 +24,20 @@ import {
   type UnifiedDebtEdge,
 } from "../utils/currencyMerge";
 import { DebtEdge, simplifyDebts } from "../utils/debt";
+import {
+  currenciesFromGroupStats,
+  spendingTotalsFromGroupStats,
+} from "../utils/groupDashboardStats";
 
 interface GroupDashboardProps {
   groupId?: string;
   balances: Balance[];
-  transactions: Transaction[];
+  /** Full-set backend stats — never derive spending totals from paginated transactions. */
+  groupStats?: GroupStatsResponse | null;
   currentUserId?: string;
   currentUserParticipantId?: string;
   loading: boolean;
+  statsLoading?: boolean;
   defaultCurrency?: string;
   onSettlePress?: (balance: Balance) => void;
   onMyCostsPress?: () => void;
@@ -44,10 +50,11 @@ interface GroupDashboardProps {
 export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   groupId,
   balances,
-  transactions,
+  groupStats,
   currentUserId,
   currentUserParticipantId,
   loading,
+  statsLoading = false,
   defaultCurrency = getDefaultCurrency(),
   onSettlePress,
   onMyCostsPress,
@@ -62,10 +69,11 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
     rateBook,
     setGroupSettings,
   } = useCurrencyPreferences(groupId);
+  const dashboardLoading = loading || statsLoading;
 
   const usedCurrencies = useMemo(
-    () => collectCurrencies([...balances, ...transactions]),
-    [balances, transactions]
+    () => collectCurrencies([...balances, ...currenciesFromGroupStats(groupStats)]),
+    [balances, groupStats]
   );
   const hasMultipleCurrencies = isMultiCurrency(usedCurrencies);
   const unifyEnabled = groupSettings?.enabled === true && !!groupSettings.settlementCurrency;
@@ -136,49 +144,11 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
     }));
   }, [myDebts, currentUserId]);
 
-  // 3. Calculate Insights (Stats)
-  const { myCostTotal, groupCostTotal } = useMemo(() => {
-    const groupTotal = new Map<string, number>();
-    const myTotal = new Map<string, number>();
-
-    transactions.forEach((t) => {
-      const currency = t.currency || defaultCurrency;
-      const currentTotal = groupTotal.get(currency) || 0;
-      groupTotal.set(currency, currentTotal + t.amount);
-
-      let myShare = 0;
-      if (t.splits && t.splits.length > 0) {
-        const mySplit = t.splits.find(
-          (s) =>
-            (currentUserParticipantId &&
-              s.participant_id === currentUserParticipantId) ||
-            (currentUserId && s.user_id === currentUserId)
-        );
-        if (mySplit) myShare = mySplit.amount;
-      } else if (
-        t.split_among_participant_ids &&
-        t.split_among_participant_ids.length > 0
-      ) {
-        if (
-          currentUserParticipantId &&
-          t.split_among_participant_ids.includes(currentUserParticipantId)
-        ) {
-          myShare = t.amount / t.split_among_participant_ids.length;
-        }
-      } else if (t.split_among && t.split_among.length > 0) {
-        if (currentUserId && t.split_among.includes(currentUserId)) {
-          myShare = t.amount / t.split_among.length;
-        }
-      }
-
-      if (myShare > 0) {
-        const currentMyTotal = myTotal.get(currency) || 0;
-        myTotal.set(currency, currentMyTotal + myShare);
-      }
-    });
-
-    return { myCostTotal: myTotal, groupCostTotal: groupTotal };
-  }, [transactions, currentUserId, currentUserParticipantId, defaultCurrency]);
+  // 3. Insights from backend group_stats (independent of transaction list pagination)
+  const { myCostTotal, groupCostTotal } = useMemo(
+    () => spendingTotalsFromGroupStats(groupStats),
+    [groupStats]
+  );
 
   const myCostDisplay = useMemo(
     () => formatDisplayTotals(myCostTotal, {
@@ -301,9 +271,9 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
             <View style={{ flex: 1 }}>
                 <Text variant="labelSmall" style={{ color: theme.colors.onSecondaryContainer, opacity: 0.8 }}>My Spending</Text>
                 <Text variant="labelMedium" numberOfLines={2} style={{ color: theme.colors.onSecondaryContainer, fontWeight: 'bold' }}>
-                    {loading ? "..." : myCostDisplay.headline}
+                    {dashboardLoading ? "..." : myCostDisplay.headline}
                 </Text>
-                {!loading && myCostDisplay.breakdown ? (
+                {!dashboardLoading && myCostDisplay.breakdown ? (
                   <Text variant="labelSmall" numberOfLines={1} style={{ color: theme.colors.onSecondaryContainer, opacity: 0.75 }}>
                     from {myCostDisplay.breakdown}
                   </Text>
@@ -323,9 +293,9 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
             <View style={{ flex: 1 }}>
                 <Text variant="labelSmall" style={{ color: theme.colors.onTertiaryContainer, opacity: 0.8 }}>Group summary</Text>
                 <Text variant="labelMedium" numberOfLines={2} style={{ color: theme.colors.onTertiaryContainer, fontWeight: 'bold' }}>
-                    {loading ? "..." : groupCostDisplay.headline}
+                    {dashboardLoading ? "..." : groupCostDisplay.headline}
                 </Text>
-                {!loading && groupCostDisplay.breakdown ? (
+                {!dashboardLoading && groupCostDisplay.breakdown ? (
                   <Text variant="labelSmall" numberOfLines={1} style={{ color: theme.colors.onTertiaryContainer, opacity: 0.75 }}>
                     from {groupCostDisplay.breakdown}
                   </Text>
@@ -383,7 +353,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
                </Button>
              )}
            </View>
-        ) : (loading || !currentUserId) ? (
+        ) : (dashboardLoading || !currentUserId) ? (
              <View style={{ padding: 20, alignItems: 'center' }}>
                 <Text variant="bodySmall" style={{ opacity: 0.5 }}>Updating balances...</Text>
              </View>
