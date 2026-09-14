@@ -13,6 +13,11 @@ import {
   resolveGroupDefaultSplitAmong,
 } from "../utils/groupSplit";
 import { captureAnalyticsEvent } from "../utils/posthogAnalytics";
+import {
+  mapInfiniteTransactions,
+  replaceOptimisticTransactionInFeed,
+  resolveCreatedTransaction,
+} from "../utils/transactionOptimisticCache";
 import { queryKeys } from "./queryKeys";
 
 export interface TransactionsCursor {
@@ -149,22 +154,6 @@ export function getGroupFormDefaultSplitAmong(
     ),
     feedTransactions: getCachedGroupFeedTransactions(queryClient, groupId),
   });
-}
-
-function mapInfiniteTransactions(
-  data: InfiniteData<TransactionsPageResponse> | undefined,
-  mapper: (tx: Transaction) => Transaction | null
-): InfiniteData<TransactionsPageResponse> | undefined {
-  if (!data) return data;
-  return {
-    ...data,
-    pages: data.pages.map((page) => ({
-      ...page,
-      items: page.items
-        .map((tx) => mapper(tx))
-        .filter((tx): tx is Transaction => tx !== null),
-    })),
-  };
 }
 
 function invalidateTransactionAdjacents(queryClient: QueryClient, groupId?: string | null) {
@@ -365,20 +354,15 @@ export function useCreateTransaction(onSuccess?: () => void) {
     },
     onSuccess: (data, variables, context) => {
       const groupId = variables.group_id || context?.groupId;
-      const created =
-        data && typeof data === "object" && "id" in data
-          ? (data as Transaction)
-          : null;
+      const created = resolveCreatedTransaction(data, variables as Partial<Transaction>);
 
       // Replace temp optimistic id immediately so create → edit/delete
       // before refetch cannot 404 with Date.now() ids.
-      if (groupId && context?.optimisticId != null && created?.id != null) {
+      if (groupId && context?.optimisticId != null) {
         queryClient.setQueryData<InfiniteData<TransactionsPageResponse>>(
           queryKeys.transactionsFeed(groupId),
           (old) =>
-            mapInfiniteTransactions(old, (tx) =>
-              tx.id === context.optimisticId ? { ...tx, ...created } : tx
-            )
+            replaceOptimisticTransactionInFeed(old, context.optimisticId!, created)
         );
       }
 
