@@ -75,6 +75,10 @@ import {
   type TransactionHighlightTimer,
   type TransactionHighlightRowLayout,
 } from "../utils/transactionHighlight";
+import {
+  buildTransactionsLedger,
+  type LedgerFilter,
+} from "../utils/transactionsLedger";
 import { GroupStatsMode } from "./GroupStatsScreen";
 import { SettlementFormScreen } from "./SettlementFormScreen";
 
@@ -134,6 +138,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [listMode, setListMode] = useState<"transactions" | "activity">(
     initialListMode
   );
+  const [transactionsFilter, setTransactionsFilter] = useState<LedgerFilter>("all");
   const [showActivityFilters, setShowActivityFilters] = useState(false);
   const [activityFilterType, setActivityFilterType] = useState<"all" | "expenses" | "settlements">("all");
   const [activityFilterParticipantId, setActivityFilterParticipantId] = useState<string>("all");
@@ -438,6 +443,14 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
   // API already filters by group_id, so no need for client-side filtering
   const transactions = txData;
+  const settlements = settlementsData?.settlements ?? [];
+
+  // Mixed ledger for the Transactions tab (expenses + payments). Spending cards
+  // still use backend group_stats and intentionally ignore payment amounts.
+  const ledgerItems = useMemo(
+    () => buildTransactionsLedger(transactions, settlements, transactionsFilter),
+    [transactions, settlements, transactionsFilter],
+  );
 
   useEffect(() => {
     if (!highlightedTransactionId || listMode !== "transactions") return;
@@ -551,13 +564,14 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
     if (distanceFromBottom >= 220) return;
 
-    if (listMode === "transactions" && txHasNextPage && !txIsFetchingNextPage) {
+    if (listMode === "transactions" && transactionsFilter !== "payments" && txHasNextPage && !txIsFetchingNextPage) {
       void fetchNextTransactionsPage();
     } else if (listMode === "activity" && activityHasNextPage && !activityFetchingNextPage) {
       void fetchNextActivityPage();
     }
   }, [
     listMode,
+    transactionsFilter,
     txHasNextPage,
     txIsFetchingNextPage,
     fetchNextTransactionsPage,
@@ -721,6 +735,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   };
 
   const handleSettleUp = (balance: Balance) => {
+    setEditingSettlement(null);
     setSettlingBalance(balance);
     setShowSettlementForm(true);
   };
@@ -1181,6 +1196,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               statsLoading={groupStatsLoading}
               defaultCurrency={getDefaultCurrency()}
               onSettlePress={(balance) => {
+                  setEditingSettlement(null);
                   setSettlingBalance(balance);
                   setShowSettlementForm(true);
               }}
@@ -1220,18 +1236,75 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
             {listMode === "transactions" ? (
               <View onLayout={handleTransactionsSectionLayout}>
+                <View style={styles.transactionsFilterRow}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <Chip
+                      selected={transactionsFilter === "all"}
+                      onPress={() => setTransactionsFilter("all")}
+                      style={[
+                        styles.filterChip,
+                        transactionsFilter === "all" && {
+                          backgroundColor: theme.colors.primaryContainer,
+                        },
+                      ]}
+                      showSelectedCheck={true}
+                      mode={transactionsFilter === "all" ? "flat" : "outlined"}
+                      testID="transactions-filter-all"
+                    >
+                      All
+                    </Chip>
+                    <Chip
+                      selected={transactionsFilter === "expenses"}
+                      onPress={() => setTransactionsFilter("expenses")}
+                      style={[
+                        styles.filterChip,
+                        transactionsFilter === "expenses" && {
+                          backgroundColor: theme.colors.primaryContainer,
+                        },
+                      ]}
+                      showSelectedCheck={true}
+                      icon="format-list-bulleted"
+                      mode={transactionsFilter === "expenses" ? "flat" : "outlined"}
+                      testID="transactions-filter-expenses"
+                    >
+                      Expenses
+                    </Chip>
+                    <Chip
+                      selected={transactionsFilter === "payments"}
+                      onPress={() => setTransactionsFilter("payments")}
+                      style={[
+                        styles.filterChip,
+                        transactionsFilter === "payments" && {
+                          backgroundColor: theme.colors.primaryContainer,
+                        },
+                      ]}
+                      showSelectedCheck={true}
+                      icon="handshake-outline"
+                      mode={transactionsFilter === "payments" ? "flat" : "outlined"}
+                      testID="transactions-filter-payments"
+                    >
+                      Payments
+                    </Chip>
+                  </ScrollView>
+                </View>
                 <TransactionsSection
-                  items={transactions}
-                  loading={txLoading}
+                  items={ledgerItems}
+                  loading={txLoading || settlementsLoading}
                   hasNextPage={!!txHasNextPage}
                   isFetchingNextPage={txIsFetchingNextPage}
                   onLoadMore={handleLoadMoreTransactions}
-                  onEdit={isActiveMember ? onEditTransaction : () => {}}
+                  onEditExpense={isActiveMember ? onEditTransaction : () => {}}
+                  onEditPayment={
+                    isActiveMember
+                      ? (settlement) => handleEditSettlement(settlement)
+                      : undefined
+                  }
                   members={group.members || []}
                   participants={participants}
                   highlightedTransactionId={visibleHighlightedTransactionId}
                   onHighlightedLayout={handleHighlightedRowLayout}
                   onHighlightedInteraction={clearVisibleTransactionHighlight}
+                  filter={transactionsFilter}
                 />
               </View>
             ) : (
@@ -1388,9 +1461,13 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         onUpdate={handleSettlementUpdate}
         onDelete={editingSettlement ? handleSettlementDelete : undefined}
         onDismiss={() => {
+          // Hide first so the closing frame keeps edit chrome (avoids a
+          // one-frame flash of the create "Select a member" UI).
           setShowSettlementForm(false);
-          setSettlingBalance(null);
-          setEditingSettlement(null);
+          setTimeout(() => {
+            setSettlingBalance(null);
+            setEditingSettlement(null);
+          }, 250);
         }}
       />
 
@@ -1652,6 +1729,11 @@ const styles = StyleSheet.create({
   activitySection: {
     paddingBottom: 16,
     paddingTop: 12, 
+  },
+  transactionsFilterRow: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 4,
   },
   filterContainer: {
     marginBottom: 12, 
