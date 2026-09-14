@@ -18,6 +18,10 @@ describe("SEO route content", () => {
     ]);
   });
 
+  it("keeps SharedMoney as the home H1 for Google OAuth brand verification", () => {
+    expect(pageByPath.get("/")?.heading).toBe("SharedMoney");
+  });
+
   it("only resolves known paths and maintains related-page links", () => {
     const splitBills = pageByPath.get("/split-bills");
 

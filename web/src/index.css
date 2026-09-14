@@ -463,7 +463,7 @@ img {
 }
 
 .hero-title-block h1 {
-  max-width: 10.5ch;
+  max-width: 12ch;
   font-size: clamp(3.25rem, 6vw, 5.25rem);
   font-weight: 720;
   letter-spacing: 0;

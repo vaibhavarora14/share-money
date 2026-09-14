@@ -22,6 +22,10 @@ import { log, logError } from "../utils/logger";
 import { performLocalLogout } from "../utils/logoutFlow";
 import { syncAnalyticsAuth } from "../utils/posthogAnalytics";
 import {
+  canUseNativeGoogleSignIn,
+  signInWithNativeGoogle,
+} from "../utils/nativeGoogleAuth";
+import {
   classifySocialAuthFailure,
   getSocialAuthUserMessage,
   shouldRetryAppleNativeAuth,
@@ -431,8 +435,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   /**
-   * Signs in a user with Google OAuth
-   * Opens a browser for authentication and handles the OAuth callback
+   * Signs in a user with Google.
+   * Android development/production builds use native Credential Manager
+   * (account drawer) + Supabase signInWithIdToken. Web, iOS, and Expo Go keep
+   * the existing browser OAuth path so Apple/email flows stay unchanged.
    * @returns Promise resolving to an object with error property (null if successful)
    */
   const signInWithGoogle = useCallback(async () => {
@@ -440,7 +446,67 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     let stage: SocialAuthStage = "provider_request";
 
     try {
-      // For Expo Go, we MUST use the Expo proxy service.
+      if (canUseNativeGoogleSignIn()) {
+        stage = "native_request";
+        const nativeResult = await signInWithNativeGoogle();
+
+        if (nativeResult.status === "cancelled") {
+          return handleSocialAuthFailure(
+            "google",
+            stage,
+            new Error("Authentication was cancelled"),
+            attemptId,
+            true,
+          );
+        }
+
+        if (nativeResult.status === "unavailable") {
+          return handleSocialAuthFailure(
+            "google",
+            stage,
+            Object.assign(new Error(nativeResult.reason), {
+              code: "GOOGLE_NATIVE_UNAVAILABLE",
+            }),
+            attemptId,
+          );
+        }
+
+        stage = "token_exchange";
+        const { error: sessionError } = await supabase.auth.signInWithIdToken({
+          provider: "google",
+          token: nativeResult.idToken,
+          nonce: nativeResult.rawNonce,
+        });
+
+        if (sessionError) {
+          return handleSocialAuthFailure(
+            "google",
+            stage,
+            sessionError,
+            attemptId,
+          );
+        }
+
+        stage = "session_verification";
+        const {
+          data: { session: verifySession },
+          error: verifyError,
+        } = await supabase.auth.getSession();
+
+        if (verifyError || !verifySession) {
+          return handleSocialAuthFailure(
+            "google",
+            stage,
+            verifyError ||
+              new Error("Session was not created after native Google sign-in"),
+            attemptId,
+          );
+        }
+
+        return { error: null };
+      }
+
+      // Browser OAuth fallback (web, iOS, Expo Go, or misconfigured Android).
       const isExpoGo = Constants.appOwnership === "expo";
       const isWeb = Platform.OS === "web";
 
