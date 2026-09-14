@@ -24,11 +24,12 @@ import { syncAnalyticsAuth } from "../utils/posthogAnalytics";
 import {
   classifySocialAuthFailure,
   getSocialAuthUserMessage,
+  shouldRetryAppleNativeAuth,
+  type SocialAuthFailure,
   type SocialAuthProvider,
   type SocialAuthStage,
 } from "../utils/socialAuth";
 import { recordSocialAuthFailure } from "../utils/socialAuthTelemetry";
-
 // Complete the auth session when browser closes
 WebBrowser.maybeCompleteAuthSession();
 
@@ -117,18 +118,17 @@ function mapAuthError(
   return error;
 }
 
-function handleSocialAuthFailure(
+function classifyCaughtSocialAuthFailure(
   provider: SocialAuthProvider,
   stage: SocialAuthStage,
   error: unknown,
-  attemptId: string,
   cancelled = false,
-): { error: Error | null } {
+): SocialAuthFailure {
   const candidate =
     error && typeof error === "object"
       ? (error as { code?: unknown; message?: unknown })
       : null;
-  const failure = classifySocialAuthFailure({
+  return classifySocialAuthFailure({
     provider,
     stage,
     code: typeof candidate?.code === "string" ? candidate.code : undefined,
@@ -138,13 +138,28 @@ function handleSocialAuthFailure(
         : String(error ?? "Unknown social authentication error"),
     cancelled,
   });
+}
+
+function handleSocialAuthFailure(
+  provider: SocialAuthProvider,
+  stage: SocialAuthStage,
+  error: unknown,
+  attemptId: string,
+  cancelled = false,
+  retryCount = 0,
+): { error: Error | null } {
+  const failure = classifyCaughtSocialAuthFailure(
+    provider,
+    stage,
+    error,
+    cancelled,
+  );
 
   if (failure.kind === "cancelled") return { error: null };
 
-  recordSocialAuthFailure(failure, attemptId);
+  recordSocialAuthFailure(failure, attemptId, { retryCount });
   return { error: new Error(getSocialAuthUserMessage(failure)) };
 }
-
 function createAppleNonce(byteCount = 32): string {
   return Array.from(Crypto.getRandomBytes(byteCount))
     .map((byte) => byte.toString(16).padStart(2, "0"))
@@ -573,6 +588,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const signInWithApple = useCallback(async () => {
     const attemptId = Crypto.randomUUID();
     let stage: SocialAuthStage = "availability_check";
+    let appleNativeRetries = 0;
 
     try {
       if (Platform.OS !== "ios") {
@@ -586,20 +602,64 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         };
       }
 
-      const rawNonce = createAppleNonce();
-      const hashedNonce = await Crypto.digestStringAsync(
-        Crypto.CryptoDigestAlgorithm.SHA256,
-        rawNonce
-      );
+      const requestAppleCredential = async () => {
+        const rawNonce = createAppleNonce();
+        const hashedNonce = await Crypto.digestStringAsync(
+          Crypto.CryptoDigestAlgorithm.SHA256,
+          rawNonce
+        );
 
-      stage = "native_request";
-      const credential = await AppleAuthentication.signInAsync({
-        requestedScopes: [
-          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-          AppleAuthentication.AppleAuthenticationScope.EMAIL,
-        ],
-        nonce: hashedNonce,
-      });
+        stage = "native_request";
+        const credential = await AppleAuthentication.signInAsync({
+          requestedScopes: [
+            AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+            AppleAuthentication.AppleAuthenticationScope.EMAIL,
+          ],
+          nonce: hashedNonce,
+        });
+
+        return { credential, rawNonce };
+      };
+
+      let credential: AppleAuthentication.AppleAuthenticationCredential;
+      let rawNonce: string;
+
+      try {
+        ({ credential, rawNonce } = await requestAppleCredential());
+      } catch (nativeError) {
+        const failure = classifyCaughtSocialAuthFailure(
+          "apple",
+          stage,
+          nativeError,
+        );
+
+        // Retry once for transient Apple ERR_REQUEST_UNKNOWN with a fresh nonce.
+        // Do not report the first failure if the retry succeeds (avoids Sentry noise).
+        if (shouldRetryAppleNativeAuth(failure)) {
+          appleNativeRetries = 1;
+          try {
+            ({ credential, rawNonce } = await requestAppleCredential());
+          } catch (retryError) {
+            return handleSocialAuthFailure(
+              "apple",
+              stage,
+              retryError,
+              attemptId,
+              false,
+              appleNativeRetries,
+            );
+          }
+        } else {
+          return handleSocialAuthFailure(
+            "apple",
+            stage,
+            nativeError,
+            attemptId,
+            false,
+            appleNativeRetries,
+          );
+        }
+      }
 
       if (!credential.identityToken) {
         return handleSocialAuthFailure(
@@ -607,6 +667,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           stage,
           new Error("Apple did not return an identity token"),
           attemptId,
+          false,
+          appleNativeRetries,
         );
       }
 
@@ -623,6 +685,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           stage,
           sessionError,
           attemptId,
+          false,
+          appleNativeRetries,
         );
       }
 
@@ -643,6 +707,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
             stage,
             metadataError,
             attemptId,
+            false,
+            appleNativeRetries,
           );
         }
       }
@@ -660,6 +726,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           verifyError ||
             new Error("Session was not created after Apple sign-in"),
           attemptId,
+          false,
+          appleNativeRetries,
         );
       }
 
@@ -670,6 +738,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         stage,
         error,
         attemptId,
+        false,
+        appleNativeRetries,
       );
     }
   }, []);

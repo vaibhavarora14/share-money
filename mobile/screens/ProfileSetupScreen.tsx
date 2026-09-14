@@ -36,6 +36,7 @@ import { useCurrencyPreferences } from "../hooks/useCurrencyPreferences";
 import { useDeleteAccount } from "../hooks/useDeleteAccount";
 import { useProfile } from "../hooks/useProfile";
 import { CURRENCIES, getCurrencyName } from "../utils/currency";
+import { openAppExternalUrl } from "../utils/openAppExternalUrl";
 import {
   setCachedNotificationPreference,
   useNotifications,
@@ -666,7 +667,9 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             <Pressable
               accessibilityRole="link"
               accessibilityLabel="View Terms of Use"
-              onPress={() => void Linking.openURL("https://sharedmoney.app/terms")}
+              onPress={() => {
+                void openAppExternalUrl("https://sharedmoney.app/terms");
+              }}
               style={[
                 styles.supportButton,
                 {
@@ -690,7 +693,9 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             <Pressable
               accessibilityRole="link"
               accessibilityLabel="View Privacy Policy"
-              onPress={() => void Linking.openURL("https://sharedmoney.app/privacy")}
+              onPress={() => {
+                void openAppExternalUrl("https://sharedmoney.app/privacy");
+              }}
               style={[
                 styles.supportButton,
                 {

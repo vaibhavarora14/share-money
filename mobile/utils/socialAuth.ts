@@ -31,6 +31,8 @@ export type SocialAuthFailure = {
   code: string;
   kind: SocialAuthFailureKind;
   group: string;
+  /** Sanitized provider message safe for telemetry extras (never tokens). */
+  providerMessage?: string;
 };
 
 export type SocialAuthTelemetry = {
@@ -38,8 +40,44 @@ export type SocialAuthTelemetry = {
   level: "warning" | "error";
   fingerprint: string[];
   tags: Record<string, string>;
-  extra: { auth_attempt_id: string };
+  extra: {
+    auth_attempt_id: string;
+    provider_message?: string;
+    auth_retry_count?: number;
+  };
 };
+
+export type SocialAuthTelemetryOptions = {
+  retryCount?: number;
+};
+
+/**
+ * Strip credential-looking material before attaching provider messages to Sentry.
+ * Keeps Apple/OS error text useful while avoiding identity tokens / nonces / JWTs.
+ */
+export function sanitizeSocialAuthErrorMessage(
+  message?: string,
+): string | undefined {
+  if (!message) return undefined;
+
+  let sanitized = message
+    .replace(
+      /\b(identity[_-]?token|id[_-]?token|access[_-]?token|refresh[_-]?token|nonce)\b\s*[:=]\s*\S+/gi,
+      "$1=[redacted]",
+    )
+    .replace(
+      /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,
+      "[redacted-jwt]",
+    )
+    .replace(/\b[a-f0-9]{32,}\b/gi, "[redacted-hex]")
+    .trim();
+
+  if (!sanitized) return undefined;
+  if (sanitized.length > 240) {
+    sanitized = `${sanitized.slice(0, 240)}…`;
+  }
+  return sanitized;
+}
 
 export function classifySocialAuthFailure(
   input: SocialAuthFailureInput,
@@ -85,19 +123,36 @@ export function classifySocialAuthFailure(
     code,
     kind,
     group: `auth.${input.provider}.${kind}`,
+    providerMessage: sanitizeSocialAuthErrorMessage(input.message),
   };
+}
+
+/**
+ * Apple's ERR_REQUEST_UNKNOWN is often transient (sheet interruption / OS quirk).
+ * Retrying once at the native request stage is safe when we mint a fresh nonce.
+ */
+export function shouldRetryAppleNativeAuth(
+  failure: SocialAuthFailure,
+): boolean {
+  return (
+    failure.provider === "apple" &&
+    failure.kind === "apple_unknown" &&
+    failure.stage === "native_request"
+  );
 }
 
 export function buildSocialAuthTelemetry(
   failure: SocialAuthFailure,
   attemptId: string,
   runtimeTags: Record<string, string>,
+  options: SocialAuthTelemetryOptions = {},
 ): SocialAuthTelemetry {
   return {
     message: `Social authentication failure: ${failure.group}`,
     level:
       failure.kind === "browser_unavailable" ||
-      failure.kind === "provider_configuration"
+      failure.kind === "provider_configuration" ||
+      failure.kind === "apple_unknown"
         ? "warning"
         : "error",
     fingerprint: [failure.group],
@@ -110,6 +165,12 @@ export function buildSocialAuthTelemetry(
     },
     extra: {
       auth_attempt_id: attemptId,
+      ...(failure.providerMessage
+        ? { provider_message: failure.providerMessage }
+        : {}),
+      ...(typeof options.retryCount === "number"
+        ? { auth_retry_count: options.retryCount }
+        : {}),
     },
   };
 }
