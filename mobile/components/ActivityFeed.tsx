@@ -161,8 +161,16 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                 const openSettlement = () => {
                   if (!onPressSettlement || !isEditableSettlement) return;
                   const snapshot = activity.details?.settlement;
+                  const settlementId =
+                    activity.settlement_id || snapshot?.id || "";
+                  // Guard against missing/stale ids (history row id is not a settlement id)
+                  const uuidPattern =
+                    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                  if (!settlementId || !uuidPattern.test(settlementId)) {
+                    return;
+                  }
                   const settlement: Settlement = {
-                    id: activity.settlement_id || snapshot?.id || "",
+                    id: settlementId,
                     group_id: activity.group_id || snapshot?.group_id || "",
                     from_user_id: snapshot?.from_user_id || "",
                     to_user_id: snapshot?.to_user_id || "",
@@ -176,7 +184,6 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({
                     from_user_email: snapshot?.from_user_email,
                     to_user_email: snapshot?.to_user_email,
                   };
-                  if (!settlement.id) return;
                   onPressSettlement(settlement, activity);
                 };
 

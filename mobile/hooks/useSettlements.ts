@@ -1,7 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
-import { SettlementsResponse } from "../types";
+import { Settlement, SettlementsResponse } from "../types";
 import { fetchWithAuth } from "../utils/api";
 import type { SettlementCreateInput } from "../utils/peopleSettlements";
 import { captureAnalyticsEvent } from "../utils/posthogAnalytics";
@@ -80,6 +80,28 @@ export function useCreateSettlements(onSuccess?: () => void) {
       for (const groupId of groupIds) {
         invalidateSettlementAdjacents(queryClient, groupId);
       }
+      // Seed caches from successful creates when response includes settlements
+      for (const createdPayload of _data) {
+        const created =
+          createdPayload &&
+          typeof createdPayload === "object" &&
+          "settlement" in createdPayload
+            ? (createdPayload as { settlement?: Settlement }).settlement
+            : null;
+        if (!created?.id || !created.group_id) continue;
+        queryClient.setQueryData<SettlementsResponse>(
+          queryKeys.settlements(created.group_id),
+          (old) => {
+            const current = old?.settlements ?? [];
+            return {
+              settlements: [
+                created,
+                ...current.filter((item) => item.id !== created.id),
+              ],
+            };
+          }
+        );
+      }
       captureAnalyticsEvent("settlement_recorded", {
         settlement_count: settlements.length,
         currency: settlements[0]?.currency,
@@ -121,7 +143,27 @@ export function useCreateSettlement(onSuccess?: () => void) {
 
       return response.json();
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: (data, variables) => {
+      const created =
+        data && typeof data === "object" && "settlement" in data
+          ? (data as { settlement?: Settlement }).settlement
+          : null;
+
+      if (created?.id && variables.group_id) {
+        queryClient.setQueryData<SettlementsResponse>(
+          queryKeys.settlements(variables.group_id),
+          (old) => {
+            const current = old?.settlements ?? [];
+            return {
+              settlements: [
+                created,
+                ...current.filter((item) => item.id !== created.id),
+              ],
+            };
+          }
+        );
+      }
+
       invalidateSettlementAdjacents(queryClient, variables.group_id);
       captureAnalyticsEvent("settlement_recorded", {
         settlement_count: 1,
@@ -167,9 +209,25 @@ export function useUpdateSettlement(onSuccess?: () => void) {
       return response.json();
     },
     onSuccess: (data, variables) => {
+      const updated =
+        data && typeof data === "object" && "settlement" in data
+          ? (data as { settlement?: Settlement }).settlement
+          : null;
       const groupId =
         variables.group_id ||
-        (data as { settlement?: { group_id?: string } })?.settlement?.group_id;
+        updated?.group_id;
+
+      if (updated?.id && groupId) {
+        queryClient.setQueryData<SettlementsResponse>(
+          queryKeys.settlements(groupId),
+          (old) => {
+            const current = old?.settlements ?? [];
+            const without = current.filter((item) => item.id !== updated.id);
+            return { settlements: [updated, ...without] };
+          }
+        );
+      }
+
       invalidateSettlementAdjacents(queryClient, groupId);
       onSuccess?.();
     },

@@ -778,6 +778,28 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       group_id:
         liveSettlement?.group_id || settlement.group_id || group.id,
     };
+
+    // If activity snapshot is missing participants/amount, refresh list once
+    if (
+      !liveSettlement &&
+      settlement.id &&
+      (!settlement.from_participant_id || !settlement.to_participant_id)
+    ) {
+      void refetchSettlements().then((result) => {
+        const refreshed = result.data?.settlements?.find(
+          (item) => item.id === settlement.id
+        );
+        setSettlingBalance(null);
+        setEditingSettlement({
+          ...(refreshed || settlementWithGroupId),
+          group_id:
+            refreshed?.group_id || settlementWithGroupId.group_id || group.id,
+        });
+        setShowSettlementForm(true);
+      });
+      return;
+    }
+
     setSettlingBalance(null);
     setEditingSettlement(settlementWithGroupId);
     setShowSettlementForm(true);

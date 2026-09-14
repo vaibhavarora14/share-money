@@ -257,7 +257,8 @@ export function useCreateTransaction(onSuccess?: () => void) {
       previous?: InfiniteData<TransactionsPageResponse>;
       previousLatestCurrency?: string | null;
       previousLatestSplitAmong?: string[] | null;
-      groupId: string;
+      groupId?: string;
+      optimisticId?: number;
     }
   >({
     mutationFn: async (transactionData) => {
@@ -293,9 +294,10 @@ export function useCreateTransaction(onSuccess?: () => void) {
         queryKeys.lastGroupExpenseSplitAmong(groupId)
       );
 
+      const optimisticId = Date.now();
       const optimisticEntry: Transaction = {
         ...(variables as Transaction),
-        id: Date.now(),
+        id: optimisticId,
         created_at: new Date().toISOString(),
       };
 
@@ -336,7 +338,13 @@ export function useCreateTransaction(onSuccess?: () => void) {
         );
       }
 
-      return { previous, previousLatestCurrency, previousLatestSplitAmong, groupId };
+      return {
+        previous,
+        previousLatestCurrency,
+        previousLatestSplitAmong,
+        groupId,
+        optimisticId,
+      };
     },
     onError: (_error, _variables, context) => {
       if (!context?.groupId) return;
@@ -355,12 +363,29 @@ export function useCreateTransaction(onSuccess?: () => void) {
         context.previousLatestSplitAmong
       );
     },
-    onSuccess: (_data, variables, context) => {
-      const groupId = variables.group_id;
+    onSuccess: (data, variables, context) => {
+      const groupId = variables.group_id || context?.groupId;
+      const created =
+        data && typeof data === "object" && "id" in data
+          ? (data as Transaction)
+          : null;
+
+      // Replace temp optimistic id immediately so create → edit/delete
+      // before refetch cannot 404 with Date.now() ids.
+      if (groupId && context?.optimisticId != null && created?.id != null) {
+        queryClient.setQueryData<InfiniteData<TransactionsPageResponse>>(
+          queryKeys.transactionsFeed(groupId),
+          (old) =>
+            mapInfiniteTransactions(old, (tx) =>
+              tx.id === context.optimisticId ? { ...tx, ...created } : tx
+            )
+        );
+      }
+
       invalidateTransactionAdjacents(queryClient, groupId);
-      if (context?.groupId) {
+      if (groupId) {
         queryClient.invalidateQueries({
-          queryKey: queryKeys.transactionsFeed(context.groupId),
+          queryKey: queryKeys.transactionsFeed(groupId),
         });
       }
       captureAnalyticsEvent("expense_created", {
