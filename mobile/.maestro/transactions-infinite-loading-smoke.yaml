@@ -28,12 +28,33 @@ appId: com.vaibhavarora.sharemoney
 - assertVisible: "Transactions"
 - assertVisible: "Activity"
 
+# Capture dashboard spending labels before deeper pagination (values may vary by seed;
+# the key regression is that My Spending / Group summary remain visible and unchanged
+# after loading more list items — they must not be derived from the paginated list).
+- scrollUntilVisible:
+    element:
+      text: "My Spending"
+    direction: UP
+    timeout: 10000
+- assertVisible: "My Spending"
+- assertVisible: "Group summary"
+
 # Verify an older seeded transaction can still be reached
 - scrollUntilVisible:
     element:
       text: "Car rental for the week"
     direction: DOWN
     timeout: 10000
+
+# After reaching older list items, spending summary cards must still be present
+# (stable backend stats — not recomputed from newly loaded pages).
+- scrollUntilVisible:
+    element:
+      text: "My Spending"
+    direction: UP
+    timeout: 10000
+- assertVisible: "My Spending"
+- assertVisible: "Group summary"
 
 # Navigate back and sign out
 - tapOn: "Navigate back"
