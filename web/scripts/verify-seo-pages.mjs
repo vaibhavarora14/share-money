@@ -30,10 +30,16 @@ const playStoreUrl =
   "https://play.google.com/store/apps/details?id=com.vaibhavarora.sharemoney&pcampaignid=web_share";
 const homePage = pages.find((page) => page.path === "/");
 report(Boolean(homePage), "Home page must exist in seo-content.json.");
-report(
-  Boolean(homePage?.faqs.some((faq) => faq.question.includes("App Store"))),
-  "Home FAQ must include App Store status.",
-);
+
+const iosFaqPaths = ["/", "/split-bills", "/group-expense-tracker", "/trip-expense-splitter"];
+for (const pagePath of iosFaqPaths) {
+  const page = pages.find((candidate) => candidate.path === pagePath);
+  report(Boolean(page), `Expected SEO page at ${pagePath}.`);
+  report(
+    Boolean(page?.faqs.some((faq) => faq.question.includes("App Store"))),
+    `${pagePath}: FAQ must include App Store status.`,
+  );
+}
 
 for (const page of pages) {
   const filePath = outputPath(page);
