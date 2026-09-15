@@ -149,6 +149,17 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
       ? notifications.data?.unread_by_group[group.id] ?? 0
       : 0;
     const hasUnreadActivity = unreadActivityCount > 0;
+    const statusLabel =
+      group.user_status === "left"
+        ? "Former Member"
+        : group.archived_at
+          ? "Archived"
+          : null;
+    const statusColor =
+      group.user_status === "left"
+        ? theme.colors.error
+        : theme.colors.onSurfaceVariant;
+    const description = group.description || "No description";
 
     return (
     <Surface
@@ -223,39 +234,30 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                 />
               ) : null}
             </View>
-            <View style={styles.groupMetadata}>
-              {group.user_status === 'left' && (
-                <Text 
-                  variant="bodySmall"
-                  style={[styles.formerStatusText, { color: theme.colors.error }]}
-                >
-                  Former Member
-                </Text>
-              )}
-              {group.user_status !== 'left' && !!group.archived_at && (
-                <Text
-                  variant="bodySmall"
-                  style={[styles.formerStatusText, { color: theme.colors.onSurfaceVariant }]}
-                >
-                  Archived
-                </Text>
-              )}
-              {(group.user_status === 'left' || !!group.archived_at) && (
-                <Text
-                  variant="bodySmall"
-                  style={[styles.metadataSeparator, { color: theme.colors.onSurfaceVariant }]}
-                >
-                  •
-                </Text>
-              )}
-              <Text
-                variant="bodySmall"
-                style={{ color: theme.colors.onSurfaceVariant, flex: 1 }}
-                numberOfLines={1}
-              >
-                {group.description || "No description"}
-              </Text>
-            </View>
+            <Text
+              variant="bodySmall"
+              style={[
+                styles.groupSubtitle,
+                { color: theme.colors.onSurfaceVariant },
+              ]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {statusLabel ? (
+                <>
+                  <Text
+                    variant="bodySmall"
+                    style={[styles.formerStatusText, { color: statusColor }]}
+                  >
+                    {statusLabel}
+                  </Text>
+                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                    {" · "}
+                  </Text>
+                </>
+              ) : null}
+              {description}
+            </Text>
           </View>
         </View>
 
@@ -454,7 +456,11 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                     { backgroundColor: theme.colors.surface },
                   ]}
                   left={(props) => (
-                    <List.Icon {...props} icon="archive-outline" />
+                    <List.Icon
+                      {...props}
+                      icon="archive-outline"
+                      style={styles.accordionLeftIcon}
+                    />
                   )}
                   expanded={archivedGroupsExpanded}
                   onPress={() => setArchivedGroupsExpanded(!archivedGroupsExpanded)}
@@ -476,7 +482,11 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                     { backgroundColor: theme.colors.surface },
                   ]}
                   left={(props) => (
-                    <List.Icon {...props} icon="history" />
+                    <List.Icon
+                      {...props}
+                      icon="history"
+                      style={styles.accordionLeftIcon}
+                    />
                   )}
                   expanded={formerGroupsExpanded}
                   onPress={() => setFormerGroupsExpanded(!formerGroupsExpanded)}
@@ -615,15 +625,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   // New Styles
-  groupMetadata: {
-    flexDirection: "row",
-    alignItems: "center",
+  groupSubtitle: {
+    marginTop: 2,
   },
   formerStatusText: {
     fontWeight: "bold",
-  },
-  metadataSeparator: {
-    marginHorizontal: 4,
   },
   groupMainContent: {
     flexDirection: "row",
@@ -633,17 +639,25 @@ const styles = StyleSheet.create({
   groupInfo: {
     flex: 1,
     paddingRight: 8,
+    minWidth: 0,
   },
   accordion: {
     marginTop: 12,
     marginBottom: 12,
     borderRadius: 8,
     overflow: "hidden",
+    paddingHorizontal: 0,
   },
   accordionTitle: {
     fontWeight: "600",
   },
+  accordionLeftIcon: {
+    marginLeft: 0,
+    marginRight: 0,
+  },
   accordionContent: {
     paddingHorizontal: 0,
+    paddingLeft: 0,
+    marginLeft: 0,
   },
 });
