@@ -63,6 +63,10 @@ export interface Group {
   created_at: string;
   updated_at: string;
   user_status?: 'active' | 'left' | 'invited';
+  /** Per-user: when set, group is under Archived (not Active). */
+  archived_at?: string | null;
+  /** Per-user: when set, group is removed from Active/Archived/Former for this user. */
+  hidden_at?: string | null;
   settlement_currency?: string | null;
   unify_balances?: boolean;
 }
@@ -76,6 +80,8 @@ export interface GroupMember {
   status?: 'active' | 'left' | 'invited'; // 'invited' for users who haven't signed up yet
   joined_at: string;
   left_at?: string | null;
+  archived_at?: string | null;
+  hidden_at?: string | null;
   email?: string;
   full_name?: string | null;
   avatar_url?: string | null;
