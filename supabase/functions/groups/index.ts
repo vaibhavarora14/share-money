@@ -12,11 +12,13 @@ import { requireMinVersion } from '../_shared/version-check.ts';
  * Groups Edge Function
  * 
  * Handles CRUD operations for expense groups:
- * - GET /groups - List all groups user belongs to
+ * - GET /groups - List groups for the current user (excludes per-user hidden)
  * - GET /groups/:id - Get group details with members
  * - POST /groups - Create new group
  * - PATCH /groups/:id - Update name/description (owners) and/or settlement currency settings (active members)
- * - DELETE /groups/:id - Delete group (owners only)
+ * - POST /groups/:id/archive | /unarchive | /hide - Per-user list visibility (no hard delete)
+ * 
+ * Group hard-delete is disabled (DB prevent_group_delete). Use Leave / Archive / Hide instead.
  * 
  * @route /functions/v1/groups
  * @requires Authentication
@@ -42,6 +44,9 @@ interface GroupMember {
 }
 
 interface GroupWithMembers extends Group {
+  user_status?: string;
+  archived_at?: string | null;
+  hidden_at?: string | null;
   members?: Array<GroupMember & { email?: string; full_name?: string | null; avatar_url?: string | null }>;
 }
 
@@ -81,9 +86,9 @@ Deno.serve(async (req: Request) => {
     const parsedPath = parsePath(url.pathname);
     const groupId = parsedPath.resource === 'groups' ? parsedPath.id : null;
 
-    // Handle GET /groups - List all groups user belongs to
+    // Handle GET /groups - List groups for the current user (hidden excluded)
     if (httpMethod === 'GET' && !groupId) {
-      // Get groups and include the user's membership status
+      // Get groups and include the user's membership status / visibility
       const { data: groups, error } = await supabase
         .from('groups')
         .select(`
@@ -95,7 +100,7 @@ Deno.serve(async (req: Request) => {
           updated_at,
           settlement_currency,
           unify_balances,
-          group_members!inner(status)
+          group_members!inner(status, archived_at, hidden_at)
         `)
         .eq('group_members.user_id', user.id)
         .order('created_at', { ascending: false });
@@ -104,19 +109,32 @@ Deno.serve(async (req: Request) => {
         return handleError(error, 'fetching groups', req);
       }
 
-      // Flatten the response and extract status
-      const flattenedGroups = (groups || []).map((g: any) => ({
-        ...g,
-        user_status: g.group_members?.[0]?.status || 'active',
-        group_members: undefined // Remove nesting
-      }));
+      // Flatten the response and extract status / archive state.
+      // Hidden memberships are omitted from the list for this user only.
+      const flattenedGroups = (groups || [])
+        .map((g: any) => {
+          const membership = g.group_members?.[0] || {};
+          return {
+            ...g,
+            user_status: membership.status || 'active',
+            archived_at: membership.archived_at ?? null,
+            hidden_at: membership.hidden_at ?? null,
+            group_members: undefined, // Remove nesting
+          };
+        })
+        .filter((g: any) => !g.hidden_at)
+        .map((g: any) => ({ ...g, hidden_at: null }));
 
-      // Sort: active/invited first, left (former) last. 
-      // Secondary sort is created_at (already handled by DB query, but sort is stable)
+      // Sort: active (non-archived) first, archived next, left (former) last.
       flattenedGroups.sort((a: any, b: any) => {
-        if (a.user_status === 'left' && b.user_status !== 'left') return 1;
-        if (a.user_status !== 'left' && b.user_status === 'left') return -1;
-        return 0; // Keep DB order (created_at DESC) for same statuses
+        const rank = (g: any) => {
+          if (g.user_status === 'left') return 2;
+          if (g.archived_at) return 1;
+          return 0;
+        };
+        const diff = rank(a) - rank(b);
+        if (diff !== 0) return diff;
+        return 0; // Keep DB order (created_at DESC) within the same bucket
       });
 
       return createSuccessResponse(flattenedGroups, 200, 0, req); // No caching - real-time data
@@ -143,7 +161,7 @@ Deno.serve(async (req: Request) => {
       // Get group members
       const { data: members, error: membersError } = await supabase
         .from('group_members')
-        .select('id, group_id, user_id, role, joined_at, status, left_at')
+        .select('id, group_id, user_id, role, joined_at, status, left_at, archived_at, hidden_at')
         .eq('group_id', groupId)
         .order('joined_at', { ascending: true });
 
@@ -177,8 +195,13 @@ Deno.serve(async (req: Request) => {
         };
       });
 
+      const myMembership = (members || []).find((m: any) => m.user_id === user.id);
+
       const groupWithMembers: GroupWithMembers = {
         ...group,
+        user_status: myMembership?.status || undefined,
+        archived_at: myMembership?.archived_at ?? null,
+        hidden_at: myMembership?.hidden_at ?? null,
         members: membersWithEmails,
       };
 
@@ -371,7 +394,67 @@ Deno.serve(async (req: Request) => {
       return createSuccessResponse(group, 200, 0, req);
     }
 
-    // Method not allowed
+    // Per-user list visibility: archive / unarchive / hide (never delete the group)
+    const membershipAction = parsedPath.resource === 'groups' ? parsedPath.action : null;
+    if (
+      httpMethod === 'POST' &&
+      groupId &&
+      (membershipAction === 'archive' ||
+        membershipAction === 'unarchive' ||
+        membershipAction === 'hide')
+    ) {
+      if (!isValidUUID(groupId)) {
+        return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR', undefined, req);
+      }
+
+      const rpcArgs: {
+        p_group_id: string;
+        p_archived?: boolean;
+        p_hidden?: boolean;
+      } = { p_group_id: groupId };
+
+      if (membershipAction === 'archive') {
+        rpcArgs.p_archived = true;
+      } else if (membershipAction === 'unarchive') {
+        rpcArgs.p_archived = false;
+      } else {
+        rpcArgs.p_hidden = true;
+      }
+
+      const { data: membership, error } = await supabase.rpc(
+        'update_my_group_membership_visibility',
+        rpcArgs,
+      );
+
+      if (error) {
+        const message = (error.message || '').toLowerCase();
+        if (message.includes('not authenticated')) {
+          return createErrorResponse(401, 'Unauthorized', 'AUTH_ERROR', undefined, req);
+        }
+        if (message.includes('not a member')) {
+          return createErrorResponse(404, 'You are not a member of this group', 'NOT_FOUND', undefined, req);
+        }
+        if (
+          message.includes('only active') ||
+          message.includes('only available') ||
+          message.includes('already removed') ||
+          message.includes('cannot be') ||
+          message.includes('provide archived')
+        ) {
+          return createErrorResponse(400, error.message || 'Invalid membership visibility update', 'VALIDATION_ERROR', undefined, req);
+        }
+        return handleError(error, 'updating group membership visibility', req);
+      }
+
+      return createSuccessResponse({
+        group_id: groupId,
+        status: membership?.status ?? null,
+        archived_at: membership?.archived_at ?? null,
+        hidden_at: membership?.hidden_at ?? null,
+      }, 200, 0, req);
+    }
+
+    // Method not allowed — group hard-delete is intentionally unsupported
     return createErrorResponse(405, 'Method not allowed', 'METHOD_NOT_ALLOWED', undefined, req);
   } catch (error: unknown) {
     return handleError(error, 'groups handler', req);

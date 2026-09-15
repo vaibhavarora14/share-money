@@ -33,6 +33,7 @@ import { isTransactionNotificationsEnabled } from "../utils/featureFlags";
 import { shouldShowNotificationPrimer } from "../utils/notificationPermission";
 import { logError } from "../utils/logger";
 import { getSeenGroupIds, markGroupSeen } from "../utils/seenGroups";
+import { partitionGroupsBySection } from "../utils/groupListSections";
 import { CreateGroupScreen } from "./CreateGroupScreen";
 
 interface GroupsListScreenProps {
@@ -56,6 +57,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
 }) => {
   const [showCreateGroup, setShowCreateGroup] = useState<boolean>(false);
   const [formerGroupsExpanded, setFormerGroupsExpanded] = useState<boolean>(false);
+  const [archivedGroupsExpanded, setArchivedGroupsExpanded] = useState<boolean>(false);
   const [seenGroupIds, setSeenGroupIds] = useState<Set<string> | null>(null);
   const theme = useTheme();
   const queryClient = useQueryClient();
@@ -129,24 +131,25 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
 
   const isInitialLoading = loading && groups.length === 0;
 
-  // Separate groups into active and former
-  const activeGroups = groups.filter(
-    (group) => group.user_status !== "left"
-  );
-  const formerGroups = groups.filter(
-    (group) => group.user_status === "left"
-  );
+  const { activeGroups, archivedGroups, formerGroups } =
+    partitionGroupsBySection(groups);
+  const hasAnyVisibleGroups =
+    activeGroups.length > 0 ||
+    archivedGroups.length > 0 ||
+    formerGroups.length > 0;
 
   // Helper function to render a group item
   const renderGroupItem = (group: Group) => {
     const isNew =
       seenGroupIds !== null &&
       !seenGroupIds.has(group.id) &&
-      group.user_status !== "left";
+      group.user_status !== "left" &&
+      !group.archived_at;
     const unreadActivityCount = notificationsEnabled
       ? notifications.data?.unread_by_group[group.id] ?? 0
       : 0;
     const hasUnreadActivity = unreadActivityCount > 0;
+    const description = group.description || "No description";
 
     return (
     <Surface
@@ -162,7 +165,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
         style={styles.groupTouchable}
         onPress={() => handleGroupPress(group)}
         activeOpacity={0.7}
-        accessibilityLabel={`${group.name}${isNew ? ", new group" : ""}${hasUnreadActivity ? `, ${unreadActivityCount} unread ${unreadActivityCount === 1 ? "notification" : "notifications"}` : ""}`}
+        accessibilityLabel={`${group.name}${isNew ? ", new group" : ""}${hasUnreadActivity ? `, ${unreadActivityCount} unread ${unreadActivityCount === 1 ? "notification" : "notifications"}` : ""}${group.archived_at ? ", archived" : ""}${group.user_status === "left" ? ", former member" : ""}`}
       >
         <View style={styles.groupMainContent}>
           <View style={styles.groupIconContainer}>
@@ -221,31 +224,17 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                 />
               ) : null}
             </View>
-            <View style={styles.groupMetadata}>
-              {group.user_status === 'left' && (
-                <Text 
-                  variant="bodySmall"
-                  style={[styles.formerStatusText, { color: theme.colors.error }]}
-                >
-                  Former Member
-                </Text>
-              )}
-              {group.user_status === 'left' && (
-                <Text
-                  variant="bodySmall"
-                  style={[styles.metadataSeparator, { color: theme.colors.onSurfaceVariant }]}
-                >
-                  •
-                </Text>
-              )}
-              <Text
-                variant="bodySmall"
-                style={{ color: theme.colors.onSurfaceVariant, flex: 1 }}
-                numberOfLines={1}
-              >
-                {group.description || "No description"}
-              </Text>
-            </View>
+            <Text
+              variant="bodySmall"
+              style={[
+                styles.groupSubtitle,
+                { color: theme.colors.onSurfaceVariant },
+              ]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {description}
+            </Text>
           </View>
         </View>
 
@@ -396,7 +385,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
               </View>
             </Surface>
           ) : null}
-          {groups.length === 0 ? (
+          {!hasAnyVisibleGroups ? (
             <View style={styles.emptyContainer}>
               <Surface style={styles.emptySurface} elevation={0}>
                 <IconButton
@@ -434,6 +423,32 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
               {/* Active Groups */}
               {activeGroups.map((group) => renderGroupItem(group))}
 
+              {/* Archived Groups */}
+              {archivedGroups.length > 0 && (
+                <List.Accordion
+                  title={`Archived (${archivedGroups.length})`}
+                  titleStyle={styles.accordionTitle}
+                  style={[
+                    styles.accordion,
+                    { backgroundColor: theme.colors.surface },
+                  ]}
+                  left={(props) => (
+                    <List.Icon
+                      {...props}
+                      icon="archive-outline"
+                      style={styles.accordionLeftIcon}
+                    />
+                  )}
+                  expanded={archivedGroupsExpanded}
+                  onPress={() => setArchivedGroupsExpanded(!archivedGroupsExpanded)}
+                  testID="archived-groups-accordion"
+                >
+                  <View style={styles.accordionContent}>
+                    {archivedGroups.map((group) => renderGroupItem(group))}
+                  </View>
+                </List.Accordion>
+              )}
+
               {/* Former Groups in Accordion */}
               {formerGroups.length > 0 && (
                 <List.Accordion
@@ -444,10 +459,15 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                     { backgroundColor: theme.colors.surface },
                   ]}
                   left={(props) => (
-                    <List.Icon {...props} icon="history" />
+                    <List.Icon
+                      {...props}
+                      icon="history"
+                      style={styles.accordionLeftIcon}
+                    />
                   )}
                   expanded={formerGroupsExpanded}
                   onPress={() => setFormerGroupsExpanded(!formerGroupsExpanded)}
+                  testID="former-groups-accordion"
                 >
                   <View style={styles.accordionContent}>
                     {formerGroups.map((group) => renderGroupItem(group))}
@@ -582,15 +602,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   // New Styles
-  groupMetadata: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  formerStatusText: {
-    fontWeight: "bold",
-  },
-  metadataSeparator: {
-    marginHorizontal: 4,
+  groupSubtitle: {
+    marginTop: 2,
   },
   groupMainContent: {
     flexDirection: "row",
@@ -600,17 +613,25 @@ const styles = StyleSheet.create({
   groupInfo: {
     flex: 1,
     paddingRight: 8,
+    minWidth: 0,
   },
   accordion: {
     marginTop: 12,
     marginBottom: 12,
     borderRadius: 8,
     overflow: "hidden",
+    paddingHorizontal: 0,
   },
   accordionTitle: {
     fontWeight: "600",
   },
+  accordionLeftIcon: {
+    marginLeft: 0,
+    marginRight: 0,
+  },
   accordionContent: {
     paddingHorizontal: 0,
+    paddingLeft: 0,
+    marginLeft: 0,
   },
 });

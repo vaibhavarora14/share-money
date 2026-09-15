@@ -29,7 +29,7 @@ import {
   useCancelInvitation,
   useGroupInvitations,
 } from "../hooks/useGroupInvitations";
-import { useRemoveMember, useUpdateGroup } from "../hooks/useGroupMutations";
+import { useRemoveMember, useUpdateGroup, useArchiveGroup, useUnarchiveGroup, useHideGroupFromLists } from "../hooks/useGroupMutations";
 import { useGroupDetails } from "../hooks/useGroups";
 import { SafetyTarget, useModeration } from "../hooks/useModeration";
 import {
@@ -83,6 +83,11 @@ import {
   countActiveMembers,
   shouldPreferAddPeopleFab,
 } from "../utils/transactionsEmptyCopy";
+import {
+  ARCHIVE_GROUP_CONFIRM_MESSAGE,
+  REMOVE_FROM_LISTS_CONFIRM_MESSAGE,
+  buildLeaveGroupConfirmMessage,
+} from "../utils/leaveBalanceCopy";
 import { GroupStatsMode } from "./GroupStatsScreen";
 import { SettlementFormScreen } from "./SettlementFormScreen";
 
@@ -124,6 +129,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   captureHardwareBack = true,
 }) => {
   const [leaving, setLeaving] = useState<boolean>(false);
+  const [membershipActionLoading, setMembershipActionLoading] = useState<boolean>(false);
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
   const [workingParticipantId, setWorkingParticipantId] = useState<string | null>(null);
   const [menuVisible, setMenuVisible] = useState<boolean>(false);
@@ -414,6 +420,19 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     refetchGroup();
     refetchInvites();
   });
+  const archiveGroupMutation = useArchiveGroup(() => {
+    void refetchGroup();
+  });
+  const unarchiveGroupMutation = useUnarchiveGroup(() => {
+    void refetchGroup();
+  });
+  const hideGroupMutation = useHideGroupFromLists(() => {
+    if (onLeaveGroup) {
+      onLeaveGroup();
+    } else {
+      onBack();
+    }
+  });
   const updateGroupMutation = useUpdateGroup(() => {
     void refetchGroup();
   });
@@ -599,8 +618,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   }, [groupRefreshTrigger, refetchGroup]);
 
   const handleLeaveGroup = async () => {
-    const currentUserId = session?.user?.id;
-    if (!currentUserId) {
+    const currentUserIdForLeave = session?.user?.id;
+    if (!currentUserIdForLeave) {
       if (Platform.OS === "web") {
         setConfirmDialog({
           visible: true,
@@ -615,12 +634,18 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       return;
     }
 
+    const leaveMessage = buildLeaveGroupConfirmMessage(
+      group.name,
+      balancesData?.group_balances?.[0]?.balances,
+      currentUserIdForLeave
+    );
+
     const performLeave = async () => {
       try {
         setLeaving(true);
         await removeMemberMutation.mutate({
           groupId: group.id,
-          userId: currentUserId,
+          userId: currentUserIdForLeave,
         });
         // Call the onLeaveGroup callback if provided, otherwise just go back
         if (onLeaveGroup) {
@@ -649,8 +674,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     if (Platform.OS === "web") {
       setConfirmDialog({
         visible: true,
-        title: "Leave Group",
-        message: `Are you sure you want to leave "${group.name}"?`,
+        title: "Leave group",
+        message: leaveMessage,
         confirmText: "Leave",
         destructive: true,
         onConfirm: () => {
@@ -660,8 +685,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       });
     } else {
       Alert.alert(
-        "Leave Group",
-        `Are you sure you want to leave "${group.name}"?`,
+        "Leave group",
+        leaveMessage,
         [
           { text: "Cancel", style: "cancel" },
           {
@@ -672,6 +697,94 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         ]
       );
     }
+  };
+
+  const runMembershipVisibilityAction = async (
+    title: string,
+    message: string,
+    confirmText: string,
+    action: () => Promise<unknown>,
+    options?: { leaveAfter?: boolean }
+  ) => {
+    const perform = async () => {
+      try {
+        setMembershipActionLoading(true);
+        await action();
+        if (options?.leaveAfter) {
+          if (onLeaveGroup) {
+            onLeaveGroup();
+          } else {
+            onBack();
+          }
+        }
+      } catch (err) {
+        if (Platform.OS === "web") {
+          setConfirmDialog({
+            visible: true,
+            title: "Error",
+            message: getUserFriendlyErrorMessage(err),
+            confirmText: "OK",
+            onConfirm: () => setConfirmDialog(null),
+          });
+        } else {
+          Alert.alert("Error", getUserFriendlyErrorMessage(err));
+        }
+      } finally {
+        setMembershipActionLoading(false);
+        setMenuVisible(false);
+      }
+    };
+
+    if (Platform.OS === "web") {
+      setConfirmDialog({
+        visible: true,
+        title,
+        message,
+        confirmText,
+        destructive: confirmText !== "Unarchive",
+        onConfirm: () => {
+          setConfirmDialog(null);
+          void perform();
+        },
+      });
+    } else {
+      Alert.alert(title, message, [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: confirmText,
+          style: confirmText === "Unarchive" ? "default" : "destructive",
+          onPress: perform,
+        },
+      ]);
+    }
+  };
+
+  const handleArchiveGroup = () => {
+    void runMembershipVisibilityAction(
+      "Archive",
+      ARCHIVE_GROUP_CONFIRM_MESSAGE,
+      "Archive",
+      () => archiveGroupMutation.mutate(group.id),
+      { leaveAfter: true }
+    );
+  };
+
+  const handleUnarchiveGroup = () => {
+    void runMembershipVisibilityAction(
+      "Unarchive",
+      "Show this group in your active list again.",
+      "Unarchive",
+      () => unarchiveGroupMutation.mutate(group.id)
+    );
+  };
+
+  const handleRemoveFromMyLists = () => {
+    void runMembershipVisibilityAction(
+      "Remove from my lists",
+      REMOVE_FROM_LISTS_CONFIRM_MESSAGE,
+      "Remove",
+      () => hideGroupMutation.mutate(group.id)
+    );
   };
 
   const handleRemoveMember = async (participant: Participant) => {
@@ -709,9 +822,13 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     if (Platform.OS === "web") {
       setConfirmDialog({
         visible: true,
-        title: isRemovingSelf ? "Leave Group" : "Remove Member",
+        title: isRemovingSelf ? "Leave group" : "Remove Member",
         message: isRemovingSelf
-          ? `Are you sure you want to leave "${group.name}"?`
+          ? buildLeaveGroupConfirmMessage(
+              group.name,
+              balancesData?.group_balances?.[0]?.balances,
+              session?.user?.id
+            )
           : `Are you sure you want to remove "${memberName}" from this group?`,
         confirmText: isRemovingSelf ? "Leave" : "Remove",
         destructive: true,
@@ -722,9 +839,13 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       });
     } else {
       Alert.alert(
-        isRemovingSelf ? "Leave Group" : "Remove Member",
+        isRemovingSelf ? "Leave group" : "Remove Member",
         isRemovingSelf
-          ? `Are you sure you want to leave "${group.name}"?`
+          ? buildLeaveGroupConfirmMessage(
+              group.name,
+              balancesData?.group_balances?.[0]?.balances,
+              session?.user?.id
+            )
           : `Are you sure you want to remove "${memberName}" from this group?`,
         [
           { text: "Cancel", style: "cancel" },
@@ -833,6 +954,12 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const isActiveMember =
     group.members?.some((m) => m.user_id === currentUserId && m.status === 'active') ?? false;
 
+  const myMembership = group.members?.find((m) => m.user_id === currentUserId);
+  const isArchivedForMe = Boolean(
+    (group.archived_at || myMembership?.archived_at) && isActiveMember
+  );
+  const isFormerMember = isMember && !isActiveMember;
+
   const isOwner =
     group.members?.some(
       (m) =>
@@ -843,6 +970,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
   const canManageMembers = isActiveMember;
   const canManageInvites = isActiveMember;
+  const showGroupMenu = (isActiveMember || isFormerMember) && !showMembers;
   const activeMemberCount = countActiveMembers(group.members);
   const ledgerIsEmpty =
     !txLoading &&
@@ -1072,8 +1200,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           title={showMembers ? "People" : group.name}
           titleStyle={{ fontWeight: "bold" }}
         />
-        {/* Group options (active members only) */}
-        {isActiveMember && (
+        {/* Group options — active: Archive/Leave; archived: Unarchive/Leave/Remove; former: Remove */}
+        {showGroupMenu && (
           <Menu
             visible={menuVisible && !showMembers}
             onDismiss={handleCloseMenu}
@@ -1091,55 +1219,96 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             }
             contentStyle={{ minWidth: 200 }}
           >
-            <Menu.Item
-              onPress={() => {
-                handleCloseMenu();
-                setShowMembers(true);
-              }}
-              title="People"
-              leadingIcon="account-group"
-            />
-            {isOwner && (
-              <Menu.Item
-                onPress={() => {
-                  handleCloseMenu();
-                  handleOpenEditGroup();
-                }}
-                title="Edit group details"
-                leadingIcon="pencil"
-                testID="group-menu-edit-details"
-              />
+            {isActiveMember && (
+              <>
+                <Menu.Item
+                  onPress={() => {
+                    handleCloseMenu();
+                    setShowMembers(true);
+                  }}
+                  title="People"
+                  leadingIcon="account-group"
+                />
+                {isOwner && (
+                  <Menu.Item
+                    onPress={() => {
+                      handleCloseMenu();
+                      handleOpenEditGroup();
+                    }}
+                    title="Edit group details"
+                    leadingIcon="pencil"
+                    testID="group-menu-edit-details"
+                  />
+                )}
+                <Menu.Item
+                  onPress={() => {
+                    handleCloseMenu();
+                    setShowCurrencySettings(true);
+                  }}
+                  title="Settlement currency"
+                  leadingIcon="cash-sync"
+                  testID="group-menu-settlement-currency"
+                />
+                {onImportSplitwise && (
+                  <Menu.Item
+                    onPress={() => {
+                      handleCloseMenu();
+                      onImportSplitwise();
+                    }}
+                    title="Import from Splitwise"
+                    leadingIcon="file-import-outline"
+                    testID="group-menu-import-splitwise"
+                  />
+                )}
+                {!isArchivedForMe ? (
+                  <Menu.Item
+                    onPress={() => {
+                      handleCloseMenu();
+                      handleArchiveGroup();
+                    }}
+                    title="Archive"
+                    leadingIcon="archive-outline"
+                    testID="group-menu-archive"
+                    disabled={membershipActionLoading}
+                  />
+                ) : (
+                  <Menu.Item
+                    onPress={() => {
+                      handleCloseMenu();
+                      handleUnarchiveGroup();
+                    }}
+                    title="Unarchive"
+                    leadingIcon="archive-off-outline"
+                    testID="group-menu-unarchive"
+                    disabled={membershipActionLoading}
+                  />
+                )}
+                <Menu.Item
+                  onPress={() => {
+                    handleCloseMenu();
+                    handleLeaveGroup();
+                  }}
+                  title="Leave group"
+                  leadingIcon="exit-run"
+                  titleStyle={{ color: theme.colors.error }}
+                  testID="group-menu-leave"
+                  disabled={leaving}
+                />
+              </>
             )}
-            <Menu.Item
-              onPress={() => {
-                handleCloseMenu();
-                setShowCurrencySettings(true);
-              }}
-              title="Settlement currency"
-              leadingIcon="cash-sync"
-              testID="group-menu-settlement-currency"
-            />
-            {onImportSplitwise && (
+            {(isArchivedForMe || isFormerMember) && (
               <Menu.Item
                 onPress={() => {
                   handleCloseMenu();
-                  onImportSplitwise();
+                  handleRemoveFromMyLists();
                 }}
-                title="Import from Splitwise"
-                leadingIcon="file-import-outline"
-                testID="group-menu-import-splitwise"
-              />
-            )}
-              <Menu.Item
-                onPress={() => {
-                  handleCloseMenu();
-                  handleLeaveGroup();
-                }}
-                title="Leave Group"
-                leadingIcon="exit-run"
+                title="Remove from my lists"
+                leadingIcon="eye-off-outline"
                 titleStyle={{ color: theme.colors.error }}
-                disabled={leaving}
+                testID="group-menu-remove-from-lists"
+                disabled={membershipActionLoading}
               />
+            )}
           </Menu>
         )}
       </Appbar.Header>
@@ -1149,6 +1318,15 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           <View style={{ backgroundColor: theme.colors.errorContainer, paddingHorizontal: 16, paddingVertical: 8, alignItems: 'center', width: '100%' }}>
             <Text style={{ color: theme.colors.onErrorContainer, fontSize: 12, fontWeight: 'bold' }}>
               You are viewing this group as a former member
+            </Text>
+          </View>
+      )}
+
+      {/* Banner for archived (still active) membership */}
+      {isArchivedForMe && !showMembers && (
+          <View style={{ backgroundColor: theme.colors.secondaryContainer, paddingHorizontal: 16, paddingVertical: 8, alignItems: 'center', width: '100%' }} testID="archived-banner">
+            <Text style={{ color: theme.colors.onSecondaryContainer, fontSize: 12, fontWeight: 'bold' }}>
+              Archived — hidden from your active groups
             </Text>
           </View>
       )}
