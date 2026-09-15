@@ -111,7 +111,17 @@ import {
   getInviteLinkErrorMessage,
 } from "./utils/inviteLinks";
 import { log, logError } from "./utils/logger";
-import { needsTermsAcceptance } from "./utils/onboardingFlow";
+import {
+  canSkipProfileCompletion,
+  needsProfileCompletion,
+  needsTermsAcceptance,
+} from "./utils/onboardingFlow";
+import {
+  clearProfileCompletionSkipped,
+  getProfileCompletionSkipped,
+  setProfileCompletionSkipped,
+} from "./utils/profileCompletionSkip";
+import { getQaProfileGateMode } from "./utils/qaProfileGate";
 import {
   NotificationGroupReference,
   openNotificationGroupImmediately,
@@ -207,6 +217,8 @@ function AppContent() {
   const hasAcceptedCurrentTerms =
     !!profile && !needsTermsAcceptance(profile);
   const [isSignUp, setIsSignUp] = useState(false);
+  const [profileCompletionSkipped, setProfileCompletionSkippedState] =
+    useState<boolean | null>(null);
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [showAddMember, setShowAddMember] = useState(false);
   const [currentRoute, setCurrentRoute] = useState<string>("groups");
@@ -646,6 +658,31 @@ function AppContent() {
     };
   }, [session?.user?.id, hasAcceptedCurrentTerms, openGroupDeepLink]);
 
+  // Soft-skip for returning incomplete profiles (persisted per user).
+  useEffect(() => {
+    if (!user?.id || !profile || !needsProfileCompletion(profile)) {
+      setProfileCompletionSkippedState(null);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      const skipped = await getProfileCompletionSkipped(user.id);
+      if (!cancelled) {
+        setProfileCompletionSkippedState(skipped);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    user?.id,
+    profile?.id,
+    profile?.profile_completed,
+    profile?.full_name,
+  ]);
+
   // Debug routing / loading state to track "stuck on spinner" issues.
   // To avoid noisy duplicate breadcrumbs, only log when the state snapshot changes.
   useEffect(() => {
@@ -1013,6 +1050,59 @@ function AppContent() {
     );
   }
 
+  const qaProfileGate = getQaProfileGateMode();
+  const showProfileCompletionGate =
+    qaProfileGate !== "off" ||
+    (needsProfileCompletion(profile) && profileCompletionSkipped !== true);
+
+  if (showProfileCompletionGate) {
+    if (qaProfileGate === "off" && profileCompletionSkipped === null) {
+      return (
+        <View
+          style={[
+            styles.centerContainer,
+            { backgroundColor: theme.colors.background },
+          ]}
+        >
+          <ActivityIndicator size="large" />
+          <StatusBar style={theme.dark ? "light" : "dark"} />
+        </View>
+      );
+    }
+
+    if (qaProfileGate !== "off" || profileCompletionSkipped === false) {
+      const allowSkip =
+        qaProfileGate === "skippable" ||
+        (qaProfileGate === "off" && canSkipProfileCompletion(profile));
+
+      return (
+        <>
+          <ProfileSetupScreen
+            mode="onboarding"
+            allowSkip={allowSkip}
+            onComplete={() => {
+              if (user?.id) {
+                void clearProfileCompletionSkipped(user.id);
+              }
+              setProfileCompletionSkippedState(null);
+              void refetchProfile();
+              setCurrentRoute("groups");
+              setGroupRefreshTrigger((prev) => prev + 1);
+            }}
+            onSkip={() => {
+              if (!user?.id) return;
+              void (async () => {
+                await setProfileCompletionSkipped(user.id);
+                setProfileCompletionSkippedState(true);
+              })();
+            }}
+          />
+          <StatusBar style={theme.dark ? "light" : "dark"} />
+        </>
+      );
+    }
+  }
+
   if (currentRoute === "notifications" && notificationFeatureEnabled) {
     return (
       <>
@@ -1089,6 +1179,9 @@ function AppContent() {
       <>
         <ProfileSetupScreen
           onComplete={() => {
+            if (user?.id) {
+              void clearProfileCompletionSkipped(user.id);
+            }
             refetchProfile();
             setCurrentRoute("groups");
             setGroupRefreshTrigger((prev) => prev + 1);

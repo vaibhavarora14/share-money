@@ -57,18 +57,28 @@ import {
   SUPPORT_TOPICS,
   type SupportTopic,
 } from "../utils/supportEmail";
+import { resolveAuthDisplayName } from "../utils/posthogIdentity";
 
 interface ProfileSetupScreenProps {
   onComplete: () => void;
   onBack?: () => void;
   onOpenCurrencyPreview?: () => void;
+  /** Post-auth gate before home; keeps the same form fields as edit profile. */
+  mode?: "edit" | "onboarding";
+  /** Soft-skip for returning incomplete profiles (never traps forever). */
+  allowSkip?: boolean;
+  onSkip?: () => void;
 }
 
 export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   onComplete,
   onBack,
   onOpenCurrencyPreview,
+  mode = "edit",
+  allowSkip = false,
+  onSkip,
 }) => {
+  const isOnboarding = mode === "onboarding";
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [phoneNumber, setPhoneNumber] = useState(""); // Phone number without country code
@@ -79,6 +89,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   const [supportSheetVisible, setSupportSheetVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [notificationWorking, setNotificationWorking] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
   const theme = useTheme();
   const queryClient = useQueryClient();
   const { resolvedTheme, setThemePreference, themePreference } =
@@ -95,9 +106,11 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
 
   useEffect(() => {
     if (profile) {
-      setFullName(profile.full_name || "");
+      const authName = resolveAuthDisplayName(
+        user?.user_metadata as Record<string, unknown> | undefined
+      );
+      setFullName(profile.full_name?.trim() || authName || "");
       const phoneValue = profile.phone || "";
-
       // Parse existing phone number to extract country code
       if (phoneValue) {
         const parsed = parsePhoneNumber(phoneValue);
@@ -150,7 +163,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
         setPhone("");
       }
     }
-  }, [profile]);
+  }, [profile, user?.user_metadata]);
 
   // Update phone when phoneNumber or selectedCountry changes
   useEffect(() => {
@@ -187,13 +200,22 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     );
   }, [profile, fullName, phone, selectedCountry]);
 
+  const canSubmit = isOnboarding
+    ? fullName.trim().length > 0
+    : hasChanges && fullName.trim().length > 0;
+
   const handleComplete = async () => {
-    // Validation
+    const trimmedName = fullName.trim();
+    if (!trimmedName) {
+      setNameError("Full name is required");
+      return;
+    }
+    setNameError(null);
 
     setLoading(true);
     try {
       await updateProfile({
-        full_name: fullName.trim(),
+        full_name: trimmedName,
         phone: phone.trim() || undefined,
         country_code: selectedCountry.code,
         profile_completed: true,
@@ -286,7 +308,10 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             />
           </>
         ) : (
-          <Appbar.Content title="Profile" titleStyle={{ fontWeight: "bold" }} />
+          <Appbar.Content
+            title={isOnboarding ? "Complete profile" : "Profile"}
+            titleStyle={{ fontWeight: "bold" }}
+          />
         )}
         <Appbar.Action
           icon="logout"
@@ -326,7 +351,9 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
               variant="headlineSmall"
               style={[styles.title, { color: theme.colors.onSurface }]}
             >
-              {fullName || "Your Profile"}
+              {isOnboarding
+                ? "Tell friends who you are"
+                : fullName || "Your Profile"}
             </Text>
             <Text
               variant="bodyMedium"
@@ -335,7 +362,9 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                 { color: theme.colors.onSurfaceVariant },
               ]}
             >
-              Update your personal details
+              {isOnboarding
+                ? "Add your name so group invites and balances show the right person."
+                : "Update your personal details"}
             </Text>
           </View>
 
@@ -355,14 +384,27 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             <TextInput
               label="Full Name"
               value={fullName}
-              onChangeText={setFullName}
+              onChangeText={(value) => {
+                setFullName(value);
+                if (nameError) setNameError(null);
+              }}
               mode="outlined"
               disabled={loading}
               style={styles.input}
               left={<TextInput.Icon icon="account" />}
               placeholder="Enter your full name"
               autoCapitalize="words"
+              error={!!nameError}
+              testID="profile-full-name-input"
             />
+            {nameError ? (
+              <Text
+                variant="bodySmall"
+                style={{ color: theme.colors.error, marginTop: -8, marginBottom: 12 }}
+              >
+                {nameError}
+              </Text>
+            ) : null}
 
             <View style={styles.phoneInputWrapper}>
               <TouchableOpacity
@@ -400,9 +442,11 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                 placeholder="Enter your phone number"
                 keyboardType="phone-pad"
                 contentStyle={styles.phoneInputContent}
+                testID="profile-phone-input"
               />
             </View>
 
+            {!isOnboarding ? (
             <View style={styles.appearanceSection}>
               <View style={styles.appearanceHeader}>
                 <View>
@@ -452,6 +496,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                 style={styles.themeButtons}
               />
             </View>
+            ) : null}
 
             <View
               style={[
@@ -483,7 +528,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
               </Button>
             </View>
 
-            {onOpenCurrencyPreview ? (
+            {!isOnboarding && onOpenCurrencyPreview ? (
               <Button
                 mode="text"
                 icon="eye-outline"
@@ -495,7 +540,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
               </Button>
             ) : null}
 
-            {notificationsEnabled ? (
+            {!isOnboarding && notificationsEnabled ? (
               <View
                 style={[
                   styles.notificationSetting,
@@ -570,15 +615,29 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             <Button
               mode="contained"
               onPress={handleComplete}
-              disabled={loading || !hasChanges}
+              disabled={loading || !canSubmit}
               loading={loading}
               style={styles.button}
               contentStyle={styles.buttonContent}
+              testID="profile-save-button"
             >
-              Save Changes
+              {isOnboarding ? "Continue" : "Save Changes"}
             </Button>
+            {isOnboarding && allowSkip && onSkip ? (
+              <Button
+                mode="text"
+                onPress={onSkip}
+                disabled={loading}
+                style={{ marginTop: 4 }}
+                testID="profile-skip-button"
+              >
+                Skip for now
+              </Button>
+            ) : null}
           </Surface>
 
+          {!isOnboarding ? (
+          <>
           <Surface
             style={[
               styles.supportCard,
@@ -775,6 +834,8 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
               />
             </Pressable>
           </Surface>
+          </>
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
 
