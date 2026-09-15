@@ -104,7 +104,7 @@ function structuredData(page) {
           name: "SharedMoney",
           url: siteUrl,
           applicationCategory: "FinanceApplication",
-          operatingSystem: "Android, iOS, Web",
+          operatingSystem: "Android, Web",
           offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
           description: page.description,
         },
