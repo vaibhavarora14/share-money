@@ -1,11 +1,15 @@
 import React from "react";
 import { Pressable, View } from "react-native";
-import { ActivityIndicator, Icon, Surface, Text, useTheme } from "react-native-paper";
+import { ActivityIndicator, Button, Icon, Surface, Text, useTheme } from "react-native-paper";
 import { useAuth } from "../contexts/AuthContext";
 import { Participant, Settlement, Transaction } from "../types";
 import { formatCurrency, getDefaultCurrency } from "../utils/currency";
 import { isUnequalSplit } from "../utils/splits";
 import { openTransactionWithHighlightConsumption } from "../utils/transactionHighlight";
+import {
+  countActiveMembers,
+  getTransactionsEmptyCopy,
+} from "../utils/transactionsEmptyCopy";
 import type { LedgerItem } from "../utils/transactionsLedger";
 import { styles } from "./TransactionsSection.styles";
 
@@ -23,6 +27,10 @@ interface TransactionsSectionProps {
   onHighlightedLayout?: (y: number) => void;
   onHighlightedInteraction?: (transactionId: number) => void;
   filter?: "all" | "expenses" | "payments";
+  /** When true, empty-state CTAs (Add people / Add expense) are shown. */
+  canAct?: boolean;
+  onAddPeople?: () => void;
+  onAddExpense?: () => void;
 }
 
 function formatRelativeDate(raw: string): string {
@@ -52,10 +60,15 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
   onHighlightedLayout,
   onHighlightedInteraction,
   filter = "all",
+  canAct = false,
+  onAddPeople,
+  onAddExpense,
 }) => {
   const theme = useTheme();
   const { session } = useAuth();
   const currentUserId = session?.user?.id;
+  const activeMemberCount = countActiveMembers(members);
+  const emptyCopy = getTransactionsEmptyCopy(filter, activeMemberCount);
 
   const getCategoryIcon = (category: string) => {
     const lowerCat = category?.toLowerCase() || "";
@@ -112,24 +125,10 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
   const getPayerName = (transaction: Transaction) =>
     resolveParticipantName(transaction.paid_by_participant_id, transaction.paid_by);
 
-  const emptyCopy = (() => {
-    if (filter === "payments") {
-      return {
-        title: "No payments yet",
-        body: "Record a settlement from Settle Up and it will show up here.",
-      };
-    }
-    if (filter === "expenses") {
-      return {
-        title: "No expenses yet",
-        body: "Tap the + button to add your first expense.",
-      };
-    }
-    return {
-      title: "No transactions yet",
-      body: "Add an expense or record a payment to get started.",
-    };
-  })();
+  const runEmptyAction = (action?: "add_people" | "add_expense") => {
+    if (action === "add_people") onAddPeople?.();
+    if (action === "add_expense") onAddExpense?.();
+  };
 
   return (
     <View style={styles.container}>
@@ -357,9 +356,12 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
           )}
         </View>
       ) : (
-        <View style={[styles.emptyState, { backgroundColor: theme.colors.surfaceVariant }]}>
+        <View
+          style={[styles.emptyState, { backgroundColor: theme.colors.surfaceVariant }]}
+          testID="transactions-empty-state"
+        >
           <Text style={{ fontSize: 40, marginBottom: 16 }}>
-            {filter === "payments" ? "🤝" : "💸"}
+            {filter === "payments" ? "🤝" : activeMemberCount <= 1 ? "👥" : "💸"}
           </Text>
           <Text
             variant="titleMedium"
@@ -373,6 +375,36 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
           >
             {emptyCopy.body}
           </Text>
+          {canAct && emptyCopy.primaryLabel && emptyCopy.primaryAction ? (
+            <View style={styles.emptyActions}>
+              <Button
+                mode="contained"
+                icon={
+                  emptyCopy.primaryAction === "add_people"
+                    ? "account-plus"
+                    : "plus"
+                }
+                onPress={() => runEmptyAction(emptyCopy.primaryAction)}
+                testID={
+                  emptyCopy.primaryAction === "add_people"
+                    ? "empty-add-people"
+                    : "empty-add-expense"
+                }
+              >
+                {emptyCopy.primaryLabel}
+              </Button>
+              {emptyCopy.secondaryLabel && emptyCopy.secondaryAction ? (
+                <Button
+                  mode="text"
+                  onPress={() => runEmptyAction(emptyCopy.secondaryAction)}
+                  testID="empty-add-expense-anyway"
+                  style={styles.emptySecondaryButton}
+                >
+                  {emptyCopy.secondaryLabel}
+                </Button>
+              ) : null}
+            </View>
+          ) : null}
         </View>
       )}
     </View>
