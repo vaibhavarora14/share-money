@@ -72,6 +72,15 @@ export const styles = StyleSheet.create({
     borderRadius: 24,
     marginTop: 16,
   },
+  emptyActions: {
+    marginTop: 20,
+    alignItems: "center",
+    gap: 4,
+    width: "100%",
+  },
+  emptySecondaryButton: {
+    marginTop: 4,
+  },
   // Legacy styles (if referenced elsewhere, though unlikely for this component)
   sectionSurface: {},
   sectionContent: {},

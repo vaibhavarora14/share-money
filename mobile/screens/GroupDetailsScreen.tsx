@@ -79,6 +79,10 @@ import {
   buildTransactionsLedger,
   type LedgerFilter,
 } from "../utils/transactionsLedger";
+import {
+  countActiveMembers,
+  shouldPreferAddPeopleFab,
+} from "../utils/transactionsEmptyCopy";
 import { GroupStatsMode } from "./GroupStatsScreen";
 import { SettlementFormScreen } from "./SettlementFormScreen";
 
@@ -839,6 +843,16 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
   const canManageMembers = isActiveMember;
   const canManageInvites = isActiveMember;
+  const activeMemberCount = countActiveMembers(group.members);
+  const ledgerIsEmpty =
+    !txLoading &&
+    !settlementsLoading &&
+    transactions.length === 0 &&
+    settlements.length === 0;
+  const preferAddPeopleFab = shouldPreferAddPeopleFab(
+    activeMemberCount,
+    ledgerIsEmpty,
+  );
 
   const handleOpenEditGroup = () => {
     setEditName(group.name);
@@ -1305,6 +1319,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                   onHighlightedLayout={handleHighlightedRowLayout}
                   onHighlightedInteraction={clearVisibleTransactionHighlight}
                   filter={transactionsFilter}
+                  canAct={isActiveMember}
+                  onAddPeople={onAddMember}
+                  onAddExpense={onAddTransaction}
                 />
               </View>
             ) : (
@@ -1412,15 +1429,15 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
       {!showMembers && isActiveMember && (
         <FAB
-          testID="add-expense-button"
-          icon="plus"
+          testID={preferAddPeopleFab ? "add-people-fab" : "add-expense-button"}
+          icon={preferAddPeopleFab ? "account-plus" : "plus"}
           style={[
             styles.fab,
             { backgroundColor: theme.colors.primaryContainer },
           ]}
           color={theme.colors.onPrimaryContainer}
-          onPress={onAddTransaction}
-          label="Add Expense"
+          onPress={preferAddPeopleFab ? onAddMember : onAddTransaction}
+          label={preferAddPeopleFab ? "Add people" : "Add Expense"}
         />
       )}
 
