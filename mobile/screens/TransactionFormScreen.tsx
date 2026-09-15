@@ -78,6 +78,8 @@ interface TransactionFormScreenProps {
 
 /** Reserve space for the currency symbol beside the hero amount on web. */
 const HERO_AMOUNT_SYMBOL_RESERVE = 64;
+/** Approximate glyph width for the hero amount at fontSize 45 / letterSpacing -2. */
+const HERO_AMOUNT_WEB_CHAR_WIDTH = 28;
 
 const CATEGORY_OPTIONS = [
   { label: "Food", value: "Food", icon: "silverware-fork-knife" },
@@ -708,6 +710,24 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     []
   );
 
+  const webHeroAmountMaxWidth =
+    heroAmountWidth > 0
+      ? Math.max(heroAmountWidth - HERO_AMOUNT_SYMBOL_RESERVE, 40)
+      : undefined;
+  const webHeroAmountInputStyle =
+    Platform.OS === "web"
+      ? ({
+          width: Math.min(
+            Math.max((amount.length || 1) * HERO_AMOUNT_WEB_CHAR_WIDTH, 40),
+            webHeroAmountMaxWidth ?? Number.POSITIVE_INFINITY
+          ),
+          maxWidth: webHeroAmountMaxWidth ?? ("100%" as const),
+          // RN Web focus ring; not in core TextStyle typings.
+          outlineStyle: "solid",
+          outlineWidth: 0,
+        } as const)
+      : null;
+
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: theme.colors.background }]}
@@ -783,17 +803,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                     minWidth: amount ? undefined : 40,
                   },
                   // Web <input> defaults to ~20ch wide; at fontSize 45 that overflows the viewport.
-                  Platform.OS === "web"
-                    ? {
-                        width: `${Math.max(amount.length, 1)}ch`,
-                        maxWidth:
-                          heroAmountWidth > 0
-                            ? Math.max(heroAmountWidth - HERO_AMOUNT_SYMBOL_RESERVE, 40)
-                            : "100%",
-                        outlineStyle: "solid",
-                        outlineWidth: 0,
-                      }
-                    : null,
+                  webHeroAmountInputStyle,
                 ]}
                 testID="amount-input"
                 autoFocus={!transaction}
