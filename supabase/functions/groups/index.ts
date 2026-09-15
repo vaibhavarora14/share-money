@@ -103,24 +103,27 @@ Deno.serve(async (req: Request) => {
           group_members!inner(status, archived_at, hidden_at)
         `)
         .eq('group_members.user_id', user.id)
-        .is('group_members.hidden_at', null)
         .order('created_at', { ascending: false });
 
       if (error) {
         return handleError(error, 'fetching groups', req);
       }
 
-      // Flatten the response and extract status / archive state
-      const flattenedGroups = (groups || []).map((g: any) => {
-        const membership = g.group_members?.[0] || {};
-        return {
-          ...g,
-          user_status: membership.status || 'active',
-          archived_at: membership.archived_at ?? null,
-          hidden_at: null,
-          group_members: undefined, // Remove nesting
-        };
-      });
+      // Flatten the response and extract status / archive state.
+      // Hidden memberships are omitted from the list for this user only.
+      const flattenedGroups = (groups || [])
+        .map((g: any) => {
+          const membership = g.group_members?.[0] || {};
+          return {
+            ...g,
+            user_status: membership.status || 'active',
+            archived_at: membership.archived_at ?? null,
+            hidden_at: membership.hidden_at ?? null,
+            group_members: undefined, // Remove nesting
+          };
+        })
+        .filter((g: any) => !g.hidden_at)
+        .map((g: any) => ({ ...g, hidden_at: null }));
 
       // Sort: active (non-archived) first, archived next, left (former) last.
       flattenedGroups.sort((a: any, b: any) => {
