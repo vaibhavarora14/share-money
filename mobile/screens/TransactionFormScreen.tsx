@@ -50,6 +50,7 @@ import {
 import { convertAmount, resolveRate } from "../utils/currencyMerge";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 import { intersectSplitAmongWithAvailable } from "../utils/groupSplit";
+import { getWebHeroAmountInputWidth } from "../utils/heroAmountLayout";
 import {
     amountsFromShares,
     calculateShareSplits,
@@ -75,11 +76,6 @@ interface TransactionFormScreenProps {
   defaultSplitAmong?: string[];
   groupId?: string;
 }
-
-/** Reserve space for the currency symbol beside the hero amount on web. */
-const HERO_AMOUNT_SYMBOL_RESERVE = 64;
-/** Approximate glyph width for the hero amount at fontSize 45 / letterSpacing -2. */
-const HERO_AMOUNT_WEB_CHAR_WIDTH = 28;
 
 const CATEGORY_OPTIONS = [
   { label: "Food", value: "Food", icon: "silverware-fork-knife" },
@@ -710,18 +706,10 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     []
   );
 
-  const webHeroAmountMaxWidth =
-    heroAmountWidth > 0
-      ? Math.max(heroAmountWidth - HERO_AMOUNT_SYMBOL_RESERVE, 40)
-      : undefined;
   const webHeroAmountInputStyle =
     Platform.OS === "web"
       ? ({
-          width: Math.min(
-            Math.max((amount.length || 1) * HERO_AMOUNT_WEB_CHAR_WIDTH, 40),
-            webHeroAmountMaxWidth ?? Number.POSITIVE_INFINITY
-          ),
-          maxWidth: webHeroAmountMaxWidth ?? ("100%" as const),
+          ...getWebHeroAmountInputWidth(amount.length, heroAmountWidth),
           // RN Web focus ring; not in core TextStyle typings.
           outlineStyle: "solid",
           outlineWidth: 0,
