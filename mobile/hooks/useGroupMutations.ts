@@ -53,23 +53,99 @@ export function useCreateGroup(onSuccess?: () => void) {
   };
 }
 
-export function useDeleteGroup(onSuccess?: () => void) {
+async function updateMembershipVisibility(
+  groupId: string,
+  action: "archive" | "unarchive" | "hide"
+) {
+  const response = await fetchWithAuth(`/groups/${groupId}/${action}`, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const fallback =
+      action === "hide"
+        ? "Failed to remove group from your lists"
+        : action === "unarchive"
+          ? "Failed to unarchive group"
+          : "Failed to archive group";
+    throw new Error(errorData.error || fallback);
+  }
+
+  return response.json() as Promise<{
+    group_id: string;
+    status: string | null;
+    archived_at: string | null;
+    hidden_at: string | null;
+  }>;
+}
+
+export function useArchiveGroup(onSuccess?: () => void) {
   const queryClient = useQueryClient();
 
   const mutation = useMutation({
-    mutationFn: async (groupId: string) => {
-      const response = await fetchWithAuth(`/groups/${groupId}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to delete group");
-      }
-
-      return { groupId };
+    mutationFn: (groupId: string) =>
+      updateMembershipVisibility(groupId, "archive"),
+    onSuccess: (result) => {
+      invalidateGroupAdjacents(queryClient, result.group_id);
+      queryClient.setQueryData<Group[]>(queryKeys.groups, (current) =>
+        (current || []).map((item) =>
+          item.id === result.group_id
+            ? { ...item, archived_at: result.archived_at, hidden_at: result.hidden_at }
+            : item
+        )
+      );
+      captureAnalyticsEvent("group_archived", {});
+      onSuccess?.();
     },
-    onSuccess: (data) => {
-      invalidateGroupAdjacents(queryClient, data.groupId);
+  });
+
+  return {
+    mutate: mutation.mutateAsync,
+    isLoading: mutation.isPending,
+    error: (mutation.error as Error | null) ?? null,
+  };
+}
+
+export function useUnarchiveGroup(onSuccess?: () => void) {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: (groupId: string) =>
+      updateMembershipVisibility(groupId, "unarchive"),
+    onSuccess: (result) => {
+      invalidateGroupAdjacents(queryClient, result.group_id);
+      queryClient.setQueryData<Group[]>(queryKeys.groups, (current) =>
+        (current || []).map((item) =>
+          item.id === result.group_id
+            ? { ...item, archived_at: result.archived_at, hidden_at: result.hidden_at }
+            : item
+        )
+      );
+      captureAnalyticsEvent("group_unarchived", {});
+      onSuccess?.();
+    },
+  });
+
+  return {
+    mutate: mutation.mutateAsync,
+    isLoading: mutation.isPending,
+    error: (mutation.error as Error | null) ?? null,
+  };
+}
+
+export function useHideGroupFromLists(onSuccess?: () => void) {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: (groupId: string) =>
+      updateMembershipVisibility(groupId, "hide"),
+    onSuccess: (result) => {
+      invalidateGroupAdjacents(queryClient, result.group_id);
+      queryClient.setQueryData<Group[]>(queryKeys.groups, (current) =>
+        (current || []).filter((item) => item.id !== result.group_id)
+      );
+      captureAnalyticsEvent("group_hidden_from_lists", {});
       onSuccess?.();
     },
   });
