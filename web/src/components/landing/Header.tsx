@@ -82,7 +82,7 @@ export function Header({
           <PlatformCta
             destination={primaryDestination}
             placement="header"
-            appearance="primary"
+            appearance="secondary"
             compactLabel="Get app"
           />
           <button
