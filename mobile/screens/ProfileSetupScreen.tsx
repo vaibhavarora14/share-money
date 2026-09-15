@@ -103,13 +103,13 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     isTransactionNotificationsEnabled(notifications.data);
   const { signOut, user } = useAuth();
   const deleteAccount = useDeleteAccount();
+  const authDisplayName = resolveAuthDisplayName(
+    user?.user_metadata as Record<string, unknown> | undefined
+  );
 
   useEffect(() => {
     if (profile) {
-      const authName = resolveAuthDisplayName(
-        user?.user_metadata as Record<string, unknown> | undefined
-      );
-      setFullName(profile.full_name?.trim() || authName || "");
+      setFullName(profile.full_name?.trim() || authDisplayName || "");
       const phoneValue = profile.phone || "";
       // Parse existing phone number to extract country code
       if (phoneValue) {
@@ -163,7 +163,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
         setPhone("");
       }
     }
-  }, [profile, user?.user_metadata]);
+  }, [profile, authDisplayName]);
 
   // Update phone when phoneNumber or selectedCountry changes
   useEffect(() => {
