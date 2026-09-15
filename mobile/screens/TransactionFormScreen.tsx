@@ -76,6 +76,9 @@ interface TransactionFormScreenProps {
   groupId?: string;
 }
 
+/** Reserve space for the currency symbol beside the hero amount on web. */
+const HERO_AMOUNT_SYMBOL_RESERVE = 64;
+
 const CATEGORY_OPTIONS = [
   { label: "Food", value: "Food", icon: "silverware-fork-knife" },
   { label: "Travel", value: "Travel", icon: "airplane" },
@@ -118,6 +121,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   // Form state
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
+  const [heroAmountWidth, setHeroAmountWidth] = useState(0);
   const [date, setDate] = useState("");
   const [type, setType] = useState<"income" | "expense">("expense");
   const [category, setCategory] = useState("");
@@ -743,7 +747,13 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
           showsVerticalScrollIndicator={false}
         >
           {/* HERO AMOUNT SECTION */}
-          <View style={styles.heroAmountContainer}>
+          <View
+            style={styles.heroAmountContainer}
+            onLayout={(event) => {
+              const nextWidth = event.nativeEvent.layout.width;
+              setHeroAmountWidth((prev) => (prev === nextWidth ? prev : nextWidth));
+            }}
+          >
             <View style={styles.heroAmountInputRow}>
               <Text 
                 variant="displayMedium" 
@@ -771,7 +781,19 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                   { 
                     color: theme.colors.onSurface,
                     minWidth: amount ? undefined : 40,
-                  }
+                  },
+                  // Web <input> defaults to ~20ch wide; at fontSize 45 that overflows the viewport.
+                  Platform.OS === "web"
+                    ? {
+                        width: `${Math.max(amount.length, 1)}ch`,
+                        maxWidth:
+                          heroAmountWidth > 0
+                            ? Math.max(heroAmountWidth - HERO_AMOUNT_SYMBOL_RESERVE, 40)
+                            : "100%",
+                        outlineStyle: "solid",
+                        outlineWidth: 0,
+                      }
+                    : null,
                 ]}
                 testID="amount-input"
                 autoFocus={!transaction}
@@ -1355,6 +1377,9 @@ const styles = StyleSheet.create({
   // Hero Amount
   heroAmountContainer: {
     alignItems: "center",
+    alignSelf: "stretch",
+    width: "100%",
+    maxWidth: "100%",
     paddingVertical: 32,
     marginBottom: 8,
   },
@@ -1362,10 +1387,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    width: "100%",
+    maxWidth: "100%",
+    flexShrink: 1,
   },
   heroAmountText: {
     fontWeight: "300",
     letterSpacing: -2,
+    flexShrink: 0,
   },
   heroAmountInput: {
     fontSize: 45,
@@ -1374,6 +1403,9 @@ const styles = StyleSheet.create({
     textAlign: "left",
     padding: 0,
     margin: 0,
+    flexShrink: 1,
+    minWidth: 40,
+    maxWidth: "100%",
   },
   currencyChip: {
     marginTop: 12,
