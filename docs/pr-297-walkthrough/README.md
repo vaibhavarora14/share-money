@@ -7,7 +7,7 @@ Theme-matched UI fixtures for product visual review (ShareMoney light theme). Li
 | Shot | URL |
 |------|-----|
 | Active menu with Archive | https://litter.catbox.moe/7grj7m.png |
-| Archived list (subtitle alignment fixed) | https://litter.catbox.moe/dwzyv4.png |
+| Archived list (no card status tag) | https://litter.catbox.moe/r8mts6.png |
 | Leave confirm (+ balance) | https://litter.catbox.moe/fs792j.png |
 | Remove from my lists | https://litter.catbox.moe/x3020k.png |
 

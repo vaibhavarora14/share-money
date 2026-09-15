@@ -149,16 +149,6 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
       ? notifications.data?.unread_by_group[group.id] ?? 0
       : 0;
     const hasUnreadActivity = unreadActivityCount > 0;
-    const statusLabel =
-      group.user_status === "left"
-        ? "Former Member"
-        : group.archived_at
-          ? "Archived"
-          : null;
-    const statusColor =
-      group.user_status === "left"
-        ? theme.colors.error
-        : theme.colors.onSurfaceVariant;
     const description = group.description || "No description";
 
     return (
@@ -175,7 +165,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
         style={styles.groupTouchable}
         onPress={() => handleGroupPress(group)}
         activeOpacity={0.7}
-        accessibilityLabel={`${group.name}${isNew ? ", new group" : ""}${hasUnreadActivity ? `, ${unreadActivityCount} unread ${unreadActivityCount === 1 ? "notification" : "notifications"}` : ""}`}
+        accessibilityLabel={`${group.name}${isNew ? ", new group" : ""}${hasUnreadActivity ? `, ${unreadActivityCount} unread ${unreadActivityCount === 1 ? "notification" : "notifications"}` : ""}${group.archived_at ? ", archived" : ""}${group.user_status === "left" ? ", former member" : ""}`}
       >
         <View style={styles.groupMainContent}>
           <View style={styles.groupIconContainer}>
@@ -243,19 +233,6 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
               numberOfLines={1}
               ellipsizeMode="tail"
             >
-              {statusLabel ? (
-                <>
-                  <Text
-                    variant="bodySmall"
-                    style={[styles.formerStatusText, { color: statusColor }]}
-                  >
-                    {statusLabel}
-                  </Text>
-                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                    {" · "}
-                  </Text>
-                </>
-              ) : null}
               {description}
             </Text>
           </View>
@@ -627,9 +604,6 @@ const styles = StyleSheet.create({
   // New Styles
   groupSubtitle: {
     marginTop: 2,
-  },
-  formerStatusText: {
-    fontWeight: "bold",
   },
   groupMainContent: {
     flexDirection: "row",
