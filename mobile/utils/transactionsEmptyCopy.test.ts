@@ -20,17 +20,22 @@ Deno.test("countActiveMembers counts only active (and missing status)", () => {
   );
 });
 
-Deno.test("solo empty all: people-first CTAs", () => {
+Deno.test("solo empty all: Just you so far + people-first CTAs", () => {
   const copy = getTransactionsEmptyCopy("all", 1);
+  assertEquals(copy.title, "Just you so far");
+  assertEquals(copy.body, "Add people to start sharing expenses together.");
+  assertEquals(copy.infoFooter, "No one else yet. Expenses will be in your name.");
   assertEquals(copy.primaryAction, "add_people");
   assertEquals(copy.primaryLabel, "Add people");
   assertEquals(copy.secondaryAction, "add_expense");
   assertEquals(copy.secondaryLabel, "Add expense anyway");
+  assertEquals(copy.secondaryBody, "You can add expenses by yourself.");
 });
 
 Deno.test("solo with zero active still people-first", () => {
   const copy = getTransactionsEmptyCopy("all", 0);
   assertEquals(copy.primaryAction, "add_people");
+  assertEquals(copy.title, "Just you so far");
 });
 
 Deno.test("two+ empty all: expense-first CTA", () => {
@@ -45,6 +50,7 @@ Deno.test("solo expenses filter: people-first", () => {
   const copy = getTransactionsEmptyCopy("expenses", 1);
   assertEquals(copy.primaryAction, "add_people");
   assertEquals(copy.secondaryAction, "add_expense");
+  assertEquals(copy.title, "Just you so far");
 });
 
 Deno.test("two+ expenses filter: add first expense", () => {

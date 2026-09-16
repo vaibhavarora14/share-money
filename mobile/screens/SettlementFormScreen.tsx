@@ -20,6 +20,11 @@ import {
     getDefaultCurrency,
 } from "../utils/currency";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
+import {
+  RECORD_SETTLEMENT_LABEL,
+  SETTLE_OUTSIDE_APP_HELP,
+  UPDATE_SETTLEMENT_LABEL,
+} from "../utils/settleCopy";
 
 interface SettlementFormScreenProps {
   visible: boolean;
@@ -436,7 +441,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
         >
           <Appbar.Header>
             <Appbar.Action icon="close" onPress={onDismiss} testID="settlement-form-close" />
-            <Appbar.Content title={isEditing ? "Edit Settlement" : "Settle Up"} />
+            <Appbar.Content title={isEditing ? "Edit settlement" : "Record settlement"} />
             {isEditing && onDelete ? (
               <Appbar.Action
                 icon="delete-outline"
@@ -453,11 +458,25 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
           >
+            {!isEditing ? (
+              <Text
+                variant="bodyMedium"
+                style={{
+                  color: theme.colors.onSurfaceVariant,
+                  marginBottom: 16,
+                  paddingHorizontal: 4,
+                }}
+                testID="settle-outside-app-help"
+              >
+                {SETTLE_OUTSIDE_APP_HELP}
+              </Text>
+            ) : null}
+
             {/* Unified Settlement Header: Shows Who is Paying Who */}
             <View
               style={[
                 styles.balanceInfo,
-                { backgroundColor: theme.colors.primaryContainer },
+                { backgroundColor: theme.colors.surfaceVariant },
               ]}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -497,21 +516,21 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                      toName = member?.full_name || member?.email || "Member";
                   } else {
                     return (
-                      <Text variant="titleMedium" style={{ color: theme.colors.onPrimaryContainer, opacity: 0.6 }}>
-                        Select a member to settle with
+                      <Text variant="titleMedium" style={{ color: theme.colors.onSurfaceVariant, opacity: 0.8 }}>
+                        Choose who paid whom
                       </Text>
                     );
                   }
 
                   return (
                     <>
-                      <Text variant="titleMedium" style={{ color: theme.colors.onPrimaryContainer, fontWeight: 'bold' }}>
+                      <Text variant="titleMedium" style={{ color: theme.colors.onSurface, fontWeight: 'bold' }}>
                         {fromName}
                       </Text>
-                      <Text variant="titleMedium" style={{ color: theme.colors.onPrimaryContainer, marginHorizontal: 8, opacity: 0.7 }}>
-                        paying
+                      <Text variant="titleMedium" style={{ color: theme.colors.onSurfaceVariant, marginHorizontal: 8 }}>
+                        paid
                       </Text>
-                      <Text variant="titleMedium" style={{ color: theme.colors.onPrimaryContainer, fontWeight: 'bold' }}>
+                      <Text variant="titleMedium" style={{ color: theme.colors.onSurface, fontWeight: 'bold' }}>
                         {toName}
                       </Text>
                     </>
@@ -524,7 +543,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                   variant="bodyMedium"
                   style={[
                     styles.balanceAmount,
-                    { color: theme.colors.onPrimaryContainer, marginTop: 8, opacity: 0.8 },
+                    { color: theme.colors.onSurfaceVariant, marginTop: 8 },
                   ]}
                 >
                   {formatCurrency(
@@ -594,41 +613,55 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
             ) : null}
 
             {!isEditing && !balance && !isAdminMode && (
-              <View style={styles.section}>
-                <Text variant="labelLarge" style={styles.label}>
-                  Settle with
-                </Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.userPicker}
-                >
-                  {availableUsers.map((member) => (
-                    <Button
-                      key={member.participant_id}
-                      mode={
-                        selectedToParticipantId === member.participant_id
-                          ? "contained"
-                          : "outlined"
-                      }
-                      onPress={() => setSelectedToParticipantId(member.participant_id || "")}
-                      style={styles.userButton}
-                    >
-                      {member.full_name ||
-                        member.email ||
-                        `Member ${member.participant_id?.substring(0, 8)}...`}
-                    </Button>
-                  ))}
-                </ScrollView>
-              </View>
+              <>
+                <View style={styles.section}>
+                  <Text variant="labelLarge" style={styles.label}>
+                    From
+                  </Text>
+                  <TextInput
+                    mode="outlined"
+                    value="You"
+                    editable={false}
+                    right={<TextInput.Icon icon="account-outline" />}
+                    testID="settlement-from-you"
+                  />
+                </View>
+                <View style={styles.section}>
+                  <Text variant="labelLarge" style={styles.label}>
+                    To
+                  </Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.userPicker}
+                  >
+                    {availableUsers.map((member) => (
+                      <Button
+                        key={member.participant_id}
+                        mode={
+                          selectedToParticipantId === member.participant_id
+                            ? "contained"
+                            : "outlined"
+                        }
+                        onPress={() => setSelectedToParticipantId(member.participant_id || "")}
+                        style={styles.userButton}
+                      >
+                        {member.full_name ||
+                          member.email ||
+                          `Member ${member.participant_id?.substring(0, 8)}...`}
+                      </Button>
+                    ))}
+                  </ScrollView>
+                </View>
+              </>
             )}
 
             <View style={styles.section}>
               <Text variant="labelLarge" style={styles.label}>
-                Amount ({getCurrencySymbol(effectiveDefaultCurrency)})
+                Amount
               </Text>
               <TextInput
-                label="Settlement amount"
+                label="Amount"
                 value={amount}
                 onChangeText={(text) => {
                   setAmount(text);
@@ -637,6 +670,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                 keyboardType="decimal-pad"
                 error={!!amountError}
                 mode="outlined"
+                placeholder="$ 0.00"
                 testID="settlement-amount-input"
                 left={
                   <TextInput.Affix
@@ -677,16 +711,16 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
 
             <View style={styles.section}>
               <Text variant="labelLarge" style={styles.label}>
-                Notes (optional)
+                Note
               </Text>
               <TextInput
-                label="Add a note about this settlement"
+                label="What's this payment for?"
                 value={notes}
                 onChangeText={setNotes}
                 mode="outlined"
                 multiline
                 numberOfLines={3}
-                placeholder="e.g., Paid via Venmo"
+                placeholder="What's this payment for?"
                 testID="settlement-notes-input"
               />
             </View>
@@ -699,20 +733,16 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                 disabled={
                   loading ||
                   !amount ||
-                  (!isEditing && !isAdminMode && !selectedToParticipantId) ||
+                  (!isEditing && !isAdminMode && !selectedToParticipantId && !balance) ||
                   (isEditing &&
                     (!selectedFromParticipantId || !selectedToParticipantId))
                 }
-                style={styles.saveButton}
+                style={[styles.saveButton, { borderRadius: 8 }]}
+                icon={isEditing ? undefined : "arrow-right"}
+                contentStyle={{ flexDirection: "row-reverse" }}
                 testID="settlement-save-button"
               >
-                {isEditing
-                  ? "Update Settlement"
-                  : isAdminMode
-                  ? "Record Payment"
-                  : isPaying
-                  ? "Mark as Paid"
-                  : "Mark as Received"}
+                {isEditing ? UPDATE_SETTLEMENT_LABEL : RECORD_SETTLEMENT_LABEL}
               </Button>
               <Button
                 mode="outlined"

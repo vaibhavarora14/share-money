@@ -1,9 +1,7 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import {
-    Avatar,
-    Button,
     Surface,
     Text,
     TouchableRipple,
@@ -16,7 +14,6 @@ import { useCurrencyPreferences } from "../hooks/useCurrencyPreferences";
 import { formatCurrency, getDefaultCurrency } from "../utils/currency";
 import {
   collectCurrencies,
-  formatBreakdown,
   formatDisplayTotals,
   isMultiCurrency,
   unifyBalances,
@@ -28,6 +25,7 @@ import {
   currenciesFromGroupStats,
   spendingTotalsFromGroupStats,
 } from "../utils/groupDashboardStats";
+import { shouldHideBalanceChrome } from "../utils/balanceRowLabels";
 
 interface GroupDashboardProps {
   groupId?: string;
@@ -39,13 +37,19 @@ interface GroupDashboardProps {
   loading: boolean;
   statsLoading?: boolean;
   defaultCurrency?: string;
+  /** @deprecated Balance strip is informational — settle only via Settle tab/screens. */
   onSettlePress?: (balance: Balance) => void;
   onMyCostsPress?: () => void;
   onTotalCostsPress?: () => void;
   onOpenCurrencySettings?: () => void;
+  /** Active members in the group (for calm solo/zero chrome). */
+  activeMemberCount?: number;
 }
 
-
+function shortName(full?: string | null, email?: string | null): string {
+  const base = full?.trim() || email?.split("@")[0] || email || "Someone";
+  return base.split(/\s+/)[0] || base;
+}
 
 export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   groupId,
@@ -56,13 +60,12 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   loading,
   statsLoading = false,
   defaultCurrency = getDefaultCurrency(),
-  onSettlePress,
   onMyCostsPress,
   onTotalCostsPress,
   onOpenCurrencySettings,
+  activeMemberCount = 2,
 }) => {
   const theme = useTheme();
-  const [showAllActions, setShowAllActions] = useState(false);
   const {
     preferredCurrency,
     groupSettings,
@@ -79,7 +82,6 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   const unifyEnabled = groupSettings?.enabled === true && !!groupSettings.settlementCurrency;
   const settlementCurrency = groupSettings?.settlementCurrency || preferredCurrency || defaultCurrency;
 
-  // 1. Calculate Debts (Action List)
   const debts = useMemo(() => {
     if (!currentUserId) return [];
     if (unifyEnabled) {
@@ -125,26 +127,6 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
     })), settlementCurrency, rateBook);
   }, [balances, currentUserId, currentUserParticipantId, myDebts, unifyEnabled, settlementCurrency, rateBook]);
 
-  // 2. Calculate My Net Position (Hero)
-  const netPositions = useMemo(() => {
-    if (!currentUserId) return [];
-    const positions = new Map<string, number>();
-
-    // We can infer this from myDebts actually
-    myDebts.forEach((d) => {
-      const isOwed = d.toUser.user_id === currentUserId;
-      const val = isOwed ? d.amount : -d.amount;
-      const cur = positions.get(d.currency) || 0;
-      positions.set(d.currency, cur + val);
-    });
-
-    return Array.from(positions.entries()).map(([currency, amount]) => ({
-      currency,
-      amount,
-    }));
-  }, [myDebts, currentUserId]);
-
-  // 3. Insights from backend group_stats (independent of transaction list pagination)
   const { myCostTotal, groupCostTotal } = useMemo(
     () => spendingTotalsFromGroupStats(groupStats),
     [groupStats]
@@ -169,112 +151,40 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
     [groupCostTotal, unifyEnabled, settlementCurrency, rateBook, defaultCurrency]
   );
 
-  // --- RENDER HELPERS ---
+  const owedToYou = useMemo(
+    () => myDebts.filter((d) => d.toUser.user_id === currentUserId),
+    [myDebts, currentUserId],
+  );
+  const youOwe = useMemo(
+    () => myDebts.filter((d) => d.fromUser.user_id === currentUserId),
+    [myDebts, currentUserId],
+  );
 
-  // --- RENDER HELPERS ---
+  const topOwed = owedToYou[0] as DebtEdge | UnifiedDebtEdge | undefined;
+  const topYouOwe = youOwe[0] as DebtEdge | UnifiedDebtEdge | undefined;
 
-  const renderActionItem = (edge: DebtEdge | UnifiedDebtEdge) => {
-    const isOwed = edge.toUser.user_id === currentUserId;
-    const otherUser = isOwed ? edge.fromUser : edge.toUser;
-    
-    // Google Material 3 colors often use Tonal palettes.
-    // We'll stick to semantic red/green but with a "Google" feel (clean, readable).
-    const amountColor = isOwed ? theme.colors.tertiary : theme.colors.error;
-
-    // Look up display name - backend now enriches full_name/email for all users (including invited)
-    const displayName =
-      otherUser.full_name || 
-      otherUser.email?.split("@")[0] || 
-      otherUser.email || 
-      "User";
-    const avatarLabel = displayName.substring(0, 2).toUpperCase();
-
-    // Construct balance object for settlement
-    const settleBalance: Balance = {
-        ...otherUser,
-        amount: isOwed ? edge.amount : -edge.amount,
-        currency: edge.currency
-    };
-
-    return (
-      <Surface
-        key={`${edge.currency}-${edge.fromUser.user_id}-${edge.toUser.user_id}`}
-        style={styles.actionCard}
-        elevation={0}
-      >
-        <TouchableRipple onPress={() => onSettlePress?.(settleBalance)} style={{ paddingVertical: 4 }}>
-          <View style={styles.actionRow}>
-            {otherUser.avatar_url ? (
-              <Avatar.Image source={{ uri: otherUser.avatar_url }} size={40} />
-            ) : (
-              <Avatar.Text
-                label={avatarLabel}
-                size={40}
-                style={{ backgroundColor: theme.colors.surfaceVariant }}
-                color={theme.colors.onSurfaceVariant}
-                labelStyle={{ fontWeight: '600' }}
-              />
-            )}
-
-            <View style={styles.actionInfo}>
-              <Text variant="bodyLarge" style={{ color: theme.colors.onSurface, fontWeight: '500' }}>
-                {displayName}
-              </Text>
-              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                {isOwed ? `owes you` : `you owe`}
-              </Text>
-            </View>
-
-            <View style={{ alignItems: 'flex-end', gap: 4 }}>
-               <Text
-                variant="titleMedium"
-                style={{ color: amountColor, fontWeight: "700" }}
-              >
-                {formatCurrency(edge.amount, edge.currency)}
-              </Text>
-              {"originalParts" in edge && Array.isArray(edge.originalParts) && edge.originalParts.length ? (
-                <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                  {formatBreakdown(edge.originalParts)}
-                </Text>
-              ) : null}
-              {/* Action Button: Small, Tonal / Outlined */}
-               <View style={[
-                   styles.actionChip, 
-                   { backgroundColor: isOwed ? theme.colors.tertiaryContainer : theme.colors.errorContainer } 
-               ]}>
-                   <Text 
-                    variant="labelSmall" 
-                    style={{ 
-                        color: isOwed ? theme.colors.onTertiaryContainer : theme.colors.onErrorContainer,
-                        fontWeight: '700'
-                    }}
-                   >
-                       {isOwed ? "RECEIVE" : "PAY"}
-                   </Text>
-               </View>
-            </View>
-          </View>
-        </TouchableRipple>
-      </Surface>
-    );
-  };
+  const hideChrome = shouldHideBalanceChrome(
+    myDebts.map((d) => ({
+      amount: d.toUser.user_id === currentUserId ? d.amount : -d.amount,
+    })),
+    activeMemberCount,
+  );
 
   const renderCompactInsights = () => (
     <View style={styles.compactStatsRow}>
-      {/* My Cost - "Tonal" Card */}
-      <Surface style={[styles.compactStat, { backgroundColor: theme.colors.secondaryContainer }]} elevation={0}>
+      <Surface style={[styles.compactStat, { backgroundColor: theme.colors.surface, borderColor: theme.colors.outlineVariant }]} elevation={0}>
         <TouchableRipple onPress={onMyCostsPress} style={{ flex: 1 }}>
           <View style={styles.compactStatContent}>
-            <View style={[styles.miniIcon, { backgroundColor: theme.colors.background }]}>
-              <MaterialCommunityIcons name="wallet" size={18} color={theme.colors.onSurface} />
+            <View style={[styles.miniIcon, { backgroundColor: theme.colors.secondaryContainer }]}>
+              <MaterialCommunityIcons name="wallet" size={18} color={theme.colors.onSecondaryContainer} />
             </View>
             <View style={{ flex: 1 }}>
-                <Text variant="labelSmall" style={{ color: theme.colors.onSecondaryContainer, opacity: 0.8 }}>My Spending</Text>
-                <Text variant="labelMedium" numberOfLines={2} style={{ color: theme.colors.onSecondaryContainer, fontWeight: 'bold' }}>
+                <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>My spending</Text>
+                <Text variant="labelMedium" numberOfLines={2} style={{ color: theme.colors.onSurface, fontWeight: '700' }}>
                     {dashboardLoading ? "..." : myCostDisplay.headline}
                 </Text>
                 {!dashboardLoading && myCostDisplay.breakdown ? (
-                  <Text variant="labelSmall" numberOfLines={1} style={{ color: theme.colors.onSecondaryContainer, opacity: 0.75 }}>
+                  <Text variant="labelSmall" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant }}>
                     from {myCostDisplay.breakdown}
                   </Text>
                 ) : null}
@@ -283,20 +193,19 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
         </TouchableRipple>
       </Surface>
 
-      {/* Total Cost - "Tonal" Card */}
-      <Surface style={[styles.compactStat, { backgroundColor: theme.colors.tertiaryContainer }]} elevation={0}>
+      <Surface style={[styles.compactStat, { backgroundColor: theme.colors.surface, borderColor: theme.colors.outlineVariant }]} elevation={0}>
         <TouchableRipple onPress={onTotalCostsPress} style={{ flex: 1 }}>
           <View style={styles.compactStatContent}>
-             <View style={[styles.miniIcon, { backgroundColor: theme.colors.background }]}>
-              <MaterialCommunityIcons name="chart-pie" size={18} color={theme.colors.onSurface} />
+             <View style={[styles.miniIcon, { backgroundColor: theme.colors.tertiaryContainer }]}>
+              <MaterialCommunityIcons name="chart-pie" size={18} color={theme.colors.onTertiaryContainer} />
             </View>
             <View style={{ flex: 1 }}>
-                <Text variant="labelSmall" style={{ color: theme.colors.onTertiaryContainer, opacity: 0.8 }}>Group summary</Text>
-                <Text variant="labelMedium" numberOfLines={2} style={{ color: theme.colors.onTertiaryContainer, fontWeight: 'bold' }}>
+                <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>Group summary</Text>
+                <Text variant="labelMedium" numberOfLines={2} style={{ color: theme.colors.onSurface, fontWeight: '700' }}>
                     {dashboardLoading ? "..." : groupCostDisplay.headline}
                 </Text>
                 {!dashboardLoading && groupCostDisplay.breakdown ? (
-                  <Text variant="labelSmall" numberOfLines={1} style={{ color: theme.colors.onTertiaryContainer, opacity: 0.75 }}>
+                  <Text variant="labelSmall" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant }}>
                     from {groupCostDisplay.breakdown}
                   </Text>
                 ) : null}
@@ -307,11 +216,14 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
     </View>
   );
 
+  const formatSigned = (edge: DebtEdge | UnifiedDebtEdge, isOwed: boolean) => {
+    const raw = formatCurrency(edge.amount, edge.currency);
+    const bare = raw.replace(/^[+-]/, "");
+    return isOwed ? `+${bare}` : `-${bare}`;
+  };
+
   return (
     <View style={styles.container}>
-      {/* 2. Compact Stats (Top for Google design - Stats usually context) OR Bottom? User liked priority settlement.
-          Let's keep Settlements top as user requested "prioritizing settlement". */}
-      
       {hasMultipleCurrencies && !unifyEnabled ? (
         <UnifyPromptCard
           currencies={usedCurrencies}
@@ -337,42 +249,61 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
         />
       ) : null}
 
-      {/* 1. Settlements List */}
-      <View style={styles.section}>
-        {myDebts.length > 0 ? (
-           <View style={{ gap: 4 }}>
-             {(showAllActions ? myDebts : myDebts.slice(0, 2)).map(renderActionItem)}
-             {myDebts.length > 2 && (
-               <Button 
-                 mode="text" 
-                 compact 
-                 onPress={() => setShowAllActions(!showAllActions)}
-                 icon={showAllActions ? "chevron-up" : "chevron-down"}
-               >
-                 {showAllActions ? "Show less" : `Show ${myDebts.length - 2} more`}
-               </Button>
-             )}
-           </View>
-        ) : (dashboardLoading || !currentUserId) ? (
-             <View style={{ padding: 20, alignItems: 'center' }}>
-                <Text variant="bodySmall" style={{ opacity: 0.5 }}>Updating balances...</Text>
-             </View>
-        ) : (
-          <Surface style={styles.emptyStateCard} elevation={0}>
-             {currentUserId ? (
-                 <>
-                    <MaterialCommunityIcons name="check-decagram" size={24} color={theme.colors.primary} />
-                    <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>You are all caught up!</Text>
-                 </>
-             ) : (
-                 <Text variant="bodySmall" style={{ opacity: 0.5 }}>Loading...</Text>
-             )}
-          </Surface>
-        )}
-      </View>
+      {!hideChrome && !unifyEnabled ? (
+        <Surface
+          style={[styles.balanceStrip, { borderColor: theme.colors.outlineVariant, backgroundColor: theme.colors.surface }]}
+          elevation={0}
+          testID="group-balance-strip"
+        >
+          {dashboardLoading || !currentUserId ? (
+            <View style={{ padding: 20, alignItems: "center", flex: 1 }}>
+              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                Updating balances...
+              </Text>
+            </View>
+          ) : (
+            <>
+              <View style={styles.stripHalf}>
+                <View style={[styles.stripIcon, { backgroundColor: theme.colors.tertiaryContainer }]}>
+                  <MaterialCommunityIcons name="cash-plus" size={18} color={theme.colors.tertiary} />
+                </View>
+                <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }} numberOfLines={1}>
+                  {topOwed
+                    ? `${shortName(topOwed.fromUser.full_name, topOwed.fromUser.email)} owes you`
+                    : "You’re owed"}
+                </Text>
+                <Text
+                  variant="titleLarge"
+                  style={{ color: theme.colors.tertiary, fontWeight: "700" }}
+                  testID="balance-strip-owed-amount"
+                >
+                  {topOwed ? formatSigned(topOwed, true) : formatCurrency(0, defaultCurrency)}
+                </Text>
+              </View>
+              <View style={[styles.stripDivider, { backgroundColor: theme.colors.outlineVariant }]} />
+              <View style={styles.stripHalf}>
+                <View style={[styles.stripIcon, { backgroundColor: theme.colors.secondaryContainer }]}>
+                  <MaterialCommunityIcons name="cash-minus" size={18} color={theme.colors.secondary} />
+                </View>
+                <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }} numberOfLines={1}>
+                  {topYouOwe
+                    ? `You owe ${shortName(topYouOwe.toUser.full_name, topYouOwe.toUser.email)}`
+                    : "You owe"}
+                </Text>
+                <Text
+                  variant="titleLarge"
+                  style={{ color: theme.colors.secondary, fontWeight: "700" }}
+                  testID="balance-strip-owe-amount"
+                >
+                  {topYouOwe ? formatSigned(topYouOwe, false) : formatCurrency(0, defaultCurrency)}
+                </Text>
+              </View>
+            </>
+          )}
+        </Surface>
+      ) : null}
 
-      {/* 2. Compact Stats */}
-       {renderCompactInsights()}
+      {renderCompactInsights()}
     </View>
   );
 };
@@ -384,38 +315,31 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     gap: 16,
   },
-  section: {
-    gap: 4,
-  },
-  actionCard: {
-    borderRadius: 0, // List items often don't have card borders in strict MD lists, but let's do subtle
-    backgroundColor: "transparent",
-  },
-  actionRow: {
+  balanceStrip: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 16, // Generous spacing
-    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    overflow: "hidden",
+    minHeight: 96,
   },
-  actionInfo: {
+  stripHalf: {
     flex: 1,
-    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    gap: 4,
+    justifyContent: "center",
   },
-  actionChip: {
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 16, // Pill
-      minWidth: 70,
-      alignItems: 'center',
+  stripDivider: {
+    width: StyleSheet.hairlineWidth,
+    alignSelf: "stretch",
   },
-  emptyStateCard: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      paddingVertical: 8,
-      borderRadius: 12,
-      backgroundColor: 'rgba(0,0,0,0.03)',
+  stripIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
   },
   compactStatsRow: {
       flexDirection: 'row',
@@ -425,17 +349,18 @@ const styles = StyleSheet.create({
       flex: 1,
       borderRadius: 8,
       overflow: 'hidden',
+      borderWidth: 1,
   },
   compactStatContent: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
-      padding: 16,
+      padding: 14,
   },
   miniIcon: {
       width: 32,
       height: 32,
-      borderRadius: 16, // Circle
+      borderRadius: 16,
       alignItems: 'center',
       justifyContent: 'center',
   }

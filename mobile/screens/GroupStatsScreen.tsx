@@ -772,10 +772,7 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
         currentUserId={session?.user?.id}
         groupMembers={members}
         participants={participants}
-        onSettleUp={(balance) => {
-          setSettlingBalance(balance);
-          setShowSettlementForm(true);
-        }}
+        calmEmpty={filteredBalances.length === 0}
       />
 
       {!balancesLoading && filteredBalances.length === 0 && (

@@ -1200,6 +1200,24 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           title={showMembers ? "People" : group.name}
           titleStyle={{ fontWeight: "bold" }}
         />
+        {!showMembers && isActiveMember ? (
+          <Button
+            mode="outlined"
+            compact
+            icon="account-multiple-outline"
+            onPress={() => setShowMembers(true)}
+            style={{
+              marginRight: 4,
+              borderRadius: 8,
+              borderColor: theme.colors.primary,
+            }}
+            labelStyle={{ color: theme.colors.primary, marginVertical: 4, fontSize: 13 }}
+            textColor={theme.colors.primary}
+            testID="header-people-chip"
+          >
+            People
+          </Button>
+        ) : null}
         {/* Group options — active: Archive/Leave; archived: Unarchive/Leave/Remove; former: Remove */}
         {showGroupMenu && (
           <Menu
@@ -1387,19 +1405,27 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               loading={balancesLoading}
               statsLoading={groupStatsLoading}
               defaultCurrency={getDefaultCurrency()}
-              onSettlePress={(balance) => {
-                  setEditingSettlement(null);
-                  setSettlingBalance(balance);
-                  setShowSettlementForm(true);
-              }}
+              activeMemberCount={activeMemberCount}
               onMyCostsPress={() => handleStatNavigation("my-costs")}
               onTotalCostsPress={() => handleStatNavigation("total-costs")}
               onOpenCurrencySettings={() => setShowCurrencySettings(true)}
             />
 
             <View
-              style={{ paddingHorizontal: 16, marginTop: 16, marginBottom: 0 }}
+              style={{
+                paddingHorizontal: 16,
+                marginTop: 8,
+                marginBottom: 4,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
             >
+              <Text variant="titleMedium" style={{ fontWeight: "700", color: theme.colors.onSurface }}>
+                Recent expenses
+              </Text>
+            </View>
+            <View style={{ paddingHorizontal: 16, marginBottom: 0 }}>
               <SegmentedButtons
                 value={listMode}
                 onValueChange={(val: string) =>
@@ -1611,11 +1637,11 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           icon={preferAddPeopleFab ? "account-plus" : "plus"}
           style={[
             styles.fab,
-            { backgroundColor: theme.colors.primaryContainer },
+            { backgroundColor: theme.colors.primary },
           ]}
-          color={theme.colors.onPrimaryContainer}
+          color={theme.colors.onPrimary}
           onPress={preferAddPeopleFab ? onAddMember : onAddTransaction}
-          label={preferAddPeopleFab ? "Add people" : "Add Expense"}
+          label={preferAddPeopleFab ? "Add people" : undefined}
         />
       )}
 

@@ -3,12 +3,16 @@ import type { LedgerFilter } from "./transactionsLedger";
 export type TransactionsEmptyCopy = {
   title: string;
   body: string;
+  /** Optional calm footer under solo empty (info strip). */
+  infoFooter?: string;
   /** Primary button label; omit when no empty-state CTA. */
   primaryLabel?: string;
   primaryAction?: "add_people" | "add_expense";
-  /** Secondary text-button label (solo empty "all" filter). */
+  /** Secondary text/ghost label (solo empty). */
   secondaryLabel?: string;
   secondaryAction?: "add_expense";
+  /** Supporting line under secondary ghost row. */
+  secondaryBody?: string;
 };
 
 /**
@@ -34,7 +38,7 @@ export function getTransactionsEmptyCopy(
   if (filter === "payments") {
     return {
       title: "No payments yet",
-      body: "Record a settlement from Settle Up and it will show up here.",
+      body: "Record a settlement from Settle and it will show up here.",
     };
   }
 
@@ -43,12 +47,14 @@ export function getTransactionsEmptyCopy(
   if (filter === "expenses") {
     if (isSolo) {
       return {
-        title: "Add people first",
-        body: "Invite someone to share with before logging expenses.",
+        title: "Just you so far",
+        body: "Add people to start sharing expenses together.",
+        infoFooter: "No one else yet. Expenses will be in your name.",
         primaryLabel: "Add people",
         primaryAction: "add_people",
         secondaryLabel: "Add expense anyway",
         secondaryAction: "add_expense",
+        secondaryBody: "You can add expenses by yourself.",
       };
     }
     return {
@@ -62,12 +68,14 @@ export function getTransactionsEmptyCopy(
   // filter === "all"
   if (isSolo) {
     return {
-      title: "Add people first",
-      body: "Shared expenses work best with someone to split with. Invite people to this group.",
+      title: "Just you so far",
+      body: "Add people to start sharing expenses together.",
+      infoFooter: "No one else yet. Expenses will be in your name.",
       primaryLabel: "Add people",
       primaryAction: "add_people",
       secondaryLabel: "Add expense anyway",
       secondaryAction: "add_expense",
+      secondaryBody: "You can add expenses by yourself.",
     };
   }
 

@@ -1013,6 +1013,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                   onAmountChange={handleSplitAmountChange}
                   onShareChange={handleShareChange}
                   onSplitRemaining={handleSplitRemaining}
+                  preferCompact={!transaction && splitMode === "equal"}
                 />
               </Card.Content>
             </Card>
@@ -1037,7 +1038,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
             style={styles.saveButton}
             contentStyle={styles.saveButtonContent}
           >
-            {transaction ? "Update" : "Save"}
+            {transaction ? "Update" : "Save expense"}
           </Button>
         </Surface>
       </KeyboardAvoidingView>

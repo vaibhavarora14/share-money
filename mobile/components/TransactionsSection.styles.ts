@@ -9,13 +9,13 @@ export const styles = StyleSheet.create({
     gap: 8, // Spacing between items
   },
   card: {
-    borderRadius: 20, // Pill-ish / Large corners
-    backgroundColor: 'transparent', // Let list blend or use surface
+    borderRadius: 8,
+    backgroundColor: 'transparent',
     overflow: 'hidden',
   },
   highlightOverlay: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 20,
+    borderRadius: 8,
     borderWidth: 2,
   },
   pressable: {
@@ -33,6 +33,43 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
+  },
+  soloEmptyCard: {
+    borderRadius: 8,
+    borderWidth: 1,
+    overflow: "hidden",
+    marginTop: 8,
+  },
+  soloEmptyTop: {
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingTop: 28,
+    paddingBottom: 20,
+  },
+  soloEmptySecondary: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#DCE3EC",
+  },
+  soloEmptySecondaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  soloEmptySecondaryIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  soloEmptyFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   content: {
     flex: 1,

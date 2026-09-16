@@ -1,12 +1,14 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import {
+  Avatar,
   Button,
   Chip,
   IconButton,
   SegmentedButtons,
   Text,
   TextInput,
+  TouchableRipple,
   useTheme,
 } from "react-native-paper";
 import { Participant } from "../types";
@@ -42,6 +44,8 @@ interface SplitAmongEditorProps {
   onAmountChange: (participantId: string, text: string) => void;
   onShareChange: (participantId: string, shares: number) => void;
   onSplitRemaining: () => void;
+  /** When true, start collapsed (equal summary + Adjust split). */
+  preferCompact?: boolean;
 }
 
 function displayName(participant: Participant): string {
@@ -49,6 +53,15 @@ function displayName(participant: Participant): string {
     || participant.email?.split("@")[0]
     || participant.email
     || "Unknown";
+}
+
+function initials(participant: Participant): string {
+  const name = displayName(participant);
+  if (name.includes(" ")) {
+    const parts = name.trim().split(/\s+/);
+    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
 }
 
 export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
@@ -68,6 +81,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
   onAmountChange,
   onShareChange,
   onSplitRemaining,
+  preferCompact = true,
 }) => {
   const theme = useTheme();
   const selectionTheme = {
@@ -79,6 +93,8 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const hasTotal = totalAmount !== null && totalAmount > 0;
   const selectedParticipants = participants.filter((participant) => selectedSet.has(participant.id));
+  const needsAdvanced = mode !== "equal";
+  const [showAdvanced, setShowAdvanced] = useState(!preferCompact || needsAdvanced);
 
   const assignedAmounts = useMemo(() => {
     if (!hasTotal || selectedIds.length === 0) return {} as Record<string, number>;
@@ -117,8 +133,78 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
       ? theme.colors.primary
       : theme.colors.onSurfaceVariant;
 
+  const modeLabel =
+    mode === "equal" ? "Equal" : mode === "unequal" ? "Amounts" : "Shares";
+
+  if (!showAdvanced) {
+    return (
+      <View testID="split-among-compact">
+        <View style={styles.compactHeader}>
+          <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant }}>
+            Split
+          </Text>
+          <View style={styles.compactModeChip}>
+            <Text variant="labelLarge" style={{ color: theme.colors.onSurface, fontWeight: "700" }}>
+              {modeLabel}
+            </Text>
+            <IconButton
+              icon="chevron-down"
+              size={18}
+              onPress={() => setShowAdvanced(true)}
+              disabled={disabled}
+              accessibilityLabel="Open split options"
+            />
+          </View>
+        </View>
+
+        <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 12 }}>
+          {selectedIds.length} {selectedIds.length === 1 ? "person" : "people"}
+          {selectedIds.length > 0 ? (
+            <>
+              {" · "}
+              <Text style={{ color: theme.colors.secondary, fontWeight: "700" }}>each</Text>
+            </>
+          ) : null}
+        </Text>
+
+        <View style={styles.avatarRow}>
+          {selectedParticipants.slice(0, 6).map((participant) => (
+            <Avatar.Text
+              key={participant.id}
+              size={36}
+              label={initials(participant)}
+              style={{
+                backgroundColor: theme.colors.surface,
+                borderWidth: 2,
+                borderColor: theme.colors.secondary,
+                marginRight: -6,
+              }}
+              color={theme.colors.onSurface}
+              labelStyle={{ fontSize: 12, fontWeight: "600" }}
+            />
+          ))}
+        </View>
+
+        <TouchableRipple
+          onPress={() => setShowAdvanced(true)}
+          disabled={disabled}
+          testID="split-adjust-more-options"
+          style={styles.adjustRow}
+        >
+          <View style={styles.adjustInner}>
+            <IconButton icon="chart-pie" size={20} iconColor={theme.colors.primary} />
+            <Text variant="titleSmall" style={{ color: theme.colors.primary, fontWeight: "600", flex: 1 }}>
+              Adjust split
+            </Text>
+            <IconButton icon="chevron-right" size={20} iconColor={theme.colors.onSurfaceVariant} />
+          </View>
+        </TouchableRipple>
+      </View>
+    );
+  }
+
   return (
-    <View>
+    <View testID="split-among-advanced">
       <View style={styles.sectionHeaderWithAction}>
         <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant }}>
           Split among
@@ -289,6 +375,18 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
           ) : null}
         </View>
       ) : null}
+
+      {preferCompact && mode === "equal" ? (
+        <Button
+          mode="text"
+          compact
+          onPress={() => setShowAdvanced(false)}
+          style={{ alignSelf: "flex-start", marginTop: 8 }}
+          testID="split-hide-advanced"
+        >
+          Hide options
+        </Button>
+      ) : null}
     </View>
   );
 };
@@ -318,7 +416,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 16,
+    borderRadius: 8,
     alignItems: "center",
   },
   detailList: {
@@ -338,6 +436,31 @@ const styles = StyleSheet.create({
     width: 112,
   },
   shareStepper: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  compactHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  compactModeChip: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  avatarRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+    paddingLeft: 4,
+  },
+  adjustRow: {
+    marginTop: 4,
+    marginHorizontal: -8,
+    borderRadius: 8,
+  },
+  adjustInner: {
     flexDirection: "row",
     alignItems: "center",
   },
