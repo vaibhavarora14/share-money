@@ -16,13 +16,5 @@ Deno.test("hide balance chrome for solo or all-zero", () => {
   assertEquals(shouldHideBalanceChrome([{ amount: 5 }, { amount: -2 }], 3), false);
 });
 
-/**
- * Product lock: balance person rows must not expose settle CTAs.
- * Documented here so UI regressions are caught by review + this invariant.
- */
-Deno.test("balances rows expose no settle action keys", () => {
-  const rowActions = [] as string[];
-  assertEquals(rowActions.includes("settle"), false);
-  assertEquals(rowActions.includes("pay"), false);
-  assertEquals(rowActions.includes("receive"), false);
-});
+// The no-settle-actions product lock is exercised at the component boundary in
+// mobile/components/Balances.test.cjs, with settlement callbacks supplied.

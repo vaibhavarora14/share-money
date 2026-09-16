@@ -68,26 +68,19 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
       .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
   }, [groupBalances, overallBalances, showOverallBalances]);
 
-  const { owedTotal, oweTotal, owedCurrency, oweCurrency } = useMemo(() => {
-    let owed = 0;
-    let owe = 0;
-    let owedCur = defaultCurrency;
-    let oweCur = defaultCurrency;
-    for (const b of personRows) {
-      if (b.amount > 0) {
-        owed += b.amount;
-        owedCur = b.currency || owedCur;
-      } else if (b.amount < 0) {
-        owe += Math.abs(b.amount);
-        oweCur = b.currency || oweCur;
-      }
+  const { owedTotal, oweTotal } = useMemo(() => {
+    const owed = new Map<string, number>();
+    const owe = new Map<string, number>();
+    for (const balance of personRows) {
+      const totals = balance.amount > 0 ? owed : owe;
+      const currency = balance.currency || defaultCurrency;
+      totals.set(currency, (totals.get(currency) || 0) + Math.abs(balance.amount));
     }
-    return {
-      owedTotal: owed,
-      oweTotal: owe,
-      owedCurrency: owedCur,
-      oweCurrency: oweCur,
-    };
+    // Inputs may already be unified upstream; otherwise keep currencies separate.
+    const formatTotals = (totals: Map<string, number>) => totals.size > 0
+      ? Array.from(totals, ([currency, amount]) => formatCurrency(amount, currency)).join("\n")
+      : formatCurrency(0, defaultCurrency);
+    return { owedTotal: formatTotals(owed), oweTotal: formatTotals(owe) };
   }, [personRows, defaultCurrency]);
 
   const getUserDisplayName = (balance: Balance): string => {
@@ -206,7 +199,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
             style={{ color: theme.colors.tertiary, fontWeight: "700" }}
             testID="balances-summary-owed"
           >
-            {formatCurrency(owedTotal, owedCurrency)}
+            {owedTotal}
           </Text>
         </View>
         <View
@@ -239,7 +232,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
             style={{ color: theme.colors.secondary, fontWeight: "700" }}
             testID="balances-summary-owe"
           >
-            {formatCurrency(oweTotal, oweCurrency)}
+            {oweTotal}
           </Text>
         </View>
       </Surface>

@@ -150,23 +150,20 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
     [groupCostTotal, unifyEnabled, settlementCurrency, rateBook, defaultCurrency]
   );
 
-  const owedToYou = useMemo(
-    () =>
-      [...balances]
-        .filter((b) => b.amount > 0.005)
-        .sort((a, b) => b.amount - a.amount),
-    [balances],
-  );
-  const youOweBalances = useMemo(
-    () =>
-      [...balances]
-        .filter((b) => b.amount < -0.005)
-        .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)),
-    [balances],
-  );
+  // Group net balances are not debts to the viewer. Use the same viewer-involved
+  // settlement edges as the unified view, retaining each edge's currency/amount.
+  const viewerBalances = useMemo(() => myDebts.map((edge): Balance => {
+    const isOwed = edge.toUser.user_id === currentUserId
+      || (!!currentUserParticipantId && edge.toUser.participant_id === currentUserParticipantId);
+    return {
+      ...(isOwed ? edge.fromUser : edge.toUser),
+      amount: isOwed ? edge.amount : -edge.amount,
+      currency: edge.currency,
+    };
+  }), [myDebts, currentUserId, currentUserParticipantId]);
 
-  const topOwed = owedToYou[0];
-  const topYouOwe = youOweBalances[0];
+  const topOwed = viewerBalances.find((balance) => balance.amount > 0.005);
+  const topYouOwe = viewerBalances.find((balance) => balance.amount < -0.005);
 
   const hideChrome = shouldHideBalanceChrome(
     balances.map((b) => ({ amount: b.amount })),
