@@ -320,7 +320,6 @@ function AddExpensePreview() {
             onAmountChange={() => {}}
             onShareChange={() => {}}
             onSplitRemaining={() => {}}
-            preferCompact
           />
         </Surface>
         <Button mode="contained" style={{ borderRadius: 8 }} contentStyle={{ height: 48 }}>

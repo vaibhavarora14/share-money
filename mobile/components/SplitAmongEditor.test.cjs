@@ -1,0 +1,407 @@
+const assert = require("node:assert/strict");
+const { readFileSync } = require("node:fs");
+const path = require("node:path");
+const { test } = require("node:test");
+const ts = require("typescript");
+const React = require("react");
+
+// Shallow component harness: native/Paper views are opaque boundaries. Execute
+// the real editor and split/currency helpers without requiring a native runtime.
+function createEditor(overrides = {}) {
+  const state = [];
+  let cursor = 0;
+  const calls = [];
+  const props = {
+    participants: [
+      { id: "a", full_name: "Alice", email: "alice@example.com", type: "member" },
+      { id: "b", full_name: "Bob", email: "bob@example.com", type: "member" },
+    ],
+    selectedIds: ["a", "b"], amounts: {}, shares: {}, mode: "equal",
+    totalAmount: 100, currency: "USD", areAllSelected: true,
+    onToggleMember: (id) => calls.push(["member", id]),
+    onToggleAll: () => calls.push(["all"]),
+    onModeChange: (mode) => { props.mode = mode; calls.push(["mode", mode]); },
+    onAmountChange: (id, value) => calls.push(["amount", id, value]),
+    onShareChange: (id, value) => calls.push(["share", id, value]),
+    onSplitRemaining: () => calls.push(["remaining"]),
+    ...overrides,
+  };
+  const paper = Object.fromEntries(
+    ["Avatar", "Button", "Chip", "IconButton", "SegmentedButtons", "Text", "TextInput", "TouchableRipple"]
+      .map((name) => [name, name]),
+  );
+  paper.Avatar = { Text: "Avatar.Text" };
+  paper.Menu = Object.assign(() => {}, { Item: "Menu.Item" });
+  paper.useTheme = () => ({ colors: {} });
+  const cache = new Map();
+  function load(filename) {
+    if (cache.has(filename)) return cache.get(filename).exports;
+    const module = { exports: {} };
+    cache.set(filename, module);
+    const code = ts.transpileModule(readFileSync(filename, "utf8"), {
+      compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
+    }).outputText;
+    const localRequire = (id) => {
+      if (id === "react") return {
+        ...React,
+        useMemo: (compute) => compute(),
+        useState: (initial) => {
+          const index = cursor++;
+          if (!(index in state)) state[index] = initial;
+          return [state[index], (value) => { state[index] = value; }];
+        },
+      };
+      if (id === "react-native") return { View: "View", StyleSheet: { create: (styles) => styles } };
+      if (id === "react-native-paper") return paper;
+      if (id.startsWith(".")) return load(path.resolve(path.dirname(filename), `${id}.ts`));
+      return require(id);
+    };
+    new Function("require", "module", "exports", code)(localRequire, module, module.exports);
+    return module.exports;
+  }
+  const { SplitAmongEditor } = load(path.join(__dirname, "SplitAmongEditor.tsx"));
+  return {
+    props, calls,
+    render() { cursor = 0; return SplitAmongEditor(props); },
+  };
+}
+
+// Execute the form's real split handlers, validation, readiness and save payload
+// with an in-memory onSave boundary (never a backend write).
+function createForm(overrides = {}) {
+  const source = readFileSync(path.join(__dirname, "../screens/TransactionFormScreen.tsx"), "utf8");
+  const block = source.slice(source.indexOf("  const parsedTotalAmount ="), source.indexOf("  const filteredCurrencies ="));
+  const compile = (source) => ts.transpileModule(source, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  const module = { exports: {} };
+  new Function("exports", compile(readFileSync(path.join(__dirname, "../utils/splits.ts"), "utf8")))(module.exports);
+  const saved = [];
+  const scope = {
+    ...module.exports, useMemo: (fn) => fn(), useCallback: (fn) => fn,
+    transaction: undefined, didDefaultSplitRef: {}, isPresetCategory: () => false,
+    amount: "100", splitAmong: ["a"], allParticipantIds: ["a", "b"],
+    splitMode: "equal", splitAmounts: {}, splitShares: {}, splitAmongError: "",
+    description: "Dinner", date: "2026-09-16", type: "expense", category: "",
+    currency: "USD", effectiveDefaultCurrency: "USD", paidBy: "a", loading: false,
+    isGroupExpense: true, areAllParticipantsSelected: false,
+    onSave: async (payload) => saved.push(payload),
+    ...overrides,
+  };
+  for (const key of ["description", "amount", "date", "selectedDate", "type", "category", "useCustomCategoryInput", "currency", "paidBy", "splitMode", "splitAmong", "splitAmounts", "splitShares", "splitAmongError", "descriptionError", "amountError", "dateError", "paidByError", "loading"]) {
+    scope[`set${key[0].toUpperCase()}${key.slice(1)}`] = (value) => {
+      scope[key] = typeof value === "function" ? value(scope[key]) : value;
+    };
+  }
+  const render = new Function("scope", `with (scope) { ${compile(block)}; return { handleToggleSplitMember, handleToggleAllMembers, handleSplitModeChange, handleSplitAmountChange, handleShareChange, handleSplitRemaining, handleSave, isSaveDisabled }; }`);
+  const loadBlock = source.slice(source.indexOf("  const loadTransactionData ="), source.indexOf("  // Handle loading transaction data for editing"));
+  const load = new Function("scope", `with (scope) { ${compile(loadBlock)}; loadTransactionData(transaction); }`);
+  if (scope.transaction) load(scope);
+  return { scope, saved, render: () => render({ ...scope }) };
+}
+
+function nodes(tree) {
+  if (!tree || typeof tree !== "object") return [];
+  return [tree, ...React.Children.toArray(tree.props?.children).flatMap(nodes)];
+}
+function byId(tree, id) {
+  const node = nodes(tree).find((node) => node.props.testID === id);
+  assert.ok(node, `Expected visible ${id}`);
+  return node;
+}
+function text(tree) {
+  if (typeof tree === "string" || typeof tree === "number") return String(tree);
+  return React.Children.toArray(tree?.props?.children).map(text).join("");
+}
+
+test("header dropdown switches modes without hiding participants and dismisses on selection", () => {
+  const editor = createEditor();
+  for (const [mode, label] of [["unequal", "Amounts"], ["shares", "Shares"], ["equal", "Equal"]]) {
+    let menu = byId(editor.render(), "split-mode-menu");
+    assert.equal(menu.props.visible, false);
+    menu.props.anchor.props.onPress();
+    menu = byId(editor.render(), "split-mode-menu");
+    assert.equal(menu.props.visible, true);
+    assert.deepEqual(nodes(menu).filter((node) => node.type === "Menu.Item").map((node) => node.props.title), ["Equal", "Amounts", "Shares"]);
+    byId(menu, `split-mode-${mode}`).props.onPress();
+    const tree = editor.render();
+    menu = byId(tree, "split-mode-menu");
+    assert.equal(menu.props.visible, false);
+    assert.equal(text(menu.props.anchor), label);
+    assert.deepEqual(editor.calls.at(-1), ["mode", mode]);
+    assert.equal(byId(menu, `split-mode-${mode}`).props.trailingIcon, "check");
+    assert.equal(nodes(tree).some((node) => node.type === "Chip"), mode === "equal");
+    assert.equal(nodes(tree).some((node) => node.type === "Button" && /^(All|None|Select all)$/.test(text(node))), false);
+    const inputs = nodes(tree).filter((node) => node.type === "TextInput");
+    const steppers = nodes(tree).filter((node) => node.props.icon === "plus");
+    assert.equal(inputs.length, mode === "unequal" ? 2 : 0);
+    assert.equal(steppers.length, mode === "shares" ? 2 : 0);
+  }
+  let menu = byId(editor.render(), "split-mode-menu");
+  menu.props.anchor.props.onPress();
+  menu = byId(editor.render(), "split-mode-menu");
+  menu.props.onDismiss();
+  assert.equal(byId(editor.render(), "split-mode-menu").props.visible, false);
+});
+
+test("amount inputs and totals include everyone despite Equal deselection", () => {
+  const editor = createEditor({ mode: "unequal", amounts: { a: "20", b: "10" } });
+  const tree = editor.render();
+  assert.match(text(byId(tree, "split-remaining-label")), /Left to assign: \$70\.00/);
+  const input = byId(tree, "split-amount-input-alice@example.com");
+  input.props.onChangeText("$12.34");
+  input.props.onChangeText("12.345");
+  assert.deepEqual(editor.calls, [["amount", "a", "12.34"]]);
+  byId(tree, "split-leftover-button").props.onPress();
+  assert.deepEqual(editor.calls.at(-1), ["remaining"]);
+  editor.props.selectedIds = ["a"];
+  editor.props.amounts = { a: "100", b: "90" };
+  const updated = editor.render();
+  assert.equal(nodes(updated).filter((node) => node.type === "TextInput").length, 2);
+  assert.match(text(byId(updated, "split-remaining-label")), /Over by: \$90\.00/);
+  assert.equal(nodes(updated).some((node) => node.props.testID === "split-leftover-button"), false);
+  editor.props.amounts.a = "110";
+  assert.match(text(byId(editor.render(), "split-remaining-label")), /Over by: \$100\.00/);
+});
+
+test("shares retain weighted amounts, default share count and stepper limits", () => {
+  const editor = createEditor({ mode: "shares", selectedIds: [], shares: { a: 3 } });
+  const tree = editor.render();
+  assert.match(text(tree), /75% · \$75\.00/);
+  assert.match(text(tree), /25% · \$25\.00/);
+  const control = (tree, label) => nodes(tree).find((node) => node.props.accessibilityLabel === label);
+  assert.equal(control(tree, "Fewer shares for Bob").props.disabled, true);
+  control(tree, "More shares for Bob").props.onPress();
+  control(tree, "Fewer shares for Alice").props.onPress();
+  assert.deepEqual(editor.calls, [["share", "b", 2], ["share", "a", 2]]);
+  editor.props.shares.a = 999999;
+  assert.equal(control(editor.render(), "More shares for Alice").props.disabled, true);
+});
+
+test("empty Equal selection still exposes every Amounts field", () => {
+  const editor = createEditor({ selectedIds: [], mode: "unequal", error: "Select at least one person" });
+  const tree = editor.render();
+  assert.match(text(tree), /Select at least one person/);
+  assert.doesNotMatch(text(tree), /Select people, then set each share/);
+  assert.equal(nodes(tree).filter((node) => node.type === "TextInput").length, 2);
+  assert.match(text(byId(tree, "split-remaining-label")), /Left to assign: \$100\.00/);
+  editor.props.mode = "equal";
+  editor.props.totalAmount = null;
+  assert.doesNotMatch(text(editor.render()), /Each person pays/);
+});
+
+test("disabled editor disables participants, dropdown, menu choices and amount controls", () => {
+  const editor = createEditor({ disabled: true, mode: "unequal" });
+  const tree = editor.render();
+  const menu = byId(tree, "split-mode-menu");
+  assert.equal(menu.props.visible, false);
+  assert.equal(menu.props.anchor.props.disabled, true);
+  for (const node of nodes(tree).filter((node) => ["Chip", "Button", "Menu.Item", "TextInput"].includes(node.type))) {
+    assert.equal(node.props.disabled, true);
+  }
+});
+
+test("form saves every visible Amounts row after Equal deselection and restores Equal selection", async () => {
+  const form = createForm();
+  form.render().handleSplitModeChange("unequal");
+  assert.deepEqual(form.scope.splitAmounts, { a: "50.00", b: "50.00" });
+  const editor = createEditor({
+    mode: "unequal", selectedIds: form.scope.splitAmong, amounts: form.scope.splitAmounts,
+    onAmountChange: (id, value) => form.render().handleSplitAmountChange(id, value),
+  });
+  byId(editor.render(), "split-amount-input-alice@example.com").props.onChangeText("30");
+  byId(editor.render(), "split-amount-input-bob@example.com").props.onChangeText("70");
+  assert.equal(form.render().isSaveDisabled, false);
+  await form.render().handleSave();
+  assert.deepEqual(form.saved[0].split_among_participant_ids, ["a", "b"]);
+  assert.deepEqual(form.saved[0].splits, [{ participant_id: "a", amount: 30 }, { participant_id: "b", amount: 70 }]);
+  form.render().handleSplitModeChange("equal");
+  await form.render().handleSave();
+  assert.deepEqual(form.saved[1].split_among_participant_ids, ["a"]);
+  assert.equal(form.saved[1].splits, undefined);
+});
+
+test("form includes all Shares rows even after Equal None and converts their weights to Amounts", async () => {
+  const form = createForm({ splitAmong: [], splitShares: { a: 3 } });
+  form.render().handleSplitModeChange("shares");
+  assert.equal(form.render().isSaveDisabled, false);
+  await form.render().handleSave();
+  assert.deepEqual(form.saved[0].split_among_participant_ids, ["a", "b"]);
+  assert.deepEqual(form.saved[0].splits, [{ participant_id: "a", amount: 75 }, { participant_id: "b", amount: 25 }]);
+  form.render().handleSplitModeChange("unequal");
+  assert.deepEqual(form.scope.splitAmounts, { a: "75.00", b: "25.00" });
+  form.render().handleSplitModeChange("equal");
+  assert.equal(form.render().isSaveDisabled, true);
+});
+
+test("form rejects blank or zero visible amounts rather than silently omitting them", async () => {
+  for (const b of ["", "0", "0.00", "."]) {
+    const form = createForm({ splitMode: "unequal", splitAmounts: { a: "100", b } });
+    assert.equal(form.render().isSaveDisabled, true);
+    await form.render().handleSave();
+    assert.equal(form.saved.length, 0);
+  }
+});
+
+test("form splits leftover across all visible rows, ignoring stale unavailable values", async () => {
+  const form = createForm({ splitMode: "unequal", splitAmong: [], splitAmounts: { a: "20", b: "10", stale: "900" } });
+  form.render().handleSplitRemaining();
+  assert.deepEqual(form.scope.splitAmounts, { a: "55.00", b: "45.00", stale: "900" });
+  await form.render().handleSave();
+  assert.deepEqual(form.saved[0].splits, [{ participant_id: "a", amount: 55 }, { participant_id: "b", amount: 45 }]);
+});
+
+const subsetTransaction = {
+  id: 1, description: "Dinner", amount: 100, date: "2026-09-16", type: "expense",
+  currency: "USD", paid_by_participant_id: "a",
+  splits: [{ participant_id: "a", amount: 30 }, { participant_id: "b", amount: 70 }],
+};
+
+test("editing an older unequal subset preserves A30/B70 with C blank on description save", async () => {
+  const form = createForm({ transaction: subsetTransaction, allParticipantIds: ["a", "b", "c"] });
+  assert.equal(form.scope.splitMode, "unequal");
+  assert.deepEqual(form.scope.splitAmounts, { a: "30.00", b: "70.00" });
+  form.scope.description = "Dinner updated";
+  assert.equal(form.render().isSaveDisabled, false);
+  await form.render().handleSave();
+  assert.equal(form.saved[0].description, "Dinner updated");
+  assert.deepEqual(form.saved[0].splits, subsetTransaction.splits);
+  assert.deepEqual(form.saved[0].split_among_participant_ids, ["a", "b"]);
+});
+
+test("an added participant stays visible and can join an edited subset with a positive amount", async () => {
+  const form = createForm({ transaction: subsetTransaction });
+  form.scope.allParticipantIds = ["a", "b", "c", "d"];
+  form.render().handleSplitAmountChange("b", "60");
+  form.render().handleSplitAmountChange("c", "10");
+  assert.equal(form.render().isSaveDisabled, false);
+  await form.render().handleSave();
+  assert.deepEqual(form.saved[0].splits, [
+    { participant_id: "a", amount: 30 }, { participant_id: "b", amount: 60 }, { participant_id: "c", amount: 10 },
+  ]);
+  assert.deepEqual(form.saved[0].split_among_participant_ids, ["a", "b", "c"]);
+});
+
+test("edit never silently omits blank, zero or invalid amounts for original participants", async () => {
+  for (const b of ["", "0", "0.00", ".", "NaN", "-1"]) {
+    const form = createForm({ transaction: subsetTransaction, allParticipantIds: ["a", "b", "c"] });
+    form.scope.splitAmounts = { a: "100", b };
+    assert.equal(form.render().isSaveDisabled, true, `b=${b}`);
+    await form.render().handleSave();
+    assert.equal(form.saved.length, 0, `b=${b}`);
+  }
+  for (const amount of [0, NaN, -1]) {
+    const form = createForm({ transaction: { ...subsetTransaction, splits: [{ participant_id: "a", amount: 100 }, { participant_id: "b", amount }] } });
+    assert.equal(form.render().isSaveDisabled, true);
+    await form.render().handleSave();
+    assert.equal(form.saved.length, 0);
+  }
+});
+
+test("nonblank invalid amounts for previously excluded people also block edits", async () => {
+  for (const c of ["0", "0.00", ".", "NaN", "-1"]) {
+    const form = createForm({ transaction: subsetTransaction, allParticipantIds: ["a", "b", "c"] });
+    form.scope.splitAmounts.c = c;
+    assert.equal(form.render().isSaveDisabled, true);
+    await form.render().handleSave();
+    assert.equal(form.saved.length, 0);
+  }
+});
+
+test("blank excluded Amounts rows are labeled but remain editable without selection chips", () => {
+  const editor = createEditor({ mode: "unequal", amounts: { a: "100" }, excludedAmountIds: ["b"] });
+  const tree = editor.render();
+  assert.match(text(tree), /Not included/);
+  assert.equal(nodes(tree).filter(node => node.type === "TextInput").length, 2);
+  assert.equal(nodes(tree).some(node => node.type === "Chip"), false);
+  byId(tree, "split-amount-input-bob@example.com").props.onChangeText("10");
+  assert.deepEqual(editor.calls, [["amount", "b", "10"]]);
+  editor.props.excludedAmountIds = [];
+  editor.props.amounts.b = "10";
+  assert.doesNotMatch(text(editor.render()), /Not included/);
+});
+
+test("Equal disables Save when one cent leaves a selected person with a rounded zero allocation", () => {
+  const form = createForm({ amount: "0.01", splitAmong: ["a", "b"] });
+  assert.equal(form.render().isSaveDisabled, true);
+});
+
+test("Equal validation blocks a rounded zero allocation even when Save is invoked directly", async () => {
+  const form = createForm({ amount: "0.01", splitAmong: ["a", "b"] });
+  await form.render().handleSave();
+  assert.equal(form.saved.length, 0);
+  assert.match(form.scope.splitAmongError, /greater than 0/);
+  assert.match(form.scope.splitAmongError, /Increase the amount or select fewer people/);
+});
+
+for (const [amount, splitAmong] of [["0.02", ["a", "b"]], ["0.01", ["a"]]]) {
+  test(`Equal saves ${amount} for ${splitAmong.length} selected people without custom splits`, async () => {
+    const form = createForm({ amount, splitAmong });
+    assert.equal(form.render().isSaveDisabled, false);
+    await form.render().handleSave();
+    assert.equal(form.saved.length, 1);
+    assert.equal(form.scope.splitAmongError, "");
+    assert.equal(form.saved[0].amount, Number(amount));
+    assert.deepEqual(form.saved[0].split_among_participant_ids, splitAmong);
+    assert.equal(form.saved[0].splits, undefined);
+  });
+}
+
+test("Shares blocks a rounded zero allocation instead of sending an invalid backend split", async () => {
+  const form = createForm({ amount: "0.01", splitMode: "shares", splitShares: { a: 3, b: 1 } });
+  assert.equal(form.render().isSaveDisabled, true);
+  await form.render().handleSave();
+  assert.equal(form.saved.length, 0);
+  assert.match(form.scope.splitAmongError, /greater than 0/);
+});
+
+test("Equal inclusion edits preserve the other modes' visible drafts", () => {
+  const form = createForm({ splitAmong: ["a", "b"], splitAmounts: { a: "30", b: "70" }, splitShares: { a: 3, b: 1 }, areAllParticipantsSelected: true });
+  form.render().handleToggleSplitMember("b");
+  assert.deepEqual(form.scope.splitAmounts, { a: "30", b: "70" });
+  assert.deepEqual(form.scope.splitShares, { a: 3, b: 1 });
+  form.scope.areAllParticipantsSelected = false;
+  form.render().handleToggleAllMembers();
+  assert.deepEqual(form.scope.splitAmong, ["a", "b"]);
+  form.scope.areAllParticipantsSelected = true;
+  form.render().handleToggleAllMembers();
+  assert.deepEqual(form.scope.splitAmong, []);
+  form.render().handleSplitModeChange("unequal");
+  assert.deepEqual(form.scope.splitAmounts, { a: "30", b: "70" });
+});
+
+test("empty Equal selection has immediate guidance and Select all recovery", () => {
+  const editor = createEditor({ selectedIds: [], areAllSelected: false });
+  const tree = editor.render();
+  assert.match(text(tree), /Select at least one person/);
+  assert.doesNotMatch(text(tree), /None|Each person pays/);
+  byId(tree, "split-select-all").props.onPress();
+  assert.deepEqual(editor.calls, [["all"]]);
+  for (const mode of ["unequal", "shares"]) {
+    editor.props.mode = mode;
+    const other = editor.render();
+    assert.doesNotMatch(text(other), /Select at least one person|Select all/);
+  }
+});
+
+test("equal split exposes participant inclusion/removal immediately", () => {
+  const editor = createEditor();
+  const tree = editor.render();
+  for (const email of ["alice@example.com", "bob@example.com"]) {
+    const chip = byId(tree, `split-among-chip-${email}`);
+    assert.equal(chip.props.selected, true);
+    chip.props.onPress();
+  }
+  assert.deepEqual(editor.calls, [["member", "a"], ["member", "b"]]);
+  assert.match(text(tree), /Each person pays: \$50\.00/);
+  assert.doesNotMatch(text(tree), /Adjust split|Hide options/);
+  editor.props.selectedIds = ["a"];
+  editor.props.areAllSelected = false;
+  const updated = editor.render();
+  assert.equal(byId(updated, "split-among-chip-bob@example.com").props.selected, false);
+  assert.match(text(updated), /Each person pays: \$100\.00/);
+  const all = nodes(updated).find((node) => node.type === "Button" && text(node) === "Select all");
+  assert.ok(all);
+  all.props.onPress();
+  assert.deepEqual(editor.calls.at(-1), ["all"]);
+});

@@ -1,14 +1,12 @@
 import React, { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import {
-  Avatar,
   Button,
   Chip,
   IconButton,
-  SegmentedButtons,
+  Menu,
   Text,
   TextInput,
-  TouchableRipple,
   useTheme,
 } from "react-native-paper";
 import { Participant } from "../types";
@@ -31,6 +29,8 @@ interface SplitAmongEditorProps {
   participants: Participant[];
   selectedIds: string[];
   amounts: Record<string, string>;
+  /** Blank rows outside an edited expense's original split; still editable. */
+  excludedAmountIds?: string[];
   shares: Record<string, number>;
   mode: SplitMode;
   totalAmount: number | null;
@@ -44,8 +44,6 @@ interface SplitAmongEditorProps {
   onAmountChange: (participantId: string, text: string) => void;
   onShareChange: (participantId: string, shares: number) => void;
   onSplitRemaining: () => void;
-  /** When true, start collapsed (equal summary + Adjust split). */
-  preferCompact?: boolean;
 }
 
 function displayName(participant: Participant): string {
@@ -55,19 +53,11 @@ function displayName(participant: Participant): string {
     || "Unknown";
 }
 
-function initials(participant: Participant): string {
-  const name = displayName(participant);
-  if (name.includes(" ")) {
-    const parts = name.trim().split(/\s+/);
-    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-  }
-  return name.slice(0, 2).toUpperCase();
-}
-
 export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
   participants,
   selectedIds,
   amounts,
+  excludedAmountIds = [],
   shares,
   mode,
   totalAmount,
@@ -81,26 +71,29 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
   onAmountChange,
   onShareChange,
   onSplitRemaining,
-  preferCompact = true,
 }) => {
   const theme = useTheme();
+  const [modeMenuVisible, setModeMenuVisible] = useState(false);
   const selectionTheme = {
     colors: {
       secondaryContainer: theme.colors.primaryContainer,
       onSecondaryContainer: theme.colors.onPrimaryContainer,
     },
   };
+  // Equal owns selection chips. Amounts/Shares always display every row;
+  // excluded blank Amounts contribute nothing and are labeled below.
+  const effectiveIds = useMemo(
+    () => mode === "equal" ? selectedIds : participants.map((participant) => participant.id),
+    [mode, participants, selectedIds],
+  );
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const hasTotal = totalAmount !== null && totalAmount > 0;
-  const selectedParticipants = participants.filter((participant) => selectedSet.has(participant.id));
-  const needsAdvanced = mode !== "equal";
-  const [showAdvanced, setShowAdvanced] = useState(!preferCompact || needsAdvanced);
 
   const assignedAmounts = useMemo(() => {
-    if (!hasTotal || selectedIds.length === 0) return {} as Record<string, number>;
+    if (!hasTotal || effectiveIds.length === 0) return {} as Record<string, number>;
     if (mode === "equal") {
       return Object.fromEntries(
-        calculateEqualSplits(totalAmount, selectedIds).map((split) => [
+        calculateEqualSplits(totalAmount, effectiveIds).map((split) => [
           split.participant_id,
           split.amount,
         ]),
@@ -108,25 +101,25 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
     }
     if (mode === "shares") {
       return Object.fromEntries(
-        calculateShareSplits(totalAmount, selectedIds, shares).map((split) => [
+        calculateShareSplits(totalAmount, effectiveIds, shares).map((split) => [
           split.participant_id,
           split.amount,
         ]),
       );
     }
     return Object.fromEntries(
-      selectedIds.map((id) => [id, sumSelectedAmounts({ [id]: amounts[id] ?? "" }, [id])]),
+      effectiveIds.map((id) => [id, sumSelectedAmounts({ [id]: amounts[id] ?? "" }, [id])]),
     );
-  }, [amounts, hasTotal, mode, selectedIds, shares, totalAmount]);
+  }, [amounts, hasTotal, mode, effectiveIds, shares, totalAmount]);
 
   const assigned = useMemo(
-    () => roundMoney(selectedIds.reduce((sum, id) => sum + (assignedAmounts[id] ?? 0), 0)),
-    [assignedAmounts, selectedIds],
+    () => roundMoney(effectiveIds.reduce((sum, id) => sum + (assignedAmounts[id] ?? 0), 0)),
+    [assignedAmounts, effectiveIds],
   );
   const remaining = hasTotal ? remainingSplitAmount(totalAmount, assigned) : null;
   const leftover = remaining !== null && remaining > 0.01;
   const over = remaining !== null && remaining < -0.01;
-  const exact = remaining !== null && !leftover && !over && selectedIds.length > 0;
+  const exact = remaining !== null && !leftover && !over && effectiveIds.length > 0;
   const statusColor = over
     ? theme.colors.error
     : exact
@@ -135,104 +128,71 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
 
   const modeLabel =
     mode === "equal" ? "Equal" : mode === "unequal" ? "Amounts" : "Shares";
-
-  if (!showAdvanced) {
-    return (
-      <View testID="split-among-compact">
-        <View style={styles.compactHeader}>
-          <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant }}>
-            Split
-          </Text>
-          <View style={styles.compactModeChip}>
-            <Text variant="labelLarge" style={{ color: theme.colors.onSurface, fontWeight: "700" }}>
-              {modeLabel}
-            </Text>
-            <IconButton
-              icon="chevron-down"
-              size={18}
-              onPress={() => setShowAdvanced(true)}
-              disabled={disabled}
-              accessibilityLabel="Open split options"
-            />
-          </View>
-        </View>
-
-        <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 12 }}>
-          {selectedIds.length} {selectedIds.length === 1 ? "person" : "people"}
-          {selectedIds.length > 0 ? (
-            <>
-              {" · "}
-              <Text style={{ color: theme.colors.secondary, fontWeight: "700" }}>each</Text>
-            </>
-          ) : null}
-        </Text>
-
-        <View style={styles.avatarRow}>
-          {selectedParticipants.slice(0, 6).map((participant) => (
-            <Avatar.Text
-              key={participant.id}
-              size={36}
-              label={initials(participant)}
-              style={{
-                backgroundColor: theme.colors.surface,
-                borderWidth: 2,
-                borderColor: theme.colors.secondary,
-                marginRight: -6,
-              }}
-              color={theme.colors.onSurface}
-              labelStyle={{ fontSize: 12, fontWeight: "600" }}
-            />
-          ))}
-        </View>
-
-        <TouchableRipple
-          onPress={() => setShowAdvanced(true)}
-          disabled={disabled}
-          testID="split-adjust-more-options"
-          style={styles.adjustRow}
-        >
-          <View style={styles.adjustInner}>
-            <IconButton icon="chart-pie" size={20} iconColor={theme.colors.primary} />
-            <Text variant="titleSmall" style={{ color: theme.colors.primary, fontWeight: "600", flex: 1 }}>
-              Adjust split
-            </Text>
-            <IconButton icon="chevron-right" size={20} iconColor={theme.colors.onSurfaceVariant} />
-          </View>
-        </TouchableRipple>
-      </View>
-    );
-  }
+  const selectionError = error || (mode === "equal" && selectedIds.length === 0
+    ? "Select at least one person"
+    : undefined);
 
   return (
-    <View testID="split-among-advanced">
+    <View testID="split-among-editor">
       <View style={styles.sectionHeaderWithAction}>
         <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant }}>
           Split among
         </Text>
-        <Button mode="text" compact onPress={onToggleAll} disabled={disabled}>
-          {areAllSelected ? "None" : "All"}
-        </Button>
+        <View style={styles.headerActions}>
+          <Menu
+            visible={modeMenuVisible && !disabled}
+            onDismiss={() => setModeMenuVisible(false)}
+            anchorPosition="bottom"
+            testID="split-mode-menu"
+            anchor={
+              <Button
+                mode="text"
+                compact
+                icon="chevron-down"
+                contentStyle={styles.modeButtonContent}
+                onPress={() => setModeMenuVisible(true)}
+                disabled={disabled}
+                accessibilityLabel={`Split method: ${modeLabel}`}
+                accessibilityState={{ expanded: modeMenuVisible && !disabled }}
+                testID="split-mode-dropdown"
+              >
+                {modeLabel}
+              </Button>
+            }
+          >
+            {([
+              { value: "equal", label: "Equal" },
+              { value: "unequal", label: "Amounts" },
+              { value: "shares", label: "Shares" },
+            ] as const).map((option) => (
+              <Menu.Item
+                key={option.value}
+                title={option.label}
+                trailingIcon={mode === option.value ? "check" : undefined}
+                disabled={disabled}
+                onPress={() => {
+                  setModeMenuVisible(false);
+                  onModeChange(option.value);
+                }}
+                testID={`split-mode-${option.value}`}
+              />
+            ))}
+          </Menu>
+          {mode === "equal" && !areAllSelected && participants.length > 0 ? (
+            <Button mode="text" compact onPress={onToggleAll} disabled={disabled} testID="split-select-all">
+              Select all
+            </Button>
+          ) : null}
+        </View>
       </View>
 
-      {error ? (
-        <Text variant="bodySmall" style={{ color: theme.colors.error, marginBottom: 8 }}>
-          {error}
+      {selectionError ? (
+        <Text variant="bodySmall" accessibilityLiveRegion="polite" style={{ color: theme.colors.error, marginBottom: 8 }}>
+          {selectionError}
         </Text>
       ) : null}
 
-      <SegmentedButtons
-        value={mode}
-        onValueChange={(value) => onModeChange(value as SplitMode)}
-        theme={selectionTheme}
-        buttons={[
-          { value: "equal", label: "Equal", disabled, testID: "split-mode-equal" },
-          { value: "unequal", label: "Amounts", disabled, testID: "split-mode-unequal" },
-          { value: "shares", label: "Shares", disabled, testID: "split-mode-shares" },
-        ]}
-        style={styles.modeButtons}
-      />
-
-      <View style={styles.chipWrap}>
+      {mode === "equal" ? <View style={styles.chipWrap}>
         {participants.map((participant) => {
           const selected = selectedSet.has(participant.id);
           const isFormer = participant.type === "former";
@@ -256,7 +216,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
             </Chip>
           );
         })}
-      </View>
+      </View> : null}
 
       {mode === "equal" && hasTotal && selectedIds.length > 0 ? (
         <View style={[styles.summary, { backgroundColor: theme.colors.surfaceVariant }]}>
@@ -269,15 +229,15 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
         </View>
       ) : null}
 
-      {mode !== "equal" && selectedParticipants.length === 0 ? (
+      {mode !== "equal" && participants.length === 0 ? (
         <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginTop: 12 }}>
-          Select people, then set each share.
+          No people available.
         </Text>
       ) : null}
 
       {mode !== "equal" ? (
         <View style={styles.detailList}>
-          {selectedParticipants.map((participant) => {
+          {participants.map((participant) => {
             const name = displayName(participant);
             const personAmount = assignedAmounts[participant.id] ?? 0;
             const percent = hasTotal ? sharePercent(personAmount, totalAmount) : 0;
@@ -290,7 +250,11 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
                     {name}
                     {participant.type === "former" ? " (Former)" : ""}
                   </Text>
-                  {hasTotal ? (
+                  {mode === "unequal" && excludedAmountIds.includes(participant.id) ? (
+                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                      Not included
+                    </Text>
+                  ) : hasTotal ? (
                     <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
                       {percent}% · {formatCurrency(personAmount, currency)}
                     </Text>
@@ -342,7 +306,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
         </View>
       ) : null}
 
-      {mode !== "equal" && hasTotal && selectedIds.length > 0 ? (
+      {mode !== "equal" && hasTotal && effectiveIds.length > 0 ? (
         <View
           style={[styles.summary, { backgroundColor: theme.colors.surfaceVariant }]}
           testID="split-remaining-label"
@@ -375,18 +339,6 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
           ) : null}
         </View>
       ) : null}
-
-      {preferCompact && mode === "equal" ? (
-        <Button
-          mode="text"
-          compact
-          onPress={() => setShowAdvanced(false)}
-          style={{ alignSelf: "flex-start", marginTop: 8 }}
-          testID="split-hide-advanced"
-        >
-          Hide options
-        </Button>
-      ) : null}
     </View>
   );
 };
@@ -398,8 +350,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 8,
   },
-  modeButtons: {
-    marginBottom: 12,
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  modeButtonContent: {
+    flexDirection: "row-reverse",
   },
   chipWrap: {
     flexDirection: "row",
@@ -436,31 +392,6 @@ const styles = StyleSheet.create({
     width: 112,
   },
   shareStepper: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  compactHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 4,
-  },
-  compactModeChip: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  avatarRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-    paddingLeft: 4,
-  },
-  adjustRow: {
-    marginTop: 4,
-    marginHorizontal: -8,
-    borderRadius: 8,
-  },
-  adjustInner: {
     flexDirection: "row",
     alignItems: "center",
   },
