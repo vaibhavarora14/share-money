@@ -3,16 +3,12 @@ import type { LedgerFilter } from "./transactionsLedger";
 export type TransactionsEmptyCopy = {
   title: string;
   body: string;
-  /** Optional calm footer under solo empty (info strip). */
-  infoFooter?: string;
   /** Primary button label; omit when no empty-state CTA. */
   primaryLabel?: string;
   primaryAction?: "add_people" | "add_expense";
-  /** Secondary text/ghost label (solo empty). */
+  /** Secondary text/ghost label (solo empty — quiet escape hatch). */
   secondaryLabel?: string;
   secondaryAction?: "add_expense";
-  /** Supporting line under secondary ghost row. */
-  secondaryBody?: string;
 };
 
 /**
@@ -49,12 +45,10 @@ export function getTransactionsEmptyCopy(
       return {
         title: "Just you so far",
         body: "Add people to start sharing expenses together.",
-        infoFooter: "No one else yet. Expenses will be in your name.",
         primaryLabel: "Add people",
         primaryAction: "add_people",
         secondaryLabel: "Add expense anyway",
         secondaryAction: "add_expense",
-        secondaryBody: "You can add expenses by yourself.",
       };
     }
     return {
@@ -70,12 +64,10 @@ export function getTransactionsEmptyCopy(
     return {
       title: "Just you so far",
       body: "Add people to start sharing expenses together.",
-      infoFooter: "No one else yet. Expenses will be in your name.",
       primaryLabel: "Add people",
       primaryAction: "add_people",
       secondaryLabel: "Add expense anyway",
       secondaryAction: "add_expense",
-      secondaryBody: "You can add expenses by yourself.",
     };
   }
 

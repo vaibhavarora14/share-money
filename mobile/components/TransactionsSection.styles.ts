@@ -51,25 +51,10 @@ export const styles = StyleSheet.create({
     borderTopColor: "#DCE3EC",
   },
   soloEmptySecondaryRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  soloEmptySecondaryIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-  },
-  soloEmptyFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
   },
   content: {
     flex: 1,

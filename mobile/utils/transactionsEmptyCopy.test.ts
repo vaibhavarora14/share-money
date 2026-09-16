@@ -20,16 +20,17 @@ Deno.test("countActiveMembers counts only active (and missing status)", () => {
   );
 });
 
-Deno.test("solo empty all: Just you so far + people-first CTAs", () => {
+Deno.test("solo empty all: Just you so far + quiet secondary", () => {
   const copy = getTransactionsEmptyCopy("all", 1);
   assertEquals(copy.title, "Just you so far");
   assertEquals(copy.body, "Add people to start sharing expenses together.");
-  assertEquals(copy.infoFooter, "No one else yet. Expenses will be in your name.");
   assertEquals(copy.primaryAction, "add_people");
   assertEquals(copy.primaryLabel, "Add people");
   assertEquals(copy.secondaryAction, "add_expense");
   assertEquals(copy.secondaryLabel, "Add expense anyway");
-  assertEquals(copy.secondaryBody, "You can add expenses by yourself.");
+  // No over-explaining secondary / banner copy
+  assertEquals((copy as { infoFooter?: string }).infoFooter, undefined);
+  assertEquals((copy as { secondaryBody?: string }).secondaryBody, undefined);
 });
 
 Deno.test("solo with zero active still people-first", () => {

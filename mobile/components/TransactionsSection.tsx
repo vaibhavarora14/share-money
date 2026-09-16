@@ -412,46 +412,14 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
               style={styles.soloEmptySecondary}
             >
               <View style={styles.soloEmptySecondaryRow}>
-                <View
-                  style={[
-                    styles.soloEmptySecondaryIcon,
-                    { backgroundColor: theme.colors.tertiaryContainer },
-                  ]}
+                <Text
+                  variant="bodyMedium"
+                  style={{ color: theme.colors.tertiary, fontWeight: "600" }}
                 >
-                  <Icon source="receipt" size={18} color={theme.colors.tertiary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text
-                    variant="titleSmall"
-                    style={{ color: theme.colors.tertiary, fontWeight: "700" }}
-                  >
-                    {emptyCopy.secondaryLabel}
-                  </Text>
-                  {emptyCopy.secondaryBody ? (
-                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                      {emptyCopy.secondaryBody}
-                    </Text>
-                  ) : null}
-                </View>
+                  {emptyCopy.secondaryLabel}
+                </Text>
               </View>
             </TouchableRipple>
-          ) : null}
-
-          {emptyCopy.infoFooter ? (
-            <View
-              style={[
-                styles.soloEmptyFooter,
-                { backgroundColor: theme.colors.surfaceVariant },
-              ]}
-            >
-              <Icon source="information-outline" size={16} color={theme.colors.onSurfaceVariant} />
-              <Text
-                variant="bodySmall"
-                style={{ color: theme.colors.onSurfaceVariant, flex: 1 }}
-              >
-                {emptyCopy.infoFooter}
-              </Text>
-            </View>
           ) : null}
         </Surface>
       ) : (
