@@ -18,7 +18,7 @@ import { SplitAmongEditor } from "../components/SplitAmongEditor";
 import { TransactionsSection } from "../components/TransactionsSection";
 import { WEB_MAX_WIDTH } from "../constants/layout";
 import { lightTheme } from "../theme";
-import { Balance, Participant, Transaction } from "../types";
+import { Balance, GroupStatsResponse, Participant, Settlement, Transaction } from "../types";
 import { SETTLE_OUTSIDE_APP_HELP, RECORD_SETTLEMENT_LABEL } from "../utils/settleCopy";
 
 type SurfaceId = "empty" | "home" | "expense" | "balances" | "settle";
@@ -124,7 +124,43 @@ function sampleExpense(
   };
 }
 
-const EXPENSE_ITEMS = [
+const EXPENSE_TOTAL = 67.43 + 38.2 + 24; // 129.63
+const MY_SHARE = EXPENSE_TOTAL / 3; // equal among 3
+
+const SAMPLE_GROUP_STATS: GroupStatsResponse = {
+  member_breakdown: [],
+  my_transactions: [],
+  totals: {
+    my_share: { USD: Math.round(MY_SHARE * 100) / 100 },
+    group_total: { USD: Math.round(EXPENSE_TOTAL * 100) / 100 },
+    i_owe: { USD: 18 },
+    im_owed: { USD: 24 },
+  },
+  settlement_plan: [],
+};
+
+const SAMPLE_PAYMENT: Settlement = {
+  id: "s-venmo",
+  group_id: "g1",
+  from_user_id: "u-alex",
+  to_user_id: "u-you",
+  from_participant_id: "p-alex",
+  to_participant_id: "p-you",
+  amount: 18,
+  currency: "USD",
+  notes: "Venmo for utilities",
+  created_by: "u-alex",
+  created_at: "2025-05-19T12:00:00Z",
+};
+
+const LEDGER_ITEMS = [
+  {
+    kind: "payment" as const,
+    key: "p1",
+    sortAt: Date.parse("2025-05-19"),
+    sortTiebreaker: "0",
+    settlement: SAMPLE_PAYMENT,
+  },
   {
     kind: "expense" as const,
     key: "e1",
@@ -152,10 +188,12 @@ function PreviewShell({
   title,
   children,
   fab,
+  peopleChip = false,
 }: {
   title: string;
   children: React.ReactNode;
   fab?: React.ReactNode;
+  peopleChip?: boolean;
 }) {
   const theme = useTheme();
   const { width } = useWindowDimensions();
@@ -165,7 +203,7 @@ function PreviewShell({
       <Appbar.Header style={{ backgroundColor: theme.colors.background }}>
         <Appbar.Action icon="menu" iconColor={theme.colors.primary} />
         <Appbar.Content title={title} titleStyle={{ fontWeight: "700" }} />
-        {title === "Roommates" ? (
+        {peopleChip ? (
           <Button
             mode="outlined"
             compact
@@ -190,15 +228,20 @@ function PreviewShell({
 function EmptyHomePreview() {
   const theme = useTheme();
   return (
-    <PreviewShell title="SharedMoney">
-      <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
-        <Button
-          mode="contained"
+    <PreviewShell
+      title="SharedMoney"
+      fab={
+        <FAB
           icon="account-plus"
-          style={{ alignSelf: "flex-end", borderRadius: 8, marginBottom: 12 }}
-        >
-          Add people
-        </Button>
+          label="Add people"
+          style={[styles.fab, { backgroundColor: theme.colors.primary }]}
+          color={theme.colors.onPrimary}
+          onPress={() => {}}
+          testID="add-people-fab"
+        />
+      }
+    >
+      <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
         <TransactionsSection
           items={[]}
           loading={false}
@@ -210,9 +253,6 @@ function EmptyHomePreview() {
           onAddExpense={() => {}}
         />
       </View>
-      <Text style={{ color: theme.colors.onSurfaceVariant, textAlign: "center", marginTop: 8 }}>
-        {/* spacer */}
-      </Text>
     </PreviewShell>
   );
 }
@@ -222,6 +262,7 @@ function PopulatedHomePreview() {
   return (
     <PreviewShell
       title="Roommates"
+      peopleChip
       fab={
         <FAB
           icon="plus"
@@ -233,6 +274,7 @@ function PopulatedHomePreview() {
     >
       <GroupDashboard
         balances={SAMPLE_BALANCES}
+        groupStats={SAMPLE_GROUP_STATS}
         currentUserId="u-you"
         currentUserParticipantId="p-you"
         loading={false}
@@ -246,9 +288,10 @@ function PopulatedHomePreview() {
       </View>
       <View style={{ paddingHorizontal: 8 }}>
         <TransactionsSection
-          items={EXPENSE_ITEMS}
+          items={LEDGER_ITEMS}
           loading={false}
           onEditExpense={() => {}}
+          onEditPayment={() => {}}
           members={POPULATED_MEMBERS}
           participants={[YOU, MAYA, ALEX]}
         />

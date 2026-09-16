@@ -402,18 +402,7 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
               style={{ backgroundColor: theme.colors.surfaceVariant }}
               color={theme.colors.onSurfaceVariant}
             />
-            {canAct && emptyCopy.primaryLabel ? (
-              <Button
-                mode="contained"
-                icon="account-plus"
-                onPress={() => runEmptyAction("add_people")}
-                testID="empty-add-people"
-                style={{ marginTop: 20, borderRadius: 8, alignSelf: "stretch" }}
-                contentStyle={{ height: 44 }}
-              >
-                {emptyCopy.primaryLabel}
-              </Button>
-            ) : null}
+            {/* Primary Add people is the FAB — in-card only offers the ghost secondary. */}
           </View>
 
           {canAct && emptyCopy.secondaryLabel ? (
