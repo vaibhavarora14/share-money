@@ -188,12 +188,10 @@ function PreviewShell({
   title,
   children,
   fab,
-  peopleChip = false,
 }: {
   title: string;
   children: React.ReactNode;
   fab?: React.ReactNode;
-  peopleChip?: boolean;
 }) {
   const theme = useTheme();
   const { width } = useWindowDimensions();
@@ -203,19 +201,7 @@ function PreviewShell({
       <Appbar.Header style={{ backgroundColor: theme.colors.background }}>
         <Appbar.Action icon="menu" iconColor={theme.colors.primary} />
         <Appbar.Content title={title} titleStyle={{ fontWeight: "700" }} />
-        {peopleChip ? (
-          <Button
-            mode="outlined"
-            compact
-            icon="account-multiple-outline"
-            style={{ borderRadius: 8, borderColor: theme.colors.primary, marginRight: 4 }}
-            textColor={theme.colors.primary}
-            labelStyle={{ fontSize: 13, marginVertical: 4 }}
-          >
-            People
-          </Button>
-        ) : null}
-        <Appbar.Action icon="bell-outline" iconColor={theme.colors.primary} />
+        <Appbar.Action icon="dots-vertical" iconColor={theme.colors.onSurface} />
       </Appbar.Header>
       <ScrollView contentContainerStyle={{ paddingBottom: fab ? 96 : 32 }}>
         {children}
@@ -262,7 +248,6 @@ function PopulatedHomePreview() {
   return (
     <PreviewShell
       title="Roommates"
-      peopleChip
       fab={
         <FAB
           icon="plus"

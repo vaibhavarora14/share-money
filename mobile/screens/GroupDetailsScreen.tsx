@@ -1200,24 +1200,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           title={showMembers ? "People" : group.name}
           titleStyle={{ fontWeight: "bold" }}
         />
-        {!showMembers && isActiveMember ? (
-          <Button
-            mode="outlined"
-            compact
-            icon="account-multiple-outline"
-            onPress={() => setShowMembers(true)}
-            style={{
-              marginRight: 4,
-              borderRadius: 8,
-              borderColor: theme.colors.primary,
-            }}
-            labelStyle={{ color: theme.colors.primary, marginVertical: 4, fontSize: 13 }}
-            textColor={theme.colors.primary}
-            testID="header-people-chip"
-          >
-            People
-          </Button>
-        ) : null}
         {/* Group options — active: Archive/Leave; archived: Unarchive/Leave/Remove; former: Remove */}
         {showGroupMenu && (
           <Menu
@@ -1246,6 +1228,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                   }}
                   title="People"
                   leadingIcon="account-group"
+                  testID="group-menu-people"
                 />
                 {isOwner && (
                   <Menu.Item
