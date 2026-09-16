@@ -34,8 +34,7 @@ appId: com.vaibhavarora.sharemoney
     text: "Transactions"
 - waitForAnimationToEnd
 
-# Test accessing Members view via three-dot menu (top right)
-# The menu button opens a menu with "View Members"
+# Test accessing People view via three-dot overflow menu (top right)
 - tapOn:
     id: "group-menu-button"
     optional: true
@@ -43,23 +42,23 @@ appId: com.vaibhavarora.sharemoney
 # Wait for menu animation
 - waitForAnimationToEnd
 
-# Tap on "View Members" if the menu is open
+# Tap on "People" if the menu is open
 - runFlow:
     when:
-      visible: "View Members"
+      visible: "People"
     commands:
       - tapOn:
-          text: "View Members"
+          text: "People"
       - waitForAnimationToEnd
 
-# Check if we're in members view - if so, navigate back to group details
+# Check if we're in people/members view - if so, navigate back to group details
 - runFlow:
     when:
-      visible: "Group Members"
+      visible: "People"
     commands:
-      # Members view is open - verify and navigate back
+      # People view is open - verify and navigate back
       - assertVisible:
-          text: "Add Member"
+          text: "Add person"
           optional: true
       - tapOn:
           text: "Navigate back"
