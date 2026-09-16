@@ -18,9 +18,8 @@ import {
   isMultiCurrency,
   unifyBalances,
   simplifyUnifiedDebts,
-  type UnifiedDebtEdge,
 } from "../utils/currencyMerge";
-import { DebtEdge, simplifyDebts } from "../utils/debt";
+import { simplifyDebts } from "../utils/debt";
 import {
   currenciesFromGroupStats,
   spendingTotalsFromGroupStats,
@@ -152,23 +151,36 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   );
 
   const owedToYou = useMemo(
-    () => myDebts.filter((d) => d.toUser.user_id === currentUserId),
-    [myDebts, currentUserId],
+    () =>
+      [...balances]
+        .filter((b) => b.amount > 0.005)
+        .sort((a, b) => b.amount - a.amount),
+    [balances],
   );
-  const youOwe = useMemo(
-    () => myDebts.filter((d) => d.fromUser.user_id === currentUserId),
-    [myDebts, currentUserId],
+  const youOweBalances = useMemo(
+    () =>
+      [...balances]
+        .filter((b) => b.amount < -0.005)
+        .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)),
+    [balances],
   );
 
-  const topOwed = owedToYou[0] as DebtEdge | UnifiedDebtEdge | undefined;
-  const topYouOwe = youOwe[0] as DebtEdge | UnifiedDebtEdge | undefined;
+  const topOwed = owedToYou[0];
+  const topYouOwe = youOweBalances[0];
 
   const hideChrome = shouldHideBalanceChrome(
-    myDebts.map((d) => ({
-      amount: d.toUser.user_id === currentUserId ? d.amount : -d.amount,
-    })),
+    balances.map((b) => ({ amount: b.amount })),
     activeMemberCount,
   );
+
+  const formatSignedBalance = (amount: number, currency: string, isOwed: boolean) => {
+    const raw = formatCurrency(Math.abs(amount), currency);
+    const bare = raw.replace(/^[+-]/, "");
+    return isOwed ? `+${bare}` : `-${bare}`;
+  };
+
+  const personShort = (balance: Balance) =>
+    shortName(balance.full_name, balance.email);
 
   const renderCompactInsights = () => (
     <View style={styles.compactStatsRow}>
@@ -215,12 +227,6 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
       </Surface>
     </View>
   );
-
-  const formatSigned = (edge: DebtEdge | UnifiedDebtEdge, isOwed: boolean) => {
-    const raw = formatCurrency(edge.amount, edge.currency);
-    const bare = raw.replace(/^[+-]/, "");
-    return isOwed ? `+${bare}` : `-${bare}`;
-  };
 
   return (
     <View style={styles.container}>
@@ -269,7 +275,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
                 </View>
                 <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }} numberOfLines={1}>
                   {topOwed
-                    ? `${shortName(topOwed.fromUser.full_name, topOwed.fromUser.email)} owes you`
+                    ? `${personShort(topOwed)} owes you`
                     : "You’re owed"}
                 </Text>
                 <Text
@@ -277,7 +283,9 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
                   style={{ color: theme.colors.tertiary, fontWeight: "700" }}
                   testID="balance-strip-owed-amount"
                 >
-                  {topOwed ? formatSigned(topOwed, true) : formatCurrency(0, defaultCurrency)}
+                  {topOwed
+                    ? formatSignedBalance(topOwed.amount, topOwed.currency, true)
+                    : formatCurrency(0, defaultCurrency)}
                 </Text>
               </View>
               <View style={[styles.stripDivider, { backgroundColor: theme.colors.outlineVariant }]} />
@@ -287,7 +295,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
                 </View>
                 <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }} numberOfLines={1}>
                   {topYouOwe
-                    ? `You owe ${shortName(topYouOwe.toUser.full_name, topYouOwe.toUser.email)}`
+                    ? `You owe ${personShort(topYouOwe)}`
                     : "You owe"}
                 </Text>
                 <Text
@@ -295,7 +303,9 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
                   style={{ color: theme.colors.secondary, fontWeight: "700" }}
                   testID="balance-strip-owe-amount"
                 >
-                  {topYouOwe ? formatSigned(topYouOwe, false) : formatCurrency(0, defaultCurrency)}
+                  {topYouOwe
+                    ? formatSignedBalance(topYouOwe.amount, topYouOwe.currency, false)
+                    : formatCurrency(0, defaultCurrency)}
                 </Text>
               </View>
             </>
