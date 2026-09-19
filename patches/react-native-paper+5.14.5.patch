@@ -1,12 +1,26 @@
+diff --git a/node_modules/react-native-paper/lib/typescript/components/Menu/Menu.d.ts b/node_modules/react-native-paper/lib/typescript/components/Menu/Menu.d.ts
+index 4dc4540..580a8fa 100644
+--- a/node_modules/react-native-paper/lib/typescript/components/Menu/Menu.d.ts
++++ b/node_modules/react-native-paper/lib/typescript/components/Menu/Menu.d.ts
+@@ -7,6 +7,8 @@ export type Props = {
+      * Whether the Menu is currently visible.
+      */
+     visible: boolean;
++    /** Use an isolated Android accessibility window; other platforms retain Portal. */
++    nativeModal?: boolean;
+     /**
+      * The anchor to open the menu from. In most cases, it will be a button that opens the menu.
+      */
 diff --git a/node_modules/react-native-paper/src/components/Menu/Menu.tsx b/node_modules/react-native-paper/src/components/Menu/Menu.tsx
-index 55922c1..c321141 100644
+index 55922c1..09959d5 100644
 --- a/node_modules/react-native-paper/src/components/Menu/Menu.tsx
 +++ b/node_modules/react-native-paper/src/components/Menu/Menu.tsx
-@@ -6,22 +6,21 @@ import {
+@@ -6,22 +6,22 @@ import {
    EmitterSubscription,
    I18nManager,
    Keyboard,
 -  KeyboardEvent as RNKeyboardEvent,
++  Modal,
    LayoutRectangle,
    NativeEventSubscription,
    Platform,
@@ -27,7 +41,7 @@ index 55922c1..c321141 100644
  import { useInternalTheme } from '../../core/theming';
  import type { MD3Elevation, ThemeProp } from '../../types';
  import { ElevationLevels } from '../../types';
-@@ -29,6 +28,7 @@ import { addEventListener } from '../../utils/addEventListener';
+@@ -29,12 +29,15 @@ import { addEventListener } from '../../utils/addEventListener';
  import { BackHandler } from '../../utils/BackHandler/BackHandler';
  import Portal from '../Portal/Portal';
  import Surface from '../Surface';
@@ -35,7 +49,45 @@ index 55922c1..c321141 100644
  
  export type Props = {
    /**
-@@ -303,6 +303,10 @@ const Menu = ({
+    * Whether the Menu is currently visible.
+    */
+   visible: boolean;
++  /** Use an isolated Android accessibility window; other platforms retain Portal. */
++  nativeModal?: boolean;
+   /**
+    * The anchor to open the menu from. In most cases, it will be a button that opens the menu.
+    */
+@@ -114,3 +117,13 @@ const DEFAULT_MODE = 'elevated';
++const MenuOverlay = ({ nativeModal, onDismiss, children }: {
++  nativeModal: boolean;
++  onDismiss?: () => void;
++  children: React.ReactNode;
++}) => nativeModal && Platform.OS === 'android' ? (
++  <Modal visible transparent statusBarTranslucent onRequestClose={onDismiss}>
++    {children}
++  </Modal>
++) : <Portal>{children}</Portal>;
++
+ const focusFirstDOMNode = (el: View | null | undefined) => {
+   if (el && Platform.OS === 'web') {
+     // When in the browser, we want to focus the first focusable item on toggle
+@@ -182,5 +195,6 @@ const isBrowser = () => Platform.OS === 'web' && 'document' in global;
+ const Menu = ({
+   visible,
++  nativeModal = false,
+   statusBarHeight,
+   overlayAccessibilityLabel = 'Close menu',
+   testID = 'menu',
+@@ -244,5 +258,8 @@ const Menu = ({
+   const handleDismiss = React.useCallback(() => {
+     if (visible) {
+       onDismiss?.();
++      // Consume Android Back so it cannot also dismiss the parent screen.
++      return true;
+     }
++    return false;
+   }, [onDismiss, visible]);
+@@ -303,6 +320,10 @@ const Menu = ({
    );
  
    const show = React.useCallback(async () => {
@@ -46,7 +98,7 @@ index 55922c1..c321141 100644
      const windowLayoutResult = Dimensions.get('window');
      const [menuLayoutResult, anchorLayoutResult] = await Promise.all([
        measureMenuLayout(),
-@@ -379,32 +383,48 @@ const Menu = ({
+@@ -379,32 +400,48 @@ const Menu = ({
        useNativeDriver: true,
      }).start(({ finished }) => {
        if (finished) {
@@ -103,7 +155,7 @@ index 55922c1..c321141 100644
    );
  
    React.useEffect(() => {
-@@ -431,9 +451,21 @@ const Menu = ({
+@@ -431,9 +468,21 @@ const Menu = ({
    React.useEffect(() => {
      if (prevVisible.current !== visible) {
        prevVisible.current = visible;
@@ -128,3 +180,21 @@ index 55922c1..c321141 100644
        }
      }
    }, [visible, rendered]);
+@@ -636,7 +685,7 @@ const Menu = ({
+     >
+       {isCoordinate(anchor) ? null : anchor}
+       {rendered ? (
+-        <Portal>
++        <MenuOverlay nativeModal={nativeModal} onDismiss={onDismiss}>
+           <Pressable
+             accessibilityLabel={overlayAccessibilityLabel}
+             accessibilityRole="button"
+@@ -687,7 +736,7 @@ const Menu = ({
+               </Surface>
+             </Animated.View>
+           </View>
+-        </Portal>
++        </MenuOverlay>
+       ) : null}
+     </View>
+   );

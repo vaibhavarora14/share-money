@@ -6,7 +6,7 @@ export type TransactionsEmptyCopy = {
   /** Primary button label; omit when no empty-state CTA. */
   primaryLabel?: string;
   primaryAction?: "add_people" | "add_expense";
-  /** Secondary text-button label (solo empty "all" filter). */
+  /** Secondary text/ghost label (solo empty — quiet escape hatch). */
   secondaryLabel?: string;
   secondaryAction?: "add_expense";
 };
@@ -34,7 +34,7 @@ export function getTransactionsEmptyCopy(
   if (filter === "payments") {
     return {
       title: "No payments yet",
-      body: "Record a settlement from Settle Up and it will show up here.",
+      body: "Record a settlement from Settle and it will show up here.",
     };
   }
 
@@ -43,8 +43,8 @@ export function getTransactionsEmptyCopy(
   if (filter === "expenses") {
     if (isSolo) {
       return {
-        title: "Add people first",
-        body: "Invite someone to share with before logging expenses.",
+        title: "Just you so far",
+        body: "Add people to start sharing expenses together.",
         primaryLabel: "Add people",
         primaryAction: "add_people",
         secondaryLabel: "Add expense anyway",
@@ -62,8 +62,8 @@ export function getTransactionsEmptyCopy(
   // filter === "all"
   if (isSolo) {
     return {
-      title: "Add people first",
-      body: "Shared expenses work best with someone to split with. Invite people to this group.",
+      title: "Just you so far",
+      body: "Add people to start sharing expenses together.",
       primaryLabel: "Add people",
       primaryAction: "add_people",
       secondaryLabel: "Add expense anyway",

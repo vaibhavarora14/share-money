@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { FlatList, Modal, StyleSheet, TouchableOpacity, View } from "react-native";
 import {
-  Appbar,
   Divider,
   IconButton,
   List,
@@ -69,10 +68,18 @@ export const SettlementCurrencySheet: React.FC<SettlementCurrencySheetProps> = (
     <Modal visible={visible} animationType="slide" onRequestClose={onDismiss}>
       <SafeAreaView style={[styles.root, { backgroundColor: theme.colors.background }]} edges={["top", "left", "right"]}>
         <View style={styles.frame}>
-          <Appbar.Header style={{ backgroundColor: theme.colors.background }}>
-            <Appbar.BackAction onPress={onDismiss} />
-            <Appbar.Content title="Settlement currency" titleStyle={{ fontWeight: "700" }} />
-          </Appbar.Header>
+          <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 8, minHeight: 64 }}>
+            <IconButton
+              icon="arrow-left"
+              iconColor={theme.colors.onSurface}
+              accessibilityLabel="Back"
+              onPress={onDismiss}
+              testID="settlement-currency-back"
+            />
+            <Text variant="titleLarge" style={{ flex: 1, fontWeight: "700", marginHorizontal: 8 }}>
+              Settlement currency
+            </Text>
+          </View>
 
           <View style={styles.body}>
             <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>

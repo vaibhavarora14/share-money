@@ -53,6 +53,7 @@ import { intersectSplitAmongWithAvailable } from "../utils/groupSplit";
 import { getWebHeroAmountInputWidth } from "../utils/heroAmountLayout";
 import {
     amountsFromShares,
+    calculateEqualSplits,
     calculateShareSplits,
     defaultShareMap,
     distributeRemaining,
@@ -421,69 +422,52 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     return Number.isFinite(value) && value > 0 ? value : null;
   }, [amount]);
 
+  // Older expenses can have a subset of the current group. Blank fields for
+  // people outside that original split stay excluded on edit, but any entered
+  // value must validate. Never drop an original participant's invalid edit.
+  const excludedAmountIds = useMemo(() => {
+    if (!transaction || splitMode !== "unequal") return [];
+    const originalIds = new Set(transaction.splits?.length
+      ? transaction.splits.map((split) => split.participant_id)
+      : transaction.split_among_participant_ids || []);
+    return allParticipantIds.filter((id) =>
+      !originalIds.has(id) && !(splitAmounts[id] ?? "").trim());
+  }, [transaction, splitMode, allParticipantIds, splitAmounts]);
+  // Equal alone owns selection chips. All other fields remain visible; the
+  // amount IDs used for validation and serialization exclude only those blanks.
+  const effectiveSplitIds = splitMode === "equal"
+    ? splitAmong
+    : allParticipantIds.filter((id) => !excludedAmountIds.includes(id));
+
   const handleToggleSplitMember = (participantId: string) => {
     const uniquePrev = [...new Set(splitAmong)];
-    if (uniquePrev.includes(participantId)) {
-      setSplitAmong(uniquePrev.filter((id) => id !== participantId));
-      setSplitAmounts((current) => {
-        const next = { ...current };
-        delete next[participantId];
-        return next;
-      });
-      setSplitShares((current) => {
-        const next = { ...current };
-        delete next[participantId];
-        return next;
-      });
-    } else {
-      if (splitMode === "unequal" && parsedTotalAmount) {
-        const leftover = remainingSplitAmount(
-          parsedTotalAmount,
-          sumSelectedAmounts(splitAmounts, uniquePrev),
-        );
-        setSplitAmounts((current) => ({
-          ...current,
-          [participantId]: leftover > 0.01 ? formatAmountInput(leftover) : "",
-        }));
-      }
-      setSplitShares((current) => ({ ...current, [participantId]: current[participantId] ?? 1 }));
-      setSplitAmong([...uniquePrev, participantId]);
-    }
+    setSplitAmong(uniquePrev.includes(participantId)
+      ? uniquePrev.filter((id) => id !== participantId)
+      : [...uniquePrev, participantId]);
     if (splitAmongError) setSplitAmongError("");
   };
 
   const handleToggleAllMembers = () => {
-    if (areAllParticipantsSelected) {
-      setSplitAmong([]);
-      setSplitAmounts({});
-      setSplitShares({});
-    } else {
-      const nextIds = [...new Set(allParticipantIds)];
-      setSplitAmong(nextIds);
-      setSplitShares(defaultShareMap(nextIds));
-      if (splitMode === "unequal" && parsedTotalAmount) {
-        setSplitAmounts(equalSplitAmountMap(parsedTotalAmount, nextIds));
-      }
-    }
+    setSplitAmong(areAllParticipantsSelected ? [] : [...new Set(allParticipantIds)]);
     if (splitAmongError) setSplitAmongError("");
   };
 
   const handleSplitModeChange = (mode: SplitMode) => {
     setSplitMode(mode);
-    if (mode === "unequal" && parsedTotalAmount && splitAmong.length > 0) {
+    if (mode === "unequal" && parsedTotalAmount && allParticipantIds.length > 0) {
       setSplitAmounts((current) => {
-        const hasAny = splitAmong.some((id) => (current[id] || "").length > 0);
+        const hasAny = allParticipantIds.some((id) => (current[id] || "").length > 0);
         if (hasAny) return current;
         if (splitMode === "shares") {
-          return amountsFromShares(parsedTotalAmount, splitAmong, splitShares);
+          return amountsFromShares(parsedTotalAmount, allParticipantIds, splitShares);
         }
-        return equalSplitAmountMap(parsedTotalAmount, splitAmong);
+        return equalSplitAmountMap(parsedTotalAmount, allParticipantIds);
       });
     }
-    if (mode === "shares" && splitAmong.length > 0) {
+    if (mode === "shares" && allParticipantIds.length > 0) {
       setSplitShares((current) => {
-        const missing = splitAmong.some((id) => current[id] == null);
-        return missing ? { ...defaultShareMap(splitAmong), ...current } : current;
+        const missing = allParticipantIds.some((id) => current[id] == null);
+        return missing ? { ...defaultShareMap(allParticipantIds), ...current } : current;
       });
     }
     if (splitAmongError) setSplitAmongError("");
@@ -500,9 +484,9 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   };
 
   const handleSplitRemaining = () => {
-    if (!parsedTotalAmount || splitAmong.length === 0) return;
+    if (!parsedTotalAmount || allParticipantIds.length === 0) return;
     setSplitAmounts((current) =>
-      distributeRemaining(current, splitAmong, parsedTotalAmount),
+      distributeRemaining(current, allParticipantIds, parsedTotalAmount),
     );
     if (splitAmongError) setSplitAmongError("");
   };
@@ -510,13 +494,25 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   const customSplitsForSave = () => {
     if (!isGroupExpense || !parsedTotalAmount) return undefined;
     if (splitMode === "unequal") {
-      return splitsFromAmountMap(splitAmounts, splitAmong) ?? undefined;
+      return splitsFromAmountMap(splitAmounts, effectiveSplitIds) ?? undefined;
     }
-    if (splitMode === "shares" && sharesAreUnequal(splitAmong, splitShares)) {
-      return calculateShareSplits(parsedTotalAmount, splitAmong, splitShares);
+    if (splitMode === "shares" && sharesAreUnequal(effectiveSplitIds, splitShares)) {
+      return calculateShareSplits(parsedTotalAmount, effectiveSplitIds, splitShares);
     }
     return undefined;
   };
+
+  // Backend split rows require strictly positive amounts, including after rounding.
+  const equalSplitsReady = splitMode !== "equal" || (
+    !!parsedTotalAmount && effectiveSplitIds.length > 0 &&
+    calculateEqualSplits(parsedTotalAmount, effectiveSplitIds)
+      .every((split) => split.amount > 0)
+  );
+  const sharesReady = splitMode !== "shares" || (
+    !!parsedTotalAmount && effectiveSplitIds.length > 0 &&
+    calculateShareSplits(parsedTotalAmount, effectiveSplitIds, splitShares)
+      .every((split) => split.amount > 0)
+  );
 
   const validateForm = (): boolean => {
     let isValid = true;
@@ -558,26 +554,29 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
         setPaidByError("Please select who paid for this expense");
         isValid = false;
       }
-      if (splitAmong.length === 0) {
+      if (effectiveSplitIds.length === 0) {
         setSplitAmongError("Please select at least one person to split the expense among");
         isValid = false;
       } else if (splitMode === "unequal") {
-        const customSplits = splitsFromAmountMap(splitAmounts, splitAmong);
+        const customSplits = splitsFromAmountMap(splitAmounts, effectiveSplitIds);
         if (!customSplits) {
-          setSplitAmongError("Enter a share greater than 0 for each selected person");
+          setSplitAmongError("Enter an amount greater than 0 for each person");
           isValid = false;
         } else {
           const leftover = remainingSplitAmount(
             parseFloat(amount),
-            sumSelectedAmounts(splitAmounts, splitAmong),
+            sumSelectedAmounts(splitAmounts, effectiveSplitIds),
           );
           if (Math.abs(leftover) > 0.01) {
             setSplitAmongError("Split amounts must add up to the expense total");
             isValid = false;
           }
         }
-      } else if (splitMode === "shares" && splitAmong.length === 0) {
-        setSplitAmongError("Please select at least one person to split the expense among");
+      } else if (splitMode === "equal" && !equalSplitsReady) {
+        setSplitAmongError("Each person's split must round to an amount greater than 0. Increase the amount or select fewer people.");
+        isValid = false;
+      } else if (splitMode === "shares" && !sharesReady) {
+        setSplitAmongError("Each person's share must round to an amount greater than 0");
         isValid = false;
       }
     }
@@ -599,7 +598,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
         category: category.trim() || undefined,
         currency: currency || effectiveDefaultCurrency,
         paid_by_participant_id: isGroupExpense ? paidBy : undefined,
-        split_among_participant_ids: isGroupExpense ? splitAmong : undefined,
+        split_among_participant_ids: isGroupExpense ? effectiveSplitIds : undefined,
         splits: customSplitsForSave(),
       });
     } catch (error) {
@@ -627,16 +626,17 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
 
   const unequalSplitsReady = splitMode !== "unequal" || (
     !!parsedTotalAmount &&
-    !!splitsFromAmountMap(splitAmounts, splitAmong) &&
+    !!splitsFromAmountMap(splitAmounts, effectiveSplitIds) &&
     Math.abs(remainingSplitAmount(
       parsedTotalAmount,
-      sumSelectedAmounts(splitAmounts, splitAmong),
+      sumSelectedAmounts(splitAmounts, effectiveSplitIds),
     )) <= 0.01
   );
-  const sharesReady = splitMode !== "shares" || splitAmong.length > 0;
+
   const isSaveDisabled = loading
-    || (isGroupExpense && splitAmong.length === 0)
+    || (isGroupExpense && effectiveSplitIds.length === 0)
     || (isGroupExpense && !unequalSplitsReady)
+    || (isGroupExpense && !equalSplitsReady)
     || (isGroupExpense && !sharesReady);
 
   const filteredCurrencies = useMemo(
@@ -723,7 +723,9 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     >
       {/* Header */}
       <Appbar.Header style={[styles.header, { backgroundColor: theme.colors.background }]}>
-        <Appbar.BackAction
+        <IconButton
+          icon="arrow-left"
+          iconColor={theme.colors.onSurface}
           onPress={onDismiss}
           accessibilityLabel="Navigate back"
           testID="transaction-form-back-button"
@@ -794,12 +796,14 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                   webHeroAmountInputStyle,
                 ]}
                 testID="amount-input"
+                accessibilityHint={amountError || undefined}
+                accessibilityLabel={`Expense amount, ${currency}`}
                 autoFocus={!transaction}
                 selectTextOnFocus
               />
             </View>
             {amountError && (
-              <Text variant="bodySmall" style={{ color: theme.colors.error, marginTop: 4 }}>
+              <Text variant="bodySmall" accessibilityLiveRegion="polite" style={{ color: theme.colors.error, marginTop: 4 }}>
                 {amountError}
               </Text>
             )}
@@ -829,6 +833,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
             <Card.Content>
               <TextInput
                 testID="description-input"
+                accessibilityHint={descriptionError || undefined}
                 label="Description"
                 value={description}
                 onChangeText={(text) => {
@@ -845,7 +850,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                 onSubmitEditing={Keyboard.dismiss}
               />
               {descriptionError && (
-                <Text variant="bodySmall" style={{ color: theme.colors.error, marginLeft: 12 }}>
+                <Text variant="bodySmall" accessibilityLiveRegion="polite" style={{ color: theme.colors.error, marginLeft: 12 }}>
                   {descriptionError}
                 </Text>
               )}
@@ -854,7 +859,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
 
               <Pressable onPress={() => setShowDatePicker(true)} disabled={loading}>
                 <View style={styles.dateRow}>
-                  <IconButton icon="calendar-outline" size={24} />
+                  <IconButton icon="calendar-outline" size={24} accessible={false} importantForAccessibility="no" />
                   <View style={{ flex: 1 }}>
                     <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
                       Date
@@ -863,11 +868,11 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                       {formatDateForDisplay(date)}
                     </Text>
                   </View>
-                  <IconButton icon="chevron-right" size={24} />
+                  <IconButton icon="chevron-right" size={24} accessible={false} importantForAccessibility="no" />
                 </View>
               </Pressable>
               {dateError && (
-                <Text variant="bodySmall" style={{ color: theme.colors.error, marginLeft: 12 }}>
+                <Text variant="bodySmall" accessibilityLiveRegion="polite" style={{ color: theme.colors.error, marginLeft: 12 }}>
                   {dateError}
                 </Text>
               )}
@@ -879,7 +884,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                 disabled={loading}
               >
                 <View style={styles.selectRow}>
-                  <IconButton icon="tag-outline" size={24} />
+                  <IconButton icon="tag-outline" size={24} accessible={false} importantForAccessibility="no" />
                   <View style={styles.selectRowContent}>
                     <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
                       Category
@@ -900,7 +905,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                           : "No category"}
                     </Text>
                   </View>
-                  <IconButton icon="chevron-down" size={24} />
+                  <IconButton icon="chevron-down" size={24} accessible={false} importantForAccessibility="no" />
                 </View>
               </Pressable>
 
@@ -915,7 +920,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                   left={<TextInput.Icon icon="pencil-outline" />}
                   right={
                     category.trim() ? (
-                      <TextInput.Icon icon="close" onPress={() => setCategory("")} />
+                      <TextInput.Icon icon="close" accessibilityLabel="Clear custom category" onPress={() => setCategory("")} />
                     ) : undefined
                   }
                   placeholder="Write your own category"
@@ -935,7 +940,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                   </Text>
                 </View>
                 {paidByError && (
-                  <Text variant="bodySmall" style={{ color: theme.colors.error, marginBottom: 8 }}>
+                  <Text variant="bodySmall" accessibilityLiveRegion="polite" style={{ color: theme.colors.error, marginBottom: 8 }}>
                     {paidByError}
                   </Text>
                 )}
@@ -1000,6 +1005,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                   participants={availableParticipants}
                   selectedIds={splitAmong}
                   amounts={splitAmounts}
+                  excludedAmountIds={excludedAmountIds}
                   shares={splitShares}
                   mode={splitMode}
                   totalAmount={parsedTotalAmount}
@@ -1037,7 +1043,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
             style={styles.saveButton}
             contentStyle={styles.saveButtonContent}
           >
-            {transaction ? "Update" : "Save"}
+            {transaction ? "Update" : "Save expense"}
           </Button>
         </Surface>
       </KeyboardAvoidingView>
@@ -1156,7 +1162,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
           >
             <View style={styles.pickerHeader}>
               <Text variant="titleLarge">Who paid?</Text>
-              <IconButton icon="close" onPress={() => setShowPaidByPicker(false)} />
+              <IconButton icon="close" accessibilityLabel="Close payer picker" onPress={() => setShowPaidByPicker(false)} />
             </View>
             <FlatList
               data={availableParticipants}
@@ -1182,7 +1188,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                       {item.type === 'former' && " (Former)"}
                     </Text>
                     {isSelected && (
-                      <IconButton icon="check" size={20} iconColor={theme.colors.primary} />
+                      <IconButton icon="check" size={20} iconColor={theme.colors.primary} accessible={false} importantForAccessibility="no" />
                     )}
                   </TouchableOpacity>
                 );
@@ -1210,7 +1216,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
           >
             <View style={styles.pickerHeader}>
               <Text variant="titleLarge">Select Category</Text>
-              <IconButton icon="close" onPress={() => setShowCategoryPicker(false)} />
+              <IconButton icon="close" accessibilityLabel="Close category picker" onPress={() => setShowCategoryPicker(false)} />
             </View>
             <FlatList
               data={categoryPickerItems}
@@ -1245,6 +1251,8 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                     <View style={styles.pickerItemLabel}>
                       <IconButton
                         icon={item.icon}
+                        accessible={false}
+                        importantForAccessibility="no"
                         size={22}
                         iconColor={theme.colors.onSurfaceVariant}
                         style={styles.pickerItemIcon}
@@ -1252,7 +1260,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                       <Text variant="bodyLarge">{item.label}</Text>
                     </View>
                     {isSelected && (
-                      <IconButton icon="check" size={20} iconColor={theme.colors.primary} />
+                      <IconButton icon="check" size={20} iconColor={theme.colors.primary} accessible={false} importantForAccessibility="no" />
                     )}
                   </TouchableOpacity>
                 );
@@ -1280,7 +1288,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
           >
             <View style={styles.pickerHeader}>
               <Text variant="titleLarge">Select Currency</Text>
-              <IconButton icon="close" onPress={() => setShowCurrencyPicker(false)} />
+              <IconButton icon="close" accessibilityLabel="Close currency picker" onPress={() => setShowCurrencyPicker(false)} />
             </View>
             <Searchbar
               placeholder="Search currencies"
@@ -1323,7 +1331,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                       </Text>
                     </View>
                     {isSelected && (
-                      <IconButton icon="check" size={20} iconColor={theme.colors.primary} />
+                      <IconButton icon="check" size={20} iconColor={theme.colors.primary} accessible={false} importantForAccessibility="no" />
                     )}
                   </TouchableOpacity>
                 );

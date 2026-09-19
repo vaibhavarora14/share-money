@@ -88,6 +88,7 @@ import { CurrencyMergePreviewScreen } from "./screens/CurrencyMergePreviewScreen
 import { ProfileSetupScreen } from "./screens/ProfileSetupScreen";
 import { SplitwiseImportScreen } from "./screens/SplitwiseImportScreen";
 import { TermsAcceptanceScreen } from "./screens/TermsAcceptanceScreen";
+import { TodayRefinedPreviewScreen } from "./screens/TodayRefinedPreviewScreen";
 import { TransactionFormScreen } from "./screens/TransactionFormScreen";
 import {
   getLastNotificationResponseData,
@@ -923,6 +924,7 @@ function AppContent() {
       : null;
   const showCurrencyMergePreview = previewParam === "currency-merge";
   const showPeopleSettlementsPreview = previewParam === "people-settlements";
+  const showTodayRefinedPreview = previewParam === "today-refined";
 
   if (showCurrencyMergePreview) {
     return (
@@ -938,6 +940,15 @@ function AppContent() {
       <>
         <AllSettlementsScreen preview />
         <StatusBar style={theme.dark ? "light" : "dark"} />
+      </>
+    );
+  }
+
+  if (showTodayRefinedPreview) {
+    return (
+      <>
+        <TodayRefinedPreviewScreen />
+        <StatusBar style="dark" />
       </>
     );
   }

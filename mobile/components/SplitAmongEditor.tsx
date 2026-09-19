@@ -1,12 +1,14 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import {
   Button,
   Chip,
   IconButton,
-  SegmentedButtons,
+  Icon,
+  Menu,
   Text,
   TextInput,
+  TouchableRipple,
   useTheme,
 } from "react-native-paper";
 import { Participant } from "../types";
@@ -29,6 +31,8 @@ interface SplitAmongEditorProps {
   participants: Participant[];
   selectedIds: string[];
   amounts: Record<string, string>;
+  /** Blank rows outside an edited expense's original split; still editable. */
+  excludedAmountIds?: string[];
   shares: Record<string, number>;
   mode: SplitMode;
   totalAmount: number | null;
@@ -55,6 +59,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
   participants,
   selectedIds,
   amounts,
+  excludedAmountIds = [],
   shares,
   mode,
   totalAmount,
@@ -70,21 +75,27 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
   onSplitRemaining,
 }) => {
   const theme = useTheme();
+  const [modeMenuVisible, setModeMenuVisible] = useState(false);
   const selectionTheme = {
     colors: {
       secondaryContainer: theme.colors.primaryContainer,
       onSecondaryContainer: theme.colors.onPrimaryContainer,
     },
   };
+  // Equal owns selection chips. Amounts/Shares always display every row;
+  // excluded blank Amounts contribute nothing and are labeled below.
+  const effectiveIds = useMemo(
+    () => mode === "equal" ? selectedIds : participants.map((participant) => participant.id),
+    [mode, participants, selectedIds],
+  );
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const hasTotal = totalAmount !== null && totalAmount > 0;
-  const selectedParticipants = participants.filter((participant) => selectedSet.has(participant.id));
 
   const assignedAmounts = useMemo(() => {
-    if (!hasTotal || selectedIds.length === 0) return {} as Record<string, number>;
+    if (!hasTotal || effectiveIds.length === 0) return {} as Record<string, number>;
     if (mode === "equal") {
       return Object.fromEntries(
-        calculateEqualSplits(totalAmount, selectedIds).map((split) => [
+        calculateEqualSplits(totalAmount, effectiveIds).map((split) => [
           split.participant_id,
           split.amount,
         ]),
@@ -92,61 +103,107 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
     }
     if (mode === "shares") {
       return Object.fromEntries(
-        calculateShareSplits(totalAmount, selectedIds, shares).map((split) => [
+        calculateShareSplits(totalAmount, effectiveIds, shares).map((split) => [
           split.participant_id,
           split.amount,
         ]),
       );
     }
     return Object.fromEntries(
-      selectedIds.map((id) => [id, sumSelectedAmounts({ [id]: amounts[id] ?? "" }, [id])]),
+      effectiveIds.map((id) => [id, sumSelectedAmounts({ [id]: amounts[id] ?? "" }, [id])]),
     );
-  }, [amounts, hasTotal, mode, selectedIds, shares, totalAmount]);
+  }, [amounts, hasTotal, mode, effectiveIds, shares, totalAmount]);
 
   const assigned = useMemo(
-    () => roundMoney(selectedIds.reduce((sum, id) => sum + (assignedAmounts[id] ?? 0), 0)),
-    [assignedAmounts, selectedIds],
+    () => roundMoney(effectiveIds.reduce((sum, id) => sum + (assignedAmounts[id] ?? 0), 0)),
+    [assignedAmounts, effectiveIds],
   );
   const remaining = hasTotal ? remainingSplitAmount(totalAmount, assigned) : null;
   const leftover = remaining !== null && remaining > 0.01;
   const over = remaining !== null && remaining < -0.01;
-  const exact = remaining !== null && !leftover && !over && selectedIds.length > 0;
+  const exact = remaining !== null && !leftover && !over && effectiveIds.length > 0;
   const statusColor = over
     ? theme.colors.error
     : exact
       ? theme.colors.primary
       : theme.colors.onSurfaceVariant;
 
+  const modeLabel =
+    mode === "equal" ? "Equal" : mode === "unequal" ? "Amounts" : "Shares";
+  const roundingError = hasTotal && mode !== "unequal" &&
+    effectiveIds.some((id) => !(assignedAmounts[id] > 0))
+    ? mode === "equal"
+      ? "Each person's split must round to an amount greater than 0. Increase the amount or select fewer people."
+      : "Each person's share must round to an amount greater than 0. Increase the amount or adjust the shares."
+    : undefined;
+  const selectionError = error || (mode === "equal" && selectedIds.length === 0
+    ? "Select at least one person"
+    : roundingError);
+
   return (
-    <View>
+    <View testID="split-among-editor">
       <View style={styles.sectionHeaderWithAction}>
         <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant }}>
           Split among
         </Text>
-        <Button mode="text" compact onPress={onToggleAll} disabled={disabled}>
-          {areAllSelected ? "None" : "All"}
-        </Button>
+        <View style={styles.headerActions}>
+          <Menu
+            nativeModal
+            visible={modeMenuVisible && !disabled}
+            onDismiss={() => setModeMenuVisible(false)}
+            anchorPosition="bottom"
+            testID="split-mode-menu"
+            anchor={
+              <TouchableRipple
+                style={styles.modeButton}
+                onPress={() => setModeMenuVisible(true)}
+                disabled={disabled}
+                accessibilityRole="button"
+                accessibilityLabel={`Split method: ${modeLabel}`}
+                accessibilityState={{ expanded: modeMenuVisible && !disabled, disabled: !!disabled }}
+                testID="split-mode-dropdown"
+              >
+                <View style={styles.modeButtonContent}>
+                  <Text variant="labelLarge" style={{ color: disabled ? theme.colors.onSurfaceDisabled : theme.colors.primary }}>{modeLabel}</Text>
+                  <Icon source="chevron-down" size={18} color={disabled ? theme.colors.onSurfaceDisabled : theme.colors.primary} />
+                </View>
+              </TouchableRipple>
+            }
+          >
+            {([
+              { value: "equal", label: "Equal" },
+              { value: "unequal", label: "Amounts" },
+              { value: "shares", label: "Shares" },
+            ] as const).map((option) => (
+              <Menu.Item
+                key={option.value}
+                title={option.label}
+                accessibilityState={{ selected: mode === option.value }}
+                trailingIcon={mode === option.value ? "check" : undefined}
+                disabled={disabled}
+                onPress={() => {
+                  setModeMenuVisible(false);
+                  onModeChange(option.value);
+                }}
+                testID={`split-mode-${option.value}`}
+              />
+            ))}
+          </Menu>
+          {mode === "equal" && !areAllSelected && participants.length > 0 ? (
+            <Button mode="text" compact onPress={onToggleAll} disabled={disabled} testID="split-select-all">
+              Select all
+            </Button>
+          ) : null}
+        </View>
       </View>
 
-      {error ? (
-        <Text variant="bodySmall" style={{ color: theme.colors.error, marginBottom: 8 }}>
-          {error}
+      {selectionError ? (
+        <Text variant="bodySmall" accessibilityLiveRegion="polite" style={{ color: theme.colors.error, marginBottom: 8 }}>
+          {selectionError}
         </Text>
       ) : null}
 
-      <SegmentedButtons
-        value={mode}
-        onValueChange={(value) => onModeChange(value as SplitMode)}
-        theme={selectionTheme}
-        buttons={[
-          { value: "equal", label: "Equal", disabled, testID: "split-mode-equal" },
-          { value: "unequal", label: "Amounts", disabled, testID: "split-mode-unequal" },
-          { value: "shares", label: "Shares", disabled, testID: "split-mode-shares" },
-        ]}
-        style={styles.modeButtons}
-      />
-
-      <View style={styles.chipWrap}>
+      {mode === "equal" ? <View style={styles.chipWrap}>
         {participants.map((participant) => {
           const selected = selectedSet.has(participant.id);
           const isFormer = participant.type === "former";
@@ -170,7 +227,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
             </Chip>
           );
         })}
-      </View>
+      </View> : null}
 
       {mode === "equal" && hasTotal && selectedIds.length > 0 ? (
         <View style={[styles.summary, { backgroundColor: theme.colors.surfaceVariant }]}>
@@ -183,15 +240,15 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
         </View>
       ) : null}
 
-      {mode !== "equal" && selectedParticipants.length === 0 ? (
+      {mode !== "equal" && participants.length === 0 ? (
         <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginTop: 12 }}>
-          Select people, then set each share.
+          No people available.
         </Text>
       ) : null}
 
       {mode !== "equal" ? (
         <View style={styles.detailList}>
-          {selectedParticipants.map((participant) => {
+          {participants.map((participant) => {
             const name = displayName(participant);
             const personAmount = assignedAmounts[participant.id] ?? 0;
             const percent = hasTotal ? sharePercent(personAmount, totalAmount) : 0;
@@ -204,7 +261,11 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
                     {name}
                     {participant.type === "former" ? " (Former)" : ""}
                   </Text>
-                  {hasTotal ? (
+                  {mode === "unequal" && excludedAmountIds.includes(participant.id) ? (
+                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                      Not included
+                    </Text>
+                  ) : hasTotal ? (
                     <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
                       {percent}% · {formatCurrency(personAmount, currency)}
                     </Text>
@@ -216,6 +277,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
                     mode="outlined"
                     dense
                     value={amounts[participant.id] ?? ""}
+                    accessibilityLabel={`Amount for ${name}, ${currency}${excludedAmountIds.includes(participant.id) ? ", Not included" : ""}`}
                     onChangeText={(text) => {
                       const next = sanitizeAmountInput(text);
                       if (next === null) return;
@@ -237,8 +299,14 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
                       disabled={disabled || shareCount <= 1}
                       onPress={() => onShareChange(participant.id, shareCount - 1)}
                       accessibilityLabel={`Fewer shares for ${name}`}
+                      accessibilityValue={{ min: 1, max: MAX_SHARE_COUNT, now: shareCount, text: `${shareCount} shares` }}
                     />
-                    <Text variant="titleMedium" style={{ color: theme.colors.onSurface, minWidth: 20, textAlign: "center" }}>
+                    <Text
+                      variant="titleMedium"
+                      accessibilityLiveRegion="polite"
+                      accessibilityLabel={`${name}, ${shareCount} shares${hasTotal ? `, ${percent}%, ${formatCurrency(personAmount, currency)}` : ""}`}
+                      style={{ color: theme.colors.onSurface, minWidth: 20, textAlign: "center" }}
+                    >
                       {shareCount}
                     </Text>
                     <IconButton
@@ -247,6 +315,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
                       disabled={disabled || shareCount >= MAX_SHARE_COUNT}
                       onPress={() => onShareChange(participant.id, shareCount + 1)}
                       accessibilityLabel={`More shares for ${name}`}
+                      accessibilityValue={{ min: 1, max: MAX_SHARE_COUNT, now: shareCount, text: `${shareCount} shares` }}
                     />
                   </View>
                 )}
@@ -256,7 +325,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
         </View>
       ) : null}
 
-      {mode !== "equal" && hasTotal && selectedIds.length > 0 ? (
+      {mode !== "equal" && hasTotal && effectiveIds.length > 0 ? (
         <View
           style={[styles.summary, { backgroundColor: theme.colors.surfaceVariant }]}
           testID="split-remaining-label"
@@ -300,8 +369,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 8,
   },
-  modeButtons: {
-    marginBottom: 12,
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  modeButton: {
+    borderRadius: 20,
+    overflow: "hidden",
+  },
+  modeButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 48,
+    paddingHorizontal: 12,
+    gap: 8,
   },
   chipWrap: {
     flexDirection: "row",
@@ -318,7 +400,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 16,
+    borderRadius: 8,
     alignItems: "center",
   },
   detailList: {
