@@ -226,6 +226,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const {
     data: balancesData,
     isLoading: balancesLoading,
+    error: balancesError,
     refetch: refetchBalances,
   } = useBalances(initialGroup.id);
   const {
@@ -860,6 +861,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   };
 
   const handleSettleUp = (balance: Balance) => {
+    if (!isActiveMember || balancesError) return;
     setEditingSettlement(null);
     setSettlingBalance(balance);
     setShowSettlementForm(true);
@@ -1389,6 +1391,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               statsLoading={groupStatsLoading}
               defaultCurrency={getDefaultCurrency()}
               activeMemberCount={activeMemberCount}
+              balanceError={!!balancesError}
+              onSettlePress={isActiveMember && !balancesError ? handleSettleUp : undefined}
               onMyCostsPress={() => handleStatNavigation("my-costs")}
               onTotalCostsPress={() => handleStatNavigation("total-costs")}
               onOpenCurrencySettings={() => setShowCurrencySettings(true)}
@@ -1625,6 +1629,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           color={theme.colors.onPrimary}
           onPress={preferAddPeopleFab ? onAddMember : onAddTransaction}
           label={preferAddPeopleFab ? "Add people" : undefined}
+          accessibilityLabel={preferAddPeopleFab ? "Add people" : "Add expense"}
         />
       )}
 
@@ -1956,6 +1961,6 @@ const styles = StyleSheet.create({
   },
   filterChip: {
     marginRight: 8,
-    height: 32,
+    minHeight: 32,
   },
 });

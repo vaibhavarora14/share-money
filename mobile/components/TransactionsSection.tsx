@@ -409,6 +409,8 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
             <TouchableRipple
               onPress={() => runEmptyAction("add_expense")}
               testID="empty-add-expense-anyway"
+              accessibilityRole="button"
+              accessibilityLabel={emptyCopy.secondaryLabel}
               style={styles.soloEmptySecondary}
             >
               <View style={styles.soloEmptySecondaryRow}>

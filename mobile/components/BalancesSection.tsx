@@ -265,7 +265,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
             polarity === "owed"
               ? theme.colors.tertiary
               : polarity === "you owe"
-                ? theme.colors.secondary
+                ? theme.dark ? theme.colors.secondary : theme.colors.onSecondaryContainer
                 : theme.colors.onSurfaceVariant;
           const key =
             balance.participant_id ||
@@ -283,10 +283,10 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
                   size={36}
                   label={getInitials(name)}
                   style={{
-                    backgroundColor: avatarTone(key),
+                    backgroundColor: theme.dark ? theme.colors.primaryContainer : avatarTone(key),
                     marginRight: 12,
                   }}
-                  color={theme.colors.onSurface}
+                  color={theme.dark ? theme.colors.onPrimaryContainer : theme.colors.onSurface}
                   labelStyle={{ fontWeight: "600", fontSize: 13 }}
                 />
                 <View style={styles.balanceLeft}>

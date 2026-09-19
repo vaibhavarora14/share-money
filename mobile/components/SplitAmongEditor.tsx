@@ -4,9 +4,11 @@ import {
   Button,
   Chip,
   IconButton,
+  Icon,
   Menu,
   Text,
   TextInput,
+  TouchableRipple,
   useTheme,
 } from "react-native-paper";
 import { Participant } from "../types";
@@ -128,9 +130,15 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
 
   const modeLabel =
     mode === "equal" ? "Equal" : mode === "unequal" ? "Amounts" : "Shares";
+  const roundingError = hasTotal && mode !== "unequal" &&
+    effectiveIds.some((id) => !(assignedAmounts[id] > 0))
+    ? mode === "equal"
+      ? "Each person's split must round to an amount greater than 0. Increase the amount or select fewer people."
+      : "Each person's share must round to an amount greater than 0. Increase the amount or adjust the shares."
+    : undefined;
   const selectionError = error || (mode === "equal" && selectedIds.length === 0
     ? "Select at least one person"
-    : undefined);
+    : roundingError);
 
   return (
     <View testID="split-among-editor">
@@ -140,24 +148,26 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
         </Text>
         <View style={styles.headerActions}>
           <Menu
+            nativeModal
             visible={modeMenuVisible && !disabled}
             onDismiss={() => setModeMenuVisible(false)}
             anchorPosition="bottom"
             testID="split-mode-menu"
             anchor={
-              <Button
-                mode="text"
-                compact
-                icon="chevron-down"
-                contentStyle={styles.modeButtonContent}
+              <TouchableRipple
+                style={styles.modeButton}
                 onPress={() => setModeMenuVisible(true)}
                 disabled={disabled}
+                accessibilityRole="button"
                 accessibilityLabel={`Split method: ${modeLabel}`}
-                accessibilityState={{ expanded: modeMenuVisible && !disabled }}
+                accessibilityState={{ expanded: modeMenuVisible && !disabled, disabled: !!disabled }}
                 testID="split-mode-dropdown"
               >
-                {modeLabel}
-              </Button>
+                <View style={styles.modeButtonContent}>
+                  <Text variant="labelLarge" style={{ color: disabled ? theme.colors.onSurfaceDisabled : theme.colors.primary }}>{modeLabel}</Text>
+                  <Icon source="chevron-down" size={18} color={disabled ? theme.colors.onSurfaceDisabled : theme.colors.primary} />
+                </View>
+              </TouchableRipple>
             }
           >
             {([
@@ -168,6 +178,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
               <Menu.Item
                 key={option.value}
                 title={option.label}
+                accessibilityState={{ selected: mode === option.value }}
                 trailingIcon={mode === option.value ? "check" : undefined}
                 disabled={disabled}
                 onPress={() => {
@@ -266,6 +277,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
                     mode="outlined"
                     dense
                     value={amounts[participant.id] ?? ""}
+                    accessibilityLabel={`Amount for ${name}, ${currency}${excludedAmountIds.includes(participant.id) ? ", Not included" : ""}`}
                     onChangeText={(text) => {
                       const next = sanitizeAmountInput(text);
                       if (next === null) return;
@@ -287,8 +299,14 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
                       disabled={disabled || shareCount <= 1}
                       onPress={() => onShareChange(participant.id, shareCount - 1)}
                       accessibilityLabel={`Fewer shares for ${name}`}
+                      accessibilityValue={{ min: 1, max: MAX_SHARE_COUNT, now: shareCount, text: `${shareCount} shares` }}
                     />
-                    <Text variant="titleMedium" style={{ color: theme.colors.onSurface, minWidth: 20, textAlign: "center" }}>
+                    <Text
+                      variant="titleMedium"
+                      accessibilityLiveRegion="polite"
+                      accessibilityLabel={`${name}, ${shareCount} shares${hasTotal ? `, ${percent}%, ${formatCurrency(personAmount, currency)}` : ""}`}
+                      style={{ color: theme.colors.onSurface, minWidth: 20, textAlign: "center" }}
+                    >
                       {shareCount}
                     </Text>
                     <IconButton
@@ -297,6 +315,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
                       disabled={disabled || shareCount >= MAX_SHARE_COUNT}
                       onPress={() => onShareChange(participant.id, shareCount + 1)}
                       accessibilityLabel={`More shares for ${name}`}
+                      accessibilityValue={{ min: 1, max: MAX_SHARE_COUNT, now: shareCount, text: `${shareCount} shares` }}
                     />
                   </View>
                 )}
@@ -354,8 +373,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
+  modeButton: {
+    borderRadius: 20,
+    overflow: "hidden",
+  },
   modeButtonContent: {
-    flexDirection: "row-reverse",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 48,
+    paddingHorizontal: 12,
+    gap: 8,
   },
   chipWrap: {
     flexDirection: "row",

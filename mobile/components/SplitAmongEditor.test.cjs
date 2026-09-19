@@ -114,6 +114,24 @@ function text(tree) {
   return React.Children.toArray(tree?.props?.children).map(text).join("");
 }
 
+test("split trigger puts expanded state on the actionable ripple, and options expose selection", () => {
+  const editor = createEditor();
+  let menu = byId(editor.render(), "split-mode-menu");
+  assert.equal(menu.props.nativeModal, true, "split menu opts into Android accessibility isolation");
+  assert.equal(menu.props.anchor.type, "TouchableRipple", "Paper Button drops expanded state on its Surface");
+  assert.equal(menu.props.anchor.props.accessibilityRole, "button");
+  assert.deepEqual(menu.props.anchor.props.accessibilityState, { expanded: false, disabled: false });
+  menu.props.anchor.props.onPress();
+  menu = byId(editor.render(), "split-mode-menu");
+  assert.equal(menu.props.anchor.props.accessibilityState.expanded, true);
+  assert.equal(byId(menu, "split-mode-equal").props.accessibilityState.selected, true);
+  assert.equal(byId(menu, "split-mode-shares").props.accessibilityState.selected, false);
+  byId(menu, "split-mode-shares").props.onPress();
+  menu = byId(editor.render(), "split-mode-menu");
+  assert.equal(menu.props.anchor.props.accessibilityState.expanded, false);
+  assert.equal(byId(menu, "split-mode-shares").props.accessibilityState.selected, true);
+});
+
 test("header dropdown switches modes without hiding participants and dismisses on selection", () => {
   const editor = createEditor();
   for (const [mode, label] of [["unequal", "Amounts"], ["shares", "Shares"], ["equal", "Equal"]]) {
@@ -144,6 +162,15 @@ test("header dropdown switches modes without hiding participants and dismisses o
   assert.equal(byId(editor.render(), "split-mode-menu").props.visible, false);
 });
 
+test("amount rows expose person, currency and excluded purpose without changing editable value", () => {
+  const editor = createEditor({ mode: "unequal", excludedAmountIds: ["b"] });
+  const tree = editor.render();
+  assert.equal(byId(tree, "split-amount-input-alice@example.com").props.accessibilityLabel, "Amount for Alice, USD");
+  const bob = byId(tree, "split-amount-input-bob@example.com");
+  assert.match(bob.props.accessibilityLabel, /Amount for Bob, USD, Not included/);
+  assert.equal(bob.props.value, "");
+});
+
 test("amount inputs and totals include everyone despite Equal deselection", () => {
   const editor = createEditor({ mode: "unequal", amounts: { a: "20", b: "10" } });
   const tree = editor.render();
@@ -162,6 +189,23 @@ test("amount inputs and totals include everyone despite Equal deselection", () =
   assert.equal(nodes(updated).some((node) => node.props.testID === "split-leftover-button"), false);
   editor.props.amounts.a = "110";
   assert.match(text(byId(editor.render(), "split-remaining-label")), /Over by: \$100\.00/);
+});
+
+test("share changes expose live resulting count and allocation while preserving limits", () => {
+  const editor = createEditor({ mode: "shares", shares: { a: 3, b: 1 } });
+  editor.props.onShareChange = (id, value) => { editor.props.shares[id] = value; };
+  let tree = editor.render();
+  const plus = nodes(tree).find(node => node.props.accessibilityLabel === "More shares for Bob");
+  assert.equal(plus.props.accessibilityValue?.now, 1);
+  plus.props.onPress();
+  tree = editor.render();
+  const live = nodes(tree).find(node => node.props.accessibilityLiveRegion === "polite" && node.props.accessibilityLabel?.startsWith("Bob,"));
+  assert.ok(live);
+  assert.equal(text(live), "2");
+  assert.match(live.props.accessibilityLabel, /Bob, 2 shares, 40%.*\$40.00/);
+  const minus = nodes(tree).find(node => node.props.accessibilityLabel === "Fewer shares for Bob");
+  assert.equal(minus.props.accessibilityValue.now, 2);
+  assert.equal(minus.props.accessibilityValue.min, 1);
 });
 
 test("shares retain weighted amounts, default share count and stepper limits", () => {
@@ -319,6 +363,22 @@ test("blank excluded Amounts rows are labeled but remain editable without select
   editor.props.excludedAmountIds = [];
   editor.props.amounts.b = "10";
   assert.doesNotMatch(text(editor.render()), /Not included/);
+});
+
+test("invalid rounded Equal and Shares allocations explain disabled Save immediately in a live region", () => {
+  for (const mode of ["equal", "shares"]) {
+    const form = createForm({ amount: "0.01", splitAmong: ["a", "b"], splitMode: mode, splitShares: { a: 3, b: 1 } });
+    const editor = createEditor({ totalAmount: Number(form.scope.amount), selectedIds: form.scope.splitAmong, mode: form.scope.splitMode, shares: form.scope.splitShares });
+    assert.equal(form.render().isSaveDisabled, true);
+    assert.equal(form.scope.splitAmongError, "", "no blocked handler was invoked");
+    const live = nodes(editor.render()).find(node => node.props.accessibilityLiveRegion === "polite" && /greater than 0/.test(text(node)));
+    assert.ok(live, `${mode} rounding explanation must be immediately reachable`);
+    assert.match(text(live), /Increase the amount/);
+    editor.props.totalAmount = 1;
+    assert.doesNotMatch(text(editor.render()), /greater than 0/);
+    form.scope.amount = "1";
+    assert.equal(form.render().isSaveDisabled, false);
+  }
 });
 
 test("Equal disables Save when one cent leaves a selected person with a rounded zero allocation", () => {

@@ -1,5 +1,18 @@
 # PR #299 — native UI walkthrough
 
+## Final review status
+
+Owner authorized merge after readiness, then local Android internal testing and iOS TestFlight release; no production rollout.
+
+- Independent Antigravity five-axis review found no functional/architectural blockers. Its remaining condition was committing retained edits and all six new regression suites.
+- Fresh verification: 89 Node tests, 186 mobile Deno tests plus four steps, six backend Deno tests, TypeScript, diff checks and pristine Paper patch verification pass.
+- Current native iOS navigation opened an existing settlement edit form: charlie → Alice, INR 5,625.00, wrapping From/To chips without visible clipping. No update was saved; this is not new persistence/nonzero-unified-row coverage.
+- Accessibility-only coverage remains deferred, not passed.
+- Expo Doctor: 17/18 checks. Remaining Directory metadata warnings concern existing react-native-nitro-google-signin and react-native-vector-icons dependencies; no demonstrated runtime failure.
+- Historical images/web mock below predate final chips/unified rows. Latest external prototype copy reductions remain prototype-only.
+
+Evidence: `~/.hermes/profiles/sharedmoney-product/workspace/pr299-local-qa/` — `final-five-axis-review.log`, `final-node-tests.log`, `final-expo-doctor.log`, `final-native-summer.png`, `final-native-chips.png`.
+
 ## Current split editor
 
 Native iPhone 17 Pro captures from the local PR bundle and QA group (not Expo web):

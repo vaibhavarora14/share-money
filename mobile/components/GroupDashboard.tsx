@@ -1,6 +1,6 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import React, { useMemo } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, useWindowDimensions, View } from "react-native";
 import {
     Surface,
     Text,
@@ -8,7 +8,6 @@ import {
     useTheme
 } from "react-native-paper";
 import { Balance, GroupStatsResponse } from "../types";
-import { UnifiedBalanceHero } from "./UnifiedBalanceHero";
 import { UnifyPromptCard } from "./UnifyPromptCard";
 import { useCurrencyPreferences } from "../hooks/useCurrencyPreferences";
 import { formatCurrency, getDefaultCurrency } from "../utils/currency";
@@ -24,7 +23,6 @@ import {
   currenciesFromGroupStats,
   spendingTotalsFromGroupStats,
 } from "../utils/groupDashboardStats";
-import { shouldHideBalanceChrome } from "../utils/balanceRowLabels";
 
 interface GroupDashboardProps {
   groupId?: string;
@@ -35,8 +33,9 @@ interface GroupDashboardProps {
   currentUserParticipantId?: string;
   loading: boolean;
   statsLoading?: boolean;
+  balanceError?: boolean;
   defaultCurrency?: string;
-  /** @deprecated Balance strip is informational — settle only via Settle tab/screens. */
+  /** Opens SettlementFormScreen for a viewer-involved settlement edge. Does not mutate data. */
   onSettlePress?: (balance: Balance) => void;
   onMyCostsPress?: () => void;
   onTotalCostsPress?: () => void;
@@ -50,6 +49,19 @@ function shortName(full?: string | null, email?: string | null): string {
   return base.split(/\s+/)[0] || base;
 }
 
+function initials(full?: string | null, email?: string | null): string {
+  const name = full?.trim() || email?.split("@")[0] || email || "?";
+  if (name.includes(" ")) {
+    const parts = name.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+    }
+  }
+  const base = name.includes("@") ? name.split("@")[0] : name;
+  if (base.length >= 2) return base.substring(0, 2).toUpperCase();
+  return base.length > 0 ? (base[0] + base[0]).toUpperCase() : "??";
+}
+
 export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   groupId,
   balances,
@@ -58,13 +70,17 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   currentUserParticipantId,
   loading,
   statsLoading = false,
+  balanceError = false,
   defaultCurrency = getDefaultCurrency(),
+  onSettlePress,
   onMyCostsPress,
   onTotalCostsPress,
   onOpenCurrencySettings,
   activeMemberCount = 2,
 }) => {
   const theme = useTheme();
+  const { width, fontScale } = useWindowDimensions();
+  const stackInsights = width / fontScale < 300;
   const {
     preferredCurrency,
     groupSettings,
@@ -162,13 +178,11 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
     };
   }), [myDebts, currentUserId, currentUserParticipantId]);
 
-  const topOwed = viewerBalances.find((balance) => balance.amount > 0.005);
-  const topYouOwe = viewerBalances.find((balance) => balance.amount < -0.005);
-
-  const hideChrome = shouldHideBalanceChrome(
-    balances.map((b) => ({ amount: b.amount })),
-    activeMemberCount,
+  const settlementRows = useMemo(
+    () => viewerBalances.filter((balance) => Math.abs(balance.amount) >= 0.005),
+    [viewerBalances],
   );
+
 
   const formatSignedBalance = (amount: number, currency: string, isOwed: boolean) => {
     const raw = formatCurrency(Math.abs(amount), currency);
@@ -179,8 +193,108 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   const personShort = (balance: Balance) =>
     shortName(balance.full_name, balance.email);
 
+  const renderSettlementRows = () => {
+    if (balanceError) {
+      return (
+        <View style={styles.settlementStatus}>
+          <Text accessibilityLiveRegion="polite" variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+            Couldn't load balances. Reopen the group to try again.
+          </Text>
+        </View>
+      );
+    }
+    if (dashboardLoading || !currentUserId) {
+      return (
+        <View style={styles.settlementStatus}>
+          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+            Updating balances...
+          </Text>
+        </View>
+      );
+    }
+
+    if (settlementRows.length === 0) {
+      if (unifyEnabled && myUnified && myUnified.missing.length > 0) {
+        return (
+          <View style={styles.settlementStatus}>
+            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, textAlign: "center" }}>
+              {`No ${myUnified.missing.join(", ")} → ${settlementCurrency} rate. Original balances remain; this group is not all settled.`}
+            </Text>
+          </View>
+        );
+      }
+      return (
+        <View style={styles.settlementStatus}>
+          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+            All settled
+          </Text>
+        </View>
+      );
+    }
+
+    return settlementRows.map((balance, index) => {
+      const isOwed = balance.amount > 0;
+      const name = personShort(balance);
+      const rowKey =
+        balance.participant_id || balance.user_id || `${name}-${balance.currency}`;
+      const amountColor = isOwed ? theme.colors.tertiary : theme.colors.secondary;
+      const isConverted = !unifyEnabled || balance.currency.toUpperCase() === settlementCurrency.toUpperCase();
+      const Row = onSettlePress ? TouchableRipple : View;
+      return (
+        <Row
+          key={`${rowKey}-${balance.currency}-${index}`}
+          testID={`settlement-row-${rowKey}-${balance.currency || defaultCurrency}`}
+          onPress={onSettlePress ? () => onSettlePress(balance) : undefined}
+          accessible
+          accessibilityRole={onSettlePress ? "button" : undefined}
+          accessibilityLabel={`${isOwed ? `${name} owes you` : `You owe ${name}`}, ${formatSignedBalance(balance.amount, balance.currency, isOwed)}`}
+          accessibilityHint={onSettlePress ? "Opens the payment record form. No payment is recorded until confirmed." : undefined}
+          style={styles.settlementRow}
+        >
+          <View style={styles.settlementRowContent}>
+            <View
+              accessible={false}
+              style={[styles.settlementAvatar, { backgroundColor: theme.colors.primaryContainer }]}
+            >
+              <Text style={{ color: theme.colors.onPrimaryContainer, fontWeight: "600", fontSize: 13 }}>
+                {initials(balance.full_name, balance.email)}
+              </Text>
+            </View>
+            <View style={styles.settlementDetails}>
+              <Text
+                variant="bodyMedium"
+                style={{ flexGrow: 1, flexShrink: 1, flexBasis: 80, color: theme.colors.onSurface }}
+              >
+                {isOwed ? `${name} owes you` : `You owe ${name}`}
+              </Text>
+              <Text
+                variant="titleSmall"
+                style={{ flexShrink: 1, color: amountColor, fontWeight: "700" }}
+              >
+                {formatSignedBalance(balance.amount, balance.currency, isOwed)}
+              </Text>
+              {!isConverted ? (
+                <Text
+                  variant="labelSmall"
+                  style={{ width: "100%", color: theme.colors.onSurfaceVariant }}
+                >
+                  Not converted · {balance.currency}
+                </Text>
+              ) : null}
+            </View>
+            {onSettlePress ? <MaterialCommunityIcons
+              name="chevron-right"
+              size={22}
+              color={theme.colors.onSurfaceVariant}
+            /> : null}
+          </View>
+        </Row>
+      );
+    });
+  };
+
   const renderCompactInsights = () => (
-    <View style={styles.compactStatsRow}>
+    <View style={[styles.compactStatsRow, stackInsights && styles.stackedStats]}>
       <Surface style={[styles.compactStat, { backgroundColor: theme.colors.surface, borderColor: theme.colors.outlineVariant }]} elevation={0}>
         <TouchableRipple onPress={onMyCostsPress} style={{ flex: 1 }}>
           <View style={styles.compactStatContent}>
@@ -189,11 +303,11 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
             </View>
             <View style={{ flex: 1 }}>
                 <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>My spending</Text>
-                <Text variant="labelMedium" numberOfLines={2} style={{ color: theme.colors.onSurface, fontWeight: '700' }}>
+                <Text variant="labelMedium" style={{ color: theme.colors.onSurface, fontWeight: '700' }}>
                     {dashboardLoading ? "..." : myCostDisplay.headline}
                 </Text>
                 {!dashboardLoading && myCostDisplay.breakdown ? (
-                  <Text variant="labelSmall" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant }}>
+                  <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
                     from {myCostDisplay.breakdown}
                   </Text>
                 ) : null}
@@ -210,11 +324,11 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
             </View>
             <View style={{ flex: 1 }}>
                 <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>Group summary</Text>
-                <Text variant="labelMedium" numberOfLines={2} style={{ color: theme.colors.onSurface, fontWeight: '700' }}>
+                <Text variant="labelMedium" style={{ color: theme.colors.onSurface, fontWeight: '700' }}>
                     {dashboardLoading ? "..." : groupCostDisplay.headline}
                 </Text>
                 {!dashboardLoading && groupCostDisplay.breakdown ? (
-                  <Text variant="labelSmall" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant }}>
+                  <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
                     from {groupCostDisplay.breakdown}
                   </Text>
                 ) : null}
@@ -227,7 +341,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
 
   return (
     <View style={styles.container}>
-      {hasMultipleCurrencies && !unifyEnabled ? (
+      {hasMultipleCurrencies && !unifyEnabled && !balanceError && !dashboardLoading ? (
         <UnifyPromptCard
           currencies={usedCurrencies}
           suggestedCurrency={settlementCurrency}
@@ -245,69 +359,46 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
         />
       ) : null}
 
-      {unifyEnabled && myUnified ? (
-        <UnifiedBalanceHero
-          unified={myUnified}
-          onPressRates={onOpenCurrencySettings}
-        />
+      {unifyEnabled && !balanceError && !dashboardLoading && activeMemberCount > 1 ? (
+        <View style={styles.unifiedSubhead}>
+          <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+            {`In one currency · ${settlementCurrency}`}
+          </Text>
+          {onOpenCurrencySettings ? (
+            <TouchableRipple
+              onPress={onOpenCurrencySettings}
+              accessibilityRole="button"
+              accessibilityLabel="Rates"
+              testID="group-rates-button"
+            >
+              <Text variant="labelLarge" style={{ color: theme.colors.primary, fontWeight: "600" }}>
+                Rates ›
+              </Text>
+            </TouchableRipple>
+          ) : null}
+        </View>
       ) : null}
 
-      {!hideChrome && !unifyEnabled ? (
+      {balanceError || dashboardLoading || activeMemberCount > 1 ? (
         <Surface
-          style={[styles.balanceStrip, { borderColor: theme.colors.outlineVariant, backgroundColor: theme.colors.surface }]}
+          style={[styles.settlementList, { borderColor: theme.colors.outlineVariant, backgroundColor: theme.colors.surface }]}
           elevation={0}
-          testID="group-balance-strip"
+          testID="group-settlement-rows"
         >
-          {dashboardLoading || !currentUserId ? (
-            <View style={{ padding: 20, alignItems: "center", flex: 1 }}>
-              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                Updating balances...
-              </Text>
-            </View>
-          ) : (
-            <>
-              <View style={styles.stripHalf}>
-                <View style={[styles.stripIcon, { backgroundColor: theme.colors.tertiaryContainer }]}>
-                  <MaterialCommunityIcons name="cash-plus" size={18} color={theme.colors.tertiary} />
-                </View>
-                <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }} numberOfLines={1}>
-                  {topOwed
-                    ? `${personShort(topOwed)} owes you`
-                    : "You’re owed"}
-                </Text>
-                <Text
-                  variant="titleLarge"
-                  style={{ color: theme.colors.tertiary, fontWeight: "700" }}
-                  testID="balance-strip-owed-amount"
-                >
-                  {topOwed
-                    ? formatSignedBalance(topOwed.amount, topOwed.currency, true)
-                    : formatCurrency(0, defaultCurrency)}
-                </Text>
-              </View>
-              <View style={[styles.stripDivider, { backgroundColor: theme.colors.outlineVariant }]} />
-              <View style={styles.stripHalf}>
-                <View style={[styles.stripIcon, { backgroundColor: theme.colors.secondaryContainer }]}>
-                  <MaterialCommunityIcons name="cash-minus" size={18} color={theme.colors.secondary} />
-                </View>
-                <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }} numberOfLines={1}>
-                  {topYouOwe
-                    ? `You owe ${personShort(topYouOwe)}`
-                    : "You owe"}
-                </Text>
-                <Text
-                  variant="titleLarge"
-                  style={{ color: theme.colors.secondary, fontWeight: "700" }}
-                  testID="balance-strip-owe-amount"
-                >
-                  {topYouOwe
-                    ? formatSignedBalance(topYouOwe.amount, topYouOwe.currency, false)
-                    : formatCurrency(0, defaultCurrency)}
-                </Text>
-              </View>
-            </>
-          )}
+          {renderSettlementRows()}
         </Surface>
+      ) : null}
+
+      {unifyEnabled && !balanceError && !dashboardLoading && activeMemberCount > 1 && myUnified && myUnified.missing.length > 0 && settlementRows.length > 0 ? (
+        <Text
+          variant="labelSmall"
+          style={{ color: theme.colors.error, marginTop: -8, marginHorizontal: 4 }}
+          testID="group-missing-rates-notice"
+        >
+          {settlementRows.every((r) => r.currency.toUpperCase() !== settlementCurrency.toUpperCase())
+            ? `No ${myUnified.missing.join(", ")} → ${settlementCurrency} rate. Original balances remain; this group is not all settled.`
+            : `No ${myUnified.missing.join(", ")} → ${settlementCurrency} rate. Original balances remain below the converted rows.`}
+        </Text>
       ) : null}
 
       {renderCompactInsights()}
@@ -322,35 +413,57 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     gap: 16,
   },
-  balanceStrip: {
+  unifiedSubhead: {
     flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: -4,
+  },
+  settlementList: {
     borderRadius: 8,
     borderWidth: 1,
     overflow: "hidden",
-    minHeight: 96,
   },
-  stripHalf: {
-    flex: 1,
-    paddingVertical: 14,
+  settlementRow: {
+    minHeight: 60,
+  },
+  settlementRowContent: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 14,
-    gap: 4,
-    justifyContent: "center",
+    paddingVertical: 12,
+    minHeight: 60,
   },
-  stripDivider: {
-    width: StyleSheet.hairlineWidth,
-    alignSelf: "stretch",
+  settlementDetails: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    columnGap: 8,
+    rowGap: 4,
+    alignItems: "center",
+    marginRight: 4,
   },
-  stripIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  settlementAvatar: {
+    minWidth: 36,
+    minHeight: 36,
+    padding: 8,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 4,
+    marginRight: 12,
+  },
+  settlementStatus: {
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    alignItems: "center",
   },
   compactStatsRow: {
       flexDirection: 'row',
       gap: 12,
+  },
+  stackedStats: {
+      flexDirection: 'column',
   },
   compactStat: {
       flex: 1,

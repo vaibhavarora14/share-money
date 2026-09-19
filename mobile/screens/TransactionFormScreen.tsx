@@ -723,7 +723,9 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     >
       {/* Header */}
       <Appbar.Header style={[styles.header, { backgroundColor: theme.colors.background }]}>
-        <Appbar.BackAction
+        <IconButton
+          icon="arrow-left"
+          iconColor={theme.colors.onSurface}
           onPress={onDismiss}
           accessibilityLabel="Navigate back"
           testID="transaction-form-back-button"
@@ -794,12 +796,14 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                   webHeroAmountInputStyle,
                 ]}
                 testID="amount-input"
+                accessibilityHint={amountError || undefined}
+                accessibilityLabel={`Expense amount, ${currency}`}
                 autoFocus={!transaction}
                 selectTextOnFocus
               />
             </View>
             {amountError && (
-              <Text variant="bodySmall" style={{ color: theme.colors.error, marginTop: 4 }}>
+              <Text variant="bodySmall" accessibilityLiveRegion="polite" style={{ color: theme.colors.error, marginTop: 4 }}>
                 {amountError}
               </Text>
             )}
@@ -829,6 +833,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
             <Card.Content>
               <TextInput
                 testID="description-input"
+                accessibilityHint={descriptionError || undefined}
                 label="Description"
                 value={description}
                 onChangeText={(text) => {
@@ -845,7 +850,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                 onSubmitEditing={Keyboard.dismiss}
               />
               {descriptionError && (
-                <Text variant="bodySmall" style={{ color: theme.colors.error, marginLeft: 12 }}>
+                <Text variant="bodySmall" accessibilityLiveRegion="polite" style={{ color: theme.colors.error, marginLeft: 12 }}>
                   {descriptionError}
                 </Text>
               )}
@@ -854,7 +859,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
 
               <Pressable onPress={() => setShowDatePicker(true)} disabled={loading}>
                 <View style={styles.dateRow}>
-                  <IconButton icon="calendar-outline" size={24} />
+                  <IconButton icon="calendar-outline" size={24} accessible={false} importantForAccessibility="no" />
                   <View style={{ flex: 1 }}>
                     <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
                       Date
@@ -863,11 +868,11 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                       {formatDateForDisplay(date)}
                     </Text>
                   </View>
-                  <IconButton icon="chevron-right" size={24} />
+                  <IconButton icon="chevron-right" size={24} accessible={false} importantForAccessibility="no" />
                 </View>
               </Pressable>
               {dateError && (
-                <Text variant="bodySmall" style={{ color: theme.colors.error, marginLeft: 12 }}>
+                <Text variant="bodySmall" accessibilityLiveRegion="polite" style={{ color: theme.colors.error, marginLeft: 12 }}>
                   {dateError}
                 </Text>
               )}
@@ -879,7 +884,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                 disabled={loading}
               >
                 <View style={styles.selectRow}>
-                  <IconButton icon="tag-outline" size={24} />
+                  <IconButton icon="tag-outline" size={24} accessible={false} importantForAccessibility="no" />
                   <View style={styles.selectRowContent}>
                     <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
                       Category
@@ -900,7 +905,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                           : "No category"}
                     </Text>
                   </View>
-                  <IconButton icon="chevron-down" size={24} />
+                  <IconButton icon="chevron-down" size={24} accessible={false} importantForAccessibility="no" />
                 </View>
               </Pressable>
 
@@ -915,7 +920,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                   left={<TextInput.Icon icon="pencil-outline" />}
                   right={
                     category.trim() ? (
-                      <TextInput.Icon icon="close" onPress={() => setCategory("")} />
+                      <TextInput.Icon icon="close" accessibilityLabel="Clear custom category" onPress={() => setCategory("")} />
                     ) : undefined
                   }
                   placeholder="Write your own category"
@@ -935,7 +940,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                   </Text>
                 </View>
                 {paidByError && (
-                  <Text variant="bodySmall" style={{ color: theme.colors.error, marginBottom: 8 }}>
+                  <Text variant="bodySmall" accessibilityLiveRegion="polite" style={{ color: theme.colors.error, marginBottom: 8 }}>
                     {paidByError}
                   </Text>
                 )}
@@ -1157,7 +1162,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
           >
             <View style={styles.pickerHeader}>
               <Text variant="titleLarge">Who paid?</Text>
-              <IconButton icon="close" onPress={() => setShowPaidByPicker(false)} />
+              <IconButton icon="close" accessibilityLabel="Close payer picker" onPress={() => setShowPaidByPicker(false)} />
             </View>
             <FlatList
               data={availableParticipants}
@@ -1183,7 +1188,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                       {item.type === 'former' && " (Former)"}
                     </Text>
                     {isSelected && (
-                      <IconButton icon="check" size={20} iconColor={theme.colors.primary} />
+                      <IconButton icon="check" size={20} iconColor={theme.colors.primary} accessible={false} importantForAccessibility="no" />
                     )}
                   </TouchableOpacity>
                 );
@@ -1211,7 +1216,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
           >
             <View style={styles.pickerHeader}>
               <Text variant="titleLarge">Select Category</Text>
-              <IconButton icon="close" onPress={() => setShowCategoryPicker(false)} />
+              <IconButton icon="close" accessibilityLabel="Close category picker" onPress={() => setShowCategoryPicker(false)} />
             </View>
             <FlatList
               data={categoryPickerItems}
@@ -1246,6 +1251,8 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                     <View style={styles.pickerItemLabel}>
                       <IconButton
                         icon={item.icon}
+                        accessible={false}
+                        importantForAccessibility="no"
                         size={22}
                         iconColor={theme.colors.onSurfaceVariant}
                         style={styles.pickerItemIcon}
@@ -1253,7 +1260,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                       <Text variant="bodyLarge">{item.label}</Text>
                     </View>
                     {isSelected && (
-                      <IconButton icon="check" size={20} iconColor={theme.colors.primary} />
+                      <IconButton icon="check" size={20} iconColor={theme.colors.primary} accessible={false} importantForAccessibility="no" />
                     )}
                   </TouchableOpacity>
                 );
@@ -1281,7 +1288,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
           >
             <View style={styles.pickerHeader}>
               <Text variant="titleLarge">Select Currency</Text>
-              <IconButton icon="close" onPress={() => setShowCurrencyPicker(false)} />
+              <IconButton icon="close" accessibilityLabel="Close currency picker" onPress={() => setShowCurrencyPicker(false)} />
             </View>
             <Searchbar
               placeholder="Search currencies"
@@ -1324,7 +1331,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                       </Text>
                     </View>
                     {isSelected && (
-                      <IconButton icon="check" size={20} iconColor={theme.colors.primary} />
+                      <IconButton icon="check" size={20} iconColor={theme.colors.primary} accessible={false} importantForAccessibility="no" />
                     )}
                   </TouchableOpacity>
                 );
