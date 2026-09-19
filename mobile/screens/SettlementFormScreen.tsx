@@ -10,7 +10,7 @@ import {
     StyleSheet,
     View,
 } from "react-native";
-import { Appbar, Button, Dialog, Portal, Text, TextInput, useTheme } from "react-native-paper";
+import { Appbar, Button, Chip, Dialog, Portal, Text, TextInput, useTheme } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WEB_MAX_WIDTH } from "../constants/layout";
 import { Balance, GroupMember, Participant, Settlement } from "../types";
@@ -20,6 +20,11 @@ import {
     getDefaultCurrency,
 } from "../utils/currency";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
+import {
+  RECORD_SETTLEMENT_LABEL,
+  SETTLE_OUTSIDE_APP_HELP,
+  UPDATE_SETTLEMENT_LABEL,
+} from "../utils/settleCopy";
 
 interface SettlementFormScreenProps {
   visible: boolean;
@@ -81,6 +86,27 @@ function formatDateForDisplay(dateStr: string): string {
   }
 }
 
+function formatParticipantLabel(
+  item: { id: string; user_id?: string | null; full_name?: string | null; email?: string | null },
+  all: Array<{ id: string; user_id?: string | null; full_name?: string | null; email?: string | null }>,
+  currentUserId?: string
+): string {
+  const raw = item.full_name?.trim()
+    || item.email?.split("@")[0]?.trim()
+    || item.email?.trim()
+    || `Member ${item.id.substring(0, 8)}`;
+  const duplicates = all.filter((other) => {
+    const otherRaw = other.full_name?.trim()
+      || other.email?.split("@")[0]?.trim()
+      || other.email?.trim()
+      || `Member ${other.id.substring(0, 8)}`;
+    return otherRaw.toLowerCase() === raw.toLowerCase();
+  });
+  const base = duplicates.length > 1 ? `${raw} · ${item.email || item.id}` : raw;
+  const isCurrent = !!(currentUserId && item.user_id === currentUserId);
+  return isCurrent ? `${base} (You)` : base;
+}
+
 export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   visible,
   balance,
@@ -112,6 +138,12 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
     getDefaultCurrency();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const chipSelectionTheme = useMemo(() => ({
+    colors: {
+      secondaryContainer: theme.colors.primaryContainer,
+      onSecondaryContainer: theme.colors.onPrimaryContainer,
+    },
+  }), [theme.colors.primaryContainer, theme.colors.onPrimaryContainer]);
 
   const [amount, setAmount] = useState("");
   const [notes, setNotes] = useState("");
@@ -150,32 +182,60 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   }, [groupMembers, currentUserId]);
 
   const editableParticipants = useMemo(() => {
-    const byId = new Map<string, { id: string; label: string }>();
+    const list: Array<{ id: string; user_id?: string | null; full_name?: string | null; email?: string | null }> = [];
+    const seen = new Set<string>();
 
     for (const member of groupMembers) {
-      if (!member.participant_id) continue;
-      byId.set(member.participant_id, {
+      if (!member.participant_id || seen.has(member.participant_id)) continue;
+      seen.add(member.participant_id);
+      list.push({
         id: member.participant_id,
-        label:
-          member.full_name ||
-          member.email ||
-          `Member ${member.participant_id.substring(0, 8)}`,
+        user_id: member.user_id,
+        full_name: member.full_name,
+        email: member.email,
       });
     }
 
     for (const participant of participants) {
-      if (!participant.id || byId.has(participant.id)) continue;
-      byId.set(participant.id, {
+      if (!participant.id || seen.has(participant.id)) continue;
+      seen.add(participant.id);
+      list.push({
         id: participant.id,
-        label:
-          participant.full_name ||
-          participant.email ||
-          `Member ${participant.id.substring(0, 8)}`,
+        user_id: participant.user_id,
+        full_name: participant.full_name,
+        email: participant.email,
       });
     }
 
-    return Array.from(byId.values());
-  }, [groupMembers, participants]);
+    return list.map((item) => ({
+      ...item,
+      label: formatParticipantLabel(item, list, currentUserId),
+    }));
+  }, [groupMembers, participants, currentUserId]);
+
+  const allMembersList = useMemo(() => {
+    return groupMembers.map((member) => ({
+      id: member.participant_id || member.user_id || "",
+      user_id: member.user_id,
+      full_name: member.full_name,
+      email: member.email,
+      participant_id: member.participant_id,
+    }));
+  }, [groupMembers]);
+
+  const availableUserList = useMemo(() => {
+    return availableUsers.map((member) => ({
+      id: member.participant_id || member.user_id || "",
+      user_id: member.user_id,
+      full_name: member.full_name,
+      email: member.email,
+      participant_id: member.participant_id,
+    }));
+  }, [availableUsers]);
+
+  const formatAvailableUserLabel = (member: { id: string; user_id?: string | null; full_name?: string | null; email?: string | null }) => {
+    return formatParticipantLabel(member, allMembersList);
+  };
 
   // Initialize form when modal becomes visible
   useEffect(() => {
@@ -435,8 +495,8 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
           keyboardVerticalOffset={insets.top}
         >
           <Appbar.Header>
-            <Appbar.Action icon="close" onPress={onDismiss} testID="settlement-form-close" />
-            <Appbar.Content title={isEditing ? "Edit Settlement" : "Settle Up"} />
+            <Appbar.Action icon="close" accessibilityLabel="Close settlement" onPress={onDismiss} testID="settlement-form-close" />
+            <Appbar.Content title={isEditing ? "Edit settlement" : "Record settlement"} />
             {isEditing && onDelete ? (
               <Appbar.Action
                 icon="delete-outline"
@@ -453,11 +513,25 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
           >
+            {!isEditing ? (
+              <Text
+                variant="bodyMedium"
+                style={{
+                  color: theme.colors.onSurfaceVariant,
+                  marginBottom: 16,
+                  paddingHorizontal: 4,
+                }}
+                testID="settle-outside-app-help"
+              >
+                {SETTLE_OUTSIDE_APP_HELP}
+              </Text>
+            ) : null}
+
             {/* Unified Settlement Header: Shows Who is Paying Who */}
             <View
               style={[
                 styles.balanceInfo,
-                { backgroundColor: theme.colors.primaryContainer },
+                { backgroundColor: theme.colors.surfaceVariant },
               ]}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -497,21 +571,21 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                      toName = member?.full_name || member?.email || "Member";
                   } else {
                     return (
-                      <Text variant="titleMedium" style={{ color: theme.colors.onPrimaryContainer, opacity: 0.6 }}>
-                        Select a member to settle with
+                      <Text variant="titleMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                        Choose who paid whom
                       </Text>
                     );
                   }
 
                   return (
                     <>
-                      <Text variant="titleMedium" style={{ color: theme.colors.onPrimaryContainer, fontWeight: 'bold' }}>
+                      <Text variant="titleMedium" style={{ color: theme.colors.onSurface, fontWeight: 'bold' }}>
                         {fromName}
                       </Text>
-                      <Text variant="titleMedium" style={{ color: theme.colors.onPrimaryContainer, marginHorizontal: 8, opacity: 0.7 }}>
-                        paying
+                      <Text variant="titleMedium" style={{ color: theme.colors.onSurfaceVariant, marginHorizontal: 8 }}>
+                        paid
                       </Text>
-                      <Text variant="titleMedium" style={{ color: theme.colors.onPrimaryContainer, fontWeight: 'bold' }}>
+                      <Text variant="titleMedium" style={{ color: theme.colors.onSurface, fontWeight: 'bold' }}>
                         {toName}
                       </Text>
                     </>
@@ -524,7 +598,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                   variant="bodyMedium"
                   style={[
                     styles.balanceAmount,
-                    { color: theme.colors.onPrimaryContainer, marginTop: 8, opacity: 0.8 },
+                    { color: theme.colors.onSurfaceVariant, marginTop: 8 },
                   ]}
                 >
                   {formatCurrency(
@@ -541,94 +615,111 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                   <Text variant="labelLarge" style={styles.label}>
                     From (payer)
                   </Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={styles.userPicker}
-                  >
-                    {editableParticipants.map((participant) => (
-                      <Button
-                        key={`from-${participant.id}`}
-                        mode={
-                          selectedFromParticipantId === participant.id
-                            ? "contained"
-                            : "outlined"
-                        }
-                        onPress={() => setSelectedFromParticipantId(participant.id)}
-                        style={styles.userButton}
-                        testID={`settlement-from-${participant.id}`}
-                      >
-                        {participant.label}
-                      </Button>
-                    ))}
-                  </ScrollView>
+                  <View style={styles.chipWrap}>
+                    {editableParticipants.map((participant) => {
+                      const isSelected = selectedFromParticipantId === participant.id;
+                      return (
+                        <Chip
+                          key={`from-${participant.id}`}
+                          selected={isSelected}
+                          onPress={() => setSelectedFromParticipantId(participant.id)}
+                          disabled={loading}
+                          showSelectedCheck
+                          style={[
+                            styles.wrapChip,
+                            !isSelected && { backgroundColor: theme.colors.surfaceVariant },
+                          ]}
+                          theme={chipSelectionTheme}
+                          testID={`settlement-from-${participant.id}`}
+                        >
+                          {participant.label}
+                        </Chip>
+                      );
+                    })}
+                  </View>
                 </View>
 
                 <View style={styles.section}>
                   <Text variant="labelLarge" style={styles.label}>
                     To (receiver)
                   </Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={styles.userPicker}
-                  >
-                    {editableParticipants.map((participant) => (
-                      <Button
-                        key={`to-${participant.id}`}
-                        mode={
-                          selectedToParticipantId === participant.id
-                            ? "contained"
-                            : "outlined"
-                        }
-                        onPress={() => setSelectedToParticipantId(participant.id)}
-                        style={styles.userButton}
-                        testID={`settlement-to-${participant.id}`}
-                      >
-                        {participant.label}
-                      </Button>
-                    ))}
-                  </ScrollView>
+                  <View style={styles.chipWrap}>
+                    {editableParticipants.map((participant) => {
+                      const isSelected = selectedToParticipantId === participant.id;
+                      return (
+                        <Chip
+                          key={`to-${participant.id}`}
+                          selected={isSelected}
+                          onPress={() => setSelectedToParticipantId(participant.id)}
+                          disabled={loading}
+                          showSelectedCheck
+                          style={[
+                            styles.wrapChip,
+                            !isSelected && { backgroundColor: theme.colors.surfaceVariant },
+                          ]}
+                          theme={chipSelectionTheme}
+                          testID={`settlement-to-${participant.id}`}
+                        >
+                          {participant.label}
+                        </Chip>
+                      );
+                    })}
+                  </View>
                 </View>
               </>
             ) : null}
 
             {!isEditing && !balance && !isAdminMode && (
-              <View style={styles.section}>
-                <Text variant="labelLarge" style={styles.label}>
-                  Settle with
-                </Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.userPicker}
-                >
-                  {availableUsers.map((member) => (
-                    <Button
-                      key={member.participant_id}
-                      mode={
-                        selectedToParticipantId === member.participant_id
-                          ? "contained"
-                          : "outlined"
-                      }
-                      onPress={() => setSelectedToParticipantId(member.participant_id || "")}
-                      style={styles.userButton}
-                    >
-                      {member.full_name ||
-                        member.email ||
-                        `Member ${member.participant_id?.substring(0, 8)}...`}
-                    </Button>
-                  ))}
-                </ScrollView>
-              </View>
+              <>
+                <View style={styles.section}>
+                  <Text variant="labelLarge" style={styles.label}>
+                    From
+                  </Text>
+                  <TextInput
+                    mode="outlined"
+                    value="You"
+                    accessibilityLabel="From (payer)"
+                    editable={false}
+                    right={<TextInput.Icon icon="account-outline" accessible={false} importantForAccessibility="no" />}
+                    testID="settlement-from-you"
+                  />
+                </View>
+                <View style={styles.section}>
+                  <Text variant="labelLarge" style={styles.label}>
+                    To
+                  </Text>
+                  <View style={styles.chipWrap}>
+                    {availableUserList.map((member) => {
+                      const isSelected = selectedToParticipantId === member.participant_id;
+                      return (
+                        <Chip
+                          key={member.participant_id}
+                          selected={isSelected}
+                          onPress={() => setSelectedToParticipantId(member.participant_id || "")}
+                          disabled={loading}
+                          showSelectedCheck
+                          style={[
+                            styles.wrapChip,
+                            !isSelected && { backgroundColor: theme.colors.surfaceVariant },
+                          ]}
+                          theme={chipSelectionTheme}
+                          testID={`settlement-to-${member.participant_id}`}
+                        >
+                          {formatAvailableUserLabel(member)}
+                        </Chip>
+                      );
+                    })}
+                  </View>
+                </View>
+              </>
             )}
 
             <View style={styles.section}>
               <Text variant="labelLarge" style={styles.label}>
-                Amount ({getCurrencySymbol(effectiveDefaultCurrency)})
+                Amount
               </Text>
               <TextInput
-                label="Settlement amount"
+                label="Amount"
                 value={amount}
                 onChangeText={(text) => {
                   setAmount(text);
@@ -637,7 +728,9 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                 keyboardType="decimal-pad"
                 error={!!amountError}
                 mode="outlined"
+                placeholder="$ 0.00"
                 testID="settlement-amount-input"
+                accessibilityHint={amountError || undefined}
                 left={
                   <TextInput.Affix
                     text={getCurrencySymbol(effectiveDefaultCurrency)}
@@ -647,6 +740,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
               {amountError ? (
                 <Text
                   variant="bodySmall"
+                  accessibilityLiveRegion="polite"
                   style={[styles.errorText, { color: theme.colors.error }]}
                 >
                   {amountError}
@@ -677,16 +771,16 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
 
             <View style={styles.section}>
               <Text variant="labelLarge" style={styles.label}>
-                Notes (optional)
+                Note
               </Text>
               <TextInput
-                label="Add a note about this settlement"
+                label="What's this payment for?"
                 value={notes}
                 onChangeText={setNotes}
                 mode="outlined"
                 multiline
                 numberOfLines={3}
-                placeholder="e.g., Paid via Venmo"
+                placeholder="What's this payment for?"
                 testID="settlement-notes-input"
               />
             </View>
@@ -699,20 +793,16 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                 disabled={
                   loading ||
                   !amount ||
-                  (!isEditing && !isAdminMode && !selectedToParticipantId) ||
+                  (!isEditing && !isAdminMode && !selectedToParticipantId && !balance) ||
                   (isEditing &&
                     (!selectedFromParticipantId || !selectedToParticipantId))
                 }
-                style={styles.saveButton}
+                style={[styles.saveButton, { borderRadius: 8 }]}
+                icon={isEditing ? undefined : "arrow-right"}
+                contentStyle={{ flexDirection: "row-reverse" }}
                 testID="settlement-save-button"
               >
-                {isEditing
-                  ? "Update Settlement"
-                  : isAdminMode
-                  ? "Record Payment"
-                  : isPaying
-                  ? "Mark as Paid"
-                  : "Mark as Received"}
+                {isEditing ? UPDATE_SETTLEMENT_LABEL : RECORD_SETTLEMENT_LABEL}
               </Button>
               <Button
                 mode="outlined"
@@ -871,6 +961,14 @@ const styles = StyleSheet.create({
   label: {
     marginBottom: 8,
     fontWeight: "600",
+  },
+  chipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  wrapChip: {
+    marginBottom: 4,
   },
   userPicker: {
     marginTop: 8,

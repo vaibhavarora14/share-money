@@ -226,6 +226,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const {
     data: balancesData,
     isLoading: balancesLoading,
+    error: balancesError,
     refetch: refetchBalances,
   } = useBalances(initialGroup.id);
   const {
@@ -860,6 +861,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   };
 
   const handleSettleUp = (balance: Balance) => {
+    if (!isActiveMember || balancesError) return;
     setEditingSettlement(null);
     setSettlingBalance(balance);
     setShowSettlementForm(true);
@@ -1228,6 +1230,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                   }}
                   title="People"
                   leadingIcon="account-group"
+                  testID="group-menu-people"
                 />
                 {isOwner && (
                   <Menu.Item
@@ -1387,19 +1390,29 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               loading={balancesLoading}
               statsLoading={groupStatsLoading}
               defaultCurrency={getDefaultCurrency()}
-              onSettlePress={(balance) => {
-                  setEditingSettlement(null);
-                  setSettlingBalance(balance);
-                  setShowSettlementForm(true);
-              }}
+              activeMemberCount={activeMemberCount}
+              balanceError={!!balancesError}
+              onSettlePress={isActiveMember && !balancesError ? handleSettleUp : undefined}
               onMyCostsPress={() => handleStatNavigation("my-costs")}
               onTotalCostsPress={() => handleStatNavigation("total-costs")}
               onOpenCurrencySettings={() => setShowCurrencySettings(true)}
             />
 
             <View
-              style={{ paddingHorizontal: 16, marginTop: 16, marginBottom: 0 }}
+              style={{
+                paddingHorizontal: 16,
+                marginTop: 8,
+                marginBottom: 4,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
             >
+              <Text variant="titleMedium" style={{ fontWeight: "700", color: theme.colors.onSurface }}>
+                Recent expenses
+              </Text>
+            </View>
+            <View style={{ paddingHorizontal: 16, marginBottom: 0 }}>
               <SegmentedButtons
                 value={listMode}
                 onValueChange={(val: string) =>
@@ -1611,11 +1624,12 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           icon={preferAddPeopleFab ? "account-plus" : "plus"}
           style={[
             styles.fab,
-            { backgroundColor: theme.colors.primaryContainer },
+            { backgroundColor: theme.colors.primary },
           ]}
-          color={theme.colors.onPrimaryContainer}
+          color={theme.colors.onPrimary}
           onPress={preferAddPeopleFab ? onAddMember : onAddTransaction}
-          label={preferAddPeopleFab ? "Add people" : "Add Expense"}
+          label={preferAddPeopleFab ? "Add people" : undefined}
+          accessibilityLabel={preferAddPeopleFab ? "Add people" : "Add expense"}
         />
       )}
 
@@ -1947,6 +1961,6 @@ const styles = StyleSheet.create({
   },
   filterChip: {
     marginRight: 8,
-    height: 32,
+    minHeight: 32,
   },
 });

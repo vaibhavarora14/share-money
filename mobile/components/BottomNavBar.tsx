@@ -171,8 +171,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flexDirection: "row",
-    height: 80,
-    paddingBottom: 0,
+    minHeight: 80,
   },
   tab: {
     flex: 1,
@@ -180,6 +179,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   tabContent: {
+    paddingVertical: 14,
     alignItems: "center",
     justifyContent: "center",
     width: "100%",
@@ -200,7 +200,7 @@ const styles = StyleSheet.create({
     top: -2,
     right: 8,
     minWidth: 16,
-    height: 16,
+    minHeight: 16,
     borderRadius: 8,
     paddingHorizontal: 4,
     alignItems: "center",

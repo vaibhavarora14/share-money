@@ -1,6 +1,15 @@
 import React from "react";
 import { Pressable, View } from "react-native";
-import { ActivityIndicator, Button, Icon, Surface, Text, useTheme } from "react-native-paper";
+import {
+  ActivityIndicator,
+  Avatar,
+  Button,
+  Icon,
+  Surface,
+  Text,
+  TouchableRipple,
+  useTheme,
+} from "react-native-paper";
 import { useAuth } from "../contexts/AuthContext";
 import { Participant, Settlement, Transaction } from "../types";
 import { formatCurrency, getDefaultCurrency } from "../utils/currency";
@@ -311,20 +320,26 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
 
                       <View style={styles.subRow}>
                         <Text
-                          variant="labelSmall"
-                          style={[styles.typeLabel, { color: theme.colors.primary }]}
-                        >
-                          Expense
-                        </Text>
-                        <Text
                           variant="bodySmall"
                           numberOfLines={1}
                           style={{ color: theme.colors.onSurfaceVariant, flex: 1 }}
                         >
-                          {" "}
-                          • {dateString} • {payerName} paid
-                          {unequalSplit ? " • Unequal split" : ""}
+                          {payerName}
+                          {unequalSplit ? " · Unequal" : ""}
                         </Text>
+                        {dateString ? (
+                          <Text
+                            variant="bodySmall"
+                            style={{ color: theme.colors.onSurfaceVariant, marginRight: 8 }}
+                          >
+                            {dateString}
+                          </Text>
+                        ) : null}
+                        <Icon
+                          source="chevron-right"
+                          size={18}
+                          color={theme.colors.onSurfaceVariant}
+                        />
                       </View>
                     </View>
                   </View>
@@ -355,17 +370,68 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
             </View>
           )}
         </View>
+      ) : emptyCopy.secondaryAction === "add_expense" &&
+        emptyCopy.primaryAction === "add_people" ? (
+        <Surface
+          style={[
+            styles.soloEmptyCard,
+            {
+              backgroundColor: theme.colors.surface,
+              borderColor: theme.colors.outlineVariant,
+            },
+          ]}
+          elevation={0}
+          testID="transactions-empty-state"
+        >
+          <View style={styles.soloEmptyTop}>
+            <Text
+              variant="titleMedium"
+              style={{ color: theme.colors.onSurface, fontWeight: "700", marginBottom: 6 }}
+            >
+              {emptyCopy.title}
+            </Text>
+            <Text
+              variant="bodyMedium"
+              style={{ color: theme.colors.onSurfaceVariant, textAlign: "center", marginBottom: 16 }}
+            >
+              {emptyCopy.body}
+            </Text>
+            <Avatar.Icon
+              size={48}
+              icon="account-outline"
+              style={{ backgroundColor: theme.colors.surfaceVariant }}
+              color={theme.colors.onSurfaceVariant}
+            />
+            {/* Primary Add people is the FAB — in-card only offers the ghost secondary. */}
+          </View>
+
+          {canAct && emptyCopy.secondaryLabel ? (
+            <TouchableRipple
+              onPress={() => runEmptyAction("add_expense")}
+              testID="empty-add-expense-anyway"
+              accessibilityRole="button"
+              accessibilityLabel={emptyCopy.secondaryLabel}
+              style={styles.soloEmptySecondary}
+            >
+              <View style={styles.soloEmptySecondaryRow}>
+                <Text
+                  variant="bodyMedium"
+                  style={{ color: theme.colors.tertiary, fontWeight: "600" }}
+                >
+                  {emptyCopy.secondaryLabel}
+                </Text>
+              </View>
+            </TouchableRipple>
+          ) : null}
+        </Surface>
       ) : (
         <View
           style={[styles.emptyState, { backgroundColor: theme.colors.surfaceVariant }]}
           testID="transactions-empty-state"
         >
-          <Text style={{ fontSize: 40, marginBottom: 16 }}>
-            {filter === "payments" ? "🤝" : activeMemberCount <= 1 ? "👥" : "💸"}
-          </Text>
           <Text
             variant="titleMedium"
-            style={{ color: theme.colors.onSurface, marginBottom: 8 }}
+            style={{ color: theme.colors.onSurface, marginBottom: 8, fontWeight: "700" }}
           >
             {emptyCopy.title}
           </Text>
@@ -390,19 +456,10 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
                     ? "empty-add-people"
                     : "empty-add-expense"
                 }
+                style={{ borderRadius: 8 }}
               >
                 {emptyCopy.primaryLabel}
               </Button>
-              {emptyCopy.secondaryLabel && emptyCopy.secondaryAction ? (
-                <Button
-                  mode="text"
-                  onPress={() => runEmptyAction(emptyCopy.secondaryAction)}
-                  testID="empty-add-expense-anyway"
-                  style={styles.emptySecondaryButton}
-                >
-                  {emptyCopy.secondaryLabel}
-                </Button>
-              ) : null}
             </View>
           ) : null}
         </View>

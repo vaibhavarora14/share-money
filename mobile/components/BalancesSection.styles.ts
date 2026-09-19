@@ -62,4 +62,30 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 16,
   },
+  summaryStrip: {
+    flexDirection: "row",
+    borderRadius: 8,
+    borderWidth: 1,
+    overflow: "hidden",
+    minHeight: 104,
+  },
+  summaryHalf: {
+    flex: 1,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    gap: 4,
+    justifyContent: "center",
+  },
+  summaryDivider: {
+    width: StyleSheet.hairlineWidth,
+    alignSelf: "stretch",
+  },
+  summaryIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
 });

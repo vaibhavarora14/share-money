@@ -1,15 +1,16 @@
 import { useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useState } from "react";
-import { Platform, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
+import { Platform, ScrollView, StyleSheet, TouchableOpacity, useWindowDimensions, View } from "react-native";
 import {
   ActivityIndicator,
   Appbar,
   Button,
-  FAB,
+  Icon,
   IconButton,
   List,
   Surface,
   Text,
+  TouchableRipple,
   useTheme,
 } from "react-native-paper";
 import { GroupBalanceBadge } from "../components/GroupBalanceBadge";
@@ -56,10 +57,13 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   onNotificationsPress,
 }) => {
   const [showCreateGroup, setShowCreateGroup] = useState<boolean>(false);
+  const [newGroupHeight, setNewGroupHeight] = useState(56);
   const [formerGroupsExpanded, setFormerGroupsExpanded] = useState<boolean>(false);
   const [archivedGroupsExpanded, setArchivedGroupsExpanded] = useState<boolean>(false);
   const [seenGroupIds, setSeenGroupIds] = useState<Set<string> | null>(null);
   const theme = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const expandedText = fontScale > 1;
   const queryClient = useQueryClient();
   const { signOut, user } = useAuth();
   const notifications = useNotifications();
@@ -162,12 +166,12 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
     >
       <TouchableOpacity
         testID={`group-card-${group.id}`}
-        style={styles.groupTouchable}
+        style={[styles.groupTouchable, expandedText && styles.groupTouchableExpanded]}
         onPress={() => handleGroupPress(group)}
         activeOpacity={0.7}
         accessibilityLabel={`${group.name}${isNew ? ", new group" : ""}${hasUnreadActivity ? `, ${unreadActivityCount} unread ${unreadActivityCount === 1 ? "notification" : "notifications"}` : ""}${group.archived_at ? ", archived" : ""}${group.user_status === "left" ? ", former member" : ""}`}
       >
-        <View style={styles.groupMainContent}>
+        <View style={[styles.groupMainContent, expandedText && styles.groupMainContentExpanded]}>
           <View style={styles.groupIconContainer}>
             <Surface
               style={[
@@ -196,7 +200,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                   styles.groupName,
                   group.user_status === 'left' && { color: theme.colors.onSurfaceVariant }
                 ]}
-                numberOfLines={1}
+                numberOfLines={expandedText ? undefined : 1}
               >
                 {group.name}
               </Text>
@@ -230,7 +234,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                 styles.groupSubtitle,
                 { color: theme.colors.onSurfaceVariant },
               ]}
-              numberOfLines={1}
+              numberOfLines={expandedText ? undefined : 1}
               ellipsizeMode="tail"
             >
               {description}
@@ -240,6 +244,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
 
         {/* Balance Badge */}
         <GroupBalanceBadge 
+          style={expandedText ? styles.balanceBadgeExpanded : undefined}
           balanceData={balancesData?.group_balances?.find(gb => gb.group_id === group.id)} 
           currentUserId={user?.id}
         />
@@ -478,17 +483,34 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
           )}
 
           {/* Bottom padding for FAB */}
-          <View style={{ height: 80 }} />
+          <View testID="new-group-clearance" style={{ height: newGroupHeight + 24 }} />
         </ScrollView>
       )}
 
-      <FAB
-        icon="plus"
-        style={[styles.fab, { backgroundColor: theme.colors.primaryContainer }]}
-        color={theme.colors.onPrimaryContainer}
-        onPress={() => setShowCreateGroup(true)}
-        label="New Group"
-      />
+      {/* Paper's extended FAB fixes its inner height; let the label size this action. */}
+      <View style={styles.fab} pointerEvents="box-none">
+        <Surface
+          testID="new-group-surface"
+          style={[styles.fabSurface, { backgroundColor: theme.colors.primaryContainer }]}
+          elevation={3}
+          onLayout={({ nativeEvent }) => setNewGroupHeight(nativeEvent.layout.height)}
+        >
+          <TouchableRipple
+            testID="new-group-action"
+            style={styles.fabRipple}
+            onPress={() => setShowCreateGroup(true)}
+            accessibilityRole="button"
+            accessibilityLabel="New Group"
+          >
+            <View style={styles.fabContent} pointerEvents="none">
+              <Icon source="plus" size={24} color={theme.colors.onPrimaryContainer} />
+              <Text variant="labelLarge" style={[styles.fabLabel, { color: theme.colors.onPrimaryContainer }]}>
+                New Group
+              </Text>
+            </View>
+          </TouchableRipple>
+        </Surface>
+      </View>
 
       <CreateGroupScreen
         visible={showCreateGroup}
@@ -543,8 +565,8 @@ const styles = StyleSheet.create({
     marginRight: 16,
   },
   groupIcon: {
-    width: 48,
-    height: 48,
+    minWidth: 48,
+    minHeight: 48,
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
@@ -596,10 +618,30 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: "absolute",
-    margin: 16,
-    right: 0,
-    bottom: 10,
+    left: 16,
+    right: 16,
+    bottom: 26,
+    alignItems: "flex-end",
+  },
+  fabSurface: {
+    maxWidth: "100%",
     borderRadius: 8,
+  },
+  fabRipple: {
+    borderRadius: 8,
+    overflow: "hidden",
+  },
+  fabContent: {
+    minHeight: 56,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  fabLabel: {
+    marginHorizontal: 8,
+    flexShrink: 1,
   },
   // New Styles
   groupSubtitle: {
@@ -614,6 +656,20 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingRight: 8,
     minWidth: 0,
+  },
+  // Give enlarged text the row width instead of competing with the balance.
+  groupTouchableExpanded: {
+    flexDirection: "column",
+    alignItems: "stretch",
+  },
+  groupMainContentExpanded: {
+    flex: 0,
+    width: "100%",
+  },
+  balanceBadgeExpanded: {
+    alignSelf: "flex-start",
+    marginTop: 12,
+    maxWidth: "100%",
   },
   accordion: {
     marginTop: 12,
