@@ -193,6 +193,10 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   const personShort = (balance: Balance) =>
     shortName(balance.full_name, balance.email);
 
+  const isSettled = !balanceError && !dashboardLoading && Boolean(currentUserId)
+    && settlementRows.length === 0
+    && !(unifyEnabled && myUnified && myUnified.missing.length > 0);
+
   const renderSettlementRows = () => {
     if (balanceError) {
       return (
@@ -224,7 +228,8 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
         );
       }
       return (
-        <View style={styles.settlementStatus}>
+        <View style={styles.settledInline} testID="group-settled-inline">
+          <MaterialCommunityIcons name="check-circle-outline" size={16} color={theme.colors.onSurfaceVariant} accessible={false} />
           <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
             All settled
           </Text>
@@ -379,7 +384,9 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
         </View>
       ) : null}
 
-      {balanceError || dashboardLoading || activeMemberCount > 1 ? (
+      {balanceError || dashboardLoading || activeMemberCount > 1 ? isSettled ? (
+        <View testID="group-settlement-rows">{renderSettlementRows()}</View>
+      ) : (
         <Surface
           style={[styles.settlementList, { borderColor: theme.colors.outlineVariant, backgroundColor: theme.colors.surface }]}
           elevation={0}
@@ -452,6 +459,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
+  },
+  settledInline: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 2,
   },
   settlementStatus: {
     paddingVertical: 16,

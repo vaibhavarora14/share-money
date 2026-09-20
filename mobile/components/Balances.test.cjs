@@ -239,6 +239,15 @@ test("settled multi-member group shows quiet status without a settlement action"
     const panel = byId(tree, "group-settlement-rows");
     assert.ok(panel, "settled group must not silently hide its status");
     assert.match(text(panel), /All settled/);
+    assert.equal(panel.type, "View", "settled status must not use a card surface");
+    const status = byId(panel, "group-settled-inline");
+    assert.ok(status);
+    assert.equal(status.props.style.flexDirection, "row");
+    assert.equal(status.props.style.minHeight, undefined);
+    assert.equal(status.props.style.backgroundColor, undefined);
+    assert.equal(status.props.style.borderWidth, undefined);
+    assert.ok(status.props.style.paddingVertical <= 4);
+    assert.ok(nodes(status).some(n => n.type === "Icon" && n.props.name === "check-circle-outline"));
     assert.equal(settlementRows(tree).length, 0);
     assert.equal(nodes(panel).some(n => n.props.onPress || n.props.accessibilityRole === "button"), false);
   }
