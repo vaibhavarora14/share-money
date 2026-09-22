@@ -28,6 +28,7 @@ report(new Set(pages.map((page) => page.path)).size === pages.length, "SEO paths
 
 const playStoreUrl =
   "https://play.google.com/store/apps/details?id=com.vaibhavarora.sharemoney&pcampaignid=web_share";
+const appStoreUrl = "https://apps.apple.com/app/id6755923591";
 const homePage = pages.find((page) => page.path === "/");
 report(Boolean(homePage), "Home page must exist in seo-content.json.");
 
@@ -38,6 +39,17 @@ for (const pagePath of iosFaqPaths) {
   report(
     Boolean(page?.faqs.some((faq) => faq.question.includes("App Store"))),
     `${pagePath}: FAQ must include App Store status.`,
+  );
+  report(
+    Boolean(
+      page?.faqs.some(
+        (faq) =>
+          faq.question.includes("App Store") &&
+          /live on the App Store/i.test(faq.answer) &&
+          !/pending review|waiting for App Store review/i.test(faq.answer),
+      ),
+    ),
+    `${pagePath}: App Store FAQ must say iOS is live.`,
   );
 }
 
@@ -62,13 +74,22 @@ for (const page of pages) {
   report(html.includes(`<h1>${page.heading}</h1>`), `${page.path}: static H1 does not match route content.`);
   report(html.includes('type="application/ld+json"'), `${page.path}: missing structured data.`);
   report(html.includes(playStoreUrl), `${page.path}: missing Google Play store link.`);
-  report(html.includes("App Store listing pending review"), `${page.path}: missing soft iOS App Store status.`);
-  report(!html.includes("apps.apple.com"), `${page.path}: must not link a public App Store install URL yet.`);
+  report(html.includes(appStoreUrl), `${page.path}: missing App Store install URL.`);
+  report(html.includes("Download on the App Store"), `${page.path}: missing App Store CTA copy.`);
+  report(!html.includes("App Store listing pending review"), `${page.path}: stale pending-review iOS copy remains.`);
   report(html.includes('data-seo-cta'), `${page.path}: missing SSR CTA tracking markers.`);
   report(html.includes('data-platform="android"'), `${page.path}: missing android SSR CTA marker.`);
   report(html.includes('data-platform="ios"'), `${page.path}: missing ios SSR CTA marker.`);
   report(html.includes('data-platform="web"'), `${page.path}: missing web SSR CTA marker.`);
   report(html.includes('data-placement="ssr_fallback"'), `${page.path}: missing SSR CTA placement.`);
+
+  if (page.kind === "home") {
+    report(
+      html.includes('"operatingSystem":"iOS, Android, Web"') ||
+        html.includes('"operatingSystem": "iOS, Android, Web"'),
+      `${page.path}: SoftwareApplication JSON-LD must include iOS, Android, Web.`,
+    );
+  }
 
   for (const relatedId of page.related) {
     const related = pages.find((candidate) => candidate.id === relatedId);

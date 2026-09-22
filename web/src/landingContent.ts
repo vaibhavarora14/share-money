@@ -69,10 +69,10 @@ export const platformDestinations: PlatformDestination[] = [
   },
   {
     platform: "ios",
-    label: "Open on iOS",
-    status: "iOS | App Store review",
-    href: "https://sharedmoney.app/app",
-    ariaLabel: "Open SharedMoney on iPhone while the App Store listing is in review",
+    label: "Get the iOS app",
+    status: "iOS | Available now",
+    href: "https://apps.apple.com/app/id6755923591",
+    ariaLabel: "Download SharedMoney for iOS from the App Store",
   },
   {
     platform: "web",
