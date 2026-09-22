@@ -18,8 +18,7 @@ export function InstallSection({
             <p className="kicker kicker-inverse">Free to use</p>
             <h2>Start the group. Keep the money part simple.</h2>
             <p>
-              Use SharedMoney on the web or install the Android app from Google Play.
-              iOS App Store listing is pending review — open the web app on iPhone in the meantime.
+              Use SharedMoney on the web, or install from Google Play and the App Store.
             </p>
           </div>
         </div>
