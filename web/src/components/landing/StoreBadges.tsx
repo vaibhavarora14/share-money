@@ -34,9 +34,9 @@ export function StoreBadges({ placement }: { placement: string }) {
         target="_blank"
         rel="noopener noreferrer"
         aria-label={iosDestination.ariaLabel}
-        onClick={() => trackCtaClick(iosDestination, `${placement}_ios_note`)}
+        onClick={() => trackCtaClick(iosDestination, `${placement}_ios`)}
       >
-        iOS: App Store listing pending review
+        Download on the App Store
       </a>
     </div>
   );
