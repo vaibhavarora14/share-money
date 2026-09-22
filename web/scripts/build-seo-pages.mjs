@@ -10,6 +10,7 @@ const siteUrl = "https://sharedmoney.app";
 const appUrl = `${siteUrl}/app`;
 const playStoreUrl =
   "https://play.google.com/store/apps/details?id=com.vaibhavarora.sharemoney&pcampaignid=web_share";
+const appStoreUrl = "https://apps.apple.com/app/id6755923591";
 const ogImage = `${siteUrl}/og-sharedmoney.png`;
 const pages = JSON.parse(await readFile(contentPath, "utf8"));
 const pagesById = new Map(pages.map((page) => [page.id, page]));
@@ -42,7 +43,7 @@ function ctaMarkup(page) {
   return [
     `<p><a ${ctaAttrs("web")} href="${webHref}">Open the SharedMoney web app</a></p>`,
     `<p><a ${ctaAttrs("android")} href="${playStoreUrl}">Get it on Google Play</a></p>`,
-    `<p>iOS: App Store listing pending review — <a ${ctaAttrs("ios")} href="${appUrl}">use the web app on iPhone</a></p>`,
+    `<p><a ${ctaAttrs("ios")} href="${appStoreUrl}">Download on the App Store</a></p>`,
   ].join("");
 }
 
@@ -104,7 +105,7 @@ function structuredData(page) {
           name: "SharedMoney",
           url: siteUrl,
           applicationCategory: "FinanceApplication",
-          operatingSystem: "Android, Web",
+          operatingSystem: "iOS, Android, Web",
           offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
           description: page.description,
         },
