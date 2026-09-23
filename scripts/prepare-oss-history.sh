@@ -38,15 +38,17 @@ function check_history() {
   local found_count=0
 
   for email in "${TARGET_EMAILS[@]}"; do
-    echo -n "  Checking for '${email}' in commit messages & diffs... "
+    echo -n "  Checking for '${email}'... "
     local match_count
     match_count=$(git log --all -S "${email}" --oneline 2>/dev/null | wc -l | tr -d ' ')
     local author_count
     author_count=$(git log --all --author="${email}" --oneline 2>/dev/null | wc -l | tr -d ' ')
+    local msg_count
+    msg_count=$(git log --all --grep="${email}" --oneline 2>/dev/null | wc -l | tr -d ' ')
 
-    if [ "$match_count" -gt 0 ] || [ "$author_count" -gt 0 ]; then
-      echo "FOUND (${author_count} author commits, ${match_count} content diff commits)"
-      found_count=$((found_count + match_count + author_count))
+    if [ "$match_count" -gt 0 ] || [ "$author_count" -gt 0 ] || [ "$msg_count" -gt 0 ]; then
+      echo "FOUND (${author_count} author commits, ${msg_count} commit messages, ${match_count} content diff commits)"
+      found_count=$((found_count + match_count + author_count + msg_count))
     else
       echo "CLEAN (0 matches)"
     fi
@@ -127,11 +129,13 @@ EOF
     git-filter-repo \
       --mailmap "${MAILMAP_FILE}" \
       --replace-text "${REPLACEMENTS_FILE}" \
+      --replace-message "${REPLACEMENTS_FILE}" \
       --force
   else
     python3 -m git_filter_repo \
       --mailmap "${MAILMAP_FILE}" \
       --replace-text "${REPLACEMENTS_FILE}" \
+      --replace-message "${REPLACEMENTS_FILE}" \
       --force
   fi
 
