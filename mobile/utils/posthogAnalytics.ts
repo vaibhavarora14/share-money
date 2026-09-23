@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import PostHog from "posthog-react-native";
 import { Platform } from "react-native";
 import { resolvePostHogEnvConfig } from "./posthogConfig";
+import { ANALYTICS_EVENTS } from "./posthogEvents";
 import {
   analyticsPersonPropertiesKey,
   buildAnalyticsPersonProperties,
@@ -18,6 +19,8 @@ let client: PostHog | null = null;
 let identifiedUserId: string | null = null;
 let identifiedPersonKey: string | null = null;
 let appOpenCaptured = false;
+/** When a local seed/E2E auth user is signed in, drop all product captures. */
+let suppressCaptureForSeedUser = false;
 
 function sanitizeProperties(
   properties?: AnalyticsProperties,
@@ -67,7 +70,7 @@ export function initializePostHog(): boolean {
   });
 
   if (!appOpenCaptured) {
-    client.capture("mobile_app_opened", {
+    client.capture(ANALYTICS_EVENTS.MOBILE_APP_OPENED, {
       platform: Platform.OS,
     });
     appOpenCaptured = true;
@@ -84,13 +87,38 @@ export function captureAnalyticsEvent(
   event: string,
   properties?: AnalyticsProperties,
 ): void {
-  if (!client) return;
+  if (!client || suppressCaptureForSeedUser) return;
   client.capture(event, sanitizeProperties(properties));
+}
+
+/**
+ * Capture a product/activation event only after the signed-in auth user is the
+ * PostHog distinct_id. Skips seed/E2E identities and unsigned-in callers so
+ * funnels are not polluted by anonymous or placeholder ids.
+ */
+export function captureIdentifiedAnalyticsEvent(
+  userId: string | null | undefined,
+  event: string,
+  properties?: AnalyticsProperties,
+  person?: AnalyticsPersonProperties,
+): void {
+  if (!client || !userId) return;
+  if (isSeedAuthUserId(userId)) return;
+
+  if (identifiedUserId !== userId) {
+    identifyAnalyticsUser(userId, person);
+  }
+
+  // identifyAnalyticsUser no-ops for seed users; refuse capture if identity
+  // still does not match the signed-in auth user.
+  if (identifiedUserId !== userId) return;
+
+  captureAnalyticsEvent(event, properties);
 }
 
 export function captureScreenView(screen: string): void {
   if (!client || !screen) return;
-  captureAnalyticsEvent("mobile_screen_viewed", {
+  captureAnalyticsEvent(ANALYTICS_EVENTS.MOBILE_SCREEN_VIEWED, {
     screen,
     platform: Platform.OS,
   });
@@ -137,6 +165,7 @@ export function identifyAnalyticsUser(
   }
   identifiedUserId = userId;
   identifiedPersonKey = nextPersonKey;
+  suppressCaptureForSeedUser = false;
 }
 
 export function resetAnalyticsUser(): void {
@@ -161,21 +190,24 @@ export function syncAnalyticsAuth(
   if (!client) return;
 
   if (userId) {
-    // Never attach seed/E2E identities to Production analytics.
+    // Never attach seed/E2E identities to Production analytics — and do not
+    // leave product events on the anonymous distinct_id either.
     if (isSeedAuthUserId(userId)) {
+      suppressCaptureForSeedUser = true;
       if (identifiedUserId) {
         resetAnalyticsUser();
       }
       return;
     }
 
+    suppressCaptureForSeedUser = false;
     const isNewIdentity = identifiedUserId !== userId;
     identifyAnalyticsUser(userId, {
       email: properties?.email,
       name: properties?.name,
     });
     if (isNewIdentity) {
-      captureAnalyticsEvent("auth_succeeded", {
+      captureAnalyticsEvent(ANALYTICS_EVENTS.AUTH_SUCCEEDED, {
         auth_provider: properties?.auth_provider || "unknown",
         platform: Platform.OS,
       });
@@ -183,6 +215,7 @@ export function syncAnalyticsAuth(
     return;
   }
 
+  suppressCaptureForSeedUser = false;
   if (identifiedUserId) {
     resetAnalyticsUser();
   }

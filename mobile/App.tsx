@@ -119,9 +119,11 @@ import {
 } from "./utils/notificationGroupNavigation";
 import { resolveNotificationRoute } from "./utils/notificationRouting";
 import {
+  captureIdentifiedAnalyticsEvent,
   captureScreenView,
   initializePostHog,
 } from "./utils/posthogAnalytics";
+import { ANALYTICS_EVENTS } from "./utils/posthogEvents";
 import {
   getSentryRuntimeTags,
   isSentryDiagnosticUrl,
@@ -307,9 +309,19 @@ function AppContent() {
           type: "error",
           message: "This invite link has expired. Ask for a new one.",
         });
+      } else if (result.status === "joined") {
+        // Activation: join path users never fire group_created; emit group_joined
+        // so funnels can attribute invite/share entry separately from create.
+        captureIdentifiedAnalyticsEvent(
+          user?.id,
+          ANALYTICS_EVENTS.GROUP_JOINED,
+          {
+            group_id: result.group_id,
+            join_method: "invite_link",
+          },
+        );
       }
-      // 'joined' and 'already_member' are intentionally silent: the joined
-      // group appears in the list with a NEW tag until first opened.
+      // 'already_member' stays quiet: the group is already in their list.
     } catch (err) {
       logError(err, { context: "redeemInviteToken" });
       setBanner({ type: "error", message: getInviteLinkErrorMessage(err) });
@@ -320,7 +332,7 @@ function AppContent() {
       await AsyncStorage.removeItem(PENDING_INVITE_TOKEN_KEY).catch(() => {});
       clearJoinPathFromWebUrl();
     }
-  }, []);
+  }, [user?.id]);
 
   const openGroupDeepLink = React.useCallback(async (
     groupId: string,
