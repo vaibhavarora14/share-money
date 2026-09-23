@@ -3,6 +3,13 @@ import { platformDestinations } from "./landingContent";
 import type { SeoPage, SeoTool } from "./seoPages";
 import { detectDevice } from "./utils/deviceDetection";
 
+/**
+ * Landing / SEO analytics only (Vite site).
+ * Product activation events for SharedMoney Production PostHog project 563625
+ * (`auth_succeeded`, `group_created`, `group_joined`, `expense_created`, …)
+ * are emitted from the Expo app — see `mobile/utils/posthogEvents.ts`.
+ */
+
 type PostHogClient = typeof import("posthog-js").default;
 
 let analyticsRequested = false;

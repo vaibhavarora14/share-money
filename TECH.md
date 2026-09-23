@@ -210,11 +210,26 @@ supabase start
 
 ### Mobile analytics (PostHog)
 
-The Expo app uses `posthog-react-native`, gated on `EXPO_PUBLIC_POSTHOG_KEY`
-(host defaults to `https://us.i.posthog.com`). Point builds at the dedicated
-**SharedMoney Production** PostHog project (`563625`) — not Paisewise/Glass Money.
-First enablement requires a new store/dev-client binary (native Expo peer
-modules); see `mobile/EXPO_PUBLISH.md`.
+The Expo app (iOS, Android, and Expo web) uses `posthog-react-native`, gated on
+`EXPO_PUBLIC_POSTHOG_KEY` (host defaults to `https://us.i.posthog.com`). Point
+builds at the dedicated **SharedMoney Production** PostHog project (`563625`) —
+not Paisewise/Glass Money. First enablement requires a new store/dev-client
+binary (native Expo peer modules); see `mobile/EXPO_PUBLISH.md`.
+
+Canonical product event names for project `563625` (see
+`mobile/utils/posthogEvents.ts`):
+
+| Event | When |
+| --- | --- |
+| `auth_succeeded` | Signed-in identity established (`$identify` just before) |
+| `group_created` | User creates a group |
+| `group_joined` | User joins via invite / share link |
+| `expense_created` | User creates an expense (**not** `expense_added`) |
+| `settlement_recorded` | User records a settlement |
+
+Activation captures run only after the PostHog distinct_id matches the Supabase
+auth user id. Local seed/E2E auth users (`supabase/seed.sql`) never identify
+and never emit product events into Production.
 
 ## Deployment
 
