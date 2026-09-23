@@ -12,7 +12,7 @@ netlify/node_modules/
 .env.*.local
 netlify/.env
 
-# Build outputs
+# Build outputs & bundles
 dist/
 build/
 *.log
@@ -20,6 +20,7 @@ releases/
 *.apk
 *.aab
 *.ipa
+*.bundle
 
 # OS files
 .DS_Store
