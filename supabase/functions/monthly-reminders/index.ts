@@ -296,40 +296,93 @@ async function reserveDelivery(
   return { id: (data as { id: string }).id, skipped: false };
 }
 
-async function sendReminderEmail(email: ReminderEmail): Promise<string | null> {
-  const resendApiKey = requireSecret('RESEND_API_KEY');
-  const fromEmail = requireSecret('REMINDER_FROM_EMAIL');
+export interface EmailProvider {
+  send(email: ReminderEmail, fromEmail: string): Promise<string | null>;
+}
 
-  const response = await fetch(RESEND_EMAIL_URL, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${resendApiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: fromEmail,
-      to: [email.to],
-      subject: email.subject,
-      html: email.html,
-      text: email.text,
-    }),
-  });
+export class ResendEmailProvider implements EmailProvider {
+  private apiKey: string;
 
-  const responseText = await response.text();
-  let data: SendResult | null = null;
-  if (responseText) {
-    try {
-      data = JSON.parse(responseText) as SendResult;
-    } catch {
-      data = { error: responseText };
+  constructor(apiKey: string) {
+    this.apiKey = apiKey;
+  }
+
+  async send(email: ReminderEmail, fromEmail: string): Promise<string | null> {
+    const response = await fetch(RESEND_EMAIL_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: [email.to],
+        subject: email.subject,
+        html: email.html,
+        text: email.text,
+      }),
+    });
+
+    const responseText = await response.text();
+    let data: SendResult | null = null;
+    if (responseText) {
+      try {
+        data = JSON.parse(responseText) as SendResult;
+      } catch {
+        data = { error: responseText };
+      }
     }
-  }
 
-  if (!response.ok) {
-    throw new Error(`Resend returned ${response.status}: ${sanitizeError(data?.error || responseText)}`);
-  }
+    if (!response.ok) {
+      throw new Error(`Resend returned ${response.status}: ${sanitizeError(data?.error || responseText)}`);
+    }
 
-  return data?.id || null;
+    return data?.id || null;
+  }
+}
+
+export class LocalEmailProvider implements EmailProvider {
+  async send(email: ReminderEmail, fromEmail: string): Promise<string | null> {
+    log('info', `[LocalEmailProvider] Sent reminder to ${email.to} from ${fromEmail}: ${email.subject}`);
+    try {
+      await fetch('http://127.0.0.1:54324/api/v1/message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: fromEmail,
+          to: [email.to],
+          subject: email.subject,
+          text: email.text,
+          html: email.html,
+        }),
+        signal: AbortSignal.timeout(500),
+      });
+    } catch {
+      // Inbucket server optional in local testing
+    }
+    return `local-msg-${Date.now()}`;
+  }
+}
+
+export function getEmailProvider(): EmailProvider {
+  const providerType = Deno.env.get('EMAIL_PROVIDER')?.toLowerCase();
+  const resendApiKey = getOptionalSecret('RESEND_API_KEY');
+
+  if (providerType === 'resend' || (resendApiKey && providerType !== 'local' && providerType !== 'console')) {
+    if (!resendApiKey) {
+      throw new Error('Missing required environment variable: RESEND_API_KEY');
+    }
+    return new ResendEmailProvider(resendApiKey);
+  }
+  return new LocalEmailProvider();
+}
+
+async function sendReminderEmail(
+  email: ReminderEmail,
+  fromEmail: string,
+  provider: EmailProvider = getEmailProvider(),
+): Promise<string | null> {
+  return provider.send(email, fromEmail);
 }
 
 async function markDeliverySent(
@@ -391,7 +444,10 @@ Deno.serve(async (req: Request) => {
     const appUrl = requireSecret('APP_URL');
     const logoUrl = getOptionalSecret('REMINDER_LOGO_URL');
 
-    if (!dryRun) {
+    const emailProvider = getEmailProvider();
+    const fromEmail = getOptionalSecret('REMINDER_FROM_EMAIL') || 'SharedMoney <reminders@sharedmoney.app>';
+
+    if (!dryRun && emailProvider instanceof ResendEmailProvider) {
       requireSecret('RESEND_API_KEY');
       requireSecret('REMINDER_FROM_EMAIL');
     }
@@ -451,7 +507,7 @@ Deno.serve(async (req: Request) => {
         }
 
         deliveryId = reservation.id;
-        const resendMessageId = await sendReminderEmail(email);
+        const resendMessageId = await sendReminderEmail(email, fromEmail, emailProvider);
         try {
           await markDeliverySent(supabase, deliveryId, resendMessageId);
         } catch (markSentError) {

@@ -1,0 +1,74 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches:
+      - main
+      - 'release/**'
+
+concurrency:
+  group: pr-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Web Test, Lint & Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Web Tests
+        run: npm run test:web
+
+      - name: Run Web Linter
+        run: npm run lint:web
+
+      - name: Run Web Build & Typecheck
+        run: npm run typecheck:web
+
+  mobile:
+    name: Mobile Typecheck & Config Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Mobile Config Tests
+        run: npm run test:mobile
+
+      - name: Run Mobile Typecheck
+        run: npm run typecheck:mobile
+
+  supabase:
+    name: Supabase Edge Functions & Shared Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Run Deno Tests
+        run: deno test --allow-env tests/ supabase/functions/

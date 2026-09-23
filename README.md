@@ -2,6 +2,7 @@
 
 Track and settle shared expenses with friends, roommates, or groups. Split bills, manage balances, and settle up efficiently—no more awkward money conversations. **[Try SharedMoney →](https://sharedmoney.app)**
 
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](./LICENSE)
 [![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=flat&logo=supabase&logoColor=white)](https://supabase.com)
 [![React Native](https://img.shields.io/badge/React%20Native-61DAFB?style=flat&logo=react&logoColor=black)](https://reactnative.dev)
 [![Expo](https://img.shields.io/badge/Expo-000020?style=flat&logo=expo&logoColor=white)](https://expo.dev)
@@ -272,19 +273,22 @@ For Android emulator Google sign-in against local Supabase, use the `sharedmoney
 
 ---
 
-## 📄 Documentation
-
-- **[TECH.md](./TECH.md)** – Complete technical documentation, setup, deployment, and troubleshooting
+## 📄 Documentation & Community
+ 
+- **[CONTRIBUTING.md](./CONTRIBUTING.md)** – Development setup, testing, and contribution guide
+- **[CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)** – Community participation standards
+- **[SECURITY.md](./SECURITY.md)** – Vulnerability reporting policy
+- **[TECH.md](./TECH.md)** – Complete technical architecture, database design, and troubleshooting
 - **[mobile/EXPO_PUBLISH.md](./mobile/EXPO_PUBLISH.md)** – Expo publishing and EAS build guide
 - **Supabase migrations**: `supabase/migrations/`
 - **GitHub Actions**: `.github/workflows/`
-
+ 
 ---
-
+ 
 ## 📄 License
-
-MIT License - see LICENSE for details.
-
+ 
+GNU Affero General Public License v3.0 (AGPL-3.0) - see [LICENSE](./LICENSE) for details.
+ 
 ---
-
+ 
 **Built with Supabase + React Native (Expo)**

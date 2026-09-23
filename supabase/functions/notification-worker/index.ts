@@ -139,26 +139,64 @@ async function reserveDelivery(
   return { id: data.id, alreadyTicketed: false };
 }
 
+export interface PushProvider {
+  send(notification: NotificationRow, token: PushTokenRow, unreadCount: number): Promise<ExpoResult>;
+}
+
+export class ExpoPushProvider implements PushProvider {
+  async send(
+    notification: NotificationRow,
+    token: PushTokenRow,
+    unreadCount: number,
+  ): Promise<ExpoResult> {
+    const content = composeNotificationPush(notification, unreadCount);
+    const response = await fetch(EXPO_PUSH_URL, {
+      method: 'POST',
+      headers: expoHeaders(),
+      body: JSON.stringify({
+        to: token.expo_push_token,
+        ...content,
+      }),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(`Expo push request failed (${response.status}): ${JSON.stringify(payload)}`);
+    }
+    return (Array.isArray(payload?.data) ? payload.data[0] : payload?.data) ?? {};
+  }
+}
+
+export class ConsolePushProvider implements PushProvider {
+  send(
+    notification: NotificationRow,
+    token: PushTokenRow,
+    unreadCount: number,
+  ): Promise<ExpoResult> {
+    const content = composeNotificationPush(notification, unreadCount);
+    log('info', `[ConsolePushProvider] Push to token ${token.expo_push_token} (${token.platform}): ${content.title} - ${content.body}`);
+    return Promise.resolve({
+      status: 'ok',
+      id: `local-ticket-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+    });
+  }
+}
+
+export function getPushProvider(): PushProvider {
+  const provider = Deno.env.get('PUSH_PROVIDER')?.toLowerCase();
+  if (provider === 'console' || provider === 'local' || provider === 'mock') {
+    return new ConsolePushProvider();
+  }
+  return new ExpoPushProvider();
+}
+
 async function sendPush(
   notification: NotificationRow,
   token: PushTokenRow,
   unreadCount: number,
+  provider: PushProvider = getPushProvider(),
 ): Promise<ExpoResult> {
-  const content = composeNotificationPush(notification, unreadCount);
-  const response = await fetch(EXPO_PUSH_URL, {
-    method: 'POST',
-    headers: expoHeaders(),
-    body: JSON.stringify({
-      to: token.expo_push_token,
-      ...content,
-    }),
-  });
-
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(`Expo push request failed (${response.status}): ${JSON.stringify(payload)}`);
-  }
-  return (Array.isArray(payload?.data) ? payload.data[0] : payload?.data) ?? {};
+  return provider.send(notification, token, unreadCount);
 }
 
 async function processOutboxRow(admin: SupabaseClient, row: OutboxRow): Promise<'sent' | 'skipped'> {

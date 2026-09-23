@@ -82,13 +82,26 @@ module.exports = ({ config }) => {
   );
   const appSchemes = ["sharedmoney", "owewho"];
 
+  const expoOwner =
+    process.env.EXPO_OWNER ||
+    (process.env.EAS_BUILD ? "varora1406" : undefined);
+  const easProjectId =
+    process.env.EAS_PROJECT_ID ||
+    (process.env.EAS_BUILD ? "afddb7db-3d7d-46da-a1b5-0d6e4b4374ce" : undefined);
+  const bundleIdentifier =
+    process.env.EXPO_PUBLIC_BUNDLE_IDENTIFIER || "com.vaibhavarora.sharemoney";
+  const androidPackage =
+    process.env.EXPO_PUBLIC_ANDROID_PACKAGE || "com.vaibhavarora.sharemoney";
+  const sentryOrg = process.env.SENTRY_ORG || "sharemoney";
+  const sentryProject = process.env.SENTRY_PROJECT || "react-native";
+
   return {
     ...config,
     expo: {
       ...config.expo,
       name: "SharedMoney",
       slug: "share-money",
-      owner: "varora1406",
+      ...(expoOwner ? { owner: expoOwner } : {}),
       scheme: appSchemes,
       version: versionConfig.version,
       orientation: "portrait",
@@ -103,7 +116,7 @@ module.exports = ({ config }) => {
       },
       ios: {
         supportsTablet: true,
-        bundleIdentifier: "com.vaibhavarora.sharemoney",
+        bundleIdentifier,
         scheme: appSchemes,
         buildNumber: versionConfig.buildNumber.toString(),
         usesAppleSignIn: true,
@@ -122,7 +135,7 @@ module.exports = ({ config }) => {
           : {})
       },
       android: {
-        package: "com.vaibhavarora.sharemoney",
+        package: androidPackage,
         ...androidPushConfig,
         scheme: appSchemes,
         versionCode: versionConfig.buildNumber,
@@ -163,26 +176,28 @@ module.exports = ({ config }) => {
         : {}),
       extra: {
         buildProfile: process.env.EAS_BUILD_PROFILE || "development",
-        eas: {
-          projectId: "afddb7db-3d7d-46da-a1b5-0d6e4b4374ce"
-        }
+        ...(easProjectId ? { eas: { projectId: easProjectId } } : {})
       },
       runtimeVersion: {
         policy: "appVersion"
       },
-      updates: {
-        url: "https://u.expo.dev/afddb7db-3d7d-46da-a1b5-0d6e4b4374ce",
-        enabled: true,
-        checkAutomatically: "ON_LOAD",
-        fallbackToCacheTimeout: 0
-      },
+      ...(easProjectId
+        ? {
+            updates: {
+              url: `https://u.expo.dev/${easProjectId}`,
+              enabled: true,
+              checkAutomatically: "ON_LOAD",
+              fallbackToCacheTimeout: 0
+            }
+          }
+        : {}),
       plugins: [
         './plugins/withStripAssociatedDomains',
         [
           "@sentry/react-native/expo",
           {
-            "organization": "sharemoney",
-            "project": "react-native"
+            "organization": sentryOrg,
+            "project": sentryProject
           }
         ],
         [

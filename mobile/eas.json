@@ -44,33 +44,21 @@
         "track": "internal",
         "releaseStatus": "completed"
       },
-      "ios": {
-        "appleId": "contact@sharedmoney.app",
-        "ascAppId": "6755923591",
-        "appleTeamId": "BQ8LZKL6TG"
-      }
+      "ios": {}
     },
     "internal": {
       "android": {
         "track": "internal",
         "releaseStatus": "completed"
       },
-      "ios": {
-        "appleId": "contact@sharedmoney.app",
-        "ascAppId": "6755923591",
-        "appleTeamId": "BQ8LZKL6TG"
-      }
+      "ios": {}
     },
     "store": {
       "android": {
         "track": "production",
         "releaseStatus": "completed"
       },
-      "ios": {
-        "appleId": "contact@sharedmoney.app",
-        "ascAppId": "6755923591",
-        "appleTeamId": "BQ8LZKL6TG"
-      }
+      "ios": {}
     }
   }
 }

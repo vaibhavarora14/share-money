@@ -119,7 +119,7 @@ jobs:
           # bot's commit was the branch head. The "[bot]" tag stays in the
           # commit MESSAGE for transparency — only the author field matters.
           git config user.name "Vaibhav Arora"
-          git config user.email "contact@sharedmoney.app"
+          git config user.email "${{ secrets.VERCEL_AUTHOR_EMAIL || 'contact@sharedmoney.app' }}"
           git add mobile/version.json supabase/functions/_shared/version-config.ts
           # Do NOT add a skip-ci marker here: squash merges inherit it into the
           # merge commit message, which makes GitHub skip ALL push-triggered

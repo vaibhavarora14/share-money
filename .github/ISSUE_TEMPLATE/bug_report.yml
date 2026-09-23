@@ -1,0 +1,56 @@
+name: Bug Report
+description: File a bug report to help us improve SharedMoney
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report an issue! Please search existing issues first before creating a new report.
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component Affected
+      description: Which part of the platform is affected?
+      options:
+        - Mobile App (iOS)
+        - Mobile App (Android)
+        - Web App
+        - Supabase Backend / Edge Functions
+        - Documentation / Other
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Step-by-step instructions to reproduce the behavior.
+      placeholder: |
+        1. Open group '...'
+        2. Tap '+' to add expense
+        3. Enter amount '...'
+        4. See error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen instead?
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment Info
+      description: Device model, OS version, app version, or browser if relevant.
+      placeholder: |
+        - OS: iOS 18 / Android 14 / macOS Sonoma
+        - App Version: 2.25.2
+        - Node Version: 22.x
