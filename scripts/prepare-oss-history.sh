@@ -102,8 +102,8 @@ function run_rewrite() {
     echo "   git-filter-repo must be run inside a dedicated clone or primary repo root."
     echo ""
     echo "Recommended execution in a fresh dedicated clone:"
-    echo "   git clone ${REPO_ROOT} /tmp/share-money-oss-clean"
-    echo "   cd /tmp/share-money-oss-clean"
+    echo "   git clone ${REPO_ROOT} /tmp/sharedmoney-oss-clean"
+    echo "   cd /tmp/sharedmoney-oss-clean"
     echo "   ./scripts/prepare-oss-history.sh rewrite"
     exit 1
   fi
