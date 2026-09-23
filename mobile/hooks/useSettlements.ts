@@ -4,7 +4,8 @@ import { useAuth } from "../contexts/AuthContext";
 import { Settlement, SettlementsResponse } from "../types";
 import { fetchWithAuth } from "../utils/api";
 import type { SettlementCreateInput } from "../utils/peopleSettlements";
-import { captureAnalyticsEvent } from "../utils/posthogAnalytics";
+import { captureIdentifiedAnalyticsEvent } from "../utils/posthogAnalytics";
+import { ANALYTICS_EVENTS } from "../utils/posthogEvents";
 import { queryKeys } from "./queryKeys";
 
 export async function fetchSettlements(groupId: string): Promise<SettlementsResponse> {
@@ -48,6 +49,7 @@ export function useSettlements(groupId?: string | null) {
 
 export function useCreateSettlements(onSuccess?: () => void) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const mutation = useMutation<SettlementsResponse[], Error, SettlementCreateInput[]>({
     mutationFn: async (settlements) => {
@@ -102,11 +104,15 @@ export function useCreateSettlements(onSuccess?: () => void) {
           }
         );
       }
-      captureAnalyticsEvent("settlement_recorded", {
-        settlement_count: settlements.length,
-        currency: settlements[0]?.currency,
-        multi_group: groupIds.length > 1,
-      });
+      captureIdentifiedAnalyticsEvent(
+        user?.id,
+        ANALYTICS_EVENTS.SETTLEMENT_RECORDED,
+        {
+          settlement_count: settlements.length,
+          currency: settlements[0]?.currency,
+          multi_group: groupIds.length > 1,
+        },
+      );
       onSuccess?.();
     },
   });
@@ -120,6 +126,7 @@ export function useCreateSettlements(onSuccess?: () => void) {
 
 export function useCreateSettlement(onSuccess?: () => void) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   interface CreateSettlementInput {
     group_id: string;
@@ -165,11 +172,16 @@ export function useCreateSettlement(onSuccess?: () => void) {
       }
 
       invalidateSettlementAdjacents(queryClient, variables.group_id);
-      captureAnalyticsEvent("settlement_recorded", {
-        settlement_count: 1,
-        currency: variables.currency,
-        multi_group: false,
-      });
+      captureIdentifiedAnalyticsEvent(
+        user?.id,
+        ANALYTICS_EVENTS.SETTLEMENT_RECORDED,
+        {
+          settlement_count: 1,
+          currency: variables.currency,
+          multi_group: false,
+          group_id: variables.group_id,
+        },
+      );
       onSuccess?.();
     },
   });

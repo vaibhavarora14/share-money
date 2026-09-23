@@ -1,8 +1,13 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "../contexts/AuthContext";
 import { Group, GroupWithMembers } from "../types";
 import { fetchWithAuth } from "../utils/api";
-import { captureAnalyticsEvent } from "../utils/posthogAnalytics";
+import {
+  captureAnalyticsEvent,
+  captureIdentifiedAnalyticsEvent,
+} from "../utils/posthogAnalytics";
+import { ANALYTICS_EVENTS } from "../utils/posthogEvents";
 import { queryKeys } from "./queryKeys";
 
 function invalidateGroupAdjacents(queryClient: QueryClient, groupId?: string) {
@@ -20,6 +25,7 @@ function invalidateGroupAdjacents(queryClient: QueryClient, groupId?: string) {
 
 export function useCreateGroup(onSuccess?: () => void) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const mutation = useMutation({
     mutationFn: async (groupData: { name: string; description?: string }) => {
@@ -39,8 +45,10 @@ export function useCreateGroup(onSuccess?: () => void) {
       if (result?.id) {
         queryClient.invalidateQueries({ queryKey: queryKeys.group(result.id) });
       }
-      captureAnalyticsEvent("group_created", {
+      // Ensure distinct_id is the signed-in auth user before activation capture.
+      captureIdentifiedAnalyticsEvent(user?.id, ANALYTICS_EVENTS.GROUP_CREATED, {
         has_description: Boolean(variables.description),
+        ...(result?.id ? { group_id: result.id } : {}),
       });
       onSuccess?.();
     },
@@ -95,7 +103,7 @@ export function useArchiveGroup(onSuccess?: () => void) {
             : item
         )
       );
-      captureAnalyticsEvent("group_archived", {});
+      captureAnalyticsEvent(ANALYTICS_EVENTS.GROUP_ARCHIVED, {});
       onSuccess?.();
     },
   });
@@ -122,7 +130,7 @@ export function useUnarchiveGroup(onSuccess?: () => void) {
             : item
         )
       );
-      captureAnalyticsEvent("group_unarchived", {});
+      captureAnalyticsEvent(ANALYTICS_EVENTS.GROUP_UNARCHIVED, {});
       onSuccess?.();
     },
   });
@@ -145,7 +153,7 @@ export function useHideGroupFromLists(onSuccess?: () => void) {
       queryClient.setQueryData<Group[]>(queryKeys.groups, (current) =>
         (current || []).filter((item) => item.id !== result.group_id)
       );
-      captureAnalyticsEvent("group_hidden_from_lists", {});
+      captureAnalyticsEvent(ANALYTICS_EVENTS.GROUP_HIDDEN_FROM_LISTS, {});
       onSuccess?.();
     },
   });
@@ -198,7 +206,7 @@ export function useUpdateGroup(onSuccess?: () => void) {
         queryKeys.group(variables.groupId),
         (current) => (current ? { ...current, ...result } : current)
       );
-      captureAnalyticsEvent("group_updated", {
+      captureAnalyticsEvent(ANALYTICS_EVENTS.GROUP_UPDATED, {
         updated_name: variables.name !== undefined,
         updated_description: variables.description !== undefined,
       });

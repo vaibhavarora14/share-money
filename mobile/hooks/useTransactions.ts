@@ -12,7 +12,8 @@ import {
   extractSplitAmongParticipantIds,
   resolveGroupDefaultSplitAmong,
 } from "../utils/groupSplit";
-import { captureAnalyticsEvent } from "../utils/posthogAnalytics";
+import { captureIdentifiedAnalyticsEvent } from "../utils/posthogAnalytics";
+import { ANALYTICS_EVENTS } from "../utils/posthogEvents";
 import {
   mapInfiniteTransactions,
   replaceOptimisticTransactionInFeed,
@@ -237,6 +238,7 @@ type UpdateTransactionInput = BaseTransactionInput;
 // Mutation hooks
 export function useCreateTransaction(onSuccess?: () => void) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const mutation = useMutation<
     Transaction | null,
@@ -372,9 +374,10 @@ export function useCreateTransaction(onSuccess?: () => void) {
           queryKey: queryKeys.transactionsFeed(groupId),
         });
       }
-      captureAnalyticsEvent("expense_created", {
+      captureIdentifiedAnalyticsEvent(user?.id, ANALYTICS_EVENTS.EXPENSE_CREATED, {
         currency: variables.currency,
         split_count: extractSplitAmongParticipantIds(variables).length,
+        ...(groupId ? { group_id: groupId } : {}),
       });
       onSuccess?.();
     },
