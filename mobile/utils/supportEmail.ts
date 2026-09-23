@@ -1,4 +1,15 @@
-export const SUPPORT_EMAIL = "contact@sharedmoney.app";
+function resolveSupportEmail(): string {
+  try {
+    if (typeof process !== "undefined" && process?.env?.EXPO_PUBLIC_SUPPORT_EMAIL) {
+      return process.env.EXPO_PUBLIC_SUPPORT_EMAIL.trim();
+    }
+  } catch {
+    // Ignore restricted env access (e.g. Deno test runner)
+  }
+  return "support@sharedmoney.app";
+}
+
+export const SUPPORT_EMAIL = resolveSupportEmail();
 
 export const SUPPORT_TOPICS = [
   {

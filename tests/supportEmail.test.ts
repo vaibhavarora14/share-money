@@ -1,5 +1,6 @@
 import {
   buildSupportEmailUrl,
+  SUPPORT_EMAIL,
   SUPPORT_TOPICS,
 } from "../mobile/utils/supportEmail.ts";
 
@@ -9,7 +10,7 @@ Deno.test("builds a prefilled email for the selected support topic", () => {
   );
 
   if (url.protocol !== "mailto:") throw new Error("expected a mailto URL");
-  if (url.pathname !== "contact@sharedmoney.app") {
+  if (url.pathname !== SUPPORT_EMAIL) {
     throw new Error("expected the SharedMoney support address");
   }
   if (

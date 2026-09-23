@@ -40,12 +40,12 @@ Deno.test("filters people by name or email and drops repeats", () => {
 Deno.test("finds a person with no stored name by email", () => {
   const result = filterAndSortExistingPeople(
     [{
-      id: "p-gitanshu",
+      id: "p-alex",
       full_name: "",
       email: "alex.doe@example.com",
-      user_id: "u-gitanshu",
+      user_id: "u-alex",
     }],
-    "gitanshu",
+    "alex.doe",
   );
 
   if (result.length !== 1) throw new Error("expected the email-only person");

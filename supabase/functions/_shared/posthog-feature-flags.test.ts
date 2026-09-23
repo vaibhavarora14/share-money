@@ -1,7 +1,9 @@
 import { assertEquals } from "jsr:@std/assert@1";
 import {
   evaluatePostHogBooleanFlag,
+  LocalFlagProvider,
   TRANSACTION_NOTIFICATIONS_FLAG_KEY,
+  transactionNotificationsEnabled,
 } from "./posthog-feature-flags.ts";
 
 Deno.test("PostHog flag evaluation sends authenticated targeting properties and returns true", async () => {
@@ -66,3 +68,26 @@ Deno.test("PostHog flag evaluation fails closed on remote errors and malformed r
     }), false);
   }
 });
+
+Deno.test("LocalFlagProvider defaults to enabling flags in self-hosted environments", async () => {
+  const provider = new LocalFlagProvider();
+  assertEquals(await provider.isEnabled(TRANSACTION_NOTIFICATIONS_FLAG_KEY), true);
+  assertEquals(await provider.isEnabled("any-arbitrary-feature"), true);
+
+  const restrictedProvider = new LocalFlagProvider("transaction-notifications");
+  assertEquals(await restrictedProvider.isEnabled("transaction-notifications"), true);
+  assertEquals(await restrictedProvider.isEnabled("other-feature"), false);
+
+  const disabledProvider = new LocalFlagProvider("none");
+  assertEquals(await disabledProvider.isEnabled(TRANSACTION_NOTIFICATIONS_FLAG_KEY), false);
+});
+
+Deno.test("transactionNotificationsEnabled integrates with pluggable provider", async () => {
+  const localProvider = new LocalFlagProvider();
+  const enabled = await transactionNotificationsEnabled("user-123", "user@example.com", localProvider);
+  assertEquals(enabled, true);
+
+  const missingEmail = await transactionNotificationsEnabled("user-123", null, localProvider);
+  assertEquals(missingEmail, false);
+});
+
