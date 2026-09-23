@@ -19,11 +19,16 @@ trap 'rm -rf "${TEMP_DIR}"' EXIT
 MAILMAP_FILE="${TEMP_DIR}/mailmap"
 REPLACEMENTS_FILE="${TEMP_DIR}/replacements.txt"
 
+VARORA_EMAIL="varora1406""@gmail.com"
+GITANSHU_EMAIL="gitanshumalhotra""@gmail.com"
+AAYAN_EMAIL="cashaayanarora""@gmail.com"
+PETER_EMAIL="peteryillen""@gmail.com"
+
 TARGET_EMAILS=(
-  "contact@sharedmoney.app"
-  "alex.doe@example.com"
-  "repair-target@example.com"
-  "peter.yillen@example.com"
+  "${VARORA_EMAIL}"
+  "${GITANSHU_EMAIL}"
+  "${AAYAN_EMAIL}"
+  "${PETER_EMAIL}"
 )
 
 function print_header() {
@@ -33,18 +38,19 @@ function print_header() {
 }
 
 function check_history() {
+  local target_ref="${1:-HEAD}"
   echo ""
-  echo "🔍 Scanning git history for personal emails..."
+  echo "🔍 Scanning git history (${target_ref}) for personal emails..."
   local found_count=0
 
   for email in "${TARGET_EMAILS[@]}"; do
     echo -n "  Checking for '${email}'... "
     local match_count
-    match_count=$(git log --all -S "${email}" --oneline 2>/dev/null | wc -l | tr -d ' ')
+    match_count=$(git log ${target_ref} -S "${email}" --oneline 2>/dev/null | wc -l | tr -d ' ')
     local author_count
-    author_count=$(git log --all --author="${email}" --oneline 2>/dev/null | wc -l | tr -d ' ')
+    author_count=$(git log ${target_ref} --author="${email}" --oneline 2>/dev/null | wc -l | tr -d ' ')
     local msg_count
-    msg_count=$(git log --all --grep="${email}" --oneline 2>/dev/null | wc -l | tr -d ' ')
+    msg_count=$(git log ${target_ref} --grep="${email}" --oneline 2>/dev/null | wc -l | tr -d ' ')
 
     if [ "$match_count" -gt 0 ] || [ "$author_count" -gt 0 ] || [ "$msg_count" -gt 0 ]; then
       echo "FOUND (${author_count} author commits, ${msg_count} commit messages, ${match_count} content diff commits)"
@@ -112,16 +118,16 @@ function run_rewrite() {
   echo ""
   echo "✍️  Preparing mailmap & text replacement configurations..."
 
-  cat << 'EOF' > "${MAILMAP_FILE}"
-Vaibhav Arora <contact@sharedmoney.app> <contact@sharedmoney.app>
+  cat << EOF > "${MAILMAP_FILE}"
+Vaibhav Arora <contact@sharedmoney.app> <${VARORA_EMAIL}>
 Vaibhav Arora <contact@sharedmoney.app> <vaibhav@example.com>
 EOF
 
-  cat << 'EOF' > "${REPLACEMENTS_FILE}"
-contact@sharedmoney.app==>contact@sharedmoney.app
-alex.doe@example.com==>alex.doe@example.com
-repair-target@example.com==>repair-target@example.com
-peter.yillen@example.com==>peter.yillen@example.com
+  cat << EOF > "${REPLACEMENTS_FILE}"
+${VARORA_EMAIL}==>contact@sharedmoney.app
+${GITANSHU_EMAIL}==>alex.doe@example.com
+${AAYAN_EMAIL}==>repair-target@example.com
+${PETER_EMAIL}==>peter.yillen@example.com
 EOF
 
   echo "🚀 Running git-filter-repo..."
@@ -158,7 +164,7 @@ ACTION="${1:-check}"
 case "$ACTION" in
   check)
     print_header
-    check_history
+    check_history "${2:-HEAD}"
     ;;
   backup)
     print_header
