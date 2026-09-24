@@ -1,7 +1,9 @@
 const assert = require("node:assert/strict");
+const Module = require("node:module");
 const test = require("node:test");
 const {
   patchAppDelegateContents,
+  PLUGIN_VERSION,
 } = require("../plugins/withIosSceneLifecycle.js");
 
 const SDK54_APP_DELEGATE = `import Expo
@@ -113,4 +115,30 @@ test("patchAppDelegateContents fails loudly on unexpected AppDelegate shape", ()
     () => patchAppDelegateContents("class AppDelegate {}\n"),
     /could not find Expo AppDelegate React Native startup block/,
   );
+});
+
+test("PLUGIN_VERSION is bumped for lazy-require fix", () => {
+  assert.equal(PLUGIN_VERSION, "1.1.1");
+});
+
+test("module loads without @expo/config-plugins (eas-build-pre-install)", () => {
+  const pluginPath = require.resolve("../plugins/withIosSceneLifecycle.js");
+  const originalLoad = Module._load;
+  Module._load = function loadWithoutConfigPlugins(request, parent, isMain) {
+    if (request === "@expo/config-plugins") {
+      throw new Error("simulated missing @expo/config-plugins (pre-install)");
+    }
+    return originalLoad.call(this, request, parent, isMain);
+  };
+  try {
+    delete require.cache[pluginPath];
+    const plugin = require("../plugins/withIosSceneLifecycle.js");
+    assert.equal(typeof plugin.patchAppDelegateContents, "function");
+    const patched = plugin.patchAppDelegateContents(SDK54_APP_DELEGATE);
+    assert.match(patched, /@objc\(SceneDelegate\)/);
+    assert.equal(plugin.PLUGIN_VERSION, "1.1.1");
+  } finally {
+    Module._load = originalLoad;
+    delete require.cache[pluginPath];
+  }
 });

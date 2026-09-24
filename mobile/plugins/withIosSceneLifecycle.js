@@ -28,14 +28,21 @@
  * with enableSceneSupport.
  */
 
-const {
-  createRunOncePlugin,
-  withAppDelegate,
-  withInfoPlist,
-} = require("@expo/config-plugins");
-
 const PLUGIN_NAME = "sharedmoney-ios-scene-lifecycle";
-const PLUGIN_VERSION = "1.1.0";
+const PLUGIN_VERSION = "1.1.1";
+
+/**
+ * Lazy-require @expo/config-plugins.
+ *
+ * `eas-build-pre-install` runs `test:ios-scene-lifecycle` (and may evaluate
+ * this module) before `npm install`, so a top-level require fails. Pure
+ * helpers like `patchAppDelegateContents` must stay loadable without it.
+ * Documented exception to the no-inline-imports rule.
+ * @returns {typeof import("@expo/config-plugins")}
+ */
+function getExpoConfigPlugins() {
+  return require("@expo/config-plugins");
+}
 
 const SCENE_CONFIGURATION_METHOD = `
   // UIScene configuration (iOS 27 SDK requires scene lifecycle — TN3187)
@@ -241,6 +248,7 @@ function patchAppDelegateContents(contents) {
 }
 
 function withSceneManifest(config) {
+  const { withInfoPlist } = getExpoConfigPlugins();
   return withInfoPlist(config, (cfg) => {
     // Full manifest required — empty UISceneConfigurations still traps on iOS 27.
     cfg.modResults.UIApplicationSceneManifest = {
@@ -259,6 +267,7 @@ function withSceneManifest(config) {
 }
 
 function withSceneAppDelegate(config) {
+  const { withAppDelegate } = getExpoConfigPlugins();
   return withAppDelegate(config, (cfg) => {
     if (cfg.modResults.language !== "swift") {
       throw new Error(
@@ -274,7 +283,23 @@ function withIosSceneLifecycle(config) {
   return withSceneAppDelegate(withSceneManifest(config));
 }
 
-module.exports = createRunOncePlugin(withIosSceneLifecycle, PLUGIN_NAME, PLUGIN_VERSION);
+/** Cached createRunOncePlugin wrapper — built on first invoke after install. */
+let runOncePlugin;
+
+function withIosSceneLifecyclePlugin(config) {
+  if (!runOncePlugin) {
+    const { createRunOncePlugin } = getExpoConfigPlugins();
+    runOncePlugin = createRunOncePlugin(
+      withIosSceneLifecycle,
+      PLUGIN_NAME,
+      PLUGIN_VERSION,
+    );
+  }
+  return runOncePlugin(config);
+}
+
+module.exports = withIosSceneLifecyclePlugin;
 module.exports.patchAppDelegateContents = patchAppDelegateContents;
 module.exports.STARTUP_BLOCK_PATTERN = STARTUP_BLOCK_PATTERN;
 module.exports.SCENE_DELEGATE_CLASS = SCENE_DELEGATE_CLASS;
+module.exports.PLUGIN_VERSION = PLUGIN_VERSION;
