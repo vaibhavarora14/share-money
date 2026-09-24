@@ -1,6 +1,6 @@
 {
   "name": "mobile",
-  "version": "2.25.2",
+  "version": "2.30.8",
   "main": "index.js",
   "scripts": {
     "start": "expo start",
@@ -20,10 +20,11 @@
     "test:android-push-config": "node --test config/androidPushConfig.test.cjs",
     "test:sentry-build-config": "node --test config/sentryBuildConfig.test.cjs",
     "test:expo-public-config": "node --test config/expoPublicConfig.test.cjs",
+    "test:ios-scene-lifecycle": "node --test plugins/withIosSceneLifecycle.test.cjs",
     "test:icon-imports": "node scripts/verify-icon-imports.mjs",
     "verify:android-push-config": "node scripts/verify-android-push-config.cjs",
     "verify:sentry-build": "node scripts/verify-sentry-build.cjs",
-    "eas-build-pre-install": "npm run verify:android-push-config && npm run verify:sentry-build && npm run test:expo-public-config && npm run test:icon-imports",
+    "eas-build-pre-install": "npm run verify:android-push-config && npm run verify:sentry-build && npm run test:expo-public-config && npm run test:ios-scene-lifecycle && npm run test:icon-imports",
     "verify:canonical-links": "node scripts/verify-canonical-links.mjs",
     "android:release": "eas submit --platform android --profile internal",
     "deploy:web": "npx expo export -p web && eas deploy --prod --non-interactive",

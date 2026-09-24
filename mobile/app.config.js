@@ -223,6 +223,9 @@ module.exports = ({ config }) => {
         // Android Credential Manager Google Sign-In. Optional iOS URL scheme via
         // EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME when native Google on iOS is enabled.
         "./plugins/withNativeGoogleSignIn",
+        // iOS 27 / Xcode 27: adopt UIScene lifecycle so App Review launch succeeds
+        // (Guideline 2.1 NoSceneLifecycleAdoption). Safe to remove after SDK 58+.
+        "./plugins/withIosSceneLifecycle",
         // Only include expo-dev-client plugin for development builds
         ...(isDevelopmentBuild ? ["expo-dev-client"] : [])
       ]
