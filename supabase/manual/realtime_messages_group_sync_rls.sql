@@ -8,10 +8,18 @@
 -- ALTER TABLE / CREATE POLICY on that table fails with:
 --   ERROR: must be owner of table messages (SQLSTATE 42501)
 --
+-- RLS ON realtime.messages
+-- ------------------------
+-- Do NOT run `ALTER TABLE realtime.messages ENABLE ROW LEVEL SECURITY`.
+-- Supabase enables RLS on `realtime.messages` by default. The ALTER fails with
+-- `must be owner of table messages` (SQLSTATE 42501) even in the SQL Editor.
+-- Only CREATE POLICY is needed (and succeeds for a privileged Dashboard role).
+-- Private channels must still be enabled in Realtime settings (see below).
+--
 -- HOW TO APPLY
 -- ------------
 -- 1. Open the Supabase Dashboard → SQL Editor (project owner / privileged role).
--- 2. Paste and run this entire file.
+-- 2. Paste and run this entire file (CREATE POLICY only; no ALTER).
 -- 3. In Realtime Settings, ensure private channels / authorization are enabled
 --    (disable "Allow public access" if you want private-only enforcement).
 -- 4. Confirm clients subscribe with `config: { private: true }` and edge
@@ -23,8 +31,7 @@
 -- file only gates Broadcast Authorization on realtime.messages.
 --
 -- Idempotent: safe to re-run.
-
-ALTER TABLE realtime.messages ENABLE ROW LEVEL SECURITY;
+-- Applied in production (CREATE POLICY only) on 2026-09-25.
 
 DROP POLICY IF EXISTS "group_members_can_receive_group_sync_broadcast"
   ON realtime.messages;
