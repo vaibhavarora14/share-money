@@ -25,12 +25,15 @@
     "lint:web": "npm run lint --workspace=web",
     "verify:google-branding": "node scripts/verify-google-branding.mjs"
   },
+  "overrides": {
+    "undici": "6.28.1"
+  },
   "devDependencies": {
     "imagemin": "^9.0.1",
     "imagemin-pngquant": "^10.0.0",
     "patch-package": "^8.0.1",
     "postinstall-postinstall": "^2.1.0",
-    "sharp": "^0.34.5",
-    "supabase": "^2.72.8"
+    "sharp": "^0.35.4",
+    "supabase": "^2.117.0"
   }
 }
