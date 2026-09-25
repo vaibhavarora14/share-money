@@ -39,7 +39,8 @@ function isTransactionDeletePush(
  * - DATA_MUTATED + CDC insert/update: debounced invalidate so members refetch
  *   over authenticated HTTP (no full ledger rows on the broadcast wire).
  *
- * Channel is private; membership is enforced by realtime.messages RLS.
+ * Channel is private; membership requires realtime.messages RLS applied from
+ * supabase/manual/realtime_messages_group_sync_rls.sql (not via db push).
  */
 export function useRealtimeGroupSync(
   groupId: string | null | undefined,
@@ -95,7 +96,7 @@ export function useRealtimeGroupSync(
     const channel = supabase
       .channel(channelName, {
         config: {
-          // Membership-gated via realtime.messages RLS (see migration).
+          // Membership-gated via realtime.messages RLS (see supabase/manual/).
           private: true,
         },
       })

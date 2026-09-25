@@ -20,7 +20,9 @@ export {
  * - Only DATA_MUTATED and id-only TRANSACTION_PUSHED (delete) are emitted.
  * - Payloads are sanitized so full ledger rows cannot leak even if a caller
  *   accidentally includes them.
- * - Messages are marked private: true; membership is gated by realtime.messages RLS.
+ * - Messages are marked private: true; membership requires realtime.messages
+ *   RLS from supabase/manual/realtime_messages_group_sync_rls.sql (Dashboard /
+ *   privileged SQL Editor — not applied by db push).
  */
 export async function broadcastToGroup(
   groupId: string,
