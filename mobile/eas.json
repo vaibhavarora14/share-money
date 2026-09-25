@@ -44,21 +44,27 @@
         "track": "internal",
         "releaseStatus": "completed"
       },
-      "ios": {}
+      "ios": {
+        "ascAppId": "6755923591"
+      }
     },
     "internal": {
       "android": {
         "track": "internal",
         "releaseStatus": "completed"
       },
-      "ios": {}
+      "ios": {
+        "ascAppId": "6755923591"
+      }
     },
     "store": {
       "android": {
         "track": "production",
         "releaseStatus": "completed"
       },
-      "ios": {}
+      "ios": {
+        "ascAppId": "6755923591"
+      }
     }
   }
 }
