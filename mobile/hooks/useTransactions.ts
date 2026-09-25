@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import type { InfiniteData, QueryClient } from "@tanstack/react-query";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
@@ -171,12 +172,20 @@ function invalidateTransactionAdjacents(queryClient: QueryClient, groupId?: stri
 
 export function useGroupLastTransactionCurrency(groupId?: string | null) {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
 
   return useQuery({
     queryKey: groupId
       ? queryKeys.lastGroupTransactionCurrency(groupId)
       : queryKeys.lastGroupTransactionCurrency(""),
-    queryFn: () => fetchLatestGroupTransactionCurrency(groupId as string),
+    queryFn: () => {
+      if (groupId) {
+        const cachedCurrency = getGroupFormDefaultCurrency(queryClient, groupId);
+        if (cachedCurrency) return cachedCurrency;
+        return fetchLatestGroupTransactionCurrency(groupId);
+      }
+      return null;
+    },
     enabled: !!user?.id && !!groupId,
     staleTime: 30_000,
   });
@@ -184,12 +193,20 @@ export function useGroupLastTransactionCurrency(groupId?: string | null) {
 
 export function useGroupLastExpenseSplitAmong(groupId?: string | null) {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
 
   return useQuery({
     queryKey: groupId
       ? queryKeys.lastGroupExpenseSplitAmong(groupId)
       : queryKeys.lastGroupExpenseSplitAmong(""),
-    queryFn: () => fetchLatestGroupExpenseSplitAmong(groupId as string),
+    queryFn: () => {
+      if (groupId) {
+        const cachedSplit = getGroupFormDefaultSplitAmong(queryClient, groupId);
+        if (cachedSplit && cachedSplit.length > 0) return cachedSplit;
+        return fetchLatestGroupExpenseSplitAmong(groupId);
+      }
+      return null;
+    },
     enabled: !!user?.id && !!groupId,
     staleTime: 30_000,
   });
@@ -210,10 +227,13 @@ export function useTransactions(groupId?: string | null) {
     staleTime: 30_000,
   });
 
-  const pages = Array.isArray(query.data?.pages) ? query.data.pages : [];
-  const flattenedData = pages.flatMap((page) =>
-    Array.isArray(page?.items) ? page.items : []
-  );
+  const pages = query.data?.pages;
+  const flattenedData = useMemo(() => {
+    if (!Array.isArray(pages)) return [];
+    return pages.flatMap((page) =>
+      Array.isArray(page?.items) ? page.items : []
+    );
+  }, [pages]);
 
   return {
     data: flattenedData,

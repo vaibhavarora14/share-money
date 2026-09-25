@@ -23,7 +23,7 @@ export function useBalances(groupId?: string | null) {
     queryKey: groupId ? queryKeys.balances(groupId) : ["balances", "all"],
     queryFn: () => fetchBalances(groupId),
     enabled: !!user?.id && (!!groupId || groupId === null || groupId === undefined),
-    staleTime: 5_000, // Reduced for testing responsiveness
+    staleTime: 30_000,
   });
 
   return {

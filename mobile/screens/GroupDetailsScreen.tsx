@@ -44,6 +44,7 @@ import {
   useSettlements,
   useUpdateSettlement,
 } from "../hooks/useSettlements";
+import { useRealtimeGroupSync } from "../hooks/useRealtimeGroupSync";
 import {
   useGroupLastExpenseSplitAmong,
   useGroupLastTransactionCurrency,
@@ -195,6 +196,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       setMenuVisible(false);
     }
   }, [showMembers]);
+
+  // Real-time synchronization: listen for remote transactions/settlements
+  useRealtimeGroupSync(initialGroup.id);
 
   // Fetch data with hooks
   const {

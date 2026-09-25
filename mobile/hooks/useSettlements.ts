@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
@@ -38,8 +39,14 @@ export function useSettlements(groupId?: string | null) {
     staleTime: 30_000,
   });
 
+  const settlements = useMemo(
+    () => query.data?.settlements ?? [],
+    [query.data?.settlements]
+  );
+  const data = useMemo(() => ({ settlements }), [settlements]);
+
   return {
-    data: { settlements: query.data?.settlements ?? [] },
+    data,
     isLoading: query.isLoading,
     isFetching: query.isFetching,
     error: query.error ?? null,
