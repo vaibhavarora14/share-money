@@ -1,5 +1,5 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { buildGroupBroadcastBody } from "./realtime-broadcast.ts";
+import { buildGroupBroadcastBody } from "./realtime-broadcast-body.ts";
 
 Deno.test("buildGroupBroadcastBody is private and id-only safe", () => {
   const body = buildGroupBroadcastBody(
