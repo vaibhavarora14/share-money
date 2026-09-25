@@ -194,6 +194,10 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          # eas submit runs outside EAS_BUILD; app.config.js only fills owner /
+          # projectId from env or EAS_BUILD (keeps Expo Go / OSS forks clean).
+          EXPO_OWNER: varora1406
+          EAS_PROJECT_ID: afddb7db-3d7d-46da-a1b5-0d6e4b4374ce
         run: |
           set -euo pipefail
           PLATFORM="${{ matrix.platform }}"
@@ -333,7 +337,14 @@ jobs:
           echo "⬇️ Downloading Android artifact..."
           curl -fsSL "$ARTIFACT_URL" -o "$ARTIFACT_PATH"
 
-          PREV_TAG=$(git tag --sort=-v:refname | awk -v cur="$TAG" '$0 != cur && $0 !~ /^(android|ios)-/ { print; exit }')
+          # Avoid `cmd | head` / early-exit awk under `pipefail` (SIGPIPE → exit 141).
+          PREV_TAG=""
+          while IFS= read -r candidate; do
+            case "$candidate" in
+              "$TAG"|android-*|ios-*) ;;
+              *) PREV_TAG="$candidate"; break ;;
+            esac
+          done < <(git tag --sort=-v:refname)
           {
             echo "## SharedMoney ${VERSION}"
             echo ""
@@ -341,9 +352,9 @@ jobs:
             echo ""
             echo "### Changes"
             if [ -n "$PREV_TAG" ]; then
-              git log --oneline --no-merges --format="- %s" "${PREV_TAG}..HEAD" | head -30
+              git log --oneline --no-merges --format="- %s" -n 30 "${PREV_TAG}..HEAD"
             else
-              git log --oneline --no-merges --format="- %s" HEAD | head -30
+              git log --oneline --no-merges --format="- %s" -n 30 HEAD
             fi
             echo ""
             echo "### Stores"

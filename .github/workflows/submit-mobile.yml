@@ -1,28 +1,108 @@
 name: Submit Mobile Store Build
 
-# Retry App Store / Play Store submission for an existing EAS build.
-# Tag push is used because workflow_dispatch is forbidden for the automation token.
+# Retry App Store / Play Store submission for an existing EAS build — no rebuild.
 #
-# Tags:
+# Tag push (automation tokens that cannot call workflow_dispatch):
 #   submit-ios-<eas-build-uuid>
 #   submit-android-<eas-build-uuid>
 #   submit-ios-latest
 #   submit-android-latest
+#
+# Manual dispatch (preferred after a successful build / failed submit):
+#   android_build_id / ios_build_id + submit_profile=internal
 on:
   push:
     tags:
       - "submit-ios-*"
       - "submit-android-*"
+  workflow_dispatch:
+    inputs:
+      android_build_id:
+        description: "Existing EAS Android build UUID to submit (leave empty to skip)"
+        required: false
+        default: ""
+        type: string
+      ios_build_id:
+        description: "Existing EAS iOS build UUID to submit (leave empty to skip)"
+        required: false
+        default: ""
+        type: string
+      submit_profile:
+        description: "EAS submit profile (internal = Play internal / TestFlight upload)"
+        required: true
+        default: "internal"
+        type: choice
+        options:
+          - internal
+          - production
+          - store
 
 concurrency:
-  group: submit-mobile-${{ github.ref }}
+  group: submit-mobile-${{ github.event.inputs.android_build_id || github.event.inputs.ios_build_id || github.ref }}
   cancel-in-progress: false
 
 jobs:
+  resolve:
+    name: Resolve submit targets
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.resolve.outputs.matrix }}
+      submit_profile: ${{ steps.resolve.outputs.submit_profile }}
+    steps:
+      - name: Resolve tag or dispatch inputs
+        id: resolve
+        run: |
+          set -euo pipefail
+          SUBMIT_PROFILE="${{ github.event.inputs.submit_profile || 'internal' }}"
+          MATRIX='[]'
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ANDROID_ID="${{ github.event.inputs.android_build_id }}"
+            IOS_ID="${{ github.event.inputs.ios_build_id }}"
+            PARTS=()
+            if [ -n "$ANDROID_ID" ]; then
+              PARTS+=("{\"platform\":\"android\",\"target\":\"${ANDROID_ID}\"}")
+            fi
+            if [ -n "$IOS_ID" ]; then
+              PARTS+=("{\"platform\":\"ios\",\"target\":\"${IOS_ID}\"}")
+            fi
+            if [ ${#PARTS[@]} -eq 0 ]; then
+              echo "❌ Provide at least one of android_build_id or ios_build_id"
+              exit 1
+            fi
+            MATRIX="[$(IFS=,; echo "${PARTS[*]}")]"
+          else
+            TAG="${GITHUB_REF_NAME}"
+            case "$TAG" in
+              submit-ios-*)
+                MATRIX="[{\"platform\":\"ios\",\"target\":\"${TAG#submit-ios-}\"}]"
+                # Tag path historically used production for iOS; keep that default.
+                SUBMIT_PROFILE=production
+                ;;
+              submit-android-*)
+                MATRIX="[{\"platform\":\"android\",\"target\":\"${TAG#submit-android-}\"}]"
+                SUBMIT_PROFILE=internal
+                ;;
+              *)
+                echo "Unsupported tag: $TAG"
+                exit 1
+                ;;
+            esac
+          fi
+
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "submit_profile=$SUBMIT_PROFILE" >> "$GITHUB_OUTPUT"
+          echo "Resolved matrix=$MATRIX profile=$SUBMIT_PROFILE"
+
   submit:
-    name: EAS submit
+    name: EAS submit ${{ matrix.platform }}
+    needs: resolve
     runs-on: ubuntu-latest
     environment: Production
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.resolve.outputs.matrix) }}
     steps:
       - name: 🏗 Checkout repository
         uses: actions/checkout@v4
@@ -49,44 +129,28 @@ jobs:
         working-directory: mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          # eas submit does not set EAS_BUILD; provide project identity explicitly
+          # so app.config.js exposes owner + extra.eas.projectId non-interactively.
+          EXPO_OWNER: varora1406
+          EAS_PROJECT_ID: afddb7db-3d7d-46da-a1b5-0d6e4b4374ce
         run: |
           set -euo pipefail
-          TAG="${GITHUB_REF_NAME}"
-          case "$TAG" in
-            submit-ios-*)
-              PLATFORM=ios
-              TARGET="${TAG#submit-ios-}"
-              ;;
-            submit-android-*)
-              PLATFORM=android
-              TARGET="${TAG#submit-android-}"
-              ;;
-            *)
-              echo "Unsupported tag: $TAG"
-              exit 1
-              ;;
-          esac
+          PLATFORM="${{ matrix.platform }}"
+          TARGET="${{ matrix.target }}"
+          SUBMIT_PROFILE="${{ needs.resolve.outputs.submit_profile }}"
 
           if [ -z "${EXPO_TOKEN:-}" ]; then
             echo "❌ EXPO_TOKEN is not set"
             exit 1
           fi
 
-          # Android must always enter Internal testing first. Production rollout
-          # requires the explicit `store` EAS submit profile.
-          if [ "$PLATFORM" = "android" ]; then
-            SUBMIT_PROFILE=internal
-          else
-            SUBMIT_PROFILE=production
-          fi
-
           ARGS=(--platform "$PLATFORM" --profile "$SUBMIT_PROFILE" --non-interactive --wait)
           if [ "$TARGET" = "latest" ]; then
             ARGS+=(--latest)
-            echo "Submitting latest ${PLATFORM} build"
+            echo "Submitting latest ${PLATFORM} build with profile ${SUBMIT_PROFILE}"
           else
             ARGS+=(--id "$TARGET")
-            echo "Submitting ${PLATFORM} build ${TARGET}"
+            echo "Submitting ${PLATFORM} build ${TARGET} with profile ${SUBMIT_PROFILE}"
           fi
 
           eas submit "${ARGS[@]}"

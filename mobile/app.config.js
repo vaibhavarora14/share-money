@@ -82,6 +82,9 @@ module.exports = ({ config }) => {
   );
   const appSchemes = ["sharedmoney", "owewho"];
 
+  // Owner/projectId default only under EAS_BUILD so Expo Go / OSS forks stay
+  // unlinked. CI `eas submit` is not an EAS build — export EXPO_OWNER and
+  // EAS_PROJECT_ID in those workflow steps instead.
   const expoOwner =
     process.env.EXPO_OWNER ||
     (process.env.EAS_BUILD ? "varora1406" : undefined);
