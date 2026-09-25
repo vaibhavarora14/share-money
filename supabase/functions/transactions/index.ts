@@ -14,6 +14,7 @@ import {
   scaleSplitsToTotal,
   type SplitShare,
 } from '../_shared/splits.ts';
+import { broadcastToGroup } from '../_shared/realtime-broadcast.ts';
 
 /**
  * Transactions Edge Function
@@ -68,7 +69,7 @@ interface Participant {
   avatar_url?: string | null;
 }
 
-interface TransactionWithSplits extends Transaction {
+interface TransactionWithSplits extends Omit<Transaction, 'splits'> {
   transaction_splits?: TransactionSplit[];
   splits?: TransactionSplit[];
 }
@@ -543,6 +544,14 @@ Deno.serve(async (req: Request) => {
         operationStartedAt,
       });
 
+      if (transaction?.group_id) {
+        broadcastToGroup(transaction.group_id, 'DATA_MUTATED', {
+          entity: 'transactions',
+          action: 'create',
+          transactionId: transaction.id,
+        }).catch(() => {});
+      }
+
       return createSuccessResponse(responseTransaction, 201, 0, req);
     }
 
@@ -814,6 +823,14 @@ Deno.serve(async (req: Request) => {
         operationStartedAt,
       });
 
+      if (existingTransaction.group_id) {
+        broadcastToGroup(existingTransaction.group_id, 'DATA_MUTATED', {
+          entity: 'transactions',
+          action: 'update',
+          transactionId: transaction.id,
+        }).catch(() => {});
+      }
+
       return createSuccessResponse(responseTransaction, 200, 0, req);
     }
 
@@ -881,6 +898,14 @@ Deno.serve(async (req: Request) => {
         after: null,
         operationStartedAt,
       });
+
+      if (transaction?.group_id) {
+        // Id-only delete signal: no full row payload on the wire.
+        broadcastToGroup(transaction.group_id, 'TRANSACTION_PUSHED', {
+          action: 'delete',
+          transactionId: Number(id),
+        }).catch(() => {});
+      }
 
       return createSuccessResponse({ success: true, message: 'Transaction deleted successfully' }, 200, 0, req);
     }

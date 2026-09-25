@@ -3,6 +3,7 @@ import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
 import { fetchUserEmails } from '../_shared/user-email.ts';
 import { isValidDate, isValidUUID, validateBodySize, validateSettlementData } from '../_shared/validation.ts';
+import { broadcastToGroup } from '../_shared/realtime-broadcast.ts';
 
 /**
  * Settlements Edge Function
@@ -270,6 +271,14 @@ Deno.serve(async (req: Request) => {
         currentUserEmail
       );
 
+      if (settlement?.group_id) {
+        broadcastToGroup(settlement.group_id, 'DATA_MUTATED', {
+          entity: 'settlements',
+          action: 'create',
+          settlementId: settlement.id,
+        }).catch(() => {});
+      }
+
       return createSuccessResponse({ settlement: enrichedSettlement }, 201, 0, req);
     }
 
@@ -415,6 +424,14 @@ Deno.serve(async (req: Request) => {
         currentUserEmail
       );
 
+      if (updatedSettlement?.group_id) {
+        broadcastToGroup(updatedSettlement.group_id, 'DATA_MUTATED', {
+          entity: 'settlements',
+          action: 'update',
+          settlementId: updatedSettlement.id,
+        }).catch(() => {});
+      }
+
       return createSuccessResponse({ settlement: enrichedSettlement }, 200, 0, req);
     }
 
@@ -463,6 +480,14 @@ Deno.serve(async (req: Request) => {
 
       if (deleteError) {
         return handleError(deleteError, 'deleting settlement', req);
+      }
+
+      if (existingSettlement?.group_id) {
+        broadcastToGroup(existingSettlement.group_id, 'DATA_MUTATED', {
+          entity: 'settlements',
+          action: 'delete',
+          settlementId,
+        }).catch(() => {});
       }
 
       return createEmptyResponse(204, req);

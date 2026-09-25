@@ -2,8 +2,11 @@
 .netlify
 
 # Dependencies
+node_modules
 node_modules/
+mobile/node_modules
 mobile/node_modules/
+netlify/node_modules
 netlify/node_modules/
 
 # Environment variables

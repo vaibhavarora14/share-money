@@ -94,9 +94,28 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
     return "tag-outline";
   };
 
+  const participantMap = React.useMemo(
+    () => new Map(participants.map((p) => [p.id, p])),
+    [participants],
+  );
+
+  const memberParticipantMap = React.useMemo(() => {
+    const map = new Map<string, any>();
+    for (const m of members) {
+      if (m.participant_id) map.set(m.participant_id, m);
+      if (m.id) map.set(m.id, m);
+    }
+    return map;
+  }, [members]);
+
+  const memberUserMap = React.useMemo(
+    () => new Map(members.map((m) => [m.user_id, m])),
+    [members],
+  );
+
   const resolveParticipantName = (participantId?: string | null, userId?: string | null) => {
     if (participantId) {
-      const participant = participants.find((p) => p.id === participantId);
+      const participant = participantMap.get(participantId);
       if (participant) {
         const baseName =
           participant.user_id === currentUserId
@@ -108,9 +127,7 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
         return participant.type === "former" ? `${baseName} (Former)` : baseName;
       }
 
-      const member = members.find(
-        (m) => m.participant_id === participantId || m.id === participantId,
-      );
+      const member = memberParticipantMap.get(participantId);
       if (member) {
         const baseName =
           member.user_id === currentUserId
@@ -122,7 +139,7 @@ export const TransactionsSection: React.FC<TransactionsSectionProps> = ({
 
     if (userId) {
       if (userId === currentUserId) return "You";
-      const payer = members.find((m) => m.user_id === userId);
+      const payer = memberUserMap.get(userId);
       if (payer) {
         return payer.full_name || payer.email?.split("@")[0] || payer.email || "Unknown";
       }

@@ -1,6 +1,7 @@
 import type { InfiniteData } from "@tanstack/react-query";
 import type { Transaction } from "../types.ts";
 import {
+  applyTransactionCreateToFeed,
   replaceOptimisticTransactionInFeed,
   resolveCreatedTransaction,
   type TransactionsPageResponse,
@@ -72,6 +73,91 @@ Deno.test("replaceOptimisticTransactionInFeed swaps Date.now id for server id", 
   assert(
     !after?.pages[0].items.some((tx) => tx.id === optimisticId),
     "temp id must not remain editable"
+  );
+});
+
+Deno.test("replaceOptimisticTransactionInFeed drops temp when server id already present", () => {
+  const optimisticId = 1_700_000_000_002;
+  const before = feedWith([
+    {
+      id: 123,
+      description: "From push",
+      amount: 5,
+      date: "2026-09-14",
+      type: "expense",
+      currency: "USD",
+      group_id: "g1",
+    } as Transaction,
+    {
+      id: optimisticId,
+      description: "Temp",
+      amount: 5,
+      date: "2026-09-14",
+      type: "expense",
+      currency: "USD",
+      group_id: "g1",
+    } as Transaction,
+  ]);
+
+  const after = replaceOptimisticTransactionInFeed(before, optimisticId, {
+    id: 123,
+    description: "Temp",
+    amount: 5,
+    date: "2026-09-14",
+    type: "expense",
+    currency: "USD",
+    group_id: "g1",
+  } as Transaction);
+
+  assert(after?.pages[0].items.length === 1, "must not duplicate server id");
+  assert(after?.pages[0].items[0].id === 123, "server row must remain");
+});
+
+Deno.test("applyTransactionCreateToFeed strips matching optimistic and dedupes server id", () => {
+  const optimisticId = 1_700_000_000_003;
+  const before = feedWith([
+    {
+      id: optimisticId,
+      description: "Coffee",
+      amount: 4.5,
+      date: "2026-09-14",
+      type: "expense",
+      currency: "USD",
+      group_id: "g1",
+    } as Transaction,
+    {
+      id: 9,
+      description: "Other",
+      amount: 1,
+      date: "2026-09-13",
+      type: "expense",
+      currency: "USD",
+      group_id: "g1",
+    } as Transaction,
+  ]);
+
+  const serverTx = {
+    id: 200,
+    description: "Coffee",
+    amount: 4.5,
+    date: "2026-09-14",
+    type: "expense",
+    currency: "USD",
+    group_id: "g1",
+  } as Transaction;
+
+  const afterPush = applyTransactionCreateToFeed(before, serverTx);
+  assert(afterPush?.pages[0].items[0].id === 200, "server row should lead");
+  assert(
+    !afterPush?.pages[0].items.some((tx) => tx.id === optimisticId),
+    "matching optimistic row must be removed"
+  );
+  assert(afterPush?.pages[0].items.length === 2, "existing unrelated row stays");
+
+  const afterSecond = applyTransactionCreateToFeed(afterPush, serverTx);
+  assert(
+    afterSecond?.pages[0].items.filter((tx) => tx.id === 200).length === 1,
+    "second push must not duplicate server id"
   );
 });
 

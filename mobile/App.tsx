@@ -181,8 +181,8 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 30_000,
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
+      refetchOnWindowFocus: Platform.OS === "web",
+      refetchOnReconnect: true,
     },
   },
 });
@@ -516,6 +516,9 @@ function AppContent() {
       : () => {};
     const appStateSubscription = AppState.addEventListener("change", (nextState) => {
       if (nextState !== "active") return;
+      void queryClientInstance.invalidateQueries({
+        predicate: (query) => query.isStale(),
+      });
       refreshNotificationReads(userId)
         .catch((error) => logError(error, { context: "flush notification reads on foreground" }))
         .finally(refreshInbox);
