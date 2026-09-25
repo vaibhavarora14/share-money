@@ -4,36 +4,40 @@ import type { InfiniteData } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../supabase";
 import { queryKeys } from "./queryKeys";
-import type { BalancesResponse, GroupStatsResponse, Transaction } from "../types";
 import type { TransactionsPageResponse } from "./useTransactions";
-import { applyTransactionCreateToFeed } from "../utils/transactionOptimisticCache";
 import { log } from "../utils/logger";
 
 interface UseRealtimeGroupSyncOptions {
   enabled?: boolean;
 }
 
-export interface TransactionPushPayload {
-  action: "create" | "update" | "delete";
+/** Id-only delete signal. Full-row create/update pushes are no longer emitted. */
+export interface TransactionDeletePushPayload {
+  action: "delete";
   groupId: string;
-  transaction?: Transaction;
-  transactionId?: number;
+  transactionId: number;
 }
 
-export interface BalancesPushPayload {
-  groupId: string;
-  balances?: BalancesResponse;
-  groupStats?: GroupStatsResponse;
+function isTransactionDeletePush(
+  payload: unknown
+): payload is TransactionDeletePushPayload {
+  if (!payload || typeof payload !== "object") return false;
+  const p = payload as Record<string, unknown>;
+  return (
+    p.action === "delete" &&
+    typeof p.groupId === "string" &&
+    typeof p.transactionId === "number" &&
+    Number.isFinite(p.transactionId)
+  );
 }
 
 /**
- * Real-time synchronization hook supporting both Push and Invalidate models.
+ * Real-time synchronization for a group session.
  *
- * - Push Model: Id-only / lightweight signals (e.g. TRANSACTION_PUSHED delete)
- *   update the cache directly via queryClient.setQueryData when safe.
- *   Full ledger rows are never accepted from public broadcast topics.
- * - Pull Fallback: DATA_MUTATED and CDC insert/update debounce-invalidate
- *   active TanStack Query keys so members refetch over authenticated HTTP.
+ * - TRANSACTION_PUSHED: id-only delete → drop the row from the feed cache and
+ *   invalidate balances / stats / activity.
+ * - DATA_MUTATED + CDC insert/update: debounced invalidate so members refetch
+ *   over authenticated HTTP (no full ledger rows on the broadcast wire).
  *
  * Channel is private; membership is enforced by realtime.messages RLS.
  */
@@ -48,68 +52,28 @@ export function useRealtimeGroupSync(
   useEffect(() => {
     if (!groupId || !enabled) return;
 
-    // Direct push updater for transactions (0 HTTP requests)
-    const handleTransactionPush = (payload: TransactionPushPayload) => {
+    const handleTransactionDeletePush = (payload: TransactionDeletePushPayload) => {
       if (payload.groupId !== groupId) return;
-      log(`[Realtime Push] Applying transaction ${payload.action} for group ${groupId}`);
+      log(`[Realtime Push] Applying transaction delete for group ${groupId}`);
 
-      if (payload.action === "create" && payload.transaction) {
-        const newTx = payload.transaction;
-        queryClient.setQueryData<InfiniteData<TransactionsPageResponse>>(
-          queryKeys.transactionsFeed(groupId),
-          (old) => applyTransactionCreateToFeed(old, newTx)
-        );
-      } else if (payload.action === "update" && payload.transaction) {
-        const updatedTx = payload.transaction;
-        queryClient.setQueryData<InfiniteData<TransactionsPageResponse>>(
-          queryKeys.transactionsFeed(groupId),
-          (old) => {
-            if (!old || !old.pages?.length) return old;
-            return {
-              ...old,
-              pages: old.pages.map((page) => ({
-                ...page,
-                items: page.items.map((item) =>
-                  item.id === updatedTx.id ? updatedTx : item
-                ),
-              })),
-            };
-          }
-        );
-      } else if (payload.action === "delete" && payload.transactionId) {
-        const delId = payload.transactionId;
-        queryClient.setQueryData<InfiniteData<TransactionsPageResponse>>(
-          queryKeys.transactionsFeed(groupId),
-          (old) => {
-            if (!old || !old.pages?.length) return old;
-            return {
-              ...old,
-              pages: old.pages.map((page) => ({
-                ...page,
-                items: page.items.filter((item) => item.id !== delId),
-              })),
-            };
-          }
-        );
-      }
+      const delId = payload.transactionId;
+      queryClient.setQueryData<InfiniteData<TransactionsPageResponse>>(
+        queryKeys.transactionsFeed(groupId),
+        (old) => {
+          if (!old || !old.pages?.length) return old;
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              items: page.items.filter((item) => item.id !== delId),
+            })),
+          };
+        }
+      );
 
-      // Any transaction change impacts balances; if balances weren't pushed together,
-      // invalidate them so they refetch.
       queryClient.invalidateQueries({ queryKey: queryKeys.balances(groupId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.groupStats(groupId) });
-    };
-
-    // Direct push updater for balances (0 HTTP requests)
-    const handleBalancesPush = (payload: BalancesPushPayload) => {
-      if (payload.groupId !== groupId) return;
-      log(`[Realtime Push] Applying pushed balances for group ${groupId}`);
-
-      if (payload.balances) {
-        queryClient.setQueryData(queryKeys.balances(groupId), payload.balances);
-      }
-      if (payload.groupStats) {
-        queryClient.setQueryData(queryKeys.groupStats(groupId), payload.groupStats);
-      }
+      queryClient.invalidateQueries({ queryKey: queryKeys.activity(groupId) });
     };
 
     // Pull fallback: debounced cache invalidation
@@ -147,7 +111,7 @@ export function useRealtimeGroupSync(
         (payload) => {
           const deletedId = (payload.old as { id?: number })?.id;
           if (deletedId) {
-            handleTransactionPush({
+            handleTransactionDeletePush({
               action: "delete",
               groupId,
               transactionId: deletedId,
@@ -187,26 +151,17 @@ export function useRealtimeGroupSync(
         },
         () => invalidateGroupData()
       )
-      // 2. Direct Server Event Push (0 HTTP round trips)
+      // 2. Id-only delete push (create/update use DATA_MUTATED instead)
       .on(
         "broadcast",
         { event: "TRANSACTION_PUSHED" },
         (payload) => {
-          if (payload?.payload) {
-            handleTransactionPush(payload.payload as TransactionPushPayload);
+          if (isTransactionDeletePush(payload?.payload)) {
+            handleTransactionDeletePush(payload.payload);
           }
         }
       )
-      .on(
-        "broadcast",
-        { event: "BALANCES_PUSHED" },
-        (payload) => {
-          if (payload?.payload) {
-            handleBalancesPush(payload.payload as BalancesPushPayload);
-          }
-        }
-      )
-      // 3. Generic Invalidation Signal
+      // 3. Generic invalidation signal (id-only; no ledger bodies)
       .on(
         "broadcast",
         { event: "DATA_MUTATED" },

@@ -6,7 +6,10 @@ import {
 } from './realtime-broadcast-body.ts';
 
 export type { RealtimeGroupEvent, RealtimeBroadcastMessage } from './realtime-broadcast-body.ts';
-export { buildGroupBroadcastBody } from './realtime-broadcast-body.ts';
+export {
+  buildGroupBroadcastBody,
+  sanitizeGroupBroadcastPayload,
+} from './realtime-broadcast-body.ts';
 
 /**
  * Broadcasts a realtime message to connected clients on private channel
@@ -14,12 +17,10 @@ export { buildGroupBroadcastBody } from './realtime-broadcast-body.ts';
  * non-blocking delivery.
  *
  * Production-safe contract:
- * - Prefer DATA_MUTATED with id-only payloads (no full transaction/settlement
- *   bodies). Public/non-member listeners must not receive ledger contents.
- * - Messages are marked private: true so only authorized private-channel
- *   subscribers (group members via realtime.messages RLS) receive them.
- * - TRANSACTION_PUSHED / BALANCES_PUSHED remain typed for delete/id signals
- *   and legacy clients, but callers must not attach full row payloads.
+ * - Only DATA_MUTATED and id-only TRANSACTION_PUSHED (delete) are emitted.
+ * - Payloads are sanitized so full ledger rows cannot leak even if a caller
+ *   accidentally includes them.
+ * - Messages are marked private: true; membership is gated by realtime.messages RLS.
  */
 export async function broadcastToGroup(
   groupId: string,

@@ -1,5 +1,8 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { buildGroupBroadcastBody } from "./realtime-broadcast-body.ts";
+import {
+  buildGroupBroadcastBody,
+  sanitizeGroupBroadcastPayload,
+} from "./realtime-broadcast-body.ts";
 
 Deno.test("buildGroupBroadcastBody is private and id-only safe", () => {
   const body = buildGroupBroadcastBody(
@@ -35,4 +38,41 @@ Deno.test("buildGroupBroadcastBody keeps delete signals id-only", () => {
     Object.prototype.hasOwnProperty.call(body.messages[0].payload, "transaction"),
     false,
   );
+});
+
+Deno.test("sanitizeGroupBroadcastPayload strips accidental full-row keys", () => {
+  const sanitized = sanitizeGroupBroadcastPayload({
+    entity: "transactions",
+    action: "create",
+    transactionId: 7,
+    transaction: { id: 7, amount: 12, description: "leak" },
+    settlement: { id: "s1", amount: 99 },
+    balances: { total: 1 },
+    groupStats: { count: 2 },
+    nested: { oops: true },
+  });
+
+  assertEquals(sanitized, {
+    entity: "transactions",
+    action: "create",
+    transactionId: 7,
+  });
+});
+
+Deno.test("buildGroupBroadcastBody drops full-row keys from caller payload", () => {
+  const body = buildGroupBroadcastBody(
+    "g2",
+    "DATA_MUTATED",
+    {
+      entity: "settlements",
+      action: "update",
+      settlementId: "settle-1",
+      settlement: { id: "settle-1", amount: 50, note: "secret" },
+    },
+    "2026-09-25T00:00:00.000Z",
+  );
+
+  assertEquals(body.messages[0].payload.settlementId, "settle-1");
+  assertEquals(body.messages[0].payload.settlement, undefined);
+  assertEquals(body.messages[0].payload.entity, "settlements");
 });
