@@ -275,7 +275,7 @@ Deno.serve(async (req: Request) => {
         broadcastToGroup(settlement.group_id, 'DATA_MUTATED', {
           entity: 'settlements',
           action: 'create',
-          settlement: enrichedSettlement,
+          settlementId: settlement.id,
         }).catch(() => {});
       }
 
@@ -428,7 +428,7 @@ Deno.serve(async (req: Request) => {
         broadcastToGroup(updatedSettlement.group_id, 'DATA_MUTATED', {
           entity: 'settlements',
           action: 'update',
-          settlement: enrichedSettlement,
+          settlementId: updatedSettlement.id,
         }).catch(() => {});
       }
 

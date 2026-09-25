@@ -545,9 +545,10 @@ Deno.serve(async (req: Request) => {
       });
 
       if (transaction?.group_id) {
-        broadcastToGroup(transaction.group_id, 'TRANSACTION_PUSHED', {
+        broadcastToGroup(transaction.group_id, 'DATA_MUTATED', {
+          entity: 'transactions',
           action: 'create',
-          transaction: responseTransaction,
+          transactionId: transaction.id,
         }).catch(() => {});
       }
 
@@ -823,9 +824,10 @@ Deno.serve(async (req: Request) => {
       });
 
       if (existingTransaction.group_id) {
-        broadcastToGroup(existingTransaction.group_id, 'TRANSACTION_PUSHED', {
+        broadcastToGroup(existingTransaction.group_id, 'DATA_MUTATED', {
+          entity: 'transactions',
           action: 'update',
-          transaction: responseTransaction,
+          transactionId: transaction.id,
         }).catch(() => {});
       }
 
@@ -898,6 +900,7 @@ Deno.serve(async (req: Request) => {
       });
 
       if (transaction?.group_id) {
+        // Id-only delete signal: no full row payload on the wire.
         broadcastToGroup(transaction.group_id, 'TRANSACTION_PUSHED', {
           action: 'delete',
           transactionId: Number(id),

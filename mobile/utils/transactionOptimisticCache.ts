@@ -54,8 +54,63 @@ export function resolveCreatedTransaction(
 }
 
 /**
+ * Client-side optimistic create ids use Date.now() (ms since epoch).
+ * Real Postgres serial/identity ids stay far below this floor.
+ */
+export const OPTIMISTIC_TRANSACTION_ID_MIN = 1_000_000_000_000;
+
+export function isOptimisticTransactionId(id: number): boolean {
+  return Number.isFinite(id) && id >= OPTIMISTIC_TRANSACTION_ID_MIN;
+}
+
+/** Match a local optimistic row to the server create that replaces it. */
+export function optimisticMatchesServerCreate(
+  local: Transaction,
+  server: Transaction
+): boolean {
+  if (!isOptimisticTransactionId(local.id)) return false;
+  return (
+    local.amount === server.amount &&
+    local.description === server.description &&
+    local.date === server.date &&
+    (local.currency ?? null) === (server.currency ?? null) &&
+    (local.type ?? null) === (server.type ?? null) &&
+    (local.group_id ?? null) === (server.group_id ?? null)
+  );
+}
+
+/**
+ * Apply a server create into the feed without duplicating rows when an
+ * optimistic placeholder (or an earlier push) already exists.
+ */
+export function applyTransactionCreateToFeed(
+  data: InfiniteData<TransactionsPageResponse> | undefined,
+  newTx: Transaction
+): InfiniteData<TransactionsPageResponse> | undefined {
+  if (!data?.pages?.length) return data;
+
+  const cleaned = mapInfiniteTransactions(data, (tx) => {
+    if (tx.id === newTx.id) return null;
+    if (optimisticMatchesServerCreate(tx, newTx)) return null;
+    return tx;
+  });
+
+  if (!cleaned?.pages?.length) return cleaned;
+
+  return {
+    ...cleaned,
+    pages: cleaned.pages.map((page, idx) =>
+      idx === 0 ? { ...page, items: [newTx, ...page.items] } : page
+    ),
+  };
+}
+
+/**
  * Swap a temporary optimistic list id for the real server id so create →
  * immediate edit/delete cannot 404.
+ *
+ * If a realtime push already inserted the server id, only drop the temp row
+ * so the feed never shows two rows for the same transaction.
  */
 export function replaceOptimisticTransactionInFeed(
   data: InfiniteData<TransactionsPageResponse> | undefined,
@@ -63,6 +118,14 @@ export function replaceOptimisticTransactionInFeed(
   created: Transaction | null
 ): InfiniteData<TransactionsPageResponse> | undefined {
   if (created?.id != null) {
+    const serverIdAlreadyPresent = data?.pages?.some((page) =>
+      page.items.some((tx) => tx.id === created.id && tx.id !== optimisticId)
+    );
+    if (serverIdAlreadyPresent) {
+      return mapInfiniteTransactions(data, (tx) =>
+        tx.id === optimisticId ? null : tx
+      );
+    }
     return mapInfiniteTransactions(data, (tx) =>
       tx.id === optimisticId ? { ...tx, ...created, id: created.id } : tx
     );

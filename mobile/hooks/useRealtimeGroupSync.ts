@@ -6,6 +6,7 @@ import { supabase } from "../supabase";
 import { queryKeys } from "./queryKeys";
 import type { BalancesResponse, GroupStatsResponse, Transaction } from "../types";
 import type { TransactionsPageResponse } from "./useTransactions";
+import { applyTransactionCreateToFeed } from "../utils/transactionOptimisticCache";
 import { log } from "../utils/logger";
 
 interface UseRealtimeGroupSyncOptions {
@@ -27,12 +28,14 @@ export interface BalancesPushPayload {
 
 /**
  * Real-time synchronization hook supporting both Push and Invalidate models.
- * 
- * - Push Model: When the server broadcasts full transaction or balance payloads
- *   (e.g., TRANSACTION_PUSHED, BALANCES_PUSHED), the cache is updated directly
- *   via queryClient.setQueryData. ZERO HTTP round-trips needed.
- * - Pull Fallback: For generic events or schema changes without full payloads,
- *   active TanStack Query keys are debounced-invalidated to fetch fresh state.
+ *
+ * - Push Model: Id-only / lightweight signals (e.g. TRANSACTION_PUSHED delete)
+ *   update the cache directly via queryClient.setQueryData when safe.
+ *   Full ledger rows are never accepted from public broadcast topics.
+ * - Pull Fallback: DATA_MUTATED and CDC insert/update debounce-invalidate
+ *   active TanStack Query keys so members refetch over authenticated HTTP.
+ *
+ * Channel is private; membership is enforced by realtime.messages RLS.
  */
 export function useRealtimeGroupSync(
   groupId: string | null | undefined,
@@ -54,19 +57,7 @@ export function useRealtimeGroupSync(
         const newTx = payload.transaction;
         queryClient.setQueryData<InfiniteData<TransactionsPageResponse>>(
           queryKeys.transactionsFeed(groupId),
-          (old) => {
-            if (!old || !old.pages?.length) return old;
-            const exists = old.pages.some((page) =>
-              page.items.some((item) => item.id === newTx.id)
-            );
-            if (exists) return old;
-            return {
-              ...old,
-              pages: old.pages.map((page, idx) =>
-                idx === 0 ? { ...page, items: [newTx, ...page.items] } : page
-              ),
-            };
-          }
+          (old) => applyTransactionCreateToFeed(old, newTx)
         );
       } else if (payload.action === "update" && payload.transaction) {
         const updatedTx = payload.transaction;
@@ -138,7 +129,12 @@ export function useRealtimeGroupSync(
 
     const channelName = `group-sync:${groupId}`;
     const channel = supabase
-      .channel(channelName)
+      .channel(channelName, {
+        config: {
+          // Membership-gated via realtime.messages RLS (see migration).
+          private: true,
+        },
+      })
       // 1. Postgres CDC for raw changes
       .on(
         "postgres_changes",
